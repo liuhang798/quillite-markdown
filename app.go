@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.5.1"
+	appVersion      = "2.5.2"
 	maxRecent       = 10
 )
 
@@ -415,7 +415,7 @@ func (a *App) readDocument(filePath string, remember bool) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, info, resolvedPath, foundBookmark, bookmarkErr := a.readDocumentWithMacBookmark(absPath)
+	data, info, _, foundBookmark, bookmarkErr := a.readDocumentWithMacBookmark(absPath)
 	if !foundBookmark || bookmarkErr != nil {
 		data, err = os.ReadFile(absPath)
 		if err == nil {
@@ -427,9 +427,7 @@ func (a *App) readDocument(filePath string, remember bool) (*Document, error) {
 			}
 			return nil, err
 		}
-		resolvedPath = absPath
 	}
-	absPath = filepath.Clean(resolvedPath)
 	if remember {
 		_ = a.rememberFile(absPath)
 	}

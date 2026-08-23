@@ -27,8 +27,8 @@ test('Typora-style Mermaid fences render as diagrams instead of highlighted code
 });
 
 test('editor offers one localized diagram builder with the full common Mermaid catalog', () => {
-  assert.match(index, /value="diagram-builder"/);
-  assert.match(index, /value="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥<\/option>/);
+  assert.match(index, /data-format-command="diagram-builder"/);
+  assert.match(index, /data-format-command="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥<\/button>/);
   assert.match(renderer, /diagramBuilder: '图表生成器 🔥'/);
   assert.match(index, /id="diagramDialog"/);
   assert.match(index, /id="openDiagramGuide"[^>]+formula-guide-link/);

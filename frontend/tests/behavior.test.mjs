@@ -207,6 +207,21 @@ test('English settings menu uses larger readable type and extra width', () => {
   assert.match(styles, /html\[lang="en"\] #moreMenu \.popover-label \{ font-size: 10\.5px; \}/);
 });
 
+test('More Formats uses an immediate in-app menu instead of the delayed native macOS selector', () => {
+  assert.match(html, /id="moreFormatButton"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"/);
+  assert.match(html, /id="moreFormatMenu"[^>]*role="menu"[^>]*aria-labelledby="moreFormatButton"/);
+  assert.match(html, /id="overflowFormatOptions"/);
+  assert.match(html, /data-format-command="formula-builder"/);
+  assert.match(html, /data-format-command="diagram-builder"/);
+  assert.doesNotMatch(html, /<select id="moreFormatSelect"/);
+  assert.match(renderer, /function openMoreFormatMenu\(\)/);
+  assert.match(renderer, /menu\.classList\.remove\('hidden'\);\s*button\.setAttribute\('aria-expanded', 'true'\)/);
+  assert.match(renderer, /button\.dataset\.formatCommand = element\.dataset\.formatOverflow/);
+  assert.match(renderer, /els\.moreFormatButton\.addEventListener\('click'/);
+  assert.match(renderer, /els\.moreFormatMenu\.addEventListener\('keydown'/);
+  assert.match(styles, /\.more-format-menu \{[^}]*max-height:[^}]*overflow-y: auto;/);
+});
+
 test('plain text files render without Markdown parsing and edit without Markdown syntax highlighting', () => {
   assert.match(renderer, /function isPlainTextFile\(path\)/);
   assert.match(renderer, /return \/\\\.txt\$\/i\.test\(path \|\| ''\)/);
@@ -367,7 +382,7 @@ test('code blocks let the user pick a common programming language', () => {
 test('LaTeX math, chemistry, and numbered equations are available in preview and editor formats', () => {
   assert.match(renderer, /import 'katex\/dist\/katex\.min\.css'/);
   assert.match(renderer, /extensions: \[highlightExtension, \.\.\.mathExtensions\]/);
-  assert.match(html, /value="formula-builder" data-i18n="formulaBuilder"/);
+  assert.match(html, /data-format-command="formula-builder" data-i18n="formulaBuilder"/);
   assert.doesNotMatch(html, /value="(?:inline-math|math-block|chemical-formula|numbered-math|math-guide)"/);
   assert.match(renderer, /command === 'formula-builder'/);
   assert.match(renderer, /MATH_GUIDE_URL = 'https:\/\/qm\.ssssa\.cn\/guides\/formulas\/'/);
@@ -388,7 +403,7 @@ test('LaTeX math, chemistry, and numbered equations are available in preview and
   assert.match(renderer, /buildFormulaMarkdown\(formulaWizardState\.mode, expression/);
   assert.match(renderer, /function chooseFormulaTemplate\(templateId\)[\s\S]*els\.formulaBuilderPanel\.scrollTop = 0;/);
   assert.match(renderer, /function chooseFormulaDiscipline\(discipline\)[\s\S]*els\.formulaBuilderPanel\.scrollTop = 0;/);
-  assert.match(html, /value="formula-builder" data-i18n="formulaBuilder">学科公式 🔥<\/option>/);
+  assert.match(html, /data-format-command="formula-builder" data-i18n="formulaBuilder">学科公式 🔥<\/button>/);
   assert.match(renderer, /formulaBuilder: '学科公式 🔥'/);
   assert.match(styles, /\.formula-dialog-layout \{ display: grid;/);
   assert.match(styles, /\.formula-preview \.katex-display \{ width: 100%; margin: 0; \}/);

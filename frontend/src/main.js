@@ -61,7 +61,7 @@ window.quilliteMarkdown = {
   setLanguage: language => desktopRuntime ? Backend.SetLanguage(language) : resolved(),
   setUsageAnalytics: enabled => desktopRuntime ? Backend.SetUsageAnalytics(enabled) : resolved({ usageAnalytics: enabled }),
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.5.1', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.5.2', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   checkForUpdates: force => desktopRuntime
@@ -71,14 +71,14 @@ window.quilliteMarkdown = {
           checked: true,
           available: true,
           currentVersion: '2.4.4',
-          latestVersion: '2.5.1',
-          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.5.1' : '轻阅 Markdown 2.5.1',
+          latestVersion: '2.5.2',
+          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.5.2' : '轻阅 Markdown 2.5.2',
           releaseNotes: localStorage.getItem('language') === 'en'
             ? 'Added feedback and website-backed updates\nAdded Word / PDF export and Save As in the reader\nImproved high-resolution displays, outlines, and editing'
             : '新增意见反馈与官网版本更新\n新增 Word / PDF 导出与阅读页另存为\n优化高分辨率显示、目录树与编辑体验',
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '2.5.1', latestVersion: '2.5.1' }),
+      : { checked: true, available: false, currentVersion: '2.5.2', latestVersion: '2.5.2' }),
   snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},

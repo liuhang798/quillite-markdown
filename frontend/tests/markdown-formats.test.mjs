@@ -19,7 +19,7 @@ test('format toolbar exposes all six headings and the missing practical Markdown
     'hard-break', 'footnote', 'reference-link', 'collapsible', 'keyboard-key', 'comment',
     'bold-italic', 'autolink', 'escape', 'html-block'
   ]) {
-    assert.match(html, new RegExp(`(?:data-format|value)="${command}"`), command);
+    assert.match(html, new RegExp(`(?:data-format|data-format-command|value)="${command}"`), command);
     assert.ok(renderer.includes(`command === '${command}'`) || renderer.includes(`runFormatCommand('${command}')`), command);
   }
 });

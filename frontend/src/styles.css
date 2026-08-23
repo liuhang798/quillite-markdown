@@ -535,10 +535,10 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .editor-format-bar button svg { width: 17px; height: 17px; }
 .editor-format-bar select { max-width: 92px; padding: 0 8px; font-size: 11px; outline: none; }
 .editor-format-bar select option { color: var(--text); background: var(--paper-strong); }
-#moreFormatSelect { width: 105px; max-width: 105px; margin-left: auto; padding: 0 9px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
-#moreFormatSelect:hover, #moreFormatSelect:focus-visible { background: color-mix(in srgb, var(--accent-soft) 76%, var(--accent)); }
-#moreFormatSelect optgroup { color: var(--muted); font-weight: 650; }
-#moreFormatSelect option { color: var(--text); font-weight: 400; }
+#moreFormatButton { width: 105px; min-width: 105px; margin-left: auto; display: flex; align-items: center; justify-content: space-between; gap: 7px; padding: 0 9px; background: var(--accent-soft); color: var(--accent-strong); font-size: 11px; font-weight: 650; }
+#moreFormatButton:hover, #moreFormatButton:focus-visible, #moreFormatButton[aria-expanded="true"] { background: color-mix(in srgb, var(--accent-soft) 76%, var(--accent)); }
+#moreFormatButton svg { width: 14px; height: 14px; transition: transform .12s ease; }
+#moreFormatButton[aria-expanded="true"] svg { transform: rotate(180deg); }
 .format-divider { width: 1px; height: 20px; flex: 0 0 1px; margin: 0 3px; background: var(--line); }
 .code-label { font-family: "Cascadia Code", Consolas, monospace; font-size: 10px; font-weight: 700; }
 .ordered-list-label { font-family: "Segoe UI", sans-serif; font-size: 12px; font-weight: 700; }
@@ -615,6 +615,10 @@ body:has(.toc-panel.hidden) .back-to-top { right: 24px; }
 .popover { position: fixed; z-index: 35; right: 144px; top: 48px; width: 210px; background: var(--paper-strong); border: 1px solid var(--line); border-radius: 11px; padding: 6px; box-shadow: var(--shadow); }
 .code-lang-menu { right: auto; top: auto; width: 204px; max-height: min(340px, 60vh); overflow-y: auto; }
 .code-lang-menu .popover-label { position: sticky; top: -6px; z-index: 1; background: var(--paper-strong); }
+.more-format-menu { right: auto; top: auto; width: 218px; max-height: min(440px, calc(100vh - 24px)); overflow-y: auto; }
+.more-format-menu .popover-label { position: sticky; top: -6px; z-index: 1; background: var(--paper-strong); }
+.more-format-menu button { justify-content: flex-start; color: var(--text); }
+.more-format-menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--accent-soft); }
 .text-color-menu { right: auto; top: auto; width: auto; min-width: 0; padding: 7px; }
 .text-color-menu .popover-label { padding: 5px 5px 8px; }
 .text-color-options { display: grid; grid-template-columns: repeat(8, 30px); gap: 4px; }

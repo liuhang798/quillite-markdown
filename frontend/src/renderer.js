@@ -159,7 +159,7 @@ const translations = {
     editorPosition: '第 {line} 行，第 {column} 列', saveAsDone: '文档已另存为', saveDone: '文档已保存', saveFailed: '保存失败，请检查文件权限', saveAsRequired: '需要另存为', editPermissionDenied: '当前文件无编辑权限，可能是微信缓存只读或正被其他程序占用。请另存为可编辑副本后再编辑', editPermissionLabel: '编辑权限', editPermissionTitle: '当前文件无法直接编辑', editPermissionDescription: '轻阅无法获得这个文件的写入权限。原文件不会被修改或删除。', currentDocument: '当前文档', possibleReasons: '可能原因', permissionReasonCache: '文件来自微信、企业微信等应用的只读缓存目录', permissionReasonReadOnly: '文件或所在目录被设置为只读，当前账号没有写入权限', permissionReasonLocked: '文件正被其他程序占用或锁定', editPermissionGuide: '建议另存为一个可编辑副本。保存成功后，轻阅会自动打开副本并进入编辑模式。', saveCopyAndEdit: '另存为副本并编辑', saveAsRequiredHint: '原文件可能来自微信缓存、处于只读状态或正被其他程序占用，请另存为后继续编辑', saveAsFallback: '原文件无法直接写入，已为你打开“另存为”',
     folderOpenFailed: '无法打开文件夹中的文档', defaultAppHint: '请在“按文件类型指定默认应用”中选择 .md', dropUnsupported: '请拖入 Markdown 或文本文件',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.5.1', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.5.2', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -200,7 +200,7 @@ const translations = {
     editorPosition: 'Line {line}, Column {column}', saveAsDone: 'Document saved as a new file', saveDone: 'Document saved', saveFailed: 'Save failed. Check file permissions.', saveAsRequired: 'Save As required', editPermissionDenied: 'This file cannot be edited because it may be a read-only app cache or locked by another program. Save a writable copy to continue editing.', editPermissionLabel: 'EDIT PERMISSION', editPermissionTitle: 'This file cannot be edited directly', editPermissionDescription: 'Quillite cannot obtain write access to this file. The original will not be changed or deleted.', currentDocument: 'Current document', possibleReasons: 'Possible reasons', permissionReasonCache: 'The file comes from a read-only WeChat, WeCom, or other application cache', permissionReasonReadOnly: 'The file or its folder is read-only, or your account lacks write permission', permissionReasonLocked: 'Another program currently has the file open or locked', editPermissionGuide: 'Save a writable copy instead. Quillite will open the copy and enter editing mode automatically after it is saved.', saveCopyAndEdit: 'Save Copy & Edit', saveAsRequiredHint: 'The source may be a read-only app cache or locked by another program. Save a writable copy to continue editing.', saveAsFallback: 'The source cannot be written. Save As has been opened for you.',
     folderOpenFailed: 'Unable to open a document from this folder', defaultAppHint: 'Choose this app for .md under “Choose defaults by file type”.', dropUnsupported: 'Drop a Markdown or text file',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.5.1', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.5.2', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -303,7 +303,7 @@ const els = {
   moreMenu: $('#moreMenu'), accentMenu: $('#accentMenu'), recentContextMenu: $('#recentContextMenu'), toast: $('#toast'), editorView: $('#editorView'), fontScaleSlider: $('#fontScaleSlider'), fontScaleValue: $('#fontScaleValue'),
   editor: $('#markdownEditor'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
-  exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'),
+  exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'), feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
   recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'),
   editorUndoButton: $('#editorUndoButton')
@@ -787,9 +787,10 @@ function openTextColorMenu() {
   if (!wasHidden) return;
   els.moreMenu.classList.add('hidden');
   els.codeLangMenu.classList.add('hidden');
+  closeMoreFormatMenu();
   closeAccentMenu();
   closeRecentContextMenu();
-  const anchor = $('[data-format="text-color"]:not([hidden])') || $('#moreFormatSelect');
+  const anchor = $('[data-format="text-color"]:not([hidden])') || els.moreFormatButton;
   const rect = anchor?.getBoundingClientRect();
   menu.classList.remove('hidden');
   $('#textColorButton')?.setAttribute('aria-expanded', 'true');
@@ -839,9 +840,10 @@ function openCodeLangMenu() {
   menu.classList.add('hidden');
   if (!wasHidden) return;
   els.moreMenu.classList.add('hidden');
+  closeMoreFormatMenu();
   closeAccentMenu();
   closeRecentContextMenu();
-  const anchor = $('[data-format="code-block"]:not([hidden])') || $('#moreFormatSelect');
+  const anchor = $('[data-format="code-block"]:not([hidden])') || els.moreFormatButton;
   const rect = anchor?.getBoundingClientRect();
   menu.classList.remove('hidden');
   menu.style.left = 'auto';
@@ -885,25 +887,60 @@ function syncFormatDividers() {
 
 function rebuildOverflowFormatOptions() {
   const group = $('#overflowFormatGroup');
+  const options = $('#overflowFormatOptions');
   const bar = $('#editorFormatBar');
-  if (!group || !bar) return;
-  group.replaceChildren();
+  if (!group || !options || !bar) return;
+  options.replaceChildren();
   for (const element of bar.querySelectorAll('[data-format-overflow][hidden]')) {
     if (element.id === 'headingSelect') {
       for (const heading of element.options) {
-        const option = document.createElement('option');
-        option.value = `heading:${heading.value}`;
-        option.textContent = t(heading.dataset.i18n);
-        group.append(option);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.role = 'menuitem';
+        button.dataset.formatCommand = `heading:${heading.value}`;
+        button.textContent = t(heading.dataset.i18n);
+        options.append(button);
       }
       continue;
     }
-    const option = document.createElement('option');
-    option.value = element.dataset.formatOverflow;
-    option.textContent = t(element.dataset.formatLabel).replace(/\s+\([^)]*\)$/, '');
-    group.append(option);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.role = 'menuitem';
+    button.dataset.formatCommand = element.dataset.formatOverflow;
+    button.textContent = t(element.dataset.formatLabel).replace(/\s+\([^)]*\)$/, '');
+    options.append(button);
   }
-  group.hidden = group.children.length === 0;
+  group.hidden = options.children.length === 0;
+}
+
+function closeMoreFormatMenu(restoreFocus = false) {
+  if (!els.moreFormatMenu || els.moreFormatMenu.classList.contains('hidden')) return;
+  els.moreFormatMenu.classList.add('hidden');
+  els.moreFormatButton.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) els.moreFormatButton.focus();
+}
+
+function openMoreFormatMenu() {
+  const menu = els.moreFormatMenu;
+  const button = els.moreFormatButton;
+  if (!menu || !button) return;
+  const wasHidden = menu.classList.contains('hidden');
+  closeMoreFormatMenu();
+  if (!wasHidden) return;
+  els.moreMenu.classList.add('hidden');
+  els.codeLangMenu.classList.add('hidden');
+  closeTextColorMenu();
+  closeAccentMenu();
+  closeRecentContextMenu();
+  const rect = button.getBoundingClientRect();
+  const margin = 8;
+  const menuWidth = 218;
+  menu.style.left = `${Math.max(margin, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - margin))}px`;
+  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.maxHeight = `${Math.max(140, window.innerHeight - rect.bottom - margin - 6)}px`;
+  menu.classList.remove('hidden');
+  button.setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(() => menu.querySelector('[role="menuitem"]')?.focus());
 }
 
 function layoutFormatToolbar() {
@@ -3767,9 +3804,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.5.1', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.5.2', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.5.1';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.5.2';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -3825,7 +3862,7 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
-  $('#currentVersion').textContent = info.currentVersion || '2.5.1';
+  $('#currentVersion').textContent = info.currentVersion || '2.5.2';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -4207,10 +4244,29 @@ $('#headingSelect').addEventListener('change', event => {
   formatSelectedLines('heading', event.target.value);
   event.target.value = '';
 });
-$('#moreFormatSelect').addEventListener('change', event => {
-  if (event.target.value.startsWith('heading:')) formatSelectedLines('heading', event.target.value.slice(8));
-  else if (event.target.value) runFormatCommand(event.target.value);
-  event.target.value = '';
+els.moreFormatButton.addEventListener('click', event => {
+  event.stopPropagation();
+  openMoreFormatMenu();
+});
+els.moreFormatMenu.addEventListener('click', event => {
+  event.stopPropagation();
+  const button = event.target.closest('[data-format-command]');
+  if (!button) return;
+  const command = button.dataset.formatCommand;
+  closeMoreFormatMenu();
+  if (command.startsWith('heading:')) formatSelectedLines('heading', command.slice(8));
+  else runFormatCommand(command);
+});
+els.moreFormatMenu.addEventListener('keydown', event => {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
+  const items = [...els.moreFormatMenu.querySelectorAll('[role="menuitem"]')].filter(item => !item.closest('[hidden]'));
+  if (!items.length) return;
+  event.preventDefault();
+  const current = Math.max(0, items.indexOf(document.activeElement));
+  const next = event.key === 'Home' ? 0
+    : event.key === 'End' ? items.length - 1
+      : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+  items[next].focus();
 });
 els.editorUndoButton.addEventListener('click', () => {
   if (codeEditor && state.editing) {
@@ -4306,6 +4362,7 @@ els.recentContextMenu.addEventListener('click', async event => {
 document.addEventListener('click', () => {
   els.moreMenu.classList.add('hidden');
   els.codeLangMenu.classList.add('hidden');
+  closeMoreFormatMenu();
   closeDocumentActionsMenu();
   closeTextColorMenu();
   closeAccentMenu();
@@ -4340,6 +4397,7 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.recentContextMenu.classList.contains('hidden')) closeRecentContextMenu();
   else if (event.key === 'Escape' && !els.textColorMenu.classList.contains('hidden')) { closeTextColorMenu(); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.codeLangMenu.classList.contains('hidden')) { els.codeLangMenu.classList.add('hidden'); focusCodeEditor(); }
+  else if (event.key === 'Escape' && !els.moreFormatMenu.classList.contains('hidden')) closeMoreFormatMenu(true);
   else if (event.key === 'Escape' && !els.accentMenu.classList.contains('hidden')) { closeAccentMenu(); $('#accentButton').focus(); }
   else if (event.key === 'Escape' && !els.documentActionsMenu.classList.contains('hidden')) { closeDocumentActionsMenu(); els.documentActionsMoreButton.focus(); }
   else if (event.key === 'Escape' && !els.diagramDialog.classList.contains('hidden')) closeDiagramDialog();

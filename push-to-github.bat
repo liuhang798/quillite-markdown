@@ -6,7 +6,7 @@ cd /d "%~dp0"
 
 set "REPO_URL=https://github.com/liuhang798/quillite-markdown.git"
 set "BRANCH=main"
-set "COMMIT_MSG=Release v2.5.1 references, images, diagrams, and update fixes"
+set "COMMIT_MSG=Release v2.5.2 macOS More Formats performance and compatibility fixes"
 set "MAX_RETRIES=3"
 set "SYSTEM_PROXY="
 

@@ -67,7 +67,7 @@ char* qm_start_accessing_security_scoped_bookmark(const char* bookmark_base64, c
         }
 
         NSString *base64 = [NSString stringWithUTF8String:bookmark_base64];
-        NSData *bookmark = [NSData dataWithBase64EncodedString:base64 options:0];
+        NSData *bookmark = [[NSData alloc] initWithBase64EncodedString:base64 options:0];
         if (bookmark == nil) {
             if (error_out != NULL) {
                 *error_out = qmCopyUTF8String(@"The bookmark data is invalid.");
@@ -117,12 +117,11 @@ void qm_stop_accessing_security_scoped_bookmark(const char* token) {
             return;
         }
         NSString *tokenString = [NSString stringWithUTF8String:token];
-        NSURL *url = nil;
         @synchronized (qmActiveSecurityScopedURLs()) {
-            url = qmActiveSecurityScopedURLs()[tokenString];
+            NSURL *url = qmActiveSecurityScopedURLs()[tokenString];
+            [url stopAccessingSecurityScopedResource];
             [qmActiveSecurityScopedURLs() removeObjectForKey:tokenString];
         }
-        [url stopAccessingSecurityScopedResource];
     }
 }
 

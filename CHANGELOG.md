@@ -8,6 +8,18 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+## [2.5.2] - 2026-08-23
+
+### 简体中文
+
+- 修复 macOS 点击编辑器“更多格式”需要等待 1–2 秒才弹出的问题。原生 WebKit 选择器已替换为应用内轻量菜单，点击后立即显示，并保留工具栏折叠项、键盘导航和中英文界面。
+- 修复新版 macOS SDK 下安全书签解码/释放崩溃和应用链接失败的问题，并在授权路径解析后继续保留用户原始文档路径，恢复本机测试与打包。
+
+### English
+
+- Fixed the 1–2 second delay before More Formats opened on macOS. The native WebKit selector is replaced by a lightweight in-app menu that appears immediately while preserving collapsed toolbar commands, keyboard navigation, and both UI languages.
+- Fixed security-bookmark decoding/release crashes and an application link failure with newer macOS SDKs, while preserving the user's original document path after permission resolution, restoring local testing and packaging.
+
 ## [2.5.1] - 2026-08-21
 
 ### 简体中文
@@ -669,3 +681,4 @@ All notable changes to Quillite Markdown are documented here.
 [2.4.9]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.4.9
 [2.5.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.0
 [2.5.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.1
+[2.5.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.2

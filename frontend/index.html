@@ -301,27 +301,10 @@
             <button type="button" data-format="table" data-format-overflow="table" data-format-label="insertTable" data-format-group="asset" data-overflow-priority="20" data-i18n-title="insertTable" title="插入表格"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16M15 4v16"/></svg></button>
             <button type="button" data-format="image" data-format-overflow="image" data-format-label="insertImage" data-format-group="asset" data-overflow-priority="10" data-i18n-title="insertImage" title="插入图片"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 2-2 6 5"/></svg></button>
             <span class="format-divider" data-divider-before="more"></span>
-            <select id="moreFormatSelect" data-i18n-title="moreFormats" title="更多格式">
-              <option value="" data-i18n="moreFormats">更多格式</option>
-              <optgroup id="overflowFormatGroup" data-i18n-label="toolbarOverflow" label="工具栏折叠" hidden></optgroup>
-              <optgroup data-i18n-label="extendedFormats" label="扩展格式">
-              <option value="bold-italic" data-i18n="boldItalic">粗斜体</option>
-              <option value="underline" data-i18n="underline">下划线</option>
-              <option value="superscript" data-i18n="superscript">上标</option>
-              <option value="subscript" data-i18n="subscript">下标</option>
-              <option value="formula-builder" data-i18n="formulaBuilder">学科公式 🔥</option>
-              <option value="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥</option>
-              <option value="hard-break" data-i18n="hardBreak">强制换行</option>
-              <option value="footnote" data-i18n="footnote">脚注</option>
-              <option value="reference-link" data-i18n="referenceLink">引用式链接</option>
-              <option value="collapsible" data-i18n="collapsible">折叠区块</option>
-              <option value="keyboard-key" data-i18n="keyboardKey">键盘按键</option>
-              <option value="autolink" data-i18n="autolink">自动链接</option>
-              <option value="escape" data-i18n="escapeSyntax">转义符号</option>
-              <option value="html-block" data-i18n="htmlBlock">HTML 区块</option>
-              <option value="comment" data-i18n="comment">注释</option>
-              </optgroup>
-            </select>
+            <button id="moreFormatButton" class="more-format-button" type="button" data-i18n-title="moreFormats" title="更多格式" aria-haspopup="menu" aria-expanded="false">
+              <span data-i18n="moreFormats">更多格式</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+            </button>
           </div>
           <div id="markdownEditor" data-i18n-aria-label="markdownEditorAria" aria-label="Markdown 编辑器"></div>
           <div class="editor-footer">
@@ -386,7 +369,7 @@
     <hr>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.5.1</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.5.2</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -398,6 +381,30 @@
     <div class="text-color-options">
       <button type="button" class="active" role="menuitemradio" data-text-color="default" aria-checked="true" data-i18n-title="textColorDefault" data-i18n-aria-label="textColorDefault" title="默认颜色" aria-label="默认颜色"><span class="text-color-swatch text-color-swatch-default">A</span></button>
     </div>
+  </div>
+
+  <div id="moreFormatMenu" class="popover more-format-menu hidden no-drag" role="menu" aria-labelledby="moreFormatButton">
+    <div id="overflowFormatGroup" hidden>
+      <div class="popover-label" data-i18n="toolbarOverflow">工具栏折叠</div>
+      <div id="overflowFormatOptions"></div>
+      <hr>
+    </div>
+    <div class="popover-label" data-i18n="extendedFormats">扩展格式</div>
+    <button type="button" role="menuitem" data-format-command="bold-italic" data-i18n="boldItalic">粗斜体</button>
+    <button type="button" role="menuitem" data-format-command="underline" data-i18n="underline">下划线</button>
+    <button type="button" role="menuitem" data-format-command="superscript" data-i18n="superscript">上标</button>
+    <button type="button" role="menuitem" data-format-command="subscript" data-i18n="subscript">下标</button>
+    <button type="button" role="menuitem" data-format-command="formula-builder" data-i18n="formulaBuilder">学科公式 🔥</button>
+    <button type="button" role="menuitem" data-format-command="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥</button>
+    <button type="button" role="menuitem" data-format-command="hard-break" data-i18n="hardBreak">强制换行</button>
+    <button type="button" role="menuitem" data-format-command="footnote" data-i18n="footnote">脚注</button>
+    <button type="button" role="menuitem" data-format-command="reference-link" data-i18n="referenceLink">引用式链接</button>
+    <button type="button" role="menuitem" data-format-command="collapsible" data-i18n="collapsible">折叠区块</button>
+    <button type="button" role="menuitem" data-format-command="keyboard-key" data-i18n="keyboardKey">键盘按键</button>
+    <button type="button" role="menuitem" data-format-command="autolink" data-i18n="autolink">自动链接</button>
+    <button type="button" role="menuitem" data-format-command="escape" data-i18n="escapeSyntax">转义符号</button>
+    <button type="button" role="menuitem" data-format-command="html-block" data-i18n="htmlBlock">HTML 区块</button>
+    <button type="button" role="menuitem" data-format-command="comment" data-i18n="comment">注释</button>
   </div>
 
   <div id="recentContextMenu" class="popover recent-context-menu hidden no-drag" role="menu" data-i18n-aria-label="recentContextMenuTitle" aria-label="最近阅读文档操作">
@@ -471,7 +478,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.5.1</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.5.2</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -527,7 +534,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.5.1</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.5.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -549,9 +556,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.5.1</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.5.2</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.5.1</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.5.2</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

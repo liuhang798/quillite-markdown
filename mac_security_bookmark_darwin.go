@@ -3,7 +3,7 @@
 package main
 
 /*
-#cgo LDFLAGS: -framework Foundation
+#cgo LDFLAGS: -framework Foundation -framework UniformTypeIdentifiers
 #include <stdlib.h>
 
 char* qm_create_security_scoped_bookmark(const char* path, char** error_out);
