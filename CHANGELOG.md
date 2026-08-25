@@ -2,6 +2,32 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [Unreleased]
+
+### 简体中文
+
+### English
+
+## [2.6.1] - 2026-08-25
+
+### 简体中文
+
+- 流程图新增可视化画布编辑：无需手改 Mermaid 源码，即可直接添加处理、判断和开始／结束节点，拖动节点调整画布位置，依次点击节点创建连线，并修改节点文字、形状、连线文字与样式；支持四种流程方向和自动排列，最终仍生成兼容其他 Markdown 软件的标准 Mermaid 源码。包含子图、样式等高级语法时会安全保留源码模式，不会覆盖或丢失内容。
+- 图表生成器新增全屏绘图模式，仅将流程图绘图区铺满整个应用窗口，不再放大左侧分类和弹框标题；“全屏绘图”移动到绘图工具栏首位，全屏工具栏固定提供“退出全屏”和“插入图表”。按钮或 `Ctrl/Cmd + 滚轮` 可在 50%–200% 间缩放图形，任意倍率下画布始终铺满整个绘图区。可拖动空白区域向任意方向平移，节点拖到边缘时自动扩展观察范围；新增“全选”和 `Ctrl/Cmd + A`，全选后拖动任一节点即可整体移动，且不再受原画布边界限制。按 `Esc` 可恢复弹框。同步修正流程图工具栏占用高度后画布区域被遮挡的问题。
+- 已插入文档的 Mermaid 流程图支持再次进入可视化画布：光标进入 `flowchart`／`graph` 代码块后会显示“在画布中编辑流程图”按钮，保存修改会原位替换当前代码块，并保留原有围栏符号、缩进和换行格式，不会重复插入图表。
+- 图表选择列表新增统一的“可视化编辑”画布图标，并将首批可视化能力扩展到 11 类高频图表。状态图与思维导图现已升级为和流程图一致的节点画布，共享全屏、缩放、自由平移、拖动、全选整体移动、边缘自动平移、连线和自动排列；状态图按“状态＋转移”保存且保留未连线状态，思维导图按“父主题＋子主题”保存并阻止多父节点与循环。三类图均可从文档代码块重新进入画布并原位保存。时序图、甘特图、时间线、看板、饼图、柱状图、折线图和环形图继续使用结构化字段／数据行编辑。遇到高级语法时会拒绝转换并安全保留源码模式。
+- 优化状态图的画布排版：状态框和起止节点采用更紧凑的专用尺寸，文字与箭头同步缩小，转移条件移到连线侧边，避免纵向状态机中的节点、标签和箭头互相遮挡。
+- 公式工具默认改为行内公式，并支持直接修改已有公式：光标进入行内、块级、编号或化学公式时会显示“编辑当前公式”，双击编辑预览中的渲染公式也可打开同一弹框；原公式内容、编号与插入方式会自动载入，保存后原位替换，不再要求手工选中完整源码。
+
+### English
+
+- Added a visual flowchart canvas. Without editing Mermaid source, users can add process, decision, and start/end nodes, drag nodes on the canvas, connect two nodes by clicking them, and edit node text, shapes, connection labels, and line styles. Four flow directions and automatic layout remain portable because the result is standard Mermaid source. Advanced subgraph or styling syntax stays safely in Source mode and is never overwritten.
+- Added a focused full-screen drawing mode that expands only the flowchart workspace rather than the category list and dialog header. Its toolbar always provides Exit full screen and Insert diagram actions, plus 50%–200% zoom through buttons or `Ctrl/Cmd + wheel`; the viewport now stays full-size at every zoom level. Dragging empty space pans freely, dragging nodes near an edge automatically reveals more canvas, and Select all or `Ctrl/Cmd + A` lets users drag every node together without the old canvas boundary. `Esc` restores the dialog. The workspace also reserves the toolbar height correctly so the canvas is no longer obscured.
+- Existing Mermaid flowcharts can now be reopened on the visual canvas. Moving the cursor into a `flowchart` or `graph` fence reveals an Edit flowchart on canvas action; Save changes replaces that block in place while preserving its fence marker, indentation, and line endings instead of inserting a duplicate.
+- Diagram templates now carry a consistent visual-editing canvas badge across 11 frequently used types. State diagrams and mind maps now share the full node canvas used by flowcharts, including full screen, zoom, free panning, dragging, select-all group movement, edge auto-pan, connections, and automatic layout. State diagrams preserve standalone states and save state transitions; mind maps save parent-child hierarchy while preventing multiple parents and cycles. All three canvas types can reopen from an existing document fence and save in place. Sequence, Gantt, timeline, Kanban, pie, bar, line, and doughnut charts retain structured field/data-row editors. Advanced syntax refuses conversion and remains safely in Source mode.
+- Refined state-diagram layout with compact state and terminal nodes, smaller labels and arrows, and transition labels offset beside their connections so vertically arranged state machines no longer overlap.
+- Academic Formulas now defaults to inline output and directly edits existing inline, display, numbered, or chemistry formulas. Putting the cursor inside one reveals Edit current formula, while double-clicking its rendered live-preview form opens the same dialog; source, equation number, and output mode are restored and saved in place without selecting the full Markdown range.
+
 ## [2.6.0] - 2026-08-25
 
 ### 简体中文
@@ -721,3 +747,4 @@ All notable changes to Quillite Markdown are documented here.
 [2.5.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.1
 [2.5.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.2
 [2.6.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.0
+[2.6.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.1

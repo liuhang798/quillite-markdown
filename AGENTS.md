@@ -23,7 +23,7 @@
 | 后端 | Go 1.25 | 文件读写、最近记录、草稿、图片读取、系统操作、更新检查 |
 | 前端 | 原生 HTML、CSS、JavaScript | 页面结构、交互、状态管理、双语界面 |
 | 构建 | Vite 7 | 前端打包，输出到 `frontend/dist` |
-| 编辑器 | CodeMirror 6 | Markdown 编辑、语法高亮、学科公式与 22 类 Mermaid 图表生成器、撤回历史、快捷键 |
+| 编辑器 | CodeMirror 6 | Markdown 编辑、语法高亮、学科公式、流程图可视化画布与 22 类 Mermaid 图表生成器、撤回历史、快捷键 |
 | Markdown | marked | Markdown 转 HTML |
 | 科学公式 | KaTeX + mhchem | 本地渲染 LaTeX 行内/块级公式、化学式与公式编号 |
 | 安全清理 | DOMPurify | 清理渲染后的 HTML |

@@ -35,7 +35,40 @@ test('editor offers one localized diagram builder with the full common Mermaid c
   assert.match(index, /data-i18n="diagramGuide">查看图表教程 ↗/);
   assert.match(index, /id="diagramSource"/);
   assert.match(index, /id="diagramPreview"/);
+  assert.match(index, /id="flowchartVisualEditor"/);
+  assert.match(index, /id="flowchartCanvas"[^>]*viewBox="0 0 920 560"/);
+  assert.match(index, /data-flowchart-add="process"/);
+  assert.match(index, /data-flowchart-add="decision"/);
+  assert.match(index, /id="flowchartConnect"/);
+  assert.match(index, /id="flowchartNodeLabel"/);
+  assert.match(index, /id="flowchartEdgeLabel"/);
+  assert.match(index, /class="flowchart-toolbar">\s*<button id="toggleDiagramFullscreen"[^>]+aria-pressed="false"/s);
+  assert.match(index, /id="flowchartZoomOut"/);
+  assert.match(index, /id="flowchartZoomValue">100%/);
+  assert.match(index, /id="flowchartZoomIn"/);
+  assert.match(index, /id="flowchartSelectAll"/);
+  assert.match(index, /id="exitDiagramFullscreen"/);
+  assert.match(index, /id="insertDiagramFullscreen"/);
   assert.match(renderer, /openDiagramDialog/);
+  assert.match(renderer, /parseFlowchartSource\(source\)/);
+  assert.match(renderer, /serializeCanvasDiagram\(flowchartDesignerState\.model\)/);
+  assert.match(renderer, /addFlowchartEdge\(flowchartDesignerState\.model, flowchartDesignerState\.connectFrom, nodeId\)/);
+  assert.match(renderer, /removeFlowchartNode\(flowchartDesignerState\.model, selection\.id\)/);
+  assert.match(renderer, /flowchartDesignerState\.model = layoutFlowchart\(flowchartDesignerState\.model\)/);
+  assert.match(renderer, /els\.flowchartCanvas\.addEventListener\('pointermove'/);
+  assert.match(renderer, /els\.flowchartCanvas\.addEventListener\('dblclick'/);
+  assert.match(renderer, /function toggleDiagramFullscreen\(\)/);
+  assert.match(renderer, /diagramDialog\.classList\.contains\('diagram-fullscreen'\)\) setDiagramFullscreen\(false\)/);
+  assert.match(renderer, /function setFlowchartZoom\(value, \{ resetPan = false \} = \{\}\)/);
+  assert.match(renderer, /flowchartCanvasViewport\.addEventListener\('wheel'/);
+  assert.match(renderer, /function flowchartViewBox\(\)/);
+  assert.match(renderer, /flowchartDesignerState\.panX \+= deltaX/);
+  assert.match(renderer, /function selectAllFlowchartNodes\(\)/);
+  assert.match(renderer, /selection\?\.type === 'nodes'/);
+  assert.match(renderer, /drag\.origins\[node\.id\]/);
+  assert.match(renderer, /event\.clientX < viewportRect\.left \+ edgeZone/);
+  assert.doesNotMatch(renderer, /Math\.max\(48, Math\.min\(872, point\.x/);
+  assert.match(renderer, /flowchartVisualUnsupported: '当前源码包含子图、样式或其他高级语法/);
   assert.match(renderer, /DIAGRAM_GUIDE_URL = 'https:\/\/qm\.ssssa\.cn\/guides\/diagrams\/'/);
   assert.match(renderer, /openDiagramGuide/);
   assert.match(renderer, /diagram-guide\.open/);
@@ -43,6 +76,14 @@ test('editor offers one localized diagram builder with the full common Mermaid c
   assert.match(styles, /\.diagram-dialog[^}]+calc\(100vw - 32px\)[^}]+calc\(100vh - 24px\)/s);
   assert.match(styles, /#diagramBuilderPanel[^}]+grid-template-columns:\s*minmax\(340px,[^}]+minmax\(460px/s);
   assert.match(styles, /\.diagram-source-card textarea[^}]+height:\s*100%[^}]+resize:\s*none/s);
+  assert.match(styles, /\.flowchart-workspace \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 210px/);
+  assert.match(styles, /\.flowchart-node\.selected \.flowchart-node-shape/);
+  assert.match(styles, /\.diagram-fullscreen \.flowchart-visual-editor \{[^}]*position:\s*fixed;[^}]*inset:\s*0/s);
+  assert.doesNotMatch(styles, /\.diagram-fullscreen \.diagram-dialog \{[^}]*width:\s*100vw/s);
+  assert.match(styles, /\.flowchart-canvas-viewport svg \{[^}]*width:\s*100%;[^}]*height:\s*100%/s);
+  assert.match(styles, /\.flowchart-canvas-viewport\.is-panning \{[^}]*cursor:\s*grabbing/s);
+  assert.match(styles, /\.diagram-fullscreen #toggleDiagramFullscreen \{\s*display:\s*none/);
+  assert.match(styles, /\.flowchart-visual-editor \{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\)/s);
   assert.equal(DIAGRAM_TEMPLATES.length, 37);
   assert.equal(new Set(DIAGRAM_TEMPLATES.map(template => template.id)).size, DIAGRAM_TEMPLATES.length);
   for (const template of DIAGRAM_TEMPLATES) {
@@ -54,6 +95,43 @@ test('editor offers one localized diagram builder with the full common Mermaid c
   assert.equal(diagramTemplatesForCategory('all').length, 37);
   assert.match(renderer, /template\.engine === 'echarts' \? 'echarts' : 'mermaid'/);
   assert.ok(renderer.includes("template.engine === 'echarts' ? 'echarts' : 'mermaid'"));
+});
+
+test('existing Mermaid flowcharts, state diagrams, and mindmaps reopen on the canvas and save in place', () => {
+  assert.match(index, /id="editFlowchartButton"/);
+  assert.match(index, /data-i18n="editFlowchartVisually"/);
+  assert.match(renderer, /findCanvasDiagramFenceAt\(source, selection\.head\)/);
+  assert.match(renderer, /openDiagramDialog\(activeFlowchartFence\.templateId, activeFlowchartFence\)/);
+  assert.match(renderer, /CANVAS_DIAGRAM_IDS = new Set\(\['flowchart', 'state', 'mindmap'\]\)/);
+  assert.match(renderer, /function stateDiagramCanvasModel\(source\)/);
+  assert.match(renderer, /function mindmapCanvasModel\(source\)/);
+  assert.match(renderer, /function serializeStateCanvas\(model\)/);
+  assert.match(renderer, /function serializeMindmapCanvas\(model\)/);
+  assert.match(renderer, /node\.diagramNodeType === 'state'[^\n]+width: 52, height: 52[^\n]+width: 132, height: 48/);
+  assert.match(renderer, /stateOffset = model\.canvasType === 'state' \? 13 : 0/);
+  assert.match(renderer, /stateEdge \? 'url\(#flowchartArrowSmall\)' : 'url\(#flowchartArrow\)'/);
+  assert.match(styles, /\.flowchart-node\.state-node text \{[^}]*font-size:\s*11px/s);
+  assert.match(renderer, /editRange:\s*null/);
+  assert.match(renderer, /function replaceExistingFlowchart\(range, source\)/);
+  assert.match(renderer, /changes:\s*\{ from: range\.from, to: range\.to, insert: markdown \}/);
+  assert.match(renderer, /saveDiagramChanges: '保存修改'/);
+  assert.match(renderer, /saveDiagramChanges: 'Save changes'/);
+  assert.match(styles, /\.edit-flowchart-button\s*\{/);
+  assert.match(styles, /\.editing-existing-flowchart \.diagram-dialog-layout/);
+});
+
+test('popular diagram templates are visibly marked and expose structured visual editing', () => {
+  assert.match(index, /id="structuredDiagramEditor"/);
+  assert.match(index, /id="structuredDiagramSettings"/);
+  assert.match(index, /id="structuredDiagramRows"/);
+  assert.match(renderer, /template\.visualEditor/);
+  assert.match(renderer, /className = 'diagram-visual-badge'/);
+  assert.match(renderer, /function renderStructuredDiagramEditor\(\)/);
+  assert.match(renderer, /serializeStructuredDiagram\(diagramWizardState\.templateId/);
+  assert.match(renderer, /structuredDiagramAddRow: '添加一行'/);
+  assert.match(renderer, /structuredDiagramAddRow: 'Add row'/);
+  assert.match(styles, /\.diagram-visual-badge\s*\{/);
+  assert.match(styles, /\.structured-diagram-editor\s*\{/);
 });
 
 test('ECharts catalog supplies all requested data visualizations and an offline SVG export path', () => {

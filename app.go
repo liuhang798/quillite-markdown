@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.6.0"
+	appVersion      = "2.6.1"
 	maxRecent       = 10
 )
 

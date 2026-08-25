@@ -446,6 +446,11 @@ test('LaTeX math, chemistry, and numbered equations are available in preview and
   assert.match(html, /<textarea id="formulaMarkdownSource"[^>]*data-i18n-aria-label="generatedMarkdown"/);
   assert.match(renderer, /els\.formulaMarkdownSource\.addEventListener\('input', updateFormulaPreviewFromMarkdown\)/);
   assert.match(renderer, /const markdownSource = els\.formulaMarkdownSource\.value\.trim\(\)/);
+  assert.match(html, /id="editFormulaButton" class="edit-flowchart-button hidden"/);
+  assert.match(renderer, /mode: 'inline',[\s\S]*editRange: null/);
+  assert.match(renderer, /activeFormulaMatch = activeFlowchartFence \? null : findFormulaAt/);
+  assert.match(renderer, /changes: \{ from: editRange\.from, to: editRange\.to, insert: markdownSource \}/);
+  assert.match(renderer, /els\.editorPreview\.addEventListener\('dblclick'/);
   assert.match(styles, /\.markdown-body \.math-block \{[^}]*overflow-x: auto;/);
 });
 

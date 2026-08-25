@@ -5,11 +5,14 @@ import hljs from 'highlight.js/lib/common';
 import { convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
 import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory } from './diagram-templates.js';
+import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, findCanvasDiagramFenceAt, layoutFlowchart, parseFlowchartSource, removeFlowchartEdge, removeFlowchartNode, serializeFlowchart } from './flowchart-designer.js';
+import { hasStructuredVisualEditor, parseStructuredDiagram, serializeStructuredDiagram, structuredDiagramDefinition } from './structured-diagram-editor.js';
 import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearanceStorage, resolveMacColorMode, temporaryMacColorModeAfterToggle } from './appearance.js';
 import { previewWheelZoomDirection } from './font-wheel-zoom.js';
 import { clampFontScale, readFontScaleStorage, recommendedFontScale } from './font-scaling.js';
 import { escapeMarkdownText, highlightExtension, nextFootnoteNumber, prepareFootnotes, renderFootnoteSection } from './markdown-formats.js';
 import { buildFormulaExpression, buildFormulaMarkdown, FORMULA_DISCIPLINES, FORMULA_GROUP_LABELS, formulaPreviewExpression, formulaTemplateById, formulaTemplatesForDiscipline, formulaValues, parseFormulaMarkdown } from './formula-templates.js';
+import { findFormulaAt, scanMarkdownFormulas } from './formula-editing.js';
 import { mathExtensions, renderLatex } from './math-rendering.js';
 import { scanMarkdownBlockStartLines } from './preview-line-map.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
@@ -254,7 +257,7 @@ const translations = {
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.6.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.6.1', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -267,8 +270,9 @@ const translations = {
     moreFormats: '更多格式', toolbarOverflow: '折叠的工具栏格式', extendedFormats: '扩展格式', boldItalic: '粗斜体', underline: '下划线', superscript: '上标', subscript: '下标', formulaBuilder: '学科公式 🔥', diagramBuilder: '图表生成器 🔥', diagramGuide: '查看图表教程 ↗', mermaidFlowchart: 'Mermaid 流程图', mermaidSequence: 'Mermaid 时序图', mermaidGantt: 'Mermaid 甘特图', mermaidDiagram: 'Mermaid 图表', mermaidRenderError: '图表语法有误', mermaidRenderHint: '请检查 Mermaid 源码，文档其他内容不受影响。', dataChart: '数据图表', dataChartRenderError: '数据图表配置有误', dataChartRenderHint: '请检查 ECharts JSON 配置，文档其他内容不受影响。', inlineMath: '行内公式', mathBlock: '块级公式', chemicalFormula: '化学公式', mathGuide: '查看公式教程 ↗', numberedMath: '编号公式', mathExpression: 'LaTeX 公式', hardBreak: '强制换行', footnote: '脚注', referenceLink: '引用式链接', collapsible: '折叠区块', keyboardKey: '键盘按键', autolink: '自动链接', escapeSyntax: '转义符号', htmlBlock: 'HTML 区块', comment: '注释', footnotes: '脚注', footnoteText: '脚注内容', referenceName: '引用名称', collapsibleTitle: '折叠标题',
     markdownTool: 'MARKDOWN 工具', tableDialogHint: '直接填写单元格，拖动行列调整顺序或列宽，并设置每列对齐方式。', visualTableEditor: '可视化表格编辑', editTable: '编辑表格', insertTableAction: '插入表格', saveTable: '保存表格', rows: '行数', columns: '列数', columnNumber: '第 {number} 列', headerRow: '表头', rowNumber: '第 {number} 行', addRow: '添加行', addColumn: '添加列', deleteRow: '删除行', deleteColumn: '删除列', alignment: '对齐', alignLeft: '左对齐', alignCenter: '居中', alignRight: '右对齐', dragTableHint: '拖动手柄调整行列顺序', resizeTableHint: '拖动列边界调整宽度', tableCellPlaceholder: '填写内容', tableMinimumSize: 'Markdown 表格至少需要 2 行、1 列', cancel: '取消', insert: '插入', newFileFailed: '无法新建文档', imageSelectFailed: '无法导入图片', imageImported: '图片已复制到 assets 资源目录', imagePasteFailed: '无法粘贴图片', languageSaveFailed: '无法保存语言设置，请重试', imageDialogHint: '选择本地图片或粘贴在线链接；本地图片会自动复制到 assets 资源目录。', imageUrlLabel: '图片链接', imageUrlPlaceholder: 'https:// 或 http:// 链接', imageAltPlaceholder: '可选的图片说明', imageWidth: '显示宽度', imageWidthHint: '拖拽和粘贴图片也会使用此宽度', localImage: '本地图片…', imageUrlInvalid: '请输入有效的 http:// 或 https:// 链接',
     chooseImage: '选择图片…', imageUploadSettings: '图床设置', imageUploadSettingsHint: '可直接登录 PicGo 在线图床，无需安装额外软件；也可继续使用本地 assets 或已安装的 PicGo。', imageInsertMode: '图片插入方式', localAssetsMode: '本地 assets', localAssetsModeHint: '保存相对路径，离线可用', localAssetsReadyTitle: '本地模式已就绪', localAssetsReadyHint: '图片会复制到文档旁的 assets，便于离线阅读和移动。', picGoCloudMode: 'PicGo 在线图床', picGoCloudModeHint: '浏览器登录，无需安装 PicGo', picGoCloudSetupTitle: '登录后直接上传', picGoCloudSetupHint: '将在浏览器打开 PicGo Cloud 登录页。登录令牌仅保存在本机；免费账户提供 200 个文件、500 MB 存储空间，额度与计费以 PicGo Cloud 为准。', picGoCloudConnectedTitle: 'PicGo Cloud 已连接', loginPicGoCloud: '登录 PicGo Cloud', logoutPicGoCloud: '退出登录', testPicGoCloud: '检查连接', picGoCloudSigningIn: '请在浏览器完成 PicGo Cloud 登录…', picGoCloudChecking: '正在检查 PicGo Cloud 连接…', picGoCloudConnected: '连接正常，可以启用在线图床', picGoCloudLoginFailed: 'PicGo Cloud 登录失败，请重试', picGoCloudConnectionFailed: 'PicGo Cloud 连接失效，请重新登录', picGoCloudLoggedOut: '已退出 PicGo Cloud', picGoMode: '本机 PicGo', picGoModeHint: '兼容已安装的 PicGo 与其他图床', picGoSetupProgress: '本机 PicGo 配置进度', picGoSetupInstallShort: '安装 PicGo', picGoSetupConfigureShort: '配置并检测', picGoSetupReadyShort: '完成', picGoSetupStep1: '第 1 步', picGoSetupInstallTitle: '安装并启动 PicGo', picGoSetupInstallHint: '此兼容模式需要安装 PicGo。安装后打开，并让它保持在后台运行。', downloadPicGo: '打开 PicGo 下载页', picGoInstalledNext: '已经安装，下一步', picGoSetupStep2: '第 2 步', picGoSetupConfigureTitle: '配置图床并开启 Server', picGoSetupConfigureHost: '在 PicGo 中配置要使用的图床。', picGoSetupEnableServer: '打开“PicGo 设置 → PicGo-Server”，确认服务已开启，端口为 36677。', picGoSetupKeepRunning: '保持 PicGo 在后台运行，然后让轻阅自动检测。', picGoSetupBack: '上一步', autoDetectPicGo: '自动检测 PicGo', picGoSetupStep3: '第 3 步', picGoSetupReadyTitle: '本机 PicGo 已连接', picGoSetupReadyHint: '保存后，粘贴、拖拽和选择的图片将自动上传；失败时仍会安全使用本地 assets。', picGoAdvancedSettings: '高级设置', picGoServerURL: 'PicGo 服务地址', picGoSecret: '服务密钥（可选）', picGoSecretPlaceholder: '留空则保留已保存密钥', clearPicGoSecret: '清除已保存密钥', picGoSecurityHint: '默认无需修改。仅允许连接本机 localhost 地址；第三方图床密钥继续由 PicGo 管理。', testPicGo: '测试连接', saveSettings: '保存设置', enablePicGo: '启用在线图床', picGoTesting: '正在自动检测 PicGo…', picGoConnected: '检测成功，可以启用本机 PicGo', picGoConnectionFailed: '没有检测到 PicGo。请确认 PicGo 正在运行并已开启 36677 端口的 PicGo-Server；如改过地址或密钥，请在高级设置中核对。', imageUploadSettingsSaved: '图床设置已保存', imageUploadSettingsSaveFailed: '图床设置保存失败', imageUploaded: '图片已上传到在线图床', picGoUploadFailedFallback: '在线图床上传失败，已自动使用本地图片', imageUploadingTitle: '正在上传图片', imageUploadPreparing: '正在准备图片…', imageUploadingCloud: '正在上传到 PicGo Cloud…', imageUploadingLocalPicGo: '正在发送到本机 PicGo…', imageUploadFinalizing: '正在生成在线链接…', imageUploadComplete: '上传完成',
-    formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式', formulaWizardHint: '按学科选择常用公式，填写参数后直接插入 Markdown。', formulaSubject: '学科分类', formulaOutput: '插入方式', selectedFormula: '已选公式', equationNumber: '公式编号', formulaPreview: '实时预览', generatedMarkdown: '生成的 Markdown', insertFormula: '插入公式', formulaModeInline: '行内公式', formulaModeBlock: '块级公式', formulaModeNumbered: '编号公式', formulaInvalid: '请填写有效的公式内容',
-    diagramWizardLabel: 'MERMAID 图表', diagramWizardTitle: '选择并生成图表', diagramWizardHint: '按用途选择常用图表，编辑源码并实时预览后插入 Markdown。', diagramCategory: '图表分类', selectedDiagram: '已选图表', diagramSource: '图表源码', diagramPreview: '实时预览', insertDiagram: '插入图表', diagramInvalid: '请输入有效的 Mermaid 图表源码',
+    formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式', formulaWizardHint: '按学科选择常用公式，填写参数后直接插入 Markdown。', formulaEditTitle: '修改当前公式', formulaEditHint: '直接修改参数、公式源码或插入方式，保存后会原位替换当前公式。', editFormulaDirectly: '编辑当前公式', formulaPreviewEditHint: '双击修改此公式', formulaSubject: '学科分类', formulaOutput: '插入方式', selectedFormula: '已选公式', equationNumber: '公式编号', formulaPreview: '实时预览', generatedMarkdown: '生成的 Markdown', insertFormula: '插入公式', saveFormulaChanges: '保存修改', formulaModeInline: '行内公式', formulaModeBlock: '块级公式', formulaModeNumbered: '编号公式', formulaInvalid: '请填写有效的公式内容',
+    diagramWizardLabel: 'MERMAID 图表', diagramWizardTitle: '选择并生成图表', diagramWizardHint: '带画布图标的常用图表支持可视化编辑；其他图表可编辑源码并实时预览。', diagramCategory: '图表分类', selectedDiagram: '已选图表', diagramSource: '图表源码', diagramPreview: '实时预览', insertDiagram: '插入图表', saveDiagramChanges: '保存修改', editFlowchartVisually: '在画布中编辑流程图', visualEditorAvailable: '支持可视化编辑', structuredDiagramEditorAria: '可视化图表数据编辑器', structuredDiagramAddRow: '添加一行', structuredDiagramHint: '直接修改字段，右侧预览会实时更新。', structuredDiagramRemoveRow: '删除此行', diagramInvalid: '请输入有效的 Mermaid 图表源码', diagramFullscreen: '全屏绘图', diagramExitFullscreen: '退出全屏',
+    flowchartVisualMode: '可视化编辑', flowchartSourceMode: '源码模式', flowchartVisualSafeHint: '操作会自动生成兼容 Mermaid 的源码', flowchartEditModeAria: '流程图编辑方式', flowchartEditorAria: '可视化流程图编辑器', flowchartAddAria: '添加流程图节点', flowchartCanvasAria: '可编辑流程图画布', flowchartZoomAria: '画布缩放', flowchartZoomOut: '缩小画布', flowchartZoomIn: '放大画布', flowchartZoomReset: '恢复 100%', flowchartProcess: '步骤', flowchartDecision: '判断', flowchartTerminal: '开始／结束', flowchartAddProcess: '添加处理步骤', flowchartAddDecision: '添加判断分支', flowchartAddTerminal: '添加开始或结束', flowchartConnect: '连接节点', flowchartConnectHint: '依次点击两个节点创建连线', flowchartAutoLayout: '自动排列', flowchartAutoLayoutHint: '按照流程方向自动排列', flowchartDirection: '流程方向', flowchartDirectionLR: '左 → 右', flowchartDirectionTD: '上 → 下', flowchartDirectionRL: '右 → 左', flowchartDirectionBT: '下 → 上', flowchartCanvasHint: '双击空白处添加步骤；拖动节点调整位置；连接模式下依次点击两个节点。', flowchartProperties: '所选元素', flowchartNothingSelected: '点击节点或连线后，可在这里修改。', flowchartNodeText: '节点文字', flowchartNodeShape: '节点形状', flowchartEdgeText: '连线文字', flowchartEdgeStyle: '连线样式', flowchartEdgeSolid: '箭头', flowchartEdgeDashed: '虚线箭头', flowchartEdgeThick: '粗箭头', flowchartEdgeLine: '无箭头直线', flowchartDeleteSelection: '删除所选元素', flowchartConnectActive: '请点击起点节点', flowchartConnectTarget: '再点击终点节点', flowchartVisualUnsupported: '当前源码包含子图、样式或其他高级语法，请继续使用源码模式，避免内容丢失。', flowchartNodeDefault: '新步骤', flowchartDecisionDefault: '是否满足条件？', flowchartTerminalDefault: '开始／结束',
     resizeSidebar: '拖动调整文档库宽度', resizeToc: '拖动调整目录宽度', resizeEditor: '拖动调整预览宽度'
   },
   en: {
@@ -300,7 +304,7 @@ const translations = {
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.6.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.6.1', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -313,13 +317,33 @@ const translations = {
     moreFormats: 'More formats', toolbarOverflow: 'Collapsed toolbar formats', extendedFormats: 'Extended formats', boldItalic: 'Bold italic', underline: 'Underline', superscript: 'Superscript', subscript: 'Subscript', formulaBuilder: 'Academic formulas 🔥', diagramBuilder: 'Diagram builder 🔥', diagramGuide: 'Diagram guide ↗', mermaidFlowchart: 'Mermaid flowchart', mermaidSequence: 'Mermaid sequence diagram', mermaidGantt: 'Mermaid Gantt chart', mermaidDiagram: 'Mermaid diagram', mermaidRenderError: 'Invalid diagram syntax', mermaidRenderHint: 'Check the Mermaid source. The rest of the document is unaffected.', dataChart: 'Data chart', dataChartRenderError: 'Invalid data chart configuration', dataChartRenderHint: 'Check the ECharts JSON. The rest of the document is unaffected.', inlineMath: 'Inline formula', mathBlock: 'Display formula', chemicalFormula: 'Chemical formula', mathGuide: 'Formula guide ↗', numberedMath: 'Numbered formula', mathExpression: 'LaTeX expression', hardBreak: 'Hard line break', footnote: 'Footnote', referenceLink: 'Reference link', collapsible: 'Collapsible section', keyboardKey: 'Keyboard key', autolink: 'Autolink', escapeSyntax: 'Escape syntax', htmlBlock: 'HTML block', comment: 'Comment', footnotes: 'Footnotes', footnoteText: 'Footnote text', referenceName: 'reference', collapsibleTitle: 'Section title',
     markdownTool: 'MARKDOWN TOOL', tableDialogHint: 'Edit cells directly, drag rows or columns to reorder or resize, and set alignment for each column.', visualTableEditor: 'Visual table editor', editTable: 'Edit table', insertTableAction: 'Insert table', saveTable: 'Save table', rows: 'Rows', columns: 'Columns', columnNumber: 'Column {number}', headerRow: 'Header', rowNumber: 'Row {number}', addRow: 'Add row', addColumn: 'Add column', deleteRow: 'Delete row', deleteColumn: 'Delete column', alignment: 'Alignment', alignLeft: 'Align left', alignCenter: 'Center', alignRight: 'Align right', dragTableHint: 'Drag handles to reorder rows or columns', resizeTableHint: 'Drag column borders to resize', tableCellPlaceholder: 'Enter content', tableMinimumSize: 'A Markdown table needs at least 2 rows and 1 column', cancel: 'Cancel', insert: 'Insert', newFileFailed: 'Unable to create the document', imageSelectFailed: 'Unable to import the image', imageImported: 'Image copied to the assets folder', imagePasteFailed: 'Unable to paste the image', languageSaveFailed: 'Unable to save the language setting. Please try again.', imageDialogHint: 'Pick a local image or paste an online link. Local images are copied to the assets folder automatically.', imageUrlLabel: 'Image URL', imageUrlPlaceholder: 'https:// or http:// link', imageAltPlaceholder: 'Optional image description', imageWidth: 'Display width', imageWidthHint: 'Dropped and pasted images use this width too', localImage: 'Local image…', imageUrlInvalid: 'Enter a valid http:// or https:// link',
     chooseImage: 'Choose image…', imageUploadSettings: 'Image hosting', imageUploadSettingsHint: 'Sign in to PicGo Cloud directly without installing another app, or keep local assets or an existing PicGo installation.', imageInsertMode: 'Image insertion mode', localAssetsMode: 'Local assets', localAssetsModeHint: 'Portable relative paths that work offline', localAssetsReadyTitle: 'Local mode is ready', localAssetsReadyHint: 'Images are copied to an assets folder beside the document for offline use and portability.', picGoCloudMode: 'PicGo Cloud', picGoCloudModeHint: 'Browser sign-in; no PicGo installation', picGoCloudSetupTitle: 'Sign in and upload directly', picGoCloudSetupHint: 'Quillite opens PicGo Cloud in your browser. The login token stays on this device. Free accounts include 200 files and 500 MB of storage; current limits and billing are controlled by PicGo Cloud.', picGoCloudConnectedTitle: 'PicGo Cloud connected', loginPicGoCloud: 'Sign in to PicGo Cloud', logoutPicGoCloud: 'Sign out', testPicGoCloud: 'Check connection', picGoCloudSigningIn: 'Complete PicGo Cloud sign-in in your browser…', picGoCloudChecking: 'Checking the PicGo Cloud connection…', picGoCloudConnected: 'Connected. Online hosting is ready to enable.', picGoCloudLoginFailed: 'PicGo Cloud sign-in failed. Please try again.', picGoCloudConnectionFailed: 'The PicGo Cloud connection expired. Sign in again.', picGoCloudLoggedOut: 'Signed out of PicGo Cloud', picGoMode: 'Local PicGo', picGoModeHint: 'Use an installed PicGo and its other providers', picGoSetupProgress: 'Local PicGo setup progress', picGoSetupInstallShort: 'Install PicGo', picGoSetupConfigureShort: 'Configure & detect', picGoSetupReadyShort: 'Ready', picGoSetupStep1: 'Step 1', picGoSetupInstallTitle: 'Install and start PicGo', picGoSetupInstallHint: 'This compatibility mode requires PicGo. Open it after installation and keep it running in the background.', downloadPicGo: 'Open PicGo download page', picGoInstalledNext: 'Installed — continue', picGoSetupStep2: 'Step 2', picGoSetupConfigureTitle: 'Configure hosting and enable Server', picGoSetupConfigureHost: 'Configure the provider you want to use inside PicGo.', picGoSetupEnableServer: 'Open PicGo Settings → PicGo-Server, enable it, and keep port 36677.', picGoSetupKeepRunning: 'Keep PicGo running in the background, then let Quillite detect it.', picGoSetupBack: 'Back', autoDetectPicGo: 'Detect PicGo automatically', picGoSetupStep3: 'Step 3', picGoSetupReadyTitle: 'Local PicGo connected', picGoSetupReadyHint: 'After saving, chosen, dropped, and pasted images upload automatically. Failures still fall back safely to local assets.', picGoAdvancedSettings: 'Advanced settings', picGoServerURL: 'PicGo server address', picGoSecret: 'Server secret (optional)', picGoSecretPlaceholder: 'Leave blank to keep the saved secret', clearPicGoSecret: 'Clear the saved secret', picGoSecurityHint: 'No changes are normally needed. Only localhost connections are allowed, and third-party provider credentials remain managed by PicGo.', testPicGo: 'Test connection', saveSettings: 'Save settings', enablePicGo: 'Enable online hosting', picGoTesting: 'Detecting PicGo automatically…', picGoConnected: 'Detection succeeded. Local PicGo is ready to enable.', picGoConnectionFailed: 'PicGo was not detected. Make sure it is running with PicGo-Server enabled on port 36677. If you changed the address or secret, check Advanced settings.', imageUploadSettingsSaved: 'Image hosting settings saved', imageUploadSettingsSaveFailed: 'Unable to save image hosting settings', imageUploaded: 'Image uploaded to online hosting', picGoUploadFailedFallback: 'Online upload failed; the local image was used instead', imageUploadingTitle: 'Uploading image', imageUploadPreparing: 'Preparing the image…', imageUploadingCloud: 'Uploading to PicGo Cloud…', imageUploadingLocalPicGo: 'Sending to local PicGo…', imageUploadFinalizing: 'Generating the online link…', imageUploadComplete: 'Upload complete',
-    formulaWizardLabel: 'ACADEMIC FORMULAS', formulaWizardTitle: 'Choose and build a formula', formulaWizardHint: 'Choose a common formula by subject, fill in its values, and insert the generated Markdown.', formulaSubject: 'Subjects', formulaOutput: 'Insert as', selectedFormula: 'Selected formula', equationNumber: 'Equation number', formulaPreview: 'Live preview', generatedMarkdown: 'Generated Markdown', insertFormula: 'Insert formula', formulaModeInline: 'Inline', formulaModeBlock: 'Display', formulaModeNumbered: 'Numbered', formulaInvalid: 'Enter valid formula content',
-    diagramWizardLabel: 'MERMAID DIAGRAMS', diagramWizardTitle: 'Choose and build a diagram', diagramWizardHint: 'Choose a common diagram by use case, edit its source, preview it, and insert it into Markdown.', diagramCategory: 'Diagram categories', selectedDiagram: 'Selected diagram', diagramSource: 'Diagram source', diagramPreview: 'Live preview', insertDiagram: 'Insert diagram', diagramInvalid: 'Enter valid Mermaid diagram source',
+    formulaWizardLabel: 'ACADEMIC FORMULAS', formulaWizardTitle: 'Choose and build a formula', formulaWizardHint: 'Choose a common formula by subject, fill in its values, and insert the generated Markdown.', formulaEditTitle: 'Edit current formula', formulaEditHint: 'Edit its values, source, or output mode; saving replaces the current formula in place.', editFormulaDirectly: 'Edit current formula', formulaPreviewEditHint: 'Double-click to edit this formula', formulaSubject: 'Subjects', formulaOutput: 'Insert as', selectedFormula: 'Selected formula', equationNumber: 'Equation number', formulaPreview: 'Live preview', generatedMarkdown: 'Generated Markdown', insertFormula: 'Insert formula', saveFormulaChanges: 'Save changes', formulaModeInline: 'Inline', formulaModeBlock: 'Display', formulaModeNumbered: 'Numbered', formulaInvalid: 'Enter valid formula content',
+    diagramWizardLabel: 'MERMAID DIAGRAMS', diagramWizardTitle: 'Choose and build a diagram', diagramWizardHint: 'Popular diagrams marked with the canvas icon support visual editing; the others retain source editing and live preview.', diagramCategory: 'Diagram categories', selectedDiagram: 'Selected diagram', diagramSource: 'Diagram source', diagramPreview: 'Live preview', insertDiagram: 'Insert diagram', saveDiagramChanges: 'Save changes', editFlowchartVisually: 'Edit flowchart on canvas', visualEditorAvailable: 'Visual editing available', structuredDiagramEditorAria: 'Visual diagram data editor', structuredDiagramAddRow: 'Add row', structuredDiagramHint: 'Edit fields directly; the preview updates as you type.', structuredDiagramRemoveRow: 'Remove this row', diagramInvalid: 'Enter valid Mermaid diagram source', diagramFullscreen: 'Full-screen drawing', diagramExitFullscreen: 'Exit full screen',
+    flowchartVisualMode: 'Visual editor', flowchartSourceMode: 'Source mode', flowchartVisualSafeHint: 'Actions automatically generate compatible Mermaid source', flowchartEditModeAria: 'Flowchart editing mode', flowchartEditorAria: 'Visual flowchart editor', flowchartAddAria: 'Add flowchart nodes', flowchartCanvasAria: 'Editable flowchart canvas', flowchartZoomAria: 'Canvas zoom', flowchartZoomOut: 'Zoom out', flowchartZoomIn: 'Zoom in', flowchartZoomReset: 'Reset to 100%', flowchartProcess: 'Process', flowchartDecision: 'Decision', flowchartTerminal: 'Start / end', flowchartAddProcess: 'Add a process node', flowchartAddDecision: 'Add a decision node', flowchartAddTerminal: 'Add a start or end node', flowchartConnect: 'Connect nodes', flowchartConnectHint: 'Click two nodes in order to create a connection', flowchartAutoLayout: 'Auto layout', flowchartAutoLayoutHint: 'Arrange nodes in the selected flow direction', flowchartDirection: 'Flow direction', flowchartDirectionLR: 'Left → right', flowchartDirectionTD: 'Top → bottom', flowchartDirectionRL: 'Right → left', flowchartDirectionBT: 'Bottom → top', flowchartCanvasHint: 'Double-click empty space to add a process; drag nodes to move them; in Connect mode, click two nodes.', flowchartProperties: 'Selected element', flowchartNothingSelected: 'Select a node or connection to edit it here.', flowchartNodeText: 'Node text', flowchartNodeShape: 'Node shape', flowchartEdgeText: 'Connection text', flowchartEdgeStyle: 'Connection style', flowchartEdgeSolid: 'Arrow', flowchartEdgeDashed: 'Dashed arrow', flowchartEdgeThick: 'Thick arrow', flowchartEdgeLine: 'Line without arrow', flowchartDeleteSelection: 'Delete selected element', flowchartConnectActive: 'Click the starting node', flowchartConnectTarget: 'Now click the target node', flowchartVisualUnsupported: 'This source contains subgraphs, styling, or other advanced syntax. Keep using Source mode so no content is lost.', flowchartNodeDefault: 'New step', flowchartDecisionDefault: 'Condition met?', flowchartTerminalDefault: 'Start / end',
     resizeSidebar: 'Drag to resize the library', resizeToc: 'Drag to resize the outline', resizeEditor: 'Drag to resize the preview'
   }
 };
 
 Object.assign(translations['zh-CN'], {
+  flowchartSelectAll: '全选',
+  flowchartSelectAllHint: '选择全部节点并整体移动',
+  flowchartMultiSelected: '已选择 {count} 个节点，拖动任一节点可整体移动。',
+  flowchartCanvasHint: '拖动空白处移动画布；全选后拖动任一节点可整体移动；双击空白处添加步骤。',
+  canvasStateNode: '状态',
+  canvasAddState: '添加状态',
+  canvasStateTerminal: '初始／结束',
+  canvasAddStateTerminal: '添加初始或结束状态',
+  canvasMindmapChild: '子主题',
+  canvasAddMindmapChild: '为所选主题添加子主题',
+  canvasMindmapSibling: '同级主题',
+  canvasAddMindmapSibling: '为所选主题添加同级主题',
+  canvasMindmapConnect: '设为子主题',
+  canvasStateHint: '拖动状态调整位置；连接模式下依次点击起始状态和目标状态；拖动空白处移动画布。',
+  canvasMindmapHint: '选择主题后添加子主题或同级主题；连接模式下先点父主题再点子主题；拖动空白处移动画布。',
+  editDiagramVisually: '在画布中编辑图表',
+  flowchartVisualSafeHint: '操作会自动生成兼容的图表源码',
+  flowchartEditModeAria: '图表编辑方式',
+  diagramVisualUnsupported: '当前源码包含循环、注释、元数据或其他高级配置，请继续使用源码模式，避免内容丢失。',
   pdfWithBookmarks: '标题书签',
   pdfExported: 'PDF 已导出并生成标题书签',
   pdfDirectFailed: 'PDF 直接导出失败',
@@ -328,6 +352,25 @@ Object.assign(translations['zh-CN'], {
   exportDescriptionPdf: '直接生成 PDF，并根据 H1–H6 标题写入可点击的书签目录。'
 });
 Object.assign(translations.en, {
+  flowchartSelectAll: 'Select all',
+  flowchartSelectAllHint: 'Select every node and move them together',
+  flowchartMultiSelected: '{count} nodes selected. Drag any selected node to move them together.',
+  flowchartCanvasHint: 'Drag empty space to pan; select all and drag any node to move the group; double-click empty space to add a process.',
+  canvasStateNode: 'State',
+  canvasAddState: 'Add a state',
+  canvasStateTerminal: 'Initial / final',
+  canvasAddStateTerminal: 'Add an initial or final state',
+  canvasMindmapChild: 'Child topic',
+  canvasAddMindmapChild: 'Add a child to the selected topic',
+  canvasMindmapSibling: 'Sibling topic',
+  canvasAddMindmapSibling: 'Add a sibling to the selected topic',
+  canvasMindmapConnect: 'Set as child',
+  canvasStateHint: 'Drag states to move them; in Connect mode, click the source then target state; drag empty space to pan.',
+  canvasMindmapHint: 'Select a topic to add a child or sibling; in Connect mode, click the parent then child; drag empty space to pan.',
+  editDiagramVisually: 'Edit diagram on canvas',
+  flowchartVisualSafeHint: 'Actions automatically generate compatible diagram source',
+  flowchartEditModeAria: 'Diagram editing mode',
+  diagramVisualUnsupported: 'This source contains loops, notes, metadata, or other advanced configuration. Keep using Source mode so no content is lost.',
   pdfWithBookmarks: 'Heading bookmarks',
   pdfExported: 'PDF exported with heading bookmarks',
   pdfDirectFailed: 'Direct PDF export failed',
@@ -379,6 +422,12 @@ function applyStaticTranslations() {
   });
   scheduleFormatToolbarLayout();
   syncSpellcheckOptions();
+  updateDiagramFullscreenButton();
+  updateDiagramActionLabels();
+  if (structuredDiagramState?.model && flowchartDesignerState?.mode === 'visual') {
+    structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale());
+    renderStructuredDiagramEditor();
+  }
 }
 
 function applyPlatformShortcuts() {
@@ -425,11 +474,11 @@ const els = {
   editorResizer: $('#editorResizer'),
   searchInput: $('#searchInput'), searchCount: $('#searchCount'), dropOverlay: $('#dropOverlay'),
   moreMenu: $('#moreMenu'), accentMenu: $('#accentMenu'), recentContextMenu: $('#recentContextMenu'), editorClipboardMenu: $('#editorClipboardMenu'), spellcheckContextMenu: $('#spellcheckContextMenu'), spellingContextWord: $('#spellingContextWord'), spellingSuggestions: $('#spellingSuggestions'), spellingNoSuggestions: $('#spellingNoSuggestions'), personalDictionaryCount: $('#personalDictionaryCount'), toast: $('#toast'), imageUploadProgress: $('#imageUploadProgress'), imageUploadProgressTitle: $('#imageUploadProgressTitle'), imageUploadProgressDetail: $('#imageUploadProgressDetail'), imageUploadProgressPercent: $('#imageUploadProgressPercent'), imageUploadProgressBar: $('#imageUploadProgressBar'), editorView: $('#editorView'), fontScaleSlider: $('#fontScaleSlider'), fontScaleValue: $('#fontScaleValue'),
-  editor: $('#markdownEditor'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'),
+  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'), feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
-  recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'),
+  recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramFullscreenButton: $('#toggleDiagramFullscreen'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'), flowchartModeBar: $('#flowchartModeBar'), flowchartVisualEditor: $('#flowchartVisualEditor'), structuredDiagramEditor: $('#structuredDiagramEditor'), structuredDiagramSettings: $('#structuredDiagramSettings'), structuredDiagramHead: $('#structuredDiagramHead'), structuredDiagramRows: $('#structuredDiagramRows'), flowchartCanvasViewport: $('#flowchartCanvasViewport'), flowchartCanvas: $('#flowchartCanvas'), flowchartZoomOut: $('#flowchartZoomOut'), flowchartZoomReset: $('#flowchartZoomReset'), flowchartZoomIn: $('#flowchartZoomIn'), flowchartZoomValue: $('#flowchartZoomValue'), flowchartNodeLayer: $('#flowchartNodeLayer'), flowchartEdgeLayer: $('#flowchartEdgeLayer'), flowchartDirection: $('#flowchartDirection'), flowchartNodeProperties: $('#flowchartNodeProperties'), flowchartEdgeProperties: $('#flowchartEdgeProperties'), flowchartNodeLabel: $('#flowchartNodeLabel'), flowchartNodeShape: $('#flowchartNodeShape'), flowchartEdgeLabel: $('#flowchartEdgeLabel'), flowchartEdgeStyle: $('#flowchartEdgeStyle'), flowchartSelectionHint: $('#flowchartSelectionHint'),
   imageUploadSettingsDialog: $('#imageUploadSettingsDialog'), picGoCloudSetup: $('#picGoCloudSetup'), picGoCloudAccount: $('#picGoCloudAccount'), picGoCloudUser: $('#picGoCloudUser'), picGoCloudStatus: $('#picGoCloudStatus'), picGoSetupWizard: $('#picGoSetupWizard'), picGoSetupInstall: $('#picGoSetupInstall'), picGoSetupConnect: $('#picGoSetupConnect'), picGoSetupReady: $('#picGoSetupReady'), picGoAdvancedSettings: $('#picGoAdvancedSettings'), localAssetsSummary: $('#localAssetsSummary'), picGoSettingsFields: $('#picGoSettingsFields'), picGoServerURL: $('#picGoServerURL'), picGoSecret: $('#picGoSecret'), clearPicGoSecretRow: $('#clearPicGoSecretRow'), clearPicGoSecret: $('#clearPicGoSecret'), picGoTestStatus: $('#picGoTestStatus'),
   editorUndoButton: $('#editorUndoButton')
 };
@@ -698,6 +747,39 @@ function replaceEditorContent(content, moveToStart = false) {
   codeEditor.setState(createEditorState(content, moveToStart));
   suppressEditorChanges = false;
   updateUndoButton();
+  updateExistingFlowchartButton();
+}
+
+let activeFlowchartFence = null;
+let activeFormulaMatch = null;
+
+function updateExistingFlowchartButton() {
+  if (!els.editFlowchartButton || !els.editFormulaButton || !codeEditor || !state.editing) {
+    els.editFlowchartButton?.classList.add('hidden');
+    els.editFormulaButton?.classList.add('hidden');
+    activeFlowchartFence = null;
+    activeFormulaMatch = null;
+    return;
+  }
+  const selection = codeEditor.state.selection.main;
+  const source = codeEditor.state.doc.toString();
+  activeFlowchartFence = findCanvasDiagramFenceAt(source, selection.head)
+    || findCanvasDiagramFenceAt(source, selection.from);
+  els.editFlowchartButton.classList.toggle('hidden', !activeFlowchartFence);
+  activeFormulaMatch = activeFlowchartFence ? null : findFormulaAt(source, selection.from, selection.to);
+  els.editFormulaButton.classList.toggle('hidden', !activeFormulaMatch);
+  if (activeFlowchartFence) {
+    const label = t(activeFlowchartFence.templateId === 'flowchart' ? 'editFlowchartVisually' : 'editDiagramVisually');
+    els.editFlowchartButton.title = label;
+    els.editFlowchartButton.setAttribute('aria-label', label);
+    els.editFlowchartButton.querySelector('span').textContent = label;
+  }
+  if (activeFormulaMatch) {
+    const label = t('editFormulaDirectly');
+    els.editFormulaButton.title = label;
+    els.editFormulaButton.setAttribute('aria-label', label);
+    els.editFormulaButton.querySelector('span').textContent = label;
+  }
 }
 
 function focusCodeEditor() {
@@ -1248,10 +1330,11 @@ function initializeFormatToolbarOverflow() {
 }
 
 const formulaWizardState = {
-  mode: 'block',
+  mode: 'inline',
   discipline: 'all',
   templateId: 'equation',
   valuesByTemplate: new Map(),
+  editRange: null,
 };
 
 function formulaLocale() {
@@ -1259,26 +1342,37 @@ function formulaLocale() {
 }
 
 function selectedFormulaDetails() {
-  if (!codeEditor) return { source: '', templateId: 'equation', mode: 'block' };
+  if (!codeEditor) return { source: '', templateId: 'equation', mode: 'inline', equationNumber: '1', editRange: null };
   const selection = codeEditor.state.selection.main;
+  const documentSource = codeEditor.state.doc.toString();
+  const existing = findFormulaAt(documentSource, selection.from, selection.to);
+  if (existing) return { ...existing, editRange: { from: existing.from, to: existing.to } };
   const raw = codeEditor.state.doc.sliceString(selection.from, selection.to).trim();
-  if (!raw) return { source: '', templateId: 'equation', mode: 'block' };
-  let mode = 'block';
+  if (!raw) return { source: '', templateId: 'equation', mode: 'inline', equationNumber: '1', editRange: null };
+  let mode = 'inline';
   let source = raw;
-  if (/^\$\$(?:.|\n)*\$\$$/.test(raw)) source = raw.slice(2, -2).trim();
+  if (/^\$\$(?:.|\n)*\$\$$/.test(raw)) {
+    mode = 'block';
+    source = raw.slice(2, -2).trim();
+  }
   else if (/^\$(?:.|\n)*\$$/.test(raw)) {
     mode = 'inline';
     source = raw.slice(1, -1).trim();
-  } else if (/^\\\[(?:.|\n)*\\\]$/.test(raw)) source = raw.slice(2, -2).trim();
+  } else if (/^\\\[(?:.|\n)*\\\]$/.test(raw)) {
+    mode = 'block';
+    source = raw.slice(2, -2).trim();
+  }
   else if (/^\\\((?:.|\n)*\\\)$/.test(raw)) {
     mode = 'inline';
     source = raw.slice(2, -2).trim();
   }
-  if (/\\tag\{[^{}]*\}\s*$/.test(source)) mode = 'numbered';
+  const numbered = source.match(/\s+\\tag\{([^{}]*)\}\s*$/);
+  if (numbered) mode = 'numbered';
   source = source.replace(/\s+\\tag\{[^{}]*\}\s*$/, '').trim();
   const chemistry = source.match(/^\\ce\{([\s\S]*)\}$/);
-  if (chemistry) return { source: chemistry[1].trim(), templateId: 'chem-custom', mode };
-  return { source, templateId: 'custom', mode };
+  const details = { source, templateId: 'custom', mode, equationNumber: numbered?.[1] || '1', editRange: { from: selection.from, to: selection.to } };
+  if (chemistry) return { ...details, source: chemistry[1].trim(), templateId: 'chem-custom' };
+  return details;
 }
 
 function formulaTemplateValues(template) {
@@ -1431,19 +1525,26 @@ function chooseFormulaMode(mode) {
   updateFormulaPreview();
 }
 
-function openFormulaDialog() {
+function openFormulaDialog(existingFormula = null) {
   if (!state.currentFile || !codeEditor) return;
-  const selected = selectedFormulaDetails();
+  const selected = existingFormula
+    ? { ...existingFormula, editRange: { from: existingFormula.from, to: existingFormula.to } }
+    : selectedFormulaDetails();
   const preferred = selected.source ? selected.templateId : 'equation';
   const template = formulaTemplateById(preferred);
   formulaWizardState.mode = selected.mode;
   formulaWizardState.discipline = selected.source ? template.group : 'all';
   formulaWizardState.templateId = preferred;
   formulaWizardState.valuesByTemplate = new Map();
+  formulaWizardState.editRange = selected.editRange;
   if (selected.source) {
     formulaWizardState.valuesByTemplate.set(preferred, formulaValues(template, { formula: selected.source }));
   }
-  $('#formulaNumber').value = '1';
+  $('#formulaNumber').value = selected.equationNumber || '1';
+  const editing = Boolean(formulaWizardState.editRange);
+  $('#formulaDialogTitle').textContent = t(editing ? 'formulaEditTitle' : 'formulaWizardTitle');
+  $('#formulaDialogHint').textContent = t(editing ? 'formulaEditHint' : 'formulaWizardHint');
+  $('#insertFormula').textContent = t(editing ? 'saveFormulaChanges' : 'insertFormula');
   renderFormulaDisciplineTabs();
   renderFormulaTemplateList();
   renderFormulaFields();
@@ -1467,19 +1568,752 @@ function insertGeneratedFormula() {
     els.formulaMarkdownSource.focus();
     return;
   }
+  const editRange = formulaWizardState.editRange;
   closeFormulaDialog();
+  if (editRange && codeEditor) {
+    codeEditor.dispatch({
+      changes: { from: editRange.from, to: editRange.to, insert: markdownSource },
+      selection: { anchor: editRange.from + markdownSource.length },
+      scrollIntoView: true
+    });
+    codeEditor.focus();
+    return;
+  }
   replaceSelection(markdownSource, markdownSource.length, 0);
 }
 
 const diagramWizardState = {
   category: 'all',
   templateId: 'flowchart',
-  valuesByTemplate: new Map()
+  valuesByTemplate: new Map(),
+  editRange: null
 };
 let diagramPreviewTimer = 0;
 
 function diagramLocale() {
   return state.language === 'en' ? 'en' : 'zh';
+}
+
+const FLOWCHART_SVG_NS = 'http://www.w3.org/2000/svg';
+const flowchartDesignerState = {
+  mode: 'visual',
+  model: null,
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+  selection: null,
+  connecting: false,
+  connectFrom: '',
+  drag: null,
+  panDrag: null,
+  ignoreClickUntil: 0,
+  sourceSnapshot: ''
+};
+const CANVAS_DIAGRAM_IDS = new Set(['flowchart', 'state', 'mindmap']);
+const structuredDiagramState = {
+  model: null,
+  definition: null,
+  sourceSnapshot: ''
+};
+
+function isCanvasDiagram(templateId = diagramWizardState.templateId) {
+  return CANVAS_DIAGRAM_IDS.has(templateId);
+}
+
+function stateDiagramCanvasModel(source) {
+  const lines = String(source || '').split(/\r?\n/u);
+  const header = lines.findIndex(line => /^stateDiagram-v2\s*$/iu.test(line.trim()));
+  if (header < 0) return { valid: false, error: 'missing-header' };
+  const nodes = [];
+  const edges = [];
+  const byToken = new Map();
+  const aliases = new Map();
+  const transitions = [];
+  let sourceDirection = '';
+  const unsupportedLines = [];
+  for (const raw of lines.slice(header + 1)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const direction = line.match(/^direction\s+(LR|RL|TB|BT)$/iu);
+    if (direction) { sourceDirection = direction[1].toUpperCase(); continue; }
+    const declaration = line.match(/^state\s+"([\s\S]*?)"\s+as\s+([A-Za-z_][\w-]*)$/u);
+    if (declaration) { aliases.set(declaration[2], declaration[1]); continue; }
+    const transition = line.match(/^(.+?)\s*-->\s*([^:]+?)(?:\s*:\s*(.*))?$/u);
+    if (transition) transitions.push({ from: transition[1].trim(), to: transition[2].trim(), label: (transition[3] || '').trim() });
+    else unsupportedLines.push(raw);
+  }
+  if (unsupportedLines.length) return { valid: false, error: 'unsupported-syntax', unsupportedLines };
+  const locale = diagramLocale();
+  const getNode = (token, role = '') => {
+    const key = token === '[*]' ? role : token;
+    if (byToken.has(key)) return byToken.get(key);
+    const id = `S${nodes.length + 1}`;
+    const special = token === '[*]';
+    const node = {
+      id,
+      label: special ? (role === 'start' ? (locale === 'en' ? 'Start' : '开始') : (locale === 'en' ? 'End' : '结束')) : (aliases.get(token) || token),
+      shape: special ? 'circle' : 'round',
+      stateToken: special ? '[*]' : '',
+      stateRole: role,
+      stateSourceId: special ? '' : token,
+      diagramNodeType: 'state',
+      x: 0,
+      y: 0
+    };
+    nodes.push(node);
+    byToken.set(key, node);
+    return node;
+  };
+  transitions.forEach((row, index) => {
+    const from = getNode(row.from, row.from === '[*]' ? 'start' : '');
+    const to = getNode(row.to, row.to === '[*]' ? 'end' : '');
+    edges.push({ id: `edge-${index + 1}`, from: from.id, to: to.id, label: row.label || '', style: 'solid' });
+  });
+  aliases.forEach((label, token) => getNode(token));
+  if (!nodes.length) return { valid: false, error: 'missing-nodes' };
+  const direction = sourceDirection === 'TB' ? 'TD' : sourceDirection || 'TD';
+  return { valid: true, model: layoutFlowchart({ canvasType: 'state', direction, nodes, edges }) };
+}
+
+function mindmapCanvasModel(source) {
+  const parsed = parseStructuredDiagram('mindmap', source);
+  if (!parsed.valid || !parsed.model.rows.length) return { valid: false, error: 'missing-nodes' };
+  const nodes = [];
+  const edges = [];
+  const levelStack = [];
+  parsed.model.rows.forEach((row, index) => {
+    const level = index === 0 ? 0 : Math.max(1, Math.min(5, Number(row.level) || 1));
+    const node = { id: `M${index + 1}`, label: row.label, shape: index === 0 ? 'circle' : 'round', mindmapRoot: index === 0, x: 0, y: 0 };
+    nodes.push(node);
+    if (index > 0) {
+      let parentLevel = level - 1;
+      while (parentLevel > 0 && !levelStack[parentLevel]) parentLevel -= 1;
+      const parent = levelStack[parentLevel] || nodes[0];
+      edges.push({ id: `edge-${edges.length + 1}`, from: parent.id, to: node.id, label: '', style: 'line' });
+    }
+    levelStack[level] = node;
+    levelStack.length = level + 1;
+  });
+  return { valid: true, model: layoutFlowchart({ canvasType: 'mindmap', direction: 'LR', nodes, edges }) };
+}
+
+function parseCanvasDiagramSource(templateId, source) {
+  if (templateId === 'state') return stateDiagramCanvasModel(source);
+  if (templateId === 'mindmap') return mindmapCanvasModel(source);
+  return parseFlowchartSource(source);
+}
+
+function serializeStateCanvas(model) {
+  const safe = value => String(value || '').replace(/[\r\n]+/gu, ' ').replaceAll('"', '＂').trim();
+  const lines = ['stateDiagram-v2', `    direction ${model.direction === 'TD' ? 'TB' : model.direction}`];
+  model.nodes.filter(node => node.stateToken !== '[*]').forEach(node => lines.push(`    state "${safe(node.label) || node.id}" as ${node.id}`));
+  const token = node => node.stateToken === '[*]' ? '[*]' : node.id;
+  model.edges.forEach(edge => {
+    const from = model.nodes.find(node => node.id === edge.from);
+    const to = model.nodes.find(node => node.id === edge.to);
+    if (!from || !to) return;
+    lines.push(`    ${token(from)} --> ${token(to)}${edge.label ? ` : ${safe(edge.label)}` : ''}`);
+  });
+  return lines.join('\n');
+}
+
+function serializeMindmapCanvas(model) {
+  if (!model.nodes.length) return 'mindmap';
+  const nodeMap = new Map(model.nodes.map(node => [node.id, node]));
+  const incoming = new Map(model.nodes.map(node => [node.id, 0]));
+  const outgoing = new Map(model.nodes.map(node => [node.id, []]));
+  model.edges.forEach(edge => {
+    if (!nodeMap.has(edge.from) || !nodeMap.has(edge.to)) return;
+    incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1);
+    outgoing.get(edge.from).push(edge.to);
+  });
+  const root = model.nodes.find(node => node.mindmapRoot) || model.nodes.find(node => !incoming.get(node.id)) || model.nodes[0];
+  const rows = [];
+  const visited = new Set();
+  const visit = (nodeId, level) => {
+    if (visited.has(nodeId)) return;
+    const node = nodeMap.get(nodeId);
+    if (!node) return;
+    visited.add(nodeId);
+    rows.push({ level, label: node.label });
+    (outgoing.get(nodeId) || []).forEach(childId => visit(childId, Math.min(5, level + 1)));
+  };
+  visit(root.id, 0);
+  model.nodes.filter(node => !visited.has(node.id)).forEach(node => visit(node.id, 1));
+  return serializeStructuredDiagram('mindmap', { settings: {}, rows });
+}
+
+function serializeCanvasDiagram(model) {
+  if (model?.canvasType === 'state') return serializeStateCanvas(model);
+  if (model?.canvasType === 'mindmap') return serializeMindmapCanvas(model);
+  return serializeFlowchart(model);
+}
+
+function flowchartSVGElement(name, attributes = {}) {
+  const element = document.createElementNS(FLOWCHART_SVG_NS, name);
+  Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, String(value)));
+  return element;
+}
+
+function flowchartNodeSize(node) {
+  if (node.diagramNodeType === 'state') return node.stateToken === '[*]' ? { width: 52, height: 52 } : { width: 132, height: 48 };
+  if (node.mindmapRoot) return { width: 184, height: 76 };
+  if (node.shape === 'decision') return { width: 176, height: 94 };
+  if (node.shape === 'circle') return { width: 86, height: 86 };
+  if (node.shape === 'terminal') return { width: 164, height: 64 };
+  return { width: 164, height: 68 };
+}
+
+function flowchartBoundaryPoint(node, towardNode) {
+  const size = flowchartNodeSize(node);
+  const deltaX = towardNode.x - node.x;
+  const deltaY = towardNode.y - node.y;
+  if (!deltaX && !deltaY) return { x: node.x, y: node.y };
+  if (node.shape === 'decision') {
+    const scale = 1 / ((Math.abs(deltaX) / (size.width / 2)) + (Math.abs(deltaY) / (size.height / 2)));
+    return { x: node.x + deltaX * scale, y: node.y + deltaY * scale };
+  }
+  const scale = 1 / Math.max(Math.abs(deltaX) / (size.width / 2), Math.abs(deltaY) / (size.height / 2));
+  return { x: node.x + deltaX * scale, y: node.y + deltaY * scale };
+}
+
+function flowchartTextLines(label, limit = 14) {
+  const text = String(label || '').trim();
+  if (!text) return [''];
+  const characters = [...text];
+  const lines = [];
+  while (characters.length && lines.length < 3) lines.push(characters.splice(0, limit).join(''));
+  if (characters.length) lines[2] = `${lines[2].slice(0, Math.max(1, limit - 1))}…`;
+  return lines;
+}
+
+function renderFlowchartNodeShape(group, node) {
+  const size = flowchartNodeSize(node);
+  const left = node.x - size.width / 2;
+  const top = node.y - size.height / 2;
+  let shape;
+  if (node.shape === 'decision') {
+    shape = flowchartSVGElement('polygon', { points: `${node.x},${top} ${left + size.width},${node.y} ${node.x},${top + size.height} ${left},${node.y}` });
+  } else if (node.shape === 'circle') {
+    shape = flowchartSVGElement('ellipse', { cx: node.x, cy: node.y, rx: size.width / 2, ry: size.height / 2 });
+  } else if (node.shape === 'database') {
+    shape = flowchartSVGElement('path', { d: `M${left},${top + 10} C${left},${top - 2} ${left + size.width},${top - 2} ${left + size.width},${top + 10} V${top + size.height - 10} C${left + size.width},${top + size.height + 2} ${left},${top + size.height + 2} ${left},${top + size.height - 10} Z` });
+    group.append(flowchartSVGElement('path', { class: 'flowchart-database-line', d: `M${left},${top + 10} C${left},${top + 22} ${left + size.width},${top + 22} ${left + size.width},${top + 10}` }));
+  } else {
+    const radius = node.shape === 'terminal' ? size.height / 2 : node.shape === 'round' ? 17 : 7;
+    shape = flowchartSVGElement('rect', { x: left, y: top, width: size.width, height: size.height, rx: radius, ry: radius });
+    if (node.shape === 'subroutine') {
+      group.append(flowchartSVGElement('path', { class: 'flowchart-subroutine-line', d: `M${left + 13},${top} V${top + size.height} M${left + size.width - 13},${top} V${top + size.height}` }));
+    }
+  }
+  shape.classList.add('flowchart-node-shape');
+  group.prepend(shape);
+  const lines = flowchartTextLines(node.label, node.shape === 'decision' ? 11 : 14);
+  const text = flowchartSVGElement('text', { x: node.x, y: node.y - ((lines.length - 1) * 8) });
+  lines.forEach((line, index) => {
+    const span = flowchartSVGElement('tspan', { x: node.x, dy: index ? 17 : 0 });
+    span.textContent = line;
+    text.append(span);
+  });
+  group.append(text);
+}
+
+function configureCanvasToolbar() {
+  const type = flowchartDesignerState.model?.canvasType || 'flowchart';
+  const processButton = els.flowchartVisualEditor.querySelector('[data-flowchart-add="process"]');
+  const decisionButton = els.flowchartVisualEditor.querySelector('[data-flowchart-add="decision"]');
+  const terminalButton = els.flowchartVisualEditor.querySelector('[data-flowchart-add="terminal"]');
+  const connectButton = $('#flowchartConnect');
+  const setButton = (button, hidden, labelKey, titleKey) => {
+    button.classList.toggle('hidden', hidden);
+    if (labelKey) button.querySelector('span').textContent = t(labelKey);
+    if (titleKey) {
+      button.title = t(titleKey);
+      button.setAttribute('aria-label', t(titleKey));
+    }
+  };
+  if (type === 'state') {
+    setButton(processButton, false, 'canvasStateNode', 'canvasAddState');
+    setButton(decisionButton, true);
+    setButton(terminalButton, false, 'canvasStateTerminal', 'canvasAddStateTerminal');
+    terminalButton.disabled = ['start', 'end'].every(role => flowchartDesignerState.model.nodes.some(node => node.stateRole === role));
+  } else if (type === 'mindmap') {
+    setButton(processButton, false, 'canvasMindmapChild', 'canvasAddMindmapChild');
+    setButton(decisionButton, false, 'canvasMindmapSibling', 'canvasAddMindmapSibling');
+    setButton(terminalButton, true);
+    terminalButton.disabled = false;
+  } else {
+    setButton(processButton, false, 'flowchartProcess', 'flowchartAddProcess');
+    setButton(decisionButton, false, 'flowchartDecision', 'flowchartAddDecision');
+    setButton(terminalButton, false, 'flowchartTerminal', 'flowchartAddTerminal');
+    terminalButton.disabled = false;
+  }
+  if (!flowchartDesignerState.connecting) connectButton.querySelector('span').textContent = t(type === 'mindmap' ? 'canvasMindmapConnect' : 'flowchartConnect');
+  connectButton.title = t(type === 'mindmap' ? 'canvasMindmapConnect' : 'flowchartConnectHint');
+  els.flowchartDirection.closest('label').classList.toggle('hidden', type === 'mindmap');
+  els.flowchartNodeShape.closest('label').classList.toggle('hidden', type !== 'flowchart');
+  els.flowchartCanvasViewport.querySelector('.flowchart-canvas-hint').textContent = t(type === 'state' ? 'canvasStateHint' : type === 'mindmap' ? 'canvasMindmapHint' : 'flowchartCanvasHint');
+}
+
+function renderFlowchartProperties() {
+  const selection = flowchartDesignerState.selection;
+  const model = flowchartDesignerState.model;
+  const node = selection?.type === 'node' ? model?.nodes.find(item => item.id === selection.id) : null;
+  const edge = selection?.type === 'edge' ? model?.edges.find(item => item.id === selection.id) : null;
+  const selectedNodes = selection?.type === 'nodes' ? selection.ids.length : 0;
+  els.flowchartNodeProperties.classList.toggle('hidden', !node);
+  const mindmap = model?.canvasType === 'mindmap';
+  els.flowchartEdgeProperties.classList.toggle('hidden', !edge || mindmap);
+  els.flowchartSelectionHint.classList.toggle('hidden', Boolean(node || edge));
+  els.flowchartSelectionHint.textContent = selectedNodes
+    ? t('flowchartMultiSelected', { count: selectedNodes })
+    : t('flowchartNothingSelected');
+  $('#flowchartDeleteSelection').disabled = !node && !edge && !selectedNodes;
+  $('#flowchartSelectAll').classList.toggle('active', Boolean(model?.nodes.length) && selectedNodes === model.nodes.length);
+  if (node) {
+    els.flowchartNodeLabel.value = node.label;
+    els.flowchartNodeLabel.disabled = node.stateToken === '[*]';
+    els.flowchartNodeShape.replaceChildren(...FLOWCHART_SHAPES.map(option => {
+      const element = document.createElement('option');
+      element.value = option.id;
+      element.textContent = option[diagramLocale()];
+      element.selected = option.id === node.shape;
+      return element;
+    }));
+  }
+  if (!node) els.flowchartNodeLabel.disabled = false;
+  if (edge) {
+    els.flowchartEdgeLabel.value = edge.label || '';
+    els.flowchartEdgeStyle.value = edge.style || 'solid';
+  }
+  $('#flowchartConnect').classList.toggle('active', flowchartDesignerState.connecting);
+  const connectText = flowchartDesignerState.connecting
+    ? t(flowchartDesignerState.connectFrom ? 'flowchartConnectTarget' : 'flowchartConnectActive')
+    : t(mindmap ? 'canvasMindmapConnect' : 'flowchartConnect');
+  $('#flowchartConnect').querySelector('span').textContent = connectText;
+}
+
+function renderFlowchartCanvas() {
+  const model = flowchartDesignerState.model;
+  if (!model) return;
+  configureCanvasToolbar();
+  els.flowchartDirection.value = model.direction;
+  els.flowchartEdgeLayer.replaceChildren();
+  els.flowchartNodeLayer.replaceChildren();
+  const nodeMap = new Map(model.nodes.map(node => [node.id, node]));
+  for (const edge of model.edges) {
+    const from = nodeMap.get(edge.from);
+    const to = nodeMap.get(edge.to);
+    if (!from || !to) continue;
+    const start = flowchartBoundaryPoint(from, to);
+    const end = flowchartBoundaryPoint(to, from);
+    const stateEdge = model.canvasType === 'state';
+    const group = flowchartSVGElement('g', { class: `flowchart-edge${stateEdge ? ' state-edge' : ''}${flowchartDesignerState.selection?.type === 'edge' && flowchartDesignerState.selection.id === edge.id ? ' selected' : ''}`, 'data-flowchart-edge': edge.id });
+    const path = flowchartSVGElement('path', { class: `flowchart-edge-path${edge.style === 'dashed' ? ' is-dashed' : ''}${edge.style === 'thick' ? ' is-thick' : ''}`, d: `M${start.x},${start.y} L${end.x},${end.y}` });
+    if (edge.style !== 'line') path.setAttribute('marker-end', stateEdge ? 'url(#flowchartArrowSmall)' : 'url(#flowchartArrow)');
+    const hit = flowchartSVGElement('path', { class: 'flowchart-edge-hit', d: `M${start.x},${start.y} L${end.x},${end.y}` });
+    group.append(path, hit);
+    if (edge.label) {
+      const deltaX = end.x - start.x;
+      const deltaY = end.y - start.y;
+      const length = Math.max(1, Math.hypot(deltaX, deltaY));
+      const stateOffset = model.canvasType === 'state' ? 13 : 0;
+      const label = flowchartSVGElement('text', {
+        class: 'flowchart-edge-label',
+        x: (start.x + end.x) / 2 - deltaY / length * stateOffset,
+        y: (start.y + end.y) / 2 + deltaX / length * stateOffset - (stateOffset ? 0 : 8)
+      });
+      label.textContent = edge.label;
+      group.append(label);
+    }
+    els.flowchartEdgeLayer.append(group);
+  }
+  for (const node of model.nodes) {
+    const selected = flowchartDesignerState.selection?.type === 'node'
+      ? flowchartDesignerState.selection.id === node.id
+      : flowchartDesignerState.selection?.type === 'nodes' && flowchartDesignerState.selection.ids.includes(node.id);
+    const origin = flowchartDesignerState.connectFrom === node.id;
+    const group = flowchartSVGElement('g', { class: `flowchart-node${node.diagramNodeType === 'state' ? ' state-node' : ''}${node.stateToken === '[*]' ? ' state-terminal-node' : ''}${selected ? ' selected' : ''}${origin ? ' connect-origin' : ''}`, 'data-flowchart-node': node.id, tabindex: '0', 'aria-label': node.label });
+    renderFlowchartNodeShape(group, node);
+    els.flowchartNodeLayer.append(group);
+  }
+  renderFlowchartProperties();
+  applyFlowchartZoom();
+}
+
+const FLOWCHART_ZOOM_MIN = .5;
+const FLOWCHART_ZOOM_MAX = 2;
+const FLOWCHART_ZOOM_STEP = .1;
+
+function flowchartViewBox() {
+  const viewport = els.flowchartCanvasViewport;
+  const aspect = Math.max(1, viewport?.clientWidth || 920) / Math.max(1, viewport?.clientHeight || 560);
+  const baseAspect = 920 / 560;
+  let width;
+  let height;
+  if (aspect >= baseAspect) {
+    height = 560 / flowchartDesignerState.zoom;
+    width = height * aspect;
+  } else {
+    width = 920 / flowchartDesignerState.zoom;
+    height = width / aspect;
+  }
+  const centerX = 460 - flowchartDesignerState.panX;
+  const centerY = 280 - flowchartDesignerState.panY;
+  return { x: centerX - width / 2, y: centerY - height / 2, width, height };
+}
+
+function applyFlowchartZoom() {
+  if (!els.flowchartCanvas || !els.flowchartCanvasViewport) return;
+  const zoom = flowchartDesignerState.zoom;
+  const viewBox = flowchartViewBox();
+  els.flowchartCanvas.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+  els.flowchartCanvas.style.width = '100%';
+  els.flowchartCanvas.style.height = '100%';
+  els.flowchartZoomValue.textContent = `${Math.round(zoom * 100)}%`;
+  els.flowchartZoomOut.disabled = zoom <= FLOWCHART_ZOOM_MIN;
+  els.flowchartZoomIn.disabled = zoom >= FLOWCHART_ZOOM_MAX;
+}
+
+function setFlowchartZoom(value, { resetPan = false } = {}) {
+  flowchartDesignerState.zoom = Math.max(FLOWCHART_ZOOM_MIN, Math.min(FLOWCHART_ZOOM_MAX, Math.round(value * 10) / 10));
+  if (resetPan) {
+    flowchartDesignerState.panX = 0;
+    flowchartDesignerState.panY = 0;
+  }
+  applyFlowchartZoom();
+}
+
+function syncFlowchartSource() {
+  if (!flowchartDesignerState.model) return;
+  const source = serializeCanvasDiagram(flowchartDesignerState.model);
+  els.diagramSource.value = source;
+  flowchartDesignerState.sourceSnapshot = source;
+  rememberDiagramSource();
+}
+
+function setFlowchartSelection(type = '', id = '') {
+  flowchartDesignerState.selection = type && id ? { type, id } : null;
+  renderFlowchartCanvas();
+}
+
+function selectAllFlowchartNodes() {
+  const ids = flowchartDesignerState.model?.nodes.map(node => node.id) || [];
+  flowchartDesignerState.selection = ids.length ? { type: 'nodes', ids } : null;
+  flowchartDesignerState.connecting = false;
+  flowchartDesignerState.connectFrom = '';
+  renderFlowchartCanvas();
+  els.flowchartCanvas.focus();
+}
+
+function initialiseFlowchartVisual(source, { notify = false } = {}) {
+  if (flowchartDesignerState.model && source === flowchartDesignerState.sourceSnapshot) return true;
+  const parsed = parseCanvasDiagramSource(diagramWizardState.templateId, source);
+  if (!parsed.valid) {
+    if (notify) showToast(t(diagramWizardState.templateId === 'flowchart' ? 'flowchartVisualUnsupported' : 'diagramVisualUnsupported'), 'warning');
+    return false;
+  }
+  flowchartDesignerState.model = parsed.model;
+  flowchartDesignerState.selection = null;
+  flowchartDesignerState.panX = 0;
+  flowchartDesignerState.panY = 0;
+  flowchartDesignerState.connecting = false;
+  flowchartDesignerState.connectFrom = '';
+  flowchartDesignerState.sourceSnapshot = source;
+  return true;
+}
+
+function structuredInput(field, value, onChange) {
+  let input;
+  if (field.type === 'select') {
+    input = document.createElement('select');
+    (field.options || []).forEach(([optionValue, label]) => {
+      const option = document.createElement('option');
+      option.value = optionValue;
+      option.textContent = label;
+      option.selected = String(value ?? '') === String(optionValue);
+      input.append(option);
+    });
+  } else {
+    input = document.createElement('input');
+    input.type = field.type === 'checkbox' ? 'checkbox' : field.type === 'number' ? 'number' : 'text';
+    if (input.type === 'checkbox') input.checked = Boolean(value);
+    else input.value = value ?? '';
+    if (field.min !== undefined) input.min = String(field.min);
+    if (field.max !== undefined) input.max = String(field.max);
+  }
+  input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => onChange(input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value));
+  return input;
+}
+
+function syncStructuredDiagramSource() {
+  if (!structuredDiagramState.model) return;
+  const source = serializeStructuredDiagram(diagramWizardState.templateId, structuredDiagramState.model);
+  els.diagramSource.value = source;
+  structuredDiagramState.sourceSnapshot = source;
+  rememberDiagramSource();
+  scheduleDiagramPreview();
+}
+
+function renderStructuredDiagramEditor() {
+  const model = structuredDiagramState.model;
+  const definition = structuredDiagramState.definition;
+  if (!model || !definition) return;
+  els.structuredDiagramSettings.replaceChildren();
+  definition.settings.forEach(field => {
+    const label = document.createElement('label');
+    const caption = document.createElement('span');
+    caption.textContent = field.label;
+    label.append(caption, structuredInput(field, model.settings[field.key], value => {
+      model.settings[field.key] = value;
+      syncStructuredDiagramSource();
+    }));
+    els.structuredDiagramSettings.append(label);
+  });
+  els.structuredDiagramHead.replaceChildren();
+  definition.columns.forEach(field => {
+    const heading = document.createElement('th');
+    heading.scope = 'col';
+    heading.textContent = field.label;
+    els.structuredDiagramHead.append(heading);
+  });
+  const actionHeading = document.createElement('th');
+  actionHeading.scope = 'col';
+  actionHeading.setAttribute('aria-label', t('structuredDiagramRemoveRow'));
+  els.structuredDiagramHead.append(actionHeading);
+  els.structuredDiagramRows.replaceChildren();
+  model.rows.forEach((row, rowIndex) => {
+    const tableRow = document.createElement('tr');
+    definition.columns.forEach(field => {
+      const cell = document.createElement('td');
+      cell.append(structuredInput(field, row[field.key], value => {
+        row[field.key] = value;
+        syncStructuredDiagramSource();
+      }));
+      tableRow.append(cell);
+    });
+    const actionCell = document.createElement('td');
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'structured-row-remove';
+    remove.dataset.structuredRemove = String(rowIndex);
+    remove.title = t('structuredDiagramRemoveRow');
+    remove.setAttribute('aria-label', t('structuredDiagramRemoveRow'));
+    remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 7l1 13h6l1-13M10 11v5M14 11v5"/></svg>';
+    actionCell.append(remove);
+    tableRow.append(actionCell);
+    els.structuredDiagramRows.append(tableRow);
+  });
+  $('#addStructuredDiagramRow span').textContent = definition.add;
+}
+
+function initialiseStructuredDiagramVisual(source, { notify = false } = {}) {
+  if (structuredDiagramState.model && source === structuredDiagramState.sourceSnapshot) return true;
+  const parsed = parseStructuredDiagram(diagramWizardState.templateId, source);
+  if (!parsed.valid) {
+    if (notify) showToast(t('diagramVisualUnsupported'), 'warning');
+    return false;
+  }
+  structuredDiagramState.model = parsed.model;
+  structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale());
+  structuredDiagramState.sourceSnapshot = source;
+  return true;
+}
+
+function showFlowchartEditorMode(mode, { notify = false } = {}) {
+  const template = diagramTemplateById(diagramWizardState.templateId);
+  const visualRequested = mode === 'visual';
+  const isFlowchart = isCanvasDiagram(template.id) && template.visualEditor === 'canvas';
+  const isStructured = template.visualEditor === 'structured' && hasStructuredVisualEditor(template.id);
+  if (visualRequested && isFlowchart && !initialiseFlowchartVisual(els.diagramSource.value.trim(), { notify })) return false;
+  if (visualRequested && isStructured && !initialiseStructuredDiagramVisual(els.diagramSource.value.trim(), { notify })) return false;
+  flowchartDesignerState.mode = visualRequested ? 'visual' : 'source';
+  $('#flowchartVisualMode').classList.toggle('active', visualRequested);
+  $('#flowchartSourceMode').classList.toggle('active', !visualRequested);
+  els.flowchartVisualEditor.classList.toggle('hidden', !visualRequested || !isFlowchart);
+  els.structuredDiagramEditor.classList.toggle('hidden', !visualRequested || !isStructured);
+  els.diagramBuilderPanel.querySelector('.diagram-source-card').classList.toggle('hidden', visualRequested);
+  els.diagramBuilderPanel.querySelector('.diagram-preview-card').classList.toggle('hidden', visualRequested && isFlowchart);
+  if (!visualRequested) setDiagramFullscreen(false);
+  updateDiagramFullscreenButton();
+  if (visualRequested && isFlowchart) renderFlowchartCanvas();
+  else if (visualRequested && isStructured) { renderStructuredDiagramEditor(); scheduleDiagramPreview(true); }
+  else scheduleDiagramPreview(true);
+  return true;
+}
+
+function configureFlowchartEditor(template) {
+  const hasVisualEditor = Boolean(template.visualEditor);
+  els.flowchartModeBar.classList.toggle('hidden', !hasVisualEditor);
+  if (!hasVisualEditor) {
+    setDiagramFullscreen(false);
+    els.flowchartVisualEditor.classList.add('hidden');
+    els.structuredDiagramEditor.classList.add('hidden');
+    els.diagramBuilderPanel.querySelector('.diagram-source-card').classList.remove('hidden');
+    els.diagramBuilderPanel.querySelector('.diagram-preview-card').classList.remove('hidden');
+    return;
+  }
+  if (!showFlowchartEditorMode(flowchartDesignerState.mode)) showFlowchartEditorMode('source');
+}
+
+function updateSelectedFlowchartNode(changes) {
+  const selection = flowchartDesignerState.selection;
+  if (selection?.type !== 'node') return;
+  flowchartDesignerState.model = {
+    ...flowchartDesignerState.model,
+    nodes: flowchartDesignerState.model.nodes.map(node => node.id === selection.id ? { ...node, ...changes } : node)
+  };
+  syncFlowchartSource();
+  renderFlowchartCanvas();
+}
+
+function updateSelectedFlowchartEdge(changes) {
+  const selection = flowchartDesignerState.selection;
+  if (selection?.type !== 'edge') return;
+  flowchartDesignerState.model = {
+    ...flowchartDesignerState.model,
+    edges: flowchartDesignerState.model.edges.map(edge => edge.id === selection.id ? { ...edge, ...changes } : edge)
+  };
+  syncFlowchartSource();
+  renderFlowchartCanvas();
+}
+
+function deleteSelectedFlowchartElement() {
+  const selection = flowchartDesignerState.selection;
+  if (!selection || !flowchartDesignerState.model) return;
+  if (selection.type === 'nodes') {
+    const selectedIds = new Set(selection.ids);
+    flowchartDesignerState.model = {
+      ...flowchartDesignerState.model,
+      nodes: flowchartDesignerState.model.nodes.filter(node => !selectedIds.has(node.id)),
+      edges: flowchartDesignerState.model.edges.filter(edge => !selectedIds.has(edge.from) && !selectedIds.has(edge.to))
+    };
+  } else {
+    flowchartDesignerState.model = selection.type === 'node'
+      ? removeFlowchartNode(flowchartDesignerState.model, selection.id)
+      : removeFlowchartEdge(flowchartDesignerState.model, selection.id);
+  }
+  if (flowchartDesignerState.model.canvasType === 'state') {
+    const connected = new Set(flowchartDesignerState.model.edges.flatMap(edge => [edge.from, edge.to]));
+    flowchartDesignerState.model = {
+      ...flowchartDesignerState.model,
+      nodes: flowchartDesignerState.model.nodes.filter(node => node.stateToken !== '[*]' || connected.has(node.id))
+    };
+  }
+  flowchartDesignerState.selection = null;
+  flowchartDesignerState.connectFrom = '';
+  syncFlowchartSource();
+  renderFlowchartCanvas();
+}
+
+function addFlowchartNodeAt(shape, position = null) {
+  if (!flowchartDesignerState.model) return;
+  const type = flowchartDesignerState.model.canvasType || 'flowchart';
+  if (type === 'mindmap') {
+    const selectedId = flowchartDesignerState.selection?.type === 'node' ? flowchartDesignerState.selection.id : '';
+    const root = flowchartDesignerState.model.nodes.find(node => node.mindmapRoot) || flowchartDesignerState.model.nodes[0];
+    const selected = flowchartDesignerState.model.nodes.find(node => node.id === selectedId) || root;
+    const parentEdge = selected && flowchartDesignerState.model.edges.find(edge => edge.to === selected.id);
+    const parentId = shape === 'decision' && parentEdge ? parentEdge.from : selected?.id || root?.id;
+    const result = addFlowchartNode(flowchartDesignerState.model, 'round', t('flowchartNodeDefault'));
+    result.node.label = t('canvasMindmapChild');
+    if (position) Object.assign(result.node, position);
+    result.model = parentId ? addFlowchartEdge(result.model, parentId, result.node.id) : result.model;
+    result.model = { ...result.model, edges: result.model.edges.map(edge => edge.to === result.node.id ? { ...edge, style: 'line' } : edge) };
+    if (!root) result.node.mindmapRoot = true;
+    flowchartDesignerState.model = result.model;
+    flowchartDesignerState.selection = { type: 'node', id: result.node.id };
+    syncFlowchartSource();
+    renderFlowchartCanvas();
+    requestAnimationFrame(() => { els.flowchartNodeLabel.focus(); els.flowchartNodeLabel.select(); });
+    return;
+  }
+  if (type === 'state' && shape === 'terminal') {
+    const hasStart = flowchartDesignerState.model.nodes.some(node => node.stateRole === 'start');
+    const hasEnd = flowchartDesignerState.model.nodes.some(node => node.stateRole === 'end');
+    if (hasStart && hasEnd) return;
+    const role = hasStart ? 'end' : 'start';
+    const selected = flowchartDesignerState.model.nodes.find(node => node.id === flowchartDesignerState.selection?.id && node.stateToken !== '[*]')
+      || flowchartDesignerState.model.nodes.find(node => node.stateToken !== '[*]');
+    if (!selected) return;
+    const result = addFlowchartNode(flowchartDesignerState.model, 'circle', role === 'start' ? (diagramLocale() === 'en' ? 'Start' : '开始') : (diagramLocale() === 'en' ? 'End' : '结束'));
+    result.node.stateToken = '[*]';
+    result.node.stateRole = role;
+    result.node.diagramNodeType = 'state';
+    if (position) Object.assign(result.node, position);
+    flowchartDesignerState.model = role === 'start'
+      ? addFlowchartEdge(result.model, result.node.id, selected.id)
+      : addFlowchartEdge(result.model, selected.id, result.node.id);
+    flowchartDesignerState.selection = { type: 'node', id: result.node.id };
+    syncFlowchartSource();
+    renderFlowchartCanvas();
+    return;
+  }
+  const effectiveShape = type === 'state' ? 'round' : shape;
+  const labelKey = shape === 'decision' ? 'flowchartDecisionDefault' : shape === 'terminal' ? 'flowchartTerminalDefault' : 'flowchartNodeDefault';
+  let label = type === 'state' ? t('canvasStateNode') : t(labelKey);
+  if (type === 'state') {
+    const used = new Set(flowchartDesignerState.model.nodes.map(node => node.label));
+    let index = 1;
+    while (used.has(label)) label = `${t('canvasStateNode')}${index++}`;
+  }
+  const result = addFlowchartNode(flowchartDesignerState.model, effectiveShape, label);
+  if (type === 'state') result.node.diagramNodeType = 'state';
+  if (position) Object.assign(result.node, position);
+  flowchartDesignerState.model = result.model;
+  flowchartDesignerState.selection = { type: 'node', id: result.node.id };
+  syncFlowchartSource();
+  renderFlowchartCanvas();
+  requestAnimationFrame(() => {
+    els.flowchartNodeLabel.focus();
+    els.flowchartNodeLabel.select();
+  });
+}
+
+function flowchartCanvasPoint(event) {
+  const point = els.flowchartCanvas.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const matrix = els.flowchartCanvas.getScreenCTM();
+  return matrix ? point.matrixTransform(matrix.inverse()) : { x: event.offsetX, y: event.offsetY };
+}
+
+function handleFlowchartNodeClick(nodeId) {
+  if (!flowchartDesignerState.connecting) {
+    if (flowchartDesignerState.selection?.type === 'nodes' && flowchartDesignerState.selection.ids.includes(nodeId)) return;
+    setFlowchartSelection('node', nodeId);
+    return;
+  }
+  if (!flowchartDesignerState.connectFrom) {
+    flowchartDesignerState.connectFrom = nodeId;
+    flowchartDesignerState.selection = { type: 'node', id: nodeId };
+    renderFlowchartCanvas();
+    return;
+  }
+  const previousEdges = flowchartDesignerState.model.edges;
+  if (flowchartDesignerState.model.canvasType === 'mindmap') {
+    const root = flowchartDesignerState.model.nodes.find(node => node.mindmapRoot);
+    const descendants = new Set();
+    const visit = id => {
+      if (descendants.has(id)) return;
+      descendants.add(id);
+      flowchartDesignerState.model.edges.filter(edge => edge.from === id).forEach(edge => visit(edge.to));
+    };
+    visit(nodeId);
+    if (nodeId !== root?.id && !descendants.has(flowchartDesignerState.connectFrom)) {
+      const withoutOldParent = { ...flowchartDesignerState.model, edges: flowchartDesignerState.model.edges.filter(edge => edge.to !== nodeId) };
+      flowchartDesignerState.model = addFlowchartEdge(withoutOldParent, flowchartDesignerState.connectFrom, nodeId);
+      flowchartDesignerState.model = { ...flowchartDesignerState.model, edges: flowchartDesignerState.model.edges.map(edge => edge.to === nodeId ? { ...edge, style: 'line' } : edge) };
+    }
+  } else {
+    flowchartDesignerState.model = addFlowchartEdge(flowchartDesignerState.model, flowchartDesignerState.connectFrom, nodeId);
+  }
+  const addedEdge = flowchartDesignerState.model.edges.find(edge => !previousEdges.includes(edge));
+  flowchartDesignerState.connecting = false;
+  flowchartDesignerState.connectFrom = '';
+  flowchartDesignerState.selection = addedEdge ? { type: 'edge', id: addedEdge.id } : { type: 'node', id: nodeId };
+  syncFlowchartSource();
+  renderFlowchartCanvas();
 }
 
 function rememberDiagramSource() {
@@ -1515,7 +2349,16 @@ function renderDiagramTemplateList() {
     label.textContent = template.name[locale];
     const kind = document.createElement('code');
     kind.textContent = template.engine === 'echarts' ? 'ECharts' : 'Mermaid';
-    button.append(label, kind);
+    button.append(label);
+    if (template.visualEditor) {
+      const visualBadge = document.createElement('span');
+      visualBadge.className = 'diagram-visual-badge';
+      visualBadge.title = t('visualEditorAvailable');
+      visualBadge.setAttribute('aria-label', t('visualEditorAvailable'));
+      visualBadge.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h3a4 4 0 0 1 4 4v3M14 11l3 3 3-3"/></svg>';
+      button.append(visualBadge);
+    }
+    button.append(kind);
     els.diagramTemplateList.append(button);
   }
 }
@@ -1561,54 +2404,157 @@ function renderDiagramBuilder() {
   const template = diagramTemplateById(diagramWizardState.templateId);
   $('#diagramTemplateName').textContent = template.name[locale];
   $('#diagramTemplateDescription').textContent = template.description[locale];
+  els.diagramBuilderPanel.querySelector('.formula-builder-heading > code').textContent = template.engine === 'echarts' ? 'ECharts' : 'Mermaid';
   els.diagramSource.value = diagramWizardState.valuesByTemplate.get(template.id) ?? diagramTemplateSource(template, locale);
   renderDiagramTemplateList();
-  scheduleDiagramPreview(true);
+  configureFlowchartEditor(template);
+  if (!isCanvasDiagram(template.id) || flowchartDesignerState.mode !== 'visual') scheduleDiagramPreview(true);
 }
 
 function chooseDiagramTemplate(templateId) {
   const template = diagramTemplateById(templateId);
   if (!template) return;
+  if (diagramWizardState.editRange && template.id !== diagramWizardState.editRange.templateId) return;
   rememberDiagramSource();
   diagramWizardState.templateId = template.id;
+  structuredDiagramState.model = null;
+  structuredDiagramState.sourceSnapshot = '';
+  flowchartDesignerState.model = null;
+  flowchartDesignerState.sourceSnapshot = '';
   renderDiagramBuilder();
   els.diagramBuilderPanel.scrollTop = 0;
-  requestAnimationFrame(() => els.diagramSource.focus());
+  requestAnimationFrame(() => isCanvasDiagram(template.id) && flowchartDesignerState.mode === 'visual'
+    ? els.flowchartCanvas.focus()
+    : template.visualEditor && flowchartDesignerState.mode === 'visual'
+      ? els.structuredDiagramEditor.querySelector('input, select, button')?.focus()
+      : els.diagramSource.focus());
 }
 
 function chooseDiagramCategory(categoryId) {
+  if (diagramWizardState.editRange) return;
   if (!DIAGRAM_CATEGORIES.some(category => category.id === categoryId)) return;
   rememberDiagramSource();
   diagramWizardState.category = categoryId;
   const templates = diagramTemplatesForCategory(categoryId);
   if (!templates.some(template => template.id === diagramWizardState.templateId)) {
     diagramWizardState.templateId = templates[0]?.id || 'flowchart';
+    structuredDiagramState.model = null;
+    structuredDiagramState.sourceSnapshot = '';
+    flowchartDesignerState.model = null;
+    flowchartDesignerState.sourceSnapshot = '';
   }
   renderDiagramCategoryTabs();
   renderDiagramBuilder();
   els.diagramBuilderPanel.scrollTop = 0;
 }
 
-function openDiagramDialog(preferredTemplateId = 'flowchart') {
+function updateDiagramActionLabels() {
+  const key = diagramWizardState.editRange ? 'saveDiagramChanges' : 'insertDiagram';
+  const normalButton = $('#insertDiagram');
+  const fullscreenLabel = $('#insertDiagramFullscreen span');
+  if (normalButton) normalButton.textContent = t(key);
+  if (fullscreenLabel) fullscreenLabel.textContent = t(key);
+}
+
+function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart = null) {
   if (!state.currentFile || !codeEditor) return;
-  const template = diagramTemplateById(preferredTemplateId);
+  const template = diagramTemplateById(existingFlowchart?.templateId || preferredTemplateId);
   diagramWizardState.category = 'all';
   diagramWizardState.templateId = template.id;
   diagramWizardState.valuesByTemplate = new Map();
+  diagramWizardState.editRange = existingFlowchart ? {
+    from: existingFlowchart.from,
+    to: existingFlowchart.to,
+    indent: existingFlowchart.indent,
+    marker: existingFlowchart.marker,
+    lineEnding: existingFlowchart.lineEnding,
+    templateId: template.id
+  } : null;
+  if (existingFlowchart) diagramWizardState.valuesByTemplate.set(template.id, existingFlowchart.source);
+  flowchartDesignerState.mode = 'visual';
+  flowchartDesignerState.model = null;
+  flowchartDesignerState.zoom = 1;
+  flowchartDesignerState.panX = 0;
+  flowchartDesignerState.panY = 0;
+  flowchartDesignerState.selection = null;
+  flowchartDesignerState.connecting = false;
+  flowchartDesignerState.connectFrom = '';
+  flowchartDesignerState.drag = null;
+  flowchartDesignerState.panDrag = null;
+  flowchartDesignerState.sourceSnapshot = '';
+  structuredDiagramState.model = null;
+  structuredDiagramState.definition = null;
+  structuredDiagramState.sourceSnapshot = '';
+  setDiagramFullscreen(false);
+  els.diagramDialog.classList.toggle('editing-existing-flowchart', Boolean(existingFlowchart));
   renderDiagramCategoryTabs();
   renderDiagramBuilder();
+  updateDiagramActionLabels();
   els.diagramBuilderPanel.scrollTop = 0;
   els.diagramDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
-  requestAnimationFrame(() => els.diagramTemplateList.querySelector('.active')?.focus());
+  requestAnimationFrame(() => {
+    applyFlowchartZoom();
+    els.diagramTemplateList.querySelector('.active')?.focus();
+  });
+}
+
+function updateDiagramFullscreenButton() {
+  const button = els?.diagramFullscreenButton;
+  if (!button) return;
+  const fullscreen = els.diagramDialog.classList.contains('diagram-fullscreen');
+  const available = isCanvasDiagram() && flowchartDesignerState.mode === 'visual';
+  button.classList.toggle('hidden', !available);
+  const label = t(fullscreen ? 'diagramExitFullscreen' : 'diagramFullscreen');
+  button.classList.toggle('active', fullscreen);
+  button.setAttribute('aria-pressed', String(fullscreen));
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  const text = button.querySelector('span');
+  if (text) text.textContent = label;
+}
+
+function setDiagramFullscreen(fullscreen) {
+  if (!els?.diagramDialog) return;
+  const available = isCanvasDiagram() && flowchartDesignerState.mode === 'visual';
+  const enabled = Boolean(fullscreen) && available;
+  els.diagramDialog.classList.toggle('diagram-fullscreen', enabled);
+  updateDiagramFullscreenButton();
+  requestAnimationFrame(() => {
+    applyFlowchartZoom();
+    if (enabled) $('#exitDiagramFullscreen').focus();
+  });
+}
+
+function toggleDiagramFullscreen() {
+  setDiagramFullscreen(!els.diagramDialog.classList.contains('diagram-fullscreen'));
 }
 
 function closeDiagramDialog() {
   if (els.diagramDialog.classList.contains('hidden')) return;
   clearTimeout(diagramPreviewTimer);
+  setDiagramFullscreen(false);
   els.diagramDialog.classList.add('hidden');
+  els.diagramDialog.classList.remove('editing-existing-flowchart');
   document.body.classList.remove('dialog-open');
+  diagramWizardState.editRange = null;
+  updateDiagramActionLabels();
   focusCodeEditor();
+}
+
+function replaceExistingFlowchart(range, source) {
+  if (!codeEditor || !range) return;
+  const indent = range.indent || '';
+  const marker = range.marker || '```';
+  const lineEnding = range.lineEnding === '\r\n' ? '\r\n' : '\n';
+  const body = String(source || '').split(/\r?\n/u).map(line => `${indent}${line}`).join(lineEnding);
+  const markdown = `${indent}${marker}mermaid${lineEnding}${body}${lineEnding}${indent}${marker}`;
+  codeEditor.dispatch({
+    changes: { from: range.from, to: range.to, insert: markdown },
+    selection: { anchor: range.from + markdown.length },
+    scrollIntoView: true
+  });
+  codeEditor.focus();
 }
 
 function insertGeneratedDiagram() {
@@ -1627,7 +2573,12 @@ function insertGeneratedDiagram() {
       return;
     }
   }
+  const editRange = diagramWizardState.editRange;
   closeDiagramDialog();
+  if (editRange) {
+    replaceExistingFlowchart(editRange, source);
+    return;
+  }
   const markdownSource = `\n\n\`\`\`${template.engine === 'echarts' ? 'echarts' : 'mermaid'}\n${source}\n\`\`\`\n\n`;
   replaceSelection(markdownSource, 13, source.length);
 }
@@ -2356,6 +3307,7 @@ async function initializeCodeEditor() {
       }
       if (update.docChanged || update.selectionSet) {
         updateEditorPosition();
+        updateExistingFlowchartButton();
         scrollPreviewToCursor();
         if (update.selectionSet) scheduleFormatPainterApply();
       }
@@ -3640,6 +4592,12 @@ function renderMarkdownTo(container, doc, content) {
   // detached observers and makes typing/scrolling feel sluggish.
   releaseEChartsDiagrams(container);
   container.innerHTML = html;
+  if (container === els.editorPreview && state.editing) {
+    container.querySelectorAll('.math-inline, .math-block').forEach(formula => {
+      formula.classList.add('editable-preview-formula');
+      formula.title = t('formulaPreviewEditHint');
+    });
+  }
   const documentHeadings = collectDocumentHeadings(container);
   renderDynamicTocs(container, documentHeadings);
   restoreReusableMermaidDiagrams(container, reusableMermaid, mermaidThemeKey);
@@ -4118,6 +5076,7 @@ async function toggleEditor(forceEditing) {
       els.editButtonLabel.textContent = t('preview');
       focusCodeEditor();
       updateEditorPosition();
+      updateExistingFlowchartButton();
     } else {
       state.currentFile.content = editorContent();
       renderCurrentDocument();
@@ -4125,6 +5084,7 @@ async function toggleEditor(forceEditing) {
       els.documentView.classList.remove('hidden');
       els.editButton.classList.remove('active');
       els.editButtonLabel.textContent = t('edit');
+      updateExistingFlowchartButton();
       updatePaneResizerVisibility();
       $('.reader-pane').scrollTo({ top: 0 });
     }
@@ -5309,9 +6269,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.6.0', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.6.1', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.6.0';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.6.1';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -5367,7 +6327,7 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
-  $('#currentVersion').textContent = info.currentVersion || '2.6.0';
+  $('#currentVersion').textContent = info.currentVersion || '2.6.1';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -5920,9 +6880,22 @@ els.formulaMarkdownSource.addEventListener('keydown', event => {
 els.formulaFields.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.isComposing) insertGeneratedFormula();
 });
+els.editFormulaButton.addEventListener('pointerdown', event => event.stopPropagation());
+els.editFormulaButton.addEventListener('click', () => {
+  updateExistingFlowchartButton();
+  if (activeFormulaMatch) openFormulaDialog(activeFormulaMatch);
+});
 $('#closeDiagramDialog').addEventListener('click', closeDiagramDialog);
 $('#cancelDiagram').addEventListener('click', closeDiagramDialog);
+els.diagramFullscreenButton.addEventListener('click', toggleDiagramFullscreen);
+$('#exitDiagramFullscreen').addEventListener('click', () => setDiagramFullscreen(false));
+$('#insertDiagramFullscreen').addEventListener('click', insertGeneratedDiagram);
 $('#insertDiagram').addEventListener('click', insertGeneratedDiagram);
+els.editFlowchartButton.addEventListener('pointerdown', event => event.stopPropagation());
+els.editFlowchartButton.addEventListener('click', () => {
+  updateExistingFlowchartButton();
+  if (activeFlowchartFence) openDiagramDialog(activeFlowchartFence.templateId, activeFlowchartFence);
+});
 $('#openDiagramGuide').addEventListener('click', () => {
   Promise.resolve(window.quilliteMarkdown.openExternal(DIAGRAM_GUIDE_URL)).catch(error => reportSilentError(error, 'diagram-guide.open'));
 });
@@ -5945,6 +6918,188 @@ els.diagramSource.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.isComposing) {
     event.preventDefault();
     insertGeneratedDiagram();
+  }
+});
+$('#flowchartVisualMode').addEventListener('click', () => showFlowchartEditorMode('visual', { notify: true }));
+$('#flowchartSourceMode').addEventListener('click', () => showFlowchartEditorMode('source'));
+$('#addStructuredDiagramRow').addEventListener('click', () => {
+  if (!structuredDiagramState.model || !structuredDiagramState.definition) return;
+  structuredDiagramState.model.rows.push({ ...structuredDiagramState.definition.empty });
+  renderStructuredDiagramEditor();
+  syncStructuredDiagramSource();
+  requestAnimationFrame(() => els.structuredDiagramRows.lastElementChild?.querySelector('input, select')?.focus());
+});
+els.structuredDiagramRows.addEventListener('click', event => {
+  const remove = event.target.closest('[data-structured-remove]');
+  if (!remove || !structuredDiagramState.model) return;
+  const index = Number(remove.dataset.structuredRemove);
+  if (!Number.isInteger(index)) return;
+  structuredDiagramState.model.rows.splice(index, 1);
+  renderStructuredDiagramEditor();
+  syncStructuredDiagramSource();
+});
+els.flowchartVisualEditor.addEventListener('click', event => {
+  const addButton = event.target.closest('[data-flowchart-add]');
+  if (addButton) addFlowchartNodeAt(addButton.dataset.flowchartAdd);
+});
+els.flowchartVisualEditor.addEventListener('keydown', event => {
+  if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'a') return;
+  if (event.target.closest('input, textarea, select')) return;
+  event.preventDefault();
+  selectAllFlowchartNodes();
+});
+$('#flowchartConnect').addEventListener('click', () => {
+  flowchartDesignerState.connecting = !flowchartDesignerState.connecting;
+  flowchartDesignerState.connectFrom = '';
+  renderFlowchartCanvas();
+});
+$('#flowchartAutoLayout').addEventListener('click', () => {
+  if (!flowchartDesignerState.model) return;
+  flowchartDesignerState.model = layoutFlowchart(flowchartDesignerState.model);
+  syncFlowchartSource();
+  renderFlowchartCanvas();
+});
+$('#flowchartSelectAll').addEventListener('click', selectAllFlowchartNodes);
+els.flowchartZoomOut.addEventListener('click', () => setFlowchartZoom(flowchartDesignerState.zoom - FLOWCHART_ZOOM_STEP));
+els.flowchartZoomReset.addEventListener('click', () => setFlowchartZoom(1, { resetPan: true }));
+els.flowchartZoomIn.addEventListener('click', () => setFlowchartZoom(flowchartDesignerState.zoom + FLOWCHART_ZOOM_STEP));
+els.flowchartCanvasViewport.addEventListener('wheel', event => {
+  if (!event.ctrlKey && !event.metaKey) return;
+  event.preventDefault();
+  setFlowchartZoom(flowchartDesignerState.zoom + (event.deltaY < 0 ? FLOWCHART_ZOOM_STEP : -FLOWCHART_ZOOM_STEP));
+}, { passive: false });
+els.flowchartDirection.addEventListener('change', event => {
+  if (!flowchartDesignerState.model) return;
+  flowchartDesignerState.model = layoutFlowchart({ ...flowchartDesignerState.model, direction: event.target.value });
+  syncFlowchartSource();
+  renderFlowchartCanvas();
+});
+els.flowchartNodeLabel.addEventListener('input', event => updateSelectedFlowchartNode({ label: event.target.value }));
+els.flowchartNodeShape.addEventListener('change', event => updateSelectedFlowchartNode({ shape: event.target.value }));
+els.flowchartEdgeLabel.addEventListener('input', event => updateSelectedFlowchartEdge({ label: event.target.value }));
+els.flowchartEdgeStyle.addEventListener('change', event => updateSelectedFlowchartEdge({ style: event.target.value }));
+$('#flowchartDeleteSelection').addEventListener('click', deleteSelectedFlowchartElement);
+els.flowchartCanvas.addEventListener('pointerdown', event => {
+  const nodeElement = event.target.closest('[data-flowchart-node]');
+  const edgeElement = event.target.closest('[data-flowchart-edge]');
+  if (nodeElement && !flowchartDesignerState.connecting && event.button === 0) {
+    const node = flowchartDesignerState.model?.nodes.find(item => item.id === nodeElement.dataset.flowchartNode);
+    if (!node) return;
+    const point = flowchartCanvasPoint(event);
+    const existingSelection = flowchartDesignerState.selection;
+    const nodeIds = existingSelection?.type === 'nodes' && existingSelection.ids.includes(node.id)
+      ? existingSelection.ids
+      : [node.id];
+    if (nodeIds.length === 1) flowchartDesignerState.selection = { type: 'node', id: node.id };
+    const selectedIds = new Set(nodeIds);
+    const origins = Object.fromEntries(flowchartDesignerState.model.nodes
+      .filter(item => selectedIds.has(item.id))
+      .map(item => [item.id, { x: item.x, y: item.y }]));
+    flowchartDesignerState.drag = { nodeIds, origins, startX: point.x, startY: point.y, moved: false };
+    els.flowchartCanvas.setPointerCapture?.(event.pointerId);
+    renderFlowchartCanvas();
+    event.preventDefault();
+    return;
+  }
+  const canPan = event.button === 1 || (event.button === 0 && !nodeElement && !edgeElement && !flowchartDesignerState.connecting);
+  if (!canPan) return;
+  flowchartDesignerState.panDrag = { clientX: event.clientX, clientY: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
+  els.flowchartCanvasViewport.classList.add('is-panning');
+  els.flowchartCanvas.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+});
+els.flowchartCanvas.addEventListener('pointermove', event => {
+  const panDrag = flowchartDesignerState.panDrag;
+  if (panDrag) {
+    const rect = els.flowchartCanvasViewport.getBoundingClientRect();
+    const viewBox = flowchartViewBox();
+    const deltaX = (event.clientX - panDrag.clientX) * viewBox.width / Math.max(1, rect.width);
+    const deltaY = (event.clientY - panDrag.clientY) * viewBox.height / Math.max(1, rect.height);
+    flowchartDesignerState.panX += deltaX;
+    flowchartDesignerState.panY += deltaY;
+    panDrag.clientX = event.clientX;
+    panDrag.clientY = event.clientY;
+    if (Math.hypot(event.clientX - panDrag.startX, event.clientY - panDrag.startY) > 3) panDrag.moved = true;
+    applyFlowchartZoom();
+    return;
+  }
+  const drag = flowchartDesignerState.drag;
+  if (!drag || !flowchartDesignerState.model) return;
+  const viewportRect = els.flowchartCanvasViewport.getBoundingClientRect();
+  const edgeZone = 52;
+  const viewBox = flowchartViewBox();
+  const horizontalStep = viewBox.width / Math.max(1, viewportRect.width) * 14;
+  const verticalStep = viewBox.height / Math.max(1, viewportRect.height) * 14;
+  if (event.clientX < viewportRect.left + edgeZone) flowchartDesignerState.panX += horizontalStep;
+  else if (event.clientX > viewportRect.right - edgeZone) flowchartDesignerState.panX -= horizontalStep;
+  if (event.clientY < viewportRect.top + edgeZone) flowchartDesignerState.panY += verticalStep;
+  else if (event.clientY > viewportRect.bottom - edgeZone) flowchartDesignerState.panY -= verticalStep;
+  applyFlowchartZoom();
+  const point = flowchartCanvasPoint(event);
+  if (Math.hypot(point.x - drag.startX, point.y - drag.startY) > 3) drag.moved = true;
+  const deltaX = point.x - drag.startX;
+  const deltaY = point.y - drag.startY;
+  flowchartDesignerState.model = {
+    ...flowchartDesignerState.model,
+    nodes: flowchartDesignerState.model.nodes.map(node => drag.origins[node.id]
+      ? { ...node, x: drag.origins[node.id].x + deltaX, y: drag.origins[node.id].y + deltaY }
+      : node)
+  };
+  renderFlowchartCanvas();
+});
+els.flowchartCanvas.addEventListener('pointerup', event => {
+  const panDrag = flowchartDesignerState.panDrag;
+  if (panDrag) {
+    if (panDrag.moved) flowchartDesignerState.ignoreClickUntil = Date.now() + 180;
+    flowchartDesignerState.panDrag = null;
+    els.flowchartCanvasViewport.classList.remove('is-panning');
+  }
+  const drag = flowchartDesignerState.drag;
+  if (drag?.moved) {
+    flowchartDesignerState.ignoreClickUntil = Date.now() + 180;
+    syncFlowchartSource();
+  }
+  flowchartDesignerState.drag = null;
+  if (els.flowchartCanvas.hasPointerCapture?.(event.pointerId)) els.flowchartCanvas.releasePointerCapture(event.pointerId);
+});
+els.flowchartCanvas.addEventListener('pointercancel', () => {
+  flowchartDesignerState.drag = null;
+  flowchartDesignerState.panDrag = null;
+  els.flowchartCanvasViewport.classList.remove('is-panning');
+});
+els.flowchartCanvas.addEventListener('click', event => {
+  if (Date.now() < flowchartDesignerState.ignoreClickUntil) return;
+  const nodeElement = event.target.closest('[data-flowchart-node]');
+  if (nodeElement) {
+    handleFlowchartNodeClick(nodeElement.dataset.flowchartNode);
+    return;
+  }
+  const edgeElement = event.target.closest('[data-flowchart-edge]');
+  if (edgeElement) {
+    flowchartDesignerState.connecting = false;
+    flowchartDesignerState.connectFrom = '';
+    setFlowchartSelection('edge', edgeElement.dataset.flowchartEdge);
+    return;
+  }
+  if (!flowchartDesignerState.drag) setFlowchartSelection();
+});
+els.flowchartCanvas.addEventListener('dblclick', event => {
+  if (event.target.closest('[data-flowchart-node], [data-flowchart-edge]')) return;
+  const point = flowchartCanvasPoint(event);
+  addFlowchartNodeAt('process', { x: point.x, y: point.y });
+});
+els.flowchartCanvas.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+    event.preventDefault();
+    selectAllFlowchartNodes();
+  } else if ((event.key === 'Delete' || event.key === 'Backspace') && flowchartDesignerState.selection) {
+    event.preventDefault();
+    deleteSelectedFlowchartElement();
+  } else if (event.key === 'Escape' && flowchartDesignerState.connecting) {
+    event.preventDefault();
+    flowchartDesignerState.connecting = false;
+    flowchartDesignerState.connectFrom = '';
+    renderFlowchartCanvas();
   }
 });
 $('#headingSelect').addEventListener('change', event => {
@@ -6101,6 +7256,9 @@ window.addEventListener('resize', closeRecentContextMenu);
 window.addEventListener('resize', closeEditorClipboardMenu);
 window.addEventListener('resize', closeSpellcheckContextMenu);
 window.addEventListener('resize', scheduleAutomaticFontScaleRefresh);
+window.addEventListener('resize', () => {
+  if (!els.diagramDialog.classList.contains('hidden') && isCanvasDiagram() && flowchartDesignerState.mode === 'visual') applyFlowchartZoom();
+});
 $('.reader-pane').addEventListener('scroll', updateActiveToc, { passive: true });
 $('.reader-pane').addEventListener('wheel', handlePreviewWheelZoom, { passive: false });
 $('.editor-preview-scroll').addEventListener('wheel', handlePreviewWheelZoom, { passive: false });
@@ -6108,6 +7266,16 @@ $('.editor-preview-scroll').addEventListener('pointermove', showPreviewLocateHin
 $('.editor-preview-scroll').addEventListener('pointerleave', hidePreviewLocateHint);
 $('.editor-preview-scroll').addEventListener('scroll', hidePreviewLocateHint, { passive: true });
 els.editorPreview.addEventListener('contextmenu', locateEditorFromPreview);
+els.editorPreview.addEventListener('dblclick', event => {
+  const formula = event.target.closest('.editable-preview-formula');
+  if (!formula || !state.editing || !codeEditor) return;
+  const previewFormulas = [...els.editorPreview.querySelectorAll('.editable-preview-formula')];
+  const sourceFormulas = scanMarkdownFormulas(codeEditor.state.doc.toString());
+  const match = sourceFormulas[previewFormulas.indexOf(formula)];
+  if (!match) return;
+  event.preventDefault();
+  openFormulaDialog(match);
+});
 
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented) return;
@@ -6132,7 +7300,10 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.moreFormatMenu.classList.contains('hidden')) closeMoreFormatMenu(true);
   else if (event.key === 'Escape' && !els.accentMenu.classList.contains('hidden')) { closeAccentMenu(); $('#accentButton').focus(); }
   else if (event.key === 'Escape' && !els.documentActionsMenu.classList.contains('hidden')) { closeDocumentActionsMenu(); els.documentActionsMoreButton.focus(); }
-  else if (event.key === 'Escape' && !els.diagramDialog.classList.contains('hidden')) closeDiagramDialog();
+  else if (event.key === 'Escape' && !els.diagramDialog.classList.contains('hidden')) {
+    if (els.diagramDialog.classList.contains('diagram-fullscreen')) setDiagramFullscreen(false);
+    else closeDiagramDialog();
+  }
   else if (event.key === 'Escape' && !els.formulaDialog.classList.contains('hidden')) closeFormulaDialog();
   else if (event.key === 'Escape' && !els.tableDialog.classList.contains('hidden')) closeTableDialog();
   else if (event.key === 'Escape' && !els.imageUploadSettingsDialog.classList.contains('hidden')) closeImageUploadSettings();

@@ -559,8 +559,13 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .editor-preview-content h2 { font-size: calc(22px * var(--font-scale)); }
 .editor-preview-content h3 { font-size: calc(18px * var(--font-scale)); }
 .preview-error { color: var(--muted); text-align: center; padding: 60px 20px; }
-#markdownEditor { flex: 1; width: 100%; min-height: 0; overflow: hidden; background: transparent; user-select: text; }
+#markdownEditor { position: relative; flex: 1; width: 100%; min-height: 0; overflow: hidden; background: transparent; user-select: text; }
 #markdownEditor .cm-editor { position: relative; z-index: 1; height: 100%; outline: none; pointer-events: auto; font-size: calc(15px * var(--font-scale)); }
+.edit-flowchart-button { position: absolute; z-index: 5; top: 11px; right: 25px; display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); border-radius: 9px; color: var(--accent-strong); background: color-mix(in srgb, var(--paper-strong) 94%, var(--accent-soft)); box-shadow: 0 5px 16px rgba(20, 28, 23, .11); font-size: 12px; font-weight: 700; cursor: pointer; }
+.edit-flowchart-button:hover, .edit-flowchart-button:focus-visible { border-color: var(--accent); outline: none; background: var(--accent-soft); box-shadow: 0 6px 20px rgba(20, 28, 23, .16); }
+.edit-flowchart-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.editable-preview-formula { border-radius: 5px; cursor: pointer; transition: background .15s ease, box-shadow .15s ease; }
+.editable-preview-formula:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); }
 #markdownEditor .cm-content { cursor: text; user-select: text !important; pointer-events: auto; }
 #markdownEditor .cm-scroller { scrollbar-gutter: stable; }
 #markdownEditor .cm-foldGutter { width: 14px; }
@@ -1125,6 +1130,9 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .formula-template-list button:hover { background: var(--paper-strong); }
 .formula-template-list button.active { border-color: color-mix(in srgb, var(--accent) 62%, var(--line)); color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 10%, var(--paper-strong)); }
 .formula-template-list button.active code { color: var(--accent-strong); }
+#diagramTemplateList button { grid-template-columns: minmax(0, 1fr) auto auto; }
+.diagram-visual-badge { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--line)); border-radius: 6px; color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 10%, var(--paper-strong)); }
+.diagram-visual-badge svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .formula-builder-panel { min-width: 0; overflow: auto; padding: 21px 23px; background: var(--paper-strong); }
 .formula-builder-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
 .formula-builder-heading > div { display: grid; gap: 4px; }
@@ -1170,8 +1178,17 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 }
 .diagram-dialog { width: min(1480px, calc(100vw - 32px)); height: min(940px, calc(100vh - 24px)); padding: 26px 28px 22px; }
 .diagram-dialog .formula-dialog-header { min-height: 68px; }
+.diagram-header-actions { display: flex; flex: none; align-items: flex-start; gap: 8px; }
+.diagram-header-actions .formula-guide-link { margin-top: 22px; }
+.diagram-fullscreen-button { display: inline-flex; align-items: center; gap: 7px; }
+.diagram-fullscreen-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.diagram-fullscreen-button .diagram-exit-fullscreen-icon { display: none; }
+.diagram-fullscreen-button.active .diagram-enter-fullscreen-icon { display: none; }
+.diagram-fullscreen-button.active .diagram-exit-fullscreen-icon { display: block; }
 .diagram-dialog-layout { grid-template-columns: 290px minmax(0, 1fr); margin-top: 14px; }
-.diagram-dialog #diagramBuilderPanel { display: grid; grid-template-columns: minmax(340px, .9fr) minmax(460px, 1.1fr); grid-template-rows: auto auto minmax(0, 1fr); gap: 0 14px; overflow: hidden; padding: 18px; }
+.editing-existing-flowchart .diagram-dialog-layout { grid-template-columns: minmax(0, 1fr); }
+.editing-existing-flowchart .diagram-dialog-layout > .formula-template-panel { display: none; }
+.diagram-dialog #diagramBuilderPanel { display: grid; grid-template-columns: minmax(340px, .9fr) minmax(460px, 1.1fr); grid-template-rows: auto auto auto minmax(0, 1fr); gap: 0 14px; overflow: hidden; padding: 18px; }
 .diagram-dialog #diagramBuilderPanel .formula-builder-heading,
 .diagram-dialog #diagramBuilderPanel .diagram-template-description { grid-column: 1 / -1; }
 .diagram-template-description { margin: 14px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
@@ -1184,6 +1201,87 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .diagram-preview .mermaid-diagram svg { display: block; max-width: 100%; margin: auto; }
 .diagram-preview .echarts-diagram { width: 100%; min-height: 360px; margin: 0; border: 0; background: transparent; box-shadow: none; }
 .diagram-preview .mermaid-error { width: 100%; }
+.structured-diagram-editor { grid-column: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; margin-top: 13px; padding: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.structured-diagram-settings { display: flex; align-items: end; gap: 9px; overflow-x: auto; padding-bottom: 2px; }
+.structured-diagram-settings:empty { display: none; }
+.structured-diagram-settings label { min-width: 130px; display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.structured-diagram-settings label:has(input[type="checkbox"]) { min-width: auto; display: flex; align-items: center; flex-direction: row-reverse; justify-content: flex-end; padding: 7px 3px; white-space: nowrap; }
+.structured-diagram-settings input:not([type="checkbox"]), .structured-diagram-settings select, .structured-diagram-table input, .structured-diagram-table select { width: 100%; min-width: 80px; height: 34px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; outline: none; color: var(--text); background: var(--paper-strong); font-size: 11px; }
+.structured-diagram-settings input:focus, .structured-diagram-settings select:focus, .structured-diagram-table input:focus, .structured-diagram-table select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 13%, transparent); }
+.structured-diagram-table-wrap { min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-strong); }
+.structured-diagram-table { width: 100%; border-collapse: collapse; table-layout: auto; }
+.structured-diagram-table th { position: sticky; top: 0; z-index: 1; padding: 8px; border-bottom: 1px solid var(--line); color: var(--muted); background: var(--panel); font-size: 10px; font-weight: 700; text-align: left; white-space: nowrap; }
+.structured-diagram-table td { padding: 5px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.structured-diagram-table th:last-child, .structured-diagram-table td:last-child { width: 39px; text-align: center; }
+.structured-row-remove { width: 30px; height: 30px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; }
+.structured-row-remove:hover { color: #c64c4c; background: color-mix(in srgb, #e06363 12%, transparent); }
+.structured-row-remove svg, .structured-diagram-actions button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.structured-diagram-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 10.5px; }
+.structured-diagram-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 8px; color: var(--accent-strong); background: var(--paper-strong); font-size: 11px; font-weight: 700; cursor: pointer; }
+.structured-diagram-actions button:hover { border-color: var(--accent); background: var(--accent-soft); }
+.flowchart-mode-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; margin-top: 12px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-strong); }
+.flowchart-mode-bar button { min-height: 32px; padding: 6px 13px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font-size: 12px; cursor: pointer; }
+.flowchart-mode-bar button.active { color: var(--accent-strong); background: var(--accent-soft); font-weight: 700; }
+.flowchart-mode-bar > span { margin-left: auto; padding-right: 8px; color: var(--muted); font-size: 11px; }
+.flowchart-visual-editor { grid-column: 1 / -1; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); margin-top: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--paper-strong); }
+.flowchart-toolbar { display: flex; align-items: center; gap: 7px; min-height: 50px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 70%, var(--paper)); }
+.flowchart-add-buttons { display: flex; gap: 6px; }
+.flowchart-toolbar button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper); font-size: 12px; cursor: pointer; }
+.flowchart-toolbar button:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.flowchart-toolbar button:disabled { opacity: .42; cursor: not-allowed; }
+.flowchart-toolbar button.active { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent); }
+.flowchart-toolbar button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.flowchart-toolbar-separator { width: 1px; align-self: stretch; margin: 2px 1px; background: var(--line); }
+.flowchart-zoom-controls { display: flex; align-items: center; }
+.flowchart-zoom-controls button { min-width: 34px; justify-content: center; padding: 6px 8px; border-radius: 0; }
+.flowchart-zoom-controls button:first-child { border-radius: 8px 0 0 8px; }
+.flowchart-zoom-controls button + button { margin-left: -1px; }
+.flowchart-zoom-controls button:last-child { border-radius: 0 8px 8px 0; }
+.flowchart-zoom-controls .flowchart-zoom-value { min-width: 50px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.flowchart-zoom-controls button:disabled { opacity: .42; cursor: not-allowed; }
+.flowchart-direction-field { display: flex; align-items: center; gap: 7px; margin-left: auto; color: var(--muted); font-size: 11px; }
+.flowchart-direction-field select { min-width: 96px; height: 34px; padding: 5px 27px 5px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper); font-size: 12px; }
+.flowchart-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 210px; min-height: 0; height: auto; }
+.flowchart-canvas-viewport { position: relative; min-width: 0; min-height: 390px; overflow: hidden; cursor: grab; background-color: var(--paper); background-image: radial-gradient(circle, color-mix(in srgb, var(--muted) 24%, transparent) 1px, transparent 1px); background-size: 18px 18px; }
+.flowchart-canvas-viewport.is-panning { cursor: grabbing; }
+.flowchart-canvas-viewport svg { display: block; width: 100%; height: 100%; min-height: 390px; touch-action: none; user-select: none; }
+.flowchart-canvas-hint { position: absolute; z-index: 2; left: 12px; bottom: 9px; width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: color-mix(in srgb, var(--paper) 92%, transparent); font-size: 10.5px; pointer-events: none; }
+.flowchart-edge-path { fill: none; stroke: color-mix(in srgb, var(--text) 68%, var(--muted)); stroke-width: 2; }
+.flowchart-edge-path.is-dashed { stroke-dasharray: 8 6; }
+.flowchart-edge-path.is-thick { stroke-width: 4; }
+.flowchart-edge.state-edge .flowchart-edge-path { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.flowchart-edge-hit { fill: none; stroke: transparent; stroke-width: 16; cursor: pointer; }
+.flowchart-edge.selected .flowchart-edge-path { stroke: var(--accent-strong); }
+.flowchart-edge-label { fill: var(--text); stroke: var(--paper); stroke-width: 5px; paint-order: stroke; font: 12px "Segoe UI", "Microsoft YaHei", sans-serif; text-anchor: middle; pointer-events: none; }
+#flowchartArrow path, #flowchartArrowSmall path { fill: color-mix(in srgb, var(--text) 68%, var(--muted)); stroke: none; }
+.flowchart-node { cursor: grab; }
+.flowchart-node:active { cursor: grabbing; }
+.flowchart-node .flowchart-node-shape { fill: var(--paper-strong); stroke: color-mix(in srgb, var(--text) 50%, var(--line)); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.flowchart-node:hover .flowchart-node-shape { stroke: var(--accent); }
+.flowchart-node.selected .flowchart-node-shape { fill: var(--accent-soft); stroke: var(--accent-strong); stroke-width: 2.5; }
+.flowchart-node.connect-origin .flowchart-node-shape { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); stroke: var(--accent-strong); stroke-dasharray: 6 4; }
+.flowchart-node text { fill: var(--text); stroke: none; font: 600 13px "Segoe UI", "Microsoft YaHei", sans-serif; text-anchor: middle; pointer-events: none; }
+.flowchart-node.state-node text { font-size: 11px; font-weight: 600; }
+.flowchart-node.state-terminal-node text { font-size: 10.5px; }
+.flowchart-node .flowchart-subroutine-line, .flowchart-node .flowchart-database-line { fill: none; stroke: color-mix(in srgb, var(--text) 50%, var(--line)); stroke-width: 1.4; pointer-events: none; }
+.flowchart-properties { display: flex; flex-direction: column; gap: 12px; padding: 15px; border-left: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 74%, var(--paper)); }
+.flowchart-properties > strong { color: var(--text); font-size: 13px; }
+.flowchart-properties > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.flowchart-property-group { display: grid; gap: 11px; }
+.flowchart-property-group label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }
+.flowchart-property-group input, .flowchart-property-group select { width: 100%; height: 35px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper); font-size: 12px; }
+.flowchart-property-group input:focus, .flowchart-property-group select:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 15%, transparent); }
+.flowchart-delete-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; margin-top: auto; border: 1px solid color-mix(in srgb, #d94a4a 34%, var(--line)); border-radius: 8px; color: #c83f3f; background: color-mix(in srgb, #d94a4a 5%, var(--paper)); cursor: pointer; }
+.flowchart-delete-button:disabled { opacity: .42; cursor: not-allowed; }
+.flowchart-delete-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.flowchart-fullscreen-actions { display: none; align-items: center; gap: 7px; }
+.diagram-fullscreen .flowchart-visual-editor { position: fixed; z-index: 220; inset: 0; margin: 0; border: 0; border-radius: 0; background: var(--paper-strong); }
+.diagram-fullscreen .flowchart-toolbar { min-height: 58px; padding: 10px 14px; }
+.diagram-fullscreen #toggleDiagramFullscreen { display: none; }
+.diagram-fullscreen .flowchart-workspace { min-height: 0; }
+.diagram-fullscreen .flowchart-fullscreen-actions { display: flex; }
+.diagram-fullscreen .flowchart-insert-button { border-color: var(--accent-strong); color: #fff; background: var(--accent-strong); font-weight: 700; }
+.diagram-fullscreen .flowchart-insert-button:hover { border-color: var(--accent-strong); color: #fff; background: color-mix(in srgb, var(--accent-strong) 88%, #000); }
 .diagram-dialog .formula-dialog-actions { margin-top: 14px; }
 .formula-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .formula-dialog-actions .large-button { min-width: 98px; }
@@ -1248,6 +1346,13 @@ body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; 
   .diagram-dialog { width: calc(100vw - 20px); height: calc(100vh - 20px); padding: 22px 20px 18px; }
   .diagram-dialog-layout { grid-template-columns: 235px minmax(0, 1fr); }
   .diagram-dialog #diagramBuilderPanel { display: block; overflow: auto; }
+  .flowchart-mode-bar { position: sticky; top: 0; z-index: 2; }
+  .flowchart-mode-bar > span { display: none; }
+  .flowchart-toolbar { flex-wrap: wrap; }
+  .flowchart-direction-field { margin-left: 0; }
+  .flowchart-workspace { grid-template-columns: 1fr; }
+  .flowchart-properties { min-height: 210px; border-top: 1px solid var(--line); border-left: 0; }
+  .flowchart-delete-button { margin-top: 6px; }
   .diagram-source-card textarea { min-height: 230px; resize: vertical; }
   .diagram-preview { min-height: 280px; }
 }

@@ -11,15 +11,15 @@ export const DIAGRAM_CATEGORIES = [
 
 export const DIAGRAM_TEMPLATES = [
   {
-    id: 'flowchart', category: 'process', name: name('流程图', 'Flowchart'),
-    description: name('业务流程、审批逻辑、程序路径和决策分支。', 'Business processes, approvals, execution paths, and decisions.'),
+    id: 'flowchart', category: 'process', visualEditor: 'canvas', name: name('流程图', 'Flowchart'),
+    description: name('业务流程、审批逻辑、程序路径和决策分支；支持直接在画布上添加、连接、拖动和修改节点。', 'Business processes, approvals, execution paths, and decisions, with direct node editing, connecting, and dragging on the canvas.'),
     source: {
       zh: `flowchart LR\n    A([收到需求]) --> B{资料是否完整}\n    B -- 是 --> C[进入开发]\n    B -- 否 --> D[补充资料]\n    D --> B\n    C --> E[测试验收]\n    E --> F([发布完成])`,
       en: `flowchart LR\n    A([Receive request]) --> B{Information complete?}\n    B -- Yes --> C[Start development]\n    B -- No --> D[Complete information]\n    D --> B\n    C --> E[Test and accept]\n    E --> F([Release])`
     }
   },
   {
-    id: 'sequence', category: 'process', name: name('时序图', 'Sequence diagram'),
+    id: 'sequence', category: 'process', visualEditor: 'structured', name: name('时序图', 'Sequence diagram'),
     description: name('接口调用、登录过程以及客户端和服务器的交互顺序。', 'API calls, login flows, and ordered client-server interactions.'),
     source: {
       zh: `sequenceDiagram\n    autonumber\n    actor U as 用户\n    participant A as 轻阅 Markdown\n    participant F as 本地文件\n    U->>A: 选择 Markdown 文档\n    A->>F: 请求读取文件\n    F-->>A: 返回文档内容\n    A-->>U: 显示实时预览`,
@@ -27,7 +27,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'gantt', category: 'process', name: name('甘特图', 'Gantt chart'),
+    id: 'gantt', category: 'process', visualEditor: 'structured', name: name('甘特图', 'Gantt chart'),
     description: name('项目排期、研发计划、任务依赖和里程碑。', 'Project schedules, task dependencies, and milestones.'),
     source: {
       zh: `gantt\n    title 版本发布计划\n    dateFormat YYYY-MM-DD\n    excludes weekends\n    section 规划\n    需求分析 :done, plan, {{date}}, 2d\n    section 实施\n    功能开发 :active, dev, after plan, 4d\n    测试验收 :test, after dev, 2d\n    正式发布 :milestone, release, after test, 0d`,
@@ -35,7 +35,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'state', category: 'process', name: name('状态图', 'State diagram'),
+    id: 'state', category: 'process', visualEditor: 'canvas', name: name('状态图', 'State diagram'),
     description: name('订单、页面或文档的状态机和生命周期。', 'State machines and lifecycles for orders, pages, or documents.'),
     source: {
       zh: `stateDiagram-v2\n    [*] --> 未打开\n    未打开 --> 阅读中 : 打开文档\n    阅读中 --> 编辑中 : 点击编辑\n    编辑中 --> 已保存 : 保存\n    已保存 --> 阅读中 : 返回预览\n    阅读中 --> [*] : 关闭文档`,
@@ -51,7 +51,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'timeline', category: 'process', name: name('时间线', 'Timeline'),
+    id: 'timeline', category: 'process', visualEditor: 'structured', name: name('时间线', 'Timeline'),
     description: name('产品发展、事件历史和阶段性成果。', 'Product evolution, event history, and milestones.'),
     source: {
       zh: `timeline\n    title 产品功能演进\n    2026 Q1 : Markdown 阅读\n            : 最近阅读\n    2026 Q2 : 实时编辑\n            : Word 与 PDF 导出\n    2026 Q3 : 学科公式\n            : Mermaid 图表`,
@@ -59,7 +59,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'kanban', category: 'process', name: name('看板', 'Kanban'),
+    id: 'kanban', category: 'process', visualEditor: 'structured', name: name('看板', 'Kanban'),
     description: name('待办、进行中、测试中和已完成任务。', 'Tasks grouped by backlog, progress, testing, and completion.'),
     source: {
       zh: `kanban\n  todo[待处理]\n    task1[撰写功能需求]\n    task2[设计交互界面]\n  doing[进行中]\n    task3[开发 Mermaid 图表]\n  testing[测试中]\n    task4[检查导出效果]\n  done[已完成]\n    task5[实时预览]`,
@@ -131,7 +131,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'pie', category: 'data', name: name('饼图', 'Pie chart'),
+    id: 'pie', category: 'data', visualEditor: 'structured', name: name('饼图', 'Pie chart'),
     description: name('分类占比和构成比例。', 'Category proportions and composition.'),
     source: {
       zh: `pie showData\n    title 文档类型占比\n    "技术文档" : 45\n    "项目方案" : 25\n    "学习笔记" : 20\n    "其他" : 10`,
@@ -179,7 +179,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'bar-chart', category: 'data', engine: 'echarts', name: name('柱状图', 'Bar chart'),
+    id: 'bar-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('柱状图', 'Bar chart'),
     description: name('比较不同分类的数量、金额或频次。', 'Compare values, amounts, or frequencies across categories.'),
     source: {
       zh: chartSource({ title: { text: '月度文档数量', left: 'center' }, tooltip: { trigger: 'axis' }, xAxis: { type: 'category', data: ['一月', '二月', '三月', '四月', '五月', '六月'] }, yAxis: { type: 'value', name: '文档数' }, series: [{ name: '文档数', type: 'bar', data: [42, 58, 76, 69, 91, 108] }] }),
@@ -187,7 +187,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'line-chart', category: 'data', engine: 'echarts', name: name('折线图', 'Line chart'),
+    id: 'line-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('折线图', 'Line chart'),
     description: name('展示连续时间内的趋势和变化速度。', 'Show trends and rates of change over continuous time.'),
     source: {
       zh: chartSource({ title: { text: '阅读时长趋势', left: 'center' }, tooltip: { trigger: 'axis' }, xAxis: { type: 'category', boundaryGap: false, data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] }, yAxis: { type: 'value', name: '分钟' }, series: [{ name: '阅读时长', type: 'line', data: [18, 26, 21, 34, 42, 55, 48] }] }),
@@ -275,7 +275,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'doughnut-chart', category: 'data', engine: 'echarts', name: name('环形图', 'Doughnut chart'),
+    id: 'doughnut-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('环形图', 'Doughnut chart'),
     description: name('以环形结构展示分类占比，并在中心保留说明空间。', 'Show proportions in a ring with room for a central summary.'),
     source: {
       zh: chartSource({ __quillite: { height: 460 }, title: { text: '文档来源占比', left: 'center' }, tooltip: { trigger: 'item' }, legend: { bottom: 4, left: 'center' }, series: [{ name: '来源', type: 'pie', radius: ['38%', '62%'], center: ['50%', '48%'], label: { formatter: '{b}\n{d}%' }, data: [{ value: 46, name: '本地创建' }, { value: 28, name: '团队共享' }, { value: 16, name: '即时通讯' }, { value: 10, name: '其他' }] }] }),
@@ -299,7 +299,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'mindmap', category: 'knowledge', name: name('思维导图', 'Mindmap'),
+    id: 'mindmap', category: 'knowledge', visualEditor: 'canvas', name: name('思维导图', 'Mindmap'),
     description: name('知识整理、功能拆解、头脑风暴和文章大纲。', 'Knowledge organization, feature breakdowns, and outlines.'),
     source: {
       zh: `mindmap\n  root((轻阅 Markdown))\n    阅读\n      实时预览\n      目录定位\n      收藏文档\n    编辑\n      语法高亮\n      自动保存\n      学科公式\n    导出\n      Word\n      PDF\n      HTML`,
