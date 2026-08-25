@@ -19,6 +19,19 @@ exportAuditLink.href = `?mode=${colorMode}&export=1`;
 const charts = document.querySelector('#charts');
 const summary = document.querySelector('#summary');
 
+const READABILITY_FIXTURES = [{
+  id: 'wide-flowchart-readability',
+  source: `flowchart LR
+    A["Application_Start"] --> B["Pilot 初始化"]
+    B --> C["获取 UnityContainer"]
+    C --> D["替换 IHttpControllerActivator"]
+    D --> E["设置 Pilot ActionFilterFactory"]
+    E --> F["RegisterWebapi"]
+    F --> G["扫描 IRepository<T> 并注册 Repository"]
+    F --> H["扫描 IBusinessService 并注册 Service"]
+    F --> I["加载 CarControllers 与 IStartup"]`
+}];
+
 function encoded(source) {
   return encodeURIComponent(source);
 }
@@ -36,6 +49,17 @@ for (const locale of ['zh', 'en']) {
     card.querySelector('pre').textContent = source;
     charts.appendChild(card);
   }
+}
+
+for (const fixture of READABILITY_FIXTURES) {
+  const card = document.createElement('article');
+  card.className = 'audit-card';
+  card.dataset.template = fixture.id;
+  card.dataset.locale = 'zh';
+  card.dataset.engine = 'mermaid';
+  card.innerHTML = `<h2>${fixture.id} · zh · mermaid</h2><div class="mermaid-diagram" data-mermaid-source="${encoded(fixture.source)}"><div class="mermaid-loading">mermaid</div></div><details><summary>源码</summary><pre></pre></details>`;
+  card.querySelector('pre').textContent = fixture.source;
+  charts.appendChild(card);
 }
 
 function intersectionRatio(a, b) {
@@ -89,6 +113,19 @@ function auditSVG(svg, source = '') {
     if (style.stroke !== 'none' && Number.isFinite(width) && width > 0) {
       issues.push('连线备注仍有可见边框');
       break;
+    }
+  }
+  if (/Application_Start/u.test(source)) {
+    const smallestLabelHeight = texts.reduce((smallest, node) => {
+      const height = node.getBoundingClientRect().height;
+      return height > 0 ? Math.min(smallest, height) : smallest;
+    }, Number.POSITIVE_INFINITY);
+    if (!Number.isFinite(smallestLabelHeight) || smallestLabelHeight < 11) {
+      issues.push(`宽流程图文字过小: ${Number.isFinite(smallestLabelHeight) ? smallestLabelHeight.toFixed(1) : 0}px`);
+    }
+    const readableWidth = Number.parseFloat(svg.dataset.mermaidReadableWidth || '0');
+    if (!Number.isFinite(readableWidth) || readableWidth <= 680) {
+      issues.push('宽流程图没有启用按内容计算的可读宽度');
     }
   }
   return [...new Set(issues)];

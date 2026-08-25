@@ -182,9 +182,11 @@ func detailedSystemVersion() string {
 	var value string
 	switch goruntime.GOOS {
 	case "windows":
-		if output, err := feedbackSystemCommand("cmd", "/C", "ver").CombinedOutput(); err == nil {
-			value = string(output)
-		}
+		// Do not use `cmd /C ver` here. Its output follows the active Windows
+		// OEM code page (for example GBK on Simplified Chinese systems), while
+		// Wails expects UTF-8 strings. Passing those bytes through directly made
+		// labels such as "版本" appear as replacement characters in the UI.
+		value = windowsSystemVersion()
 	case "darwin":
 		if output, err := feedbackSystemCommand("sw_vers", "-productVersion").CombinedOutput(); err == nil {
 			value = "macOS " + string(output)

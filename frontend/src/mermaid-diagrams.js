@@ -255,6 +255,38 @@ function normalizeSVGTypography(svg, type = '') {
   if (type === 'mindmap') normalizeMindmapDiagram(svg);
   if (type === 'sankey-beta') normalizeSankeyDiagram(svg);
   expandSVGViewBox(svg);
+  applyReadableSVGWidth(svg, type);
+}
+
+function applyReadableSVGWidth(svg, type = '') {
+  if (!svg) return;
+  const values = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/u).map(Number);
+  if (values.length !== 4 || values.some(value => !Number.isFinite(value)) || values[2] <= 0) return;
+
+  // Mermaid lays a diagram out in SVG user units and then `width: 100%`
+  // scales the complete canvas into the article. That is useful for compact
+  // diagrams, but a long LR flowchart can be 2–3 times wider than the article:
+  // every 14px label is then reduced to 5–7 physical pixels. Preserve a
+  // body-text-sized label instead and let the existing diagram scroller expose
+  // the extra width. The median ignores an occasional large title or tiny
+  // stereotype without changing Mermaid's measured node geometry.
+  const fontSizes = [...svg.querySelectorAll('text, tspan')]
+    .map(label => Number.parseFloat(getComputedStyle(label).fontSize))
+    .filter(size => Number.isFinite(size) && size >= 8 && size <= 32)
+    .sort((left, right) => left - right);
+  const medianFontSize = fontSizes.length
+    ? fontSizes[Math.floor(fontSizes.length / 2)]
+    : (type === 'gantt' ? 16 : 14);
+  const configuredScale = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--font-scale')
+  );
+  const fontScale = Number.isFinite(configuredScale) && configuredScale > 0 ? configuredScale : 1;
+  const targetFontSize = (type === 'gantt' ? 14 : 13) * fontScale;
+  const readableWidth = Math.ceil(values[2] * (targetFontSize / medianFontSize));
+  const boundedWidth = Math.max(320, Math.min(6000, readableWidth));
+
+  svg.style.setProperty('--mermaid-readable-width', `${boundedWidth}px`);
+  svg.dataset.mermaidReadableWidth = String(boundedWidth);
 }
 
 function renderedDiagramColors() {

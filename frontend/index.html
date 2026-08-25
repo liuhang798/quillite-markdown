@@ -217,17 +217,13 @@
             <button id="revealButton" class="text-button" data-i18n="revealFile" data-i18n-title="revealFileTitle" title="在资源管理器中显示">定位文件</button>
             <button id="closePreviewButton" class="text-button close-preview-button" data-i18n="closePreview" data-i18n-title="closePreviewTitle" title="关闭当前预览并返回首页">关闭预览</button>
             <button id="documentSaveAsButton" class="text-button document-action-collapsible" data-document-action="save-as" data-i18n="saveAs">另存为</button>
-            <button id="documentExportWordButton" class="text-button document-action-collapsible" data-document-action="export-word" data-i18n="exportWord">导出 Word</button>
-            <button id="documentExportHTMLButton" class="text-button document-action-collapsible" data-document-action="export-html" data-i18n="exportHTML">导出 HTML</button>
-            <button id="documentExportPDFButton" class="text-button document-action-collapsible" data-document-action="export-pdf" data-i18n="exportPDF">导出 PDF</button>
+            <button id="documentExportButton" class="text-button document-action-collapsible" data-document-action="export-center" data-i18n="exportDocument">导出文档</button>
             <button id="printButton" class="text-button document-action-collapsible" data-document-action="print" data-i18n="print" data-i18n-title="printTitle" title="打印文档">打印</button>
             <div class="document-actions-more">
               <button id="documentActionsMoreButton" class="text-button document-actions-more-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="documentActionsMenu" data-i18n="moreDocumentActions">更多</button>
               <div id="documentActionsMenu" class="document-actions-menu hidden" role="menu" data-i18n-aria-label="moreDocumentActions" aria-label="更多文档操作">
                 <button type="button" role="menuitem" data-document-action="save-as"><span data-i18n="saveAs">另存为</span><small data-i18n="markdownDocument">Markdown 文档</small></button>
-                <button type="button" role="menuitem" data-document-action="export-word"><span data-i18n="exportWord">导出 Word</span><small>.docx</small></button>
-                <button type="button" role="menuitem" data-document-action="export-html"><span data-i18n="exportHTML">导出 HTML</span><small>.html</small></button>
-                <button type="button" role="menuitem" data-document-action="export-pdf"><span data-i18n="exportPDF">导出 PDF</span><small data-i18n="systemPrint">系统打印</small></button>
+                <button type="button" role="menuitem" data-document-action="export-center"><span data-i18n="exportDocument">导出文档</span><small data-i18n="exportFormatsCount">12 种格式</small></button>
                 <button type="button" role="menuitem" data-document-action="print"><span data-i18n="printDocument">打印文档</span><small>Ctrl P</small></button>
               </div>
             </div>
@@ -322,8 +318,24 @@
     <div id="tocResizer" class="pane-resizer toc-resizer hidden" role="separator" tabindex="0" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="2000" aria-valuenow="205" data-i18n-title="resizeToc" data-i18n-aria-label="resizeToc" title="拖动调整目录宽度" aria-label="拖动调整目录宽度"></div>
 
     <aside id="tocPanel" class="toc-panel hidden">
-      <span class="eyebrow" data-i18n="toc">本页目录</span>
+      <div class="toc-panel-header">
+        <span class="eyebrow" data-i18n="toc">本页目录</span>
+        <div class="toc-view-switch" role="group" data-i18n-aria-label="tocViewMode" aria-label="目录显示方式">
+          <button id="tocTreeMode" type="button" data-toc-mode="tree" aria-pressed="true" data-i18n-title="tocTreeMode" title="折叠目录">
+            <svg viewBox="0 0 24 24"><path d="M5 6h4M5 12h4M5 18h4M12 6h7M12 12h7M12 18h7"/></svg>
+          </button>
+          <button id="tocFlatMode" type="button" data-toc-mode="flat" aria-pressed="false" data-i18n-title="tocFlatMode" title="平铺目录">
+            <svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
+          </button>
+        </div>
+      </div>
+      <label class="toc-search-box">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+        <input id="tocSearchInput" type="search" autocomplete="off" data-i18n-placeholder="tocSearchPlaceholder" data-i18n-aria-label="tocSearchPlaceholder" placeholder="搜索标题" aria-label="搜索标题">
+        <button id="clearTocSearch" class="hidden" type="button" data-i18n-title="clearTocSearch" data-i18n-aria-label="clearTocSearch" title="清除标题搜索" aria-label="清除标题搜索"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
+      </label>
       <nav id="toc" class="toc"></nav>
+      <p id="tocEmpty" class="toc-empty hidden" data-i18n="tocNoMatches">没有匹配的标题</p>
       <div class="reading-progress"><span id="progressBar"></span></div>
       <small id="readingTime"></small>
     </aside>
@@ -361,15 +373,26 @@
       <button type="button" class="width-option" role="menuitemradio" data-doc-width="full" aria-checked="false" data-i18n="widthFull">全宽</button>
     </div>
     <hr>
+    <div class="popover-label" data-i18n="spellcheck">拼写检查</div>
+    <button type="button" class="spellcheck-toggle" role="menuitemcheckbox" data-spellcheck-toggle aria-checked="true">
+      <span class="menu-label" data-i18n="spellcheckEnabled">标记英文错词</span><span class="spellcheck-check" aria-hidden="true">✓</span>
+    </button>
+    <div class="popover-label spellcheck-language-label" data-i18n="spellcheckLanguage">词典语言</div>
+    <div class="spellcheck-language-options" role="group" data-i18n-aria-label="spellcheckLanguage" aria-label="词典语言">
+      <button type="button" role="menuitemradio" data-spellcheck-language="auto" aria-checked="true" data-i18n="spellcheckAuto">自动</button>
+      <button type="button" role="menuitemradio" data-spellcheck-language="en-US" aria-checked="false" data-i18n="spellcheckUS">English (US)</button>
+      <button type="button" role="menuitemradio" data-spellcheck-language="en-GB" aria-checked="false" data-i18n="spellcheckGB">English (UK)</button>
+    </div>
+    <button type="button" data-spellcheck-clear><span class="menu-label" data-i18n="clearPersonalDictionary">清空个人词典</span><span id="personalDictionaryCount">0 个词</span></button>
+    <hr>
     <div class="popover-label" data-i18n="exportDocument">导出文档</div>
-    <button data-action="export-word"><span class="menu-label" data-i18n="exportWord">导出 Word</span> <span>.docx</span></button>
-    <button data-action="export-html"><span class="menu-label" data-i18n="exportHTML">导出 HTML</span> <span>.html</span></button>
-    <button data-action="export-pdf"><span class="menu-label" data-i18n="exportPDF">导出 PDF</span> <span data-i18n="systemPrint">系统打印</span></button>
+    <button data-action="export-center"><span class="menu-label" data-i18n="exportDocument">导出文档</span> <span data-i18n="exportFormatsCount">12 种格式</span></button>
     <button data-action="print"><span class="menu-label" data-i18n="printDocument">打印文档</span> <span>Ctrl P</span></button>
     <hr>
+    <button data-action="image-upload-settings"><span class="menu-label" data-i18n="imageUploadSettings">图床设置</span> <span>PicGo</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.5.2</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.6.0</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -435,6 +458,33 @@
     </button>
   </div>
 
+  <div id="editorClipboardMenu" class="popover recent-context-menu editor-clipboard-menu hidden no-drag" role="menu" data-i18n-aria-label="clipboardOptions" aria-label="复制选项">
+    <div class="popover-label" data-i18n="clipboardOptions">复制选项</div>
+    <button type="button" role="menuitem" data-editor-copy="markdown">
+      <svg viewBox="0 0 24 24"><path d="M7 4h10v16H7V4Z"/><path d="m9.5 15 2-2-2-2M13 15h2.5"/></svg>
+      <span class="menu-label" data-i18n="copyAsMarkdown">复制为 Markdown</span>
+    </button>
+    <button type="button" role="menuitem" data-editor-copy="plain">
+      <svg viewBox="0 0 24 24"><path d="M7 4h10v16H7V4ZM9.5 9h5M9.5 12h5M9.5 15h3"/></svg>
+      <span class="menu-label" data-i18n="copyAsPlainText">复制为纯文本</span>
+    </button>
+  </div>
+
+  <div id="spellcheckContextMenu" class="popover recent-context-menu spellcheck-context-menu hidden no-drag" role="menu" data-i18n-aria-label="spellingSuggestions" aria-label="拼写建议">
+    <div class="spelling-menu-heading"><span data-i18n="spellingSuggestions">拼写建议</span><strong id="spellingContextWord"></strong></div>
+    <div id="spellingSuggestions" class="spelling-suggestions"></div>
+    <div id="spellingNoSuggestions" class="spelling-empty hidden" data-i18n="noSpellingSuggestions">暂无纠错建议</div>
+    <hr>
+    <button type="button" role="menuitem" data-spelling-action="ignore">
+      <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>
+      <span class="menu-label" data-i18n="ignoreSpellingWord">在本文中忽略</span>
+    </button>
+    <button type="button" role="menuitem" data-spelling-action="add">
+      <svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5V4Z"/><path d="M9 12h6M12 9v6"/></svg>
+      <span class="menu-label" data-i18n="addToPersonalDictionary">加入个人词典</span>
+    </button>
+  </div>
+
   <div id="accentMenu" class="popover accent-menu hidden no-drag" role="menu" aria-labelledby="accentMenuLabel">
     <div id="accentMenuLabel" class="popover-label" data-i18n="chooseAccentTheme">选择主题颜色</div>
     <div class="accent-options">
@@ -478,7 +528,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.5.2</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.6.0</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -534,7 +584,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.5.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.6.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -556,9 +606,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.5.2</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.6.0</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.5.2</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.6.0</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>
@@ -604,6 +654,94 @@
       <div class="edit-permission-actions">
         <button id="cancelEditPermission" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
         <button id="saveCopyAndEdit" class="large-button primary" type="button" data-i18n="saveCopyAndEdit">另存为副本并编辑</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="exportCenterDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="exportCenterTitle">
+    <section class="export-center-dialog">
+      <button id="closeExportCenter" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+      <span class="eyebrow" data-i18n="exportEyebrow">EXPORT</span>
+      <h2 id="exportCenterTitle" data-i18n="exportDocument">导出文档</h2>
+      <p class="export-center-intro" data-i18n="exportCenterHint">选择用途和格式，轻阅会自动采用合适的导出设置。</p>
+
+      <div class="export-center-scroll">
+        <section class="export-center-section">
+          <div class="export-section-heading"><strong data-i18n="exportFormat">导出格式</strong><span id="exportFormatDescription"></span></div>
+          <div id="exportFormatGrid" class="export-format-categories" role="radiogroup" data-i18n-aria-label="exportFormat" aria-label="导出格式">
+            <section class="export-format-category">
+              <strong class="export-format-category-title" data-i18n="exportCategoryDocument">文档</strong>
+              <div class="export-format-grid">
+                <button type="button" class="active" role="radio" aria-checked="true" data-export-format="docx"><b>DOCX</b><span data-i18n="exportFormatWord">Word 文档</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="pdf"><b>PDF</b><span data-i18n="exportFormatPDF">系统打印</span></button>
+              </div>
+            </section>
+            <section class="export-format-category">
+              <strong class="export-format-category-title" data-i18n="exportCategoryWeb">网页</strong>
+              <div class="export-format-grid">
+                <button type="button" role="radio" aria-checked="false" data-export-format="html"><b>HTML</b><span data-i18n="exportFormatStyledHTML">带样式网页</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="html-plain"><b>HTML</b><span data-i18n="exportFormatPlainHTML">无样式网页</span></button>
+              </div>
+            </section>
+            <section class="export-format-category">
+              <strong class="export-format-category-title" data-i18n="exportCategoryImage">图片</strong>
+              <div class="export-format-grid">
+                <button type="button" role="radio" aria-checked="false" data-export-format="png"><b>PNG</b><span data-i18n="exportFormatPNG">高清图片</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="jpeg"><b>JPG</b><span data-i18n="exportFormatJPEG">压缩图片</span></button>
+              </div>
+            </section>
+            <details id="exportAdvancedFormats" class="export-format-advanced">
+              <summary><span data-i18n="exportAdvancedFormats">更多专业格式</span><small data-i18n="exportAdvancedHint">需要 Pandoc</small></summary>
+              <div class="export-format-grid export-format-grid-advanced">
+                <button type="button" role="radio" aria-checked="false" data-export-format="epub"><b>EPUB</b><span data-i18n="exportFormatEPUB">电子书</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="rtf"><b>RTF</b><span data-i18n="exportFormatRTF">富文本</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="odt"><b>ODT</b><span data-i18n="exportFormatODT">开放文档</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="latex"><b>LaTeX</b><span data-i18n="exportFormatLatex">排版源码</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="mediawiki"><b>Wiki</b><span>MediaWiki</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="custom"><b>Pandoc</b><span data-i18n="exportFormatCustom">自定义格式</span></button>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="exportImageOptions" class="export-center-section hidden">
+          <div class="export-section-heading"><strong data-i18n="imageExportOptions">图片选项</strong><span data-i18n="imageResolution">清晰度：2×</span></div>
+          <label class="export-inline-field">
+            <span data-i18n="imageOutputMode">输出方式</span>
+            <select id="exportImageLayout">
+              <option value="pages" selected data-i18n="imageOutputPages">A4 高清分页（推荐）</option>
+              <option value="long" data-i18n="imageOutputLong">单张长图（仅适合短文档）</option>
+            </select>
+          </label>
+          <small class="export-field-hint" data-i18n="imageOutputHint">按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。</small>
+        </section>
+
+        <section id="pandocExportOptions" class="export-center-section hidden">
+          <div class="export-section-heading"><strong>Pandoc</strong><span id="pandocStatusText" data-i18n="pandocNotDetected">尚未检测到 Pandoc</span></div>
+          <div id="pandocSetupFields" class="pandoc-setup-fields">
+            <p data-i18n="pandocSetupHint">此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。</p>
+            <div class="pandoc-setup-actions"><button id="detectPandoc" type="button" data-i18n="detectPandoc">重新检测</button><button id="selectPandoc" type="button" data-i18n="selectPandoc">选择文件</button><button id="openPandocInstall" class="export-text-link" type="button" data-i18n="installPandoc">安装 Pandoc ↗</button></div>
+          </div>
+          <div id="customPandocFields" class="export-two-columns hidden">
+            <label><span data-i18n="pandocWriter">输出 writer</span><input id="pandocCustomWriter" maxlength="64" value="plain" placeholder="docbook5"></label>
+            <label><span data-i18n="fileExtension">文件扩展名</span><input id="pandocCustomExtension" maxlength="12" value=".txt" placeholder=".xml"></label>
+          </div>
+          <label id="pandocArgumentsField" class="export-arguments-field hidden"><span data-i18n="pandocArguments">自定义 Pandoc 命令参数</span><textarea id="pandocExtraArguments" rows="3" maxlength="4000" placeholder="--standalone --toc"></textarea></label>
+          <small id="pandocSecurityHint" class="export-field-hint hidden" data-i18n="pandocSecurityHint">参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。</small>
+        </section>
+        <div class="hidden" aria-hidden="true">
+          <select id="exportPresetSelect"><option value=""></option></select><input id="exportPresetName"><button id="saveExportPreset" type="button"></button><button id="deleteExportPreset" type="button"></button>
+          <input id="exportHeader" value=""><input id="exportFooter" value=""><input id="pandocPath" type="hidden">
+          <select id="exportImageScale"><option value="2" selected></option></select>
+        </div>
+      </div>
+
+      <div class="export-center-actions">
+        <span id="exportCenterStatus" role="status" aria-live="polite"></span>
+        <button id="cancelExportCenter" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
+        <button id="confirmExportCenter" class="large-button primary" type="button" data-i18n="exportNow">立即导出</button>
       </div>
     </section>
   </div>
@@ -656,20 +794,33 @@
   </div>
 
   <div id="tableDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="tableDialogTitle">
-    <section class="table-dialog">
+    <section class="table-dialog table-designer-dialog">
       <button id="closeTableDialog" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
         <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
       <span class="eyebrow" data-i18n="markdownTool">MARKDOWN 工具</span>
-      <h2 id="tableDialogTitle" data-i18n="insertTable">插入表格</h2>
-      <p data-i18n="tableDialogHint">选择表格的行数和列数，表头占第一行。</p>
-      <div class="table-size-fields">
-        <label><span data-i18n="rows">行数</span><input id="tableRows" type="number" min="2" max="20" value="3"></label>
-        <label><span data-i18n="columns">列数</span><input id="tableColumns" type="number" min="1" max="12" value="3"></label>
+      <h2 id="tableDialogTitle">可视化表格编辑</h2>
+      <p data-i18n="tableDialogHint">直接填写单元格，拖动行列调整顺序或列宽，并设置每列对齐方式。</p>
+      <div class="table-designer-toolbar">
+        <div class="table-size-fields">
+          <label><span data-i18n="rows">行数</span><input id="tableRows" type="number" min="2" max="20" value="3"></label>
+          <label><span data-i18n="columns">列数</span><input id="tableColumns" type="number" min="1" max="12" value="3"></label>
+        </div>
+        <div class="table-structure-actions">
+          <button id="addTableRow" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 12h16M12 9v6M9 12h6"/></svg><span data-i18n="addRow">添加行</span></button>
+          <button id="addTableColumn" type="button"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM12 5v14M9 12h6M12 9v6"/></svg><span data-i18n="addColumn">添加列</span></button>
+        </div>
+      </div>
+      <div id="tableDesignerViewport" class="table-designer-viewport">
+        <div id="tableDesignerGrid" class="table-designer-grid"></div>
+      </div>
+      <div class="table-designer-legend">
+        <span><i class="table-legend-drag">⋮⋮</i><span data-i18n="dragTableHint">拖动手柄调整行列顺序</span></span>
+        <span><i class="table-legend-resize"></i><span data-i18n="resizeTableHint">拖动列边界调整宽度</span></span>
       </div>
       <div class="table-dialog-actions">
         <button id="cancelTable" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
-        <button id="confirmTable" class="large-button primary" type="button" data-i18n="insert">插入</button>
+        <button id="confirmTable" class="large-button primary" type="button">插入表格</button>
       </div>
     </section>
   </div>
@@ -688,9 +839,92 @@
         <label class="image-width-field"><span data-i18n="imageWidth">显示宽度</span><div><input id="imageWidth" type="range" min="10" max="100" step="5" value="100"><output id="imageWidthValue" for="imageWidth">100%</output></div><small data-i18n="imageWidthHint">拖拽和粘贴图片也会使用此宽度</small></label>
       </div>
       <div class="table-dialog-actions image-dialog-actions">
-        <button id="pickLocalImage" class="large-button secondary" type="button" data-i18n="localImage">本地图片…</button>
+        <button id="pickLocalImage" class="large-button secondary" type="button" data-i18n="chooseImage">选择图片…</button>
+        <button id="openImageUploadSettings" class="large-button secondary" type="button" data-i18n="imageUploadSettings">图床设置</button>
         <button id="cancelImage" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
         <button id="confirmImage" class="large-button primary" type="button" data-i18n="insert">插入</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="imageUploadSettingsDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="imageUploadSettingsTitle">
+    <section class="image-upload-settings-dialog">
+      <button id="closeImageUploadSettings" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+      <span class="eyebrow">PICGO</span>
+      <h2 id="imageUploadSettingsTitle" data-i18n="imageUploadSettings">图床设置</h2>
+      <p data-i18n="imageUploadSettingsHint">首次启用只需按向导完成一次配置，以后粘贴、拖拽或选择图片即可自动上传。</p>
+      <fieldset class="image-upload-mode-options">
+        <legend data-i18n="imageInsertMode">图片插入方式</legend>
+        <label><input type="radio" name="imageUploadMode" value="local" checked><span><strong data-i18n="localAssetsMode">本地 assets</strong><small data-i18n="localAssetsModeHint">保存相对路径，离线可用</small></span></label>
+        <label><input type="radio" name="imageUploadMode" value="picgo-cloud"><span><strong data-i18n="picGoCloudMode">PicGo 在线图床</strong><small data-i18n="picGoCloudModeHint">浏览器登录，无需安装 PicGo</small></span></label>
+        <label><input type="radio" name="imageUploadMode" value="picgo"><span><strong data-i18n="picGoMode">本机 PicGo</strong><small data-i18n="picGoModeHint">兼容已安装的 PicGo 与其他图床</small></span></label>
+      </fieldset>
+      <div id="picGoCloudSetup" class="picgo-cloud-setup picgo-setup-panel hidden">
+        <span class="picgo-step-label">PICGO CLOUD</span>
+        <h3 data-i18n="picGoCloudSetupTitle">登录后直接上传</h3>
+        <p data-i18n="picGoCloudSetupHint">将在浏览器打开 PicGo Cloud 登录页。登录令牌仅保存在本机；免费账户提供 200 个文件、500 MB 存储空间，额度与计费以 PicGo Cloud 为准。</p>
+        <div id="picGoCloudAccount" class="picgo-cloud-account hidden"><span class="picgo-ready-icon" aria-hidden="true">✓</span><div><strong data-i18n="picGoCloudConnectedTitle">PicGo Cloud 已连接</strong><small id="picGoCloudUser"></small></div></div>
+        <div id="picGoCloudStatus" class="picgo-test-status" role="status" aria-live="polite"></div>
+        <div class="picgo-step-actions">
+          <button id="logoutPicGoCloud" class="large-button secondary hidden" type="button" data-i18n="logoutPicGoCloud">退出登录</button>
+          <button id="testPicGoCloud" class="large-button secondary hidden" type="button" data-i18n="testPicGoCloud">检查连接</button>
+          <button id="loginPicGoCloud" class="large-button primary" type="button" data-i18n="loginPicGoCloud">登录 PicGo Cloud</button>
+        </div>
+      </div>
+      <div id="picGoSetupWizard" class="picgo-setup-wizard hidden">
+        <ol class="picgo-setup-progress" aria-label="PicGo setup progress" data-i18n-aria-label="picGoSetupProgress">
+          <li data-picgo-step="1"><b>1</b><span data-i18n="picGoSetupInstallShort">安装 PicGo</span></li>
+          <li data-picgo-step="2"><b>2</b><span data-i18n="picGoSetupConfigureShort">配置并检测</span></li>
+          <li data-picgo-step="3"><b>3</b><span data-i18n="picGoSetupReadyShort">完成</span></li>
+        </ol>
+        <section id="picGoSetupInstall" class="picgo-setup-panel">
+          <span class="picgo-step-label" data-i18n="picGoSetupStep1">第 1 步</span>
+          <h3 data-i18n="picGoSetupInstallTitle">安装并启动 PicGo</h3>
+          <p data-i18n="picGoSetupInstallHint">PicGo 是免费的图片上传工具。安装后打开，并让它保持在后台运行。</p>
+          <div class="picgo-step-actions">
+            <button id="downloadPicGo" class="large-button secondary" type="button" data-i18n="downloadPicGo">打开 PicGo 下载页</button>
+            <button id="picGoInstalledNext" class="large-button primary" type="button" data-i18n="picGoInstalledNext">已经安装，下一步</button>
+          </div>
+        </section>
+        <section id="picGoSetupConnect" class="picgo-setup-panel hidden">
+          <span class="picgo-step-label" data-i18n="picGoSetupStep2">第 2 步</span>
+          <h3 data-i18n="picGoSetupConfigureTitle">配置图床并开启 Server</h3>
+          <ol class="picgo-setup-checklist">
+            <li data-i18n="picGoSetupConfigureHost">在 PicGo 中登录 PicGo Cloud，或配置你自己的图床。</li>
+            <li data-i18n="picGoSetupEnableServer">打开“PicGo 设置 → PicGo-Server”，确认服务已开启，端口为 36677。</li>
+            <li data-i18n="picGoSetupKeepRunning">保持 PicGo 在后台运行，然后让轻阅自动检测。</li>
+          </ol>
+          <div class="picgo-step-actions">
+            <button id="picGoSetupBack" class="large-button secondary" type="button" data-i18n="picGoSetupBack">上一步</button>
+            <button id="testPicGo" class="large-button primary" type="button" data-i18n="autoDetectPicGo">自动检测 PicGo</button>
+          </div>
+        </section>
+        <section id="picGoSetupReady" class="picgo-setup-panel picgo-ready-panel hidden">
+          <div class="picgo-ready-icon" aria-hidden="true">✓</div>
+          <div>
+            <span class="picgo-step-label" data-i18n="picGoSetupStep3">第 3 步</span>
+            <h3 data-i18n="picGoSetupReadyTitle">PicGo 已连接</h3>
+            <p data-i18n="picGoSetupReadyHint">保存后，粘贴、拖拽和选择的图片将自动上传；失败时仍会安全使用本地 assets。</p>
+          </div>
+        </section>
+        <div id="picGoTestStatus" class="picgo-test-status" role="status" aria-live="polite"></div>
+        <details id="picGoAdvancedSettings" class="picgo-advanced-settings">
+          <summary data-i18n="picGoAdvancedSettings">高级设置</summary>
+          <div id="picGoSettingsFields" class="picgo-settings-fields">
+            <label><span data-i18n="picGoServerURL">PicGo 服务地址</span><input id="picGoServerURL" type="url" value="http://127.0.0.1:36677" spellcheck="false"></label>
+            <label><span data-i18n="picGoSecret">服务密钥（可选）</span><input id="picGoSecret" type="password" autocomplete="new-password" data-i18n-placeholder="picGoSecretPlaceholder" placeholder="留空则保留已保存密钥"></label>
+            <label id="clearPicGoSecretRow" class="clear-picgo-secret hidden"><input id="clearPicGoSecret" type="checkbox"><span data-i18n="clearPicGoSecret">清除已保存密钥</span></label>
+            <small data-i18n="picGoSecurityHint">默认无需修改。仅允许连接本机 localhost 地址；云图床密钥继续由 PicGo 管理。</small>
+          </div>
+        </details>
+      </div>
+      <div id="localAssetsSummary" class="local-assets-summary"><strong data-i18n="localAssetsReadyTitle">本地模式已就绪</strong><span data-i18n="localAssetsReadyHint">图片会复制到文档旁的 assets，便于离线阅读和移动。</span></div>
+      <div class="image-upload-settings-actions">
+        <span></span>
+        <button id="cancelImageUploadSettings" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
+        <button id="saveImageUploadSettings" class="large-button primary" type="button" data-i18n="saveSettings">保存设置</button>
       </div>
     </section>
   </div>
@@ -789,6 +1023,16 @@
         <button id="insertDiagram" class="large-button primary" type="button" data-i18n="insertDiagram">插入图表</button>
       </div>
     </section>
+  </div>
+
+  <div id="imageUploadProgress" class="image-upload-progress hidden is-indeterminate" role="status" aria-live="polite" aria-atomic="true">
+    <span class="image-upload-spinner" aria-hidden="true"></span>
+    <span class="image-upload-progress-copy">
+      <strong id="imageUploadProgressTitle" data-i18n="imageUploadingTitle">正在上传图片</strong>
+      <span id="imageUploadProgressDetail" data-i18n="imageUploadPreparing">正在准备图片…</span>
+    </span>
+    <strong id="imageUploadProgressPercent" class="image-upload-progress-percent">0%</strong>
+    <span class="image-upload-progress-track" aria-hidden="true"><i id="imageUploadProgressBar"></i></span>
   </div>
 
   <div id="toast" class="toast hidden" data-kind="info" role="status" aria-live="polite">

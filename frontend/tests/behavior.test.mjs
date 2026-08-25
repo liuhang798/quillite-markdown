@@ -52,8 +52,8 @@ test('file-association opens are subscribed before startup and protect unsaved c
 test('an occupied export target is explained without uploading a software error', () => {
   assert.match(renderer, /function isExportFileInUseError\(error\)[\s\S]*message\.includes\('EXPORT_FILE_IN_USE'\)/);
   assert.match(renderer, /function reportSilentError\(error, source = 'frontend'\) \{[\s\S]*if \(isExportFileInUseError\(error\)\) return;/);
-  assert.match(renderer, /async function exportWordDocument\(\)[\s\S]*catch \(error\) \{\s*if \(isExportFileInUseError\(error\)\) \{\s*showToast\(t\('exportFileInUse'\), 'warning'\);\s*return;/);
-  assert.match(renderer, /async function exportHTMLDocument\(\)[\s\S]*catch \(error\) \{\s*if \(isExportFileInUseError\(error\)\) \{\s*showToast\(t\('exportFileInUse'\), 'warning'\);\s*return;/);
+  assert.match(renderer, /async function exportWordDocument\(options = \{\}\)[\s\S]*catch \(error\) \{\s*if \(isExportFileInUseError\(error\)\) \{\s*showToast\(t\('exportFileInUse'\), 'warning'\);\s*return false;/);
+  assert.match(renderer, /async function exportHTMLDocument\(options = \{\}\)[\s\S]*catch \(error\) \{\s*if \(isExportFileInUseError\(error\)\) \{\s*showToast\(t\('exportFileInUse'\), 'warning'\);\s*return false;/);
   assert.match(renderer, /exportFileInUse: '导出文件正被其他程序占用/);
   assert.match(renderer, /exportFileInUse: 'The export file is open in another app/);
 });
@@ -232,6 +232,37 @@ test('plain text files render without Markdown parsing and edit without Markdown
   assert.match(styles, /\.plain-text \{[^}]*font-size: calc\(15px \* var\(--font-scale\)\);/);
 });
 
+test('new document creation blocks double clicks and starts a three-second cooldown only after success', () => {
+  assert.match(renderer, /const NEW_FILE_COOLDOWN_MS = 3000;/);
+  assert.match(renderer, /async function newFile\(\) \{\s*if \(newFileRequestInProgress \|\| Date\.now\(\) < newFileCooldownUntil\) return;/);
+  assert.match(renderer, /newFileRequestInProgress = true;\s*updateNewFileButtonState\(\);\s*try \{\s*const doc = await window\.quilliteMarkdown\.newFile\(\);\s*if \(!doc\?\.path\) return;\s*startNewFileCooldown\(\);/);
+  assert.match(renderer, /finally \{\s*newFileRequestInProgress = false;\s*updateNewFileButtonState\(\);/);
+  assert.match(renderer, /button\.disabled = newFileRequestInProgress \|\| Date\.now\(\) < newFileCooldownUntil;/);
+  assert.match(renderer, /newFileCooldownTimer = window\.setTimeout\(releaseNewFileCooldown, NEW_FILE_COOLDOWN_MS\);/);
+});
+
+test('visual table designer edits cells, structure, order, alignment and persistent column widths', () => {
+  assert.match(html, /id="tableDialog"[\s\S]*id="tableRows"[\s\S]*id="tableColumns"[\s\S]*id="addTableRow"[\s\S]*id="addTableColumn"[\s\S]*id="tableDesignerGrid"/);
+  assert.match(renderer, /findMarkdownTableAt\(source, selection\.head\)/);
+  assert.match(renderer, /function renderTableDesigner\(focusCell = null\)/);
+  assert.match(renderer, /tools\.dataset\.tableDrag = 'column'/);
+  assert.match(renderer, /rowTools\.dataset\.tableDrag = 'row'/);
+  assert.match(renderer, /select\.dataset\.tableAlignment/);
+  assert.match(renderer, /resizer\.dataset\.resizeTableColumn/);
+  assert.match(renderer, /removeTableRow\(tableDesignerState\.model/);
+  assert.match(renderer, /removeTableColumn\(tableDesignerState\.model/);
+  assert.match(renderer, /reorderTableColumn\(tableDesignerState\.model/);
+  assert.match(renderer, /reorderTableRow\(tableDesignerState\.model/);
+  assert.match(renderer, /serializeMarkdownTable\(tableDesignerState\.model\)/);
+  assert.match(renderer, /stripTableWidthMetadata\(content\)/);
+  assert.match(renderer, /function applyMarkdownTableLayouts\(container, layouts\)/);
+  assert.match(styles, /\.table-designer-dialog \{[^}]*width: min\(1020px/);
+  assert.match(styles, /\.table-column-resizer \{[^}]*cursor: col-resize/);
+  assert.match(styles, /\.markdown-table-scroll \{[^}]*overflow-x: auto/);
+  assert.match(renderer, /visualTableEditor: '可视化表格编辑'/);
+  assert.match(renderer, /visualTableEditor: 'Visual table editor'/);
+});
+
 test('images support links, asset imports, drag and paste, and display scaling', () => {
   assert.match(html, /id="imageDialog"/);
   assert.match(html, /id="imageUrl"/);
@@ -251,7 +282,7 @@ test('images support links, asset imports, drag and paste, and display scaling',
   assert.match(renderer, /async function importAndInsertImage\(sourcePath, description = ''\)/);
   assert.match(renderer, /window\.quilliteMarkdown\.importImage\(state\.currentFile\.path, sourcePath\)/);
   assert.match(renderer, /window\.quilliteMarkdown\.savePastedImage\(state\.currentFile\.path, await fileAsDataURL\(file\)\)/);
-  assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('paste', handleEditorImagePaste\)/);
+  assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('paste', handleEditorPaste\)/);
   assert.match(renderer, /if \(state\.editing && IMAGE_FILE_PATTERN\.test\(filePath\)\)/);
   assert.match(renderer, /\$\('#pickLocalImage'\)\.addEventListener\('click', \(\) => \{ closeImageDialog\(\); insertLocalImage\(\); \}\)/);
   assert.match(renderer, /els\.imageUrl\.addEventListener\('keydown', event => \{\s*if \(event\.key === 'Enter'\) insertImageFromUrl\(\);/);
@@ -279,16 +310,16 @@ test('the update dialog offers in-app download and apply with progress', () => {
   assert.doesNotMatch(mainSource, /github\.com\/liuhang798\/quillite-markdown\/releases/);
 });
 
-test('Word, HTML, and PDF export are available from the document menu', () => {
-  assert.match(html, /data-action="export-word"/);
-  assert.match(html, /data-action="export-html"/);
-  assert.match(html, /data-action="export-pdf"/);
-  assert.match(html, /data-i18n="exportWord"/);
-  assert.match(html, /data-i18n="exportPDF"/);
+test('Word, HTML, and PDF export are available through the unified Export document action', () => {
+  assert.match(html, /data-action="export-center"/);
+  assert.doesNotMatch(html, /data-action="export-(?:word|html|pdf)"/);
+  assert.match(html, /data-export-format="docx"/);
+  assert.match(html, /data-export-format="html"/);
+  assert.match(html, /data-export-format="pdf"/);
   assert.match(mainSource, /exportDOCX: \(filePath, title, renderedHTML\) => desktopRuntime \? Backend\.ExportDOCX\(filePath, title, renderedHTML\)/);
   assert.match(mainSource, /exportHTML: \(filePath, title, renderedHTML, colorMode, accentColor\) => desktopRuntime \? Backend\.ExportHTML\(filePath, title, renderedHTML, colorMode, accentColor\)/);
-  assert.match(renderer, /async function exportWordDocument\(\)/);
-  assert.match(renderer, /async function exportHTMLDocument\(\)/);
+  assert.match(renderer, /async function exportWordDocument\(options = \{\}\)/);
+  assert.match(renderer, /async function exportHTMLDocument\(options = \{\}\)/);
   assert.match(renderer, /cleanRenderedHTMLForExport\(container\)/);
   assert.match(renderer, /formula\.setAttribute\('data-math-source', encodeURIComponent\(annotation\.textContent\.trim\(\)\)\)/);
   assert.match(renderer, /const mathOnly = math\.cloneNode\(true\)/);
@@ -297,32 +328,37 @@ test('Word, HTML, and PDF export are available from the document menu', () => {
   assert.match(renderer, /child\.nodeType === 3 && child\.textContent\.trim\(\)/);
   assert.match(renderer, /formula\.replaceChildren\(mathOnly\)/);
   assert.match(renderer, /formula\.replaceChildren\(\)/);
-  assert.match(renderer, /if \(action === 'export-word'\) exportWordDocument\(\)/);
-  assert.match(renderer, /if \(action === 'export-html'\) exportHTMLDocument\(\)/);
   assert.match(html, /id="pdfTutorialDialog"/);
   assert.match(html, /Microsoft Print to PDF/);
   assert.match(html, /data-i18n="pdfSaveAsPDF"/);
-  assert.match(renderer, /function exportPDFDocument\(\)[\s\S]*openPDFTutorial\(\)/);
-  assert.match(renderer, /async function confirmPDFExport\(\)[\s\S]*if \(state\.editing\) toggleEditor\(false\)[\s\S]*window\.quilliteMarkdown\.print\(\)/);
+  assert.match(mainSource, /exportPDF: \(filePath, title, renderedHTML, header, footer\) => desktopRuntime \? Backend\.ExportPDF/);
+  assert.match(renderer, /async function exportPDFWithBookmarks\(options = \{\}/);
+  assert.match(renderer, /window\.quilliteMarkdown\.exportPDF\(/);
+  assert.match(renderer, /async function confirmPDFExport\(\)[\s\S]*await printCurrentDocument\(\)/);
+  assert.match(renderer, /async function printCurrentDocument\(options = \{\}\)[\s\S]*if \(state\.editing\) toggleEditor\(false\)[\s\S]*window\.quilliteMarkdown\.print\(\)/);
   assert.match(renderer, /\$\('#confirmPDFTutorial'\)\.addEventListener\('click', confirmPDFExport\)/);
-  assert.match(renderer, /if \(action === 'export-pdf'\) exportPDFDocument\(\)/);
+  assert.match(renderer, /if \(action === 'export-center'\) openExportCenter\(\)/);
   assert.match(styles, /html\[data-platform="darwin"\] \.pdf-tutorial-windows \{ display: none; \}/);
   assert.match(styles, /html\[data-platform="darwin"\] \.pdf-tutorial-macos \{ display: block; \}/);
   assert.match(styles, /@media print \{[\s\S]*\.toast, \.popover, \.pane-resizer \{ display: none !important; \}/);
+  assert.match(styles, /@media print \{[\s\S]*\.markdown-body pre, \.code-block pre \{[^}]*white-space: pre-wrap !important;[^}]*overflow-wrap: anywhere;/);
+  assert.match(styles, /@media print \{[\s\S]*\.markdown-table-scroll table, \.markdown-body table \{[^}]*table-layout: fixed;/);
 });
 
-test('reader header exposes responsive Word, HTML, and PDF export actions', () => {
+test('reader header exposes one responsive Export document action', () => {
   assert.match(html, /id="closePreviewButton" class="text-button close-preview-button"/);
   assert.match(html, /id="documentSaveAsButton"[^>]*data-document-action="save-as"[^>]*data-i18n="saveAs"/);
-  assert.match(html, /id="documentExportWordButton"[^>]*data-document-action="export-word"[^>]*data-i18n="exportWord"/);
-  assert.match(html, /id="documentExportHTMLButton"[^>]*data-document-action="export-html"[^>]*data-i18n="exportHTML"/);
-  assert.match(html, /id="documentExportPDFButton"[^>]*data-document-action="export-pdf"[^>]*data-i18n="exportPDF"/);
+  assert.match(html, /id="documentExportButton"[^>]*data-document-action="export-center"[^>]*data-i18n="exportDocument"/);
+  assert.doesNotMatch(html, /id="documentExport(?:Word|HTML|PDF)Button"/);
   assert.match(html, /id="documentActionsMoreButton"[^>]*aria-haspopup="menu"[^>]*data-i18n="moreDocumentActions"/);
-  assert.match(html, /id="documentActionsMenu"[^>]*role="menu"[\s\S]*data-document-action="save-as"[\s\S]*data-document-action="export-word"[\s\S]*data-document-action="export-html"[\s\S]*data-document-action="export-pdf"[\s\S]*data-document-action="print"/);
+  assert.match(html, /id="documentActionsMenu"[^>]*role="menu"[\s\S]*data-document-action="save-as"[\s\S]*data-document-action="export-center"[\s\S]*data-document-action="print"/);
+  const documentActionsMenu = html.match(/<div id="documentActionsMenu"[\s\S]*?<\/div>/)?.[0] || '';
+  assert.equal((documentActionsMenu.match(/data-document-action="export-center"/g) || []).length, 1);
+  assert.doesNotMatch(documentActionsMenu, /data-document-action="export-(?:word|html|pdf)"/);
   assert.match(styles, /\.document-meta \{[^}]*container-type: inline-size;/);
   assert.match(styles, /\.text-button\.close-preview-button \{ color: var\(--accent-strong\); \}/);
   assert.match(styles, /@container \(max-width: 720px\) \{[\s\S]*\.document-actions > \.document-action-collapsible \{ display: none; \}[\s\S]*\.document-actions-more \{ display: block; \}/);
-  assert.match(renderer, /function runDocumentHeaderAction\(action\)[\s\S]*action === 'save-as'[\s\S]*saveLibraryDocumentAs\(state\.currentFile\.path\)[\s\S]*action === 'export-word'\) exportWordDocument\(\)[\s\S]*action === 'export-html'\) exportHTMLDocument\(\)[\s\S]*action === 'export-pdf'\) exportPDFDocument\(\)[\s\S]*action === 'print'/);
+  assert.match(renderer, /function runDocumentHeaderAction\(action\)[\s\S]*action === 'save-as'[\s\S]*saveLibraryDocumentAs\(state\.currentFile\.path\)[\s\S]*action === 'export-center'\) openExportCenter\(\)[\s\S]*action === 'print'/);
   assert.match(renderer, /els\.documentActions\.addEventListener\('click', event =>[\s\S]*documentActionsMenu\.classList\.toggle\('hidden', !opening\)[\s\S]*runDocumentHeaderAction\(actionButton\.dataset\.documentAction\)/);
   assert.match(renderer, /function closeDocumentActionsMenu\(\)[\s\S]*aria-expanded', 'false'/);
 });
@@ -445,6 +481,8 @@ test('normal and exceptional notifications use distinct accessible toast treatme
   assert.match(renderer, /setAttribute\('role', normalizedKind === 'error' \|\| normalizedKind === 'warning' \? 'alert' : 'status'\)/);
   assert.match(renderer, /\$\('#closeToast'\)\.addEventListener\('click', hideToast\)/);
   assert.match(renderer, /els\.toast\.addEventListener\('mouseenter', \(\) => clearTimeout\(showToast\.timer\)\)/);
+  assert.match(styles, /\.dialog-backdrop \{[^}]*z-index: 150;/);
+  assert.match(styles, /\.toast \{[^}]*z-index: 1000;/);
   assert.match(styles, /\.toast\[data-kind="success"\]/);
   assert.match(styles, /\.toast\[data-kind="warning"\]/);
   assert.match(styles, /\.toast\[data-kind="error"\]/);
@@ -465,15 +503,19 @@ test('sidebar and TOC text respond to the shared global font scale', () => {
   assert.match(styles, /\.toc-row \{[^}]*grid-template-columns: max\(24px, calc\(var\(--toc-font-size\) \* 1\.55\)\)/);
   assert.match(styles, /\.toc-toggle-placeholder \{[^}]*min-height: max\(30px, calc\(var\(--toc-font-size\) \* 2\)\)/);
   assert.match(styles, /\.toc-toggle svg \{[^}]*width: max\(12px, calc\(var\(--toc-font-size\) \* \.72\)\)/);
-  assert.match(styles, /\.toc-panel > \.eyebrow \{ font-size: calc\(var\(--toc-eyebrow-font-size\) \* var\(--toc-font-user-scale\)\); \}/);
+  assert.match(styles, /\.toc-panel-header > \.eyebrow \{ font-size: calc\(var\(--toc-eyebrow-font-size\) \* var\(--toc-font-user-scale\)\); \}/);
   assert.match(styles, /\.toc-panel > small \{[^}]*font-size: calc\(var\(--toc-reading-font-size\) \* var\(--toc-font-user-scale\)\);/);
   assert.match(styles, /\.sidebar-tab \{ [^}]*font-size: calc\(11px \* var\(--font-scale\)\);/);
   assert.match(styles, /\.eyebrow \{ display: block; color: var\(--faint\); font-size: calc\(10px \* var\(--font-scale\)\);/);
   assert.match(styles, /\.sidebar-heading h2 \{ margin: 5px 0 0; font-size: calc\(18px \* var\(--font-scale\)\);/);
 });
 
-test('the document outline renders as a persistent collapsible tree', () => {
-  assert.match(renderer, /const tree = buildTocTree\(/);
+test('the document outline renders as a persistent searchable tree or flat list', () => {
+  assert.match(html, /id="tocSearchInput"/);
+  assert.match(html, /data-toc-mode="tree"[\s\S]*data-toc-mode="flat"/);
+  assert.match(renderer, /function tocTreeItems\(headings\)[\s\S]*buildTocTree\(/);
+  assert.match(renderer, /filterTocTree\(tocTreeItems\(headings\), query\)/);
+  assert.match(renderer, /localStorage\.setItem\('tocMode', state\.tocMode\)/);
   assert.match(renderer, /data-toc-toggle=/);
   assert.match(renderer, /writeCollapsedToc\(localStorage, state\.currentFile\?\.path, collapsed\)/);
   assert.match(renderer, /scrollDeltaForBounds\(\{[\s\S]*viewportTop,[\s\S]*viewportBottom,/);
@@ -483,6 +525,18 @@ test('the document outline renders as a persistent collapsible tree', () => {
   assert.doesNotMatch(renderer, /panelRect\.top \+ 38|panelRect\.bottom - 34/);
   assert.match(styles, /\.toc-children\.hidden \{ display: none; \}/);
   assert.match(styles, /\.toc-node\.collapsed > \.toc-row \.toc-toggle svg/);
+  assert.match(styles, /\.toc\.is-flat \.toc-row \{ display: block; \}/);
+  assert.match(styles, /\.toc-search-box:focus-within/);
+});
+
+test('body [TOC] markers render a dynamic linked outline and PDF export requests heading bookmarks', () => {
+  assert.match(renderer, /replaceDynamicTocMarkers\(stripTableWidthMetadata\(content\)\)/);
+  assert.match(renderer, /function renderDynamicTocs\(container/);
+  assert.match(renderer, /querySelectorAll\('\[data-dynamic-toc\]'\)/);
+  assert.match(renderer, /scrollPreviewContainerToHeading\(container, link\.dataset\.target\)/);
+  assert.match(styles, /\.markdown-dynamic-toc \{/);
+  assert.match(mainSource, /Backend\.ExportPDF/);
+  assert.match(renderer, /pdfWithBookmarks: '标题书签'/);
 });
 
 test('sidebar and TOC resizers preserve preferred widths while fitting the current viewport', () => {
@@ -556,4 +610,109 @@ test('the About dialog exposes the official website in both languages', () => {
   assert.match(renderer, /officialWebsite: '官方网站'/);
   assert.match(renderer, /officialWebsite: 'Official website'/);
   assert.doesNotMatch(html, /https:\/\/(?:www\.)?ssssa\.cn/);
+});
+
+test('export center groups formats and only exposes settings required by the selected format', () => {
+  for (const format of ['docx', 'html', 'html-plain', 'pdf', 'png', 'jpeg', 'epub', 'rtf', 'odt', 'latex', 'mediawiki', 'custom']) {
+    assert.match(html, new RegExp(`data-export-format="${format}"`));
+  }
+  assert.match(html, /id="exportCenterDialog"[\s\S]*data-i18n="exportCategoryDocument"[\s\S]*data-i18n="exportCategoryWeb"[\s\S]*data-i18n="exportCategoryImage"[\s\S]*id="exportAdvancedFormats"/);
+  assert.doesNotMatch(html, /class="export-preset-bar"|class="export-center-section export-header-footer-section"/);
+  assert.match(html, /id="pandocExtraArguments"/);
+  assert.match(html, /id="exportImageOptions" class="export-center-section hidden"[\s\S]*id="exportImageLayout"[\s\S]*value="pages" selected[\s\S]*value="long"[\s\S]*id="exportImageScale"[\s\S]*value="2" selected/);
+  assert.match(html, /value="pages" selected data-i18n="imageOutputPages">A4 高清分页（推荐）<\/option>[\s\S]*value="long" data-i18n="imageOutputLong">单张长图（仅适合短文档）<\/option>/);
+  assert.match(mainSource, /exportPlainHTML:[\s\S]*Backend\.ExportPlainHTML/);
+  assert.match(mainSource, /exportWithPandoc:[\s\S]*Backend\.ExportWithPandoc/);
+  assert.match(mainSource, /saveExportImage:[\s\S]*Backend\.SaveExportImage/);
+  assert.match(mainSource, /saveExportImageSlices:[\s\S]*Backend\.SaveExportImageSlices/);
+  assert.match(mainSource, /saveExportImagePages:[\s\S]*Backend\.SaveExportImagePages/);
+  assert.match(renderer, /imageScale: 2,\s*imageLayout: 'pages'/);
+  assert.match(renderer, /imageLayout: els\.exportImageLayout\.value/);
+  assert.match(renderer, /exportImageOptions\.classList\.toggle\('hidden', !\['png', 'jpeg'\]\.includes\(format\)\)/);
+  assert.match(renderer, /const imageLayout = value\.imageLayout === 'long' \? 'long' : 'pages'/);
+  assert.match(renderer, /await import\('html-to-image'\)/);
+  assert.match(renderer, /const \{ toCanvas \} = await import\('html-to-image'\)/);
+  assert.match(renderer, /host\.className = 'export-image-host'[\s\S]*viewport\.append\(stage\)[\s\S]*host\.append\(viewport\)[\s\S]*document\.body\.append\(host\)/);
+  assert.match(renderer, /const width = Math\.ceil\(stage\.scrollWidth\)[\s\S]*toCanvas\(viewport, \{[\s\S]*width,[\s\S]*height: currentHeight,/);
+  assert.match(renderer, /const backgroundColor = state\.colorMode === 'dark' \? '#171b18' : '#ffffff'[\s\S]*backgroundColor,[\s\S]*imageCanvasHasVisibleContent\(canvas, backgroundColor\)[\s\S]*EXPORT_IMAGE_BLANK/);
+  assert.match(renderer, /const requestedLongImage = options\.imageLayout === 'long'[\s\S]*const a4PageRanges = createExportImagePageRanges\(stage, Math\.max\(320, Math\.floor\(width \* Math\.SQRT2\) - pageMargin \* 2\)\)[\s\S]*const autoPaginatedLongImage = requestedLongImage && a4PageRanges\.length > 3[\s\S]*const splitIntoPages = !requestedLongImage \|\| autoPaginatedLongImage[\s\S]*Array\.from\(\{ length: Math\.ceil\(height \/ sliceHeight\) \}/);
+  assert.match(renderer, /stage\.style\.width = requestedLongImage \? '1280px' : '840px'[\s\S]*stage\.style\.fontSize = '16px'/);
+  assert.match(renderer, /scaledWidth \* scaledHeight > 64000000/);
+  assert.match(renderer, /stage\.style\.top = `\$\{\(splitIntoPages \? pageMargin : 0\) - range\.start\}px`[\s\S]*toCanvas\(viewport, \{[\s\S]*skipAutoScale: true[\s\S]*slices\.push\(canvas\.toDataURL\('image\/png'\)\)/);
+  assert.match(renderer, /function createExportImagePageRanges\(stage, maximumContentHeight\)[\s\S]*minimumUsefulBreak[\s\S]*ranges\.push\(\{ start, end \}\)/);
+  assert.match(renderer, /if \(splitIntoPages\) \{[\s\S]*saveExportImagePages\(state\.currentFile\.path, state\.currentFile\.name, format, slices\)[\s\S]*return paths\?\.length \? \{ paths, autoPaginatedLongImage \} : null/);
+  assert.match(renderer, /saveExportImageSlices\(state\.currentFile\.path, state\.currentFile\.name, format, slices\)/);
+  assert.match(renderer, /output\?\.autoPaginatedLongImage[\s\S]*longImageAutoPaged[\s\S]*output\.paths\.length/);
+  assert.match(renderer, /function setExportInProgress\(inProgress\)[\s\S]*confirmExportCenter\.disabled = state\.exportInProgress[\s\S]*setAttribute\('aria-busy', String\(state\.exportInProgress\)\)/);
+  assert.match(renderer, /async function performExportCenter\(\) \{\s*if \(state\.exportInProgress\) return;\s*setExportInProgress\(true\);[\s\S]*finally \{\s*setExportInProgress\(false\)/);
+  assert.doesNotMatch(renderer, /imageCanvasHasVisibleContent\(canvas, stage\.style\.background\)/);
+  assert.match(styles, /\.export-image-host \{[^}]*width: 1px;[^}]*height: 1px;[^}]*overflow: hidden;/);
+  assert.match(styles, /\.export-image-viewport \{[^}]*position: relative;[^}]*overflow: hidden;/);
+  assert.match(styles, /\.export-image-page-mask \{[^}]*position: absolute;[^}]*z-index: 2;/);
+  assert.match(styles, /\.export-center-actions \.large-button\.primary:disabled \{[^}]*cursor: not-allowed;[^}]*filter: grayscale\(1\);[^}]*pointer-events: none;/);
+  assert.doesNotMatch(styles, /\.export-image-stage \{[^}]*(?:left: -100000px|z-index: -1)/);
+  assert.match(renderer, /function exportPageBoxContent\(template\)[\s\S]*counter\(page\)/);
+  assert.match(renderer, /function createPrintPageStyle\(options = \{\}\)[\s\S]*@top-center[\s\S]*@bottom-center/);
+  assert.match(renderer, /const pageStyle = createPrintPageStyle\(options\)[\s\S]*await window\.quilliteMarkdown\.print\(\)[\s\S]*pageStyle\?\.remove\(\)/);
+  assert.match(renderer, /header: '',\s*footer: '',[\s\S]*imageScale: 2,\s*imageLayout: 'pages'/);
+  assert.match(renderer, /const needsPandocSetup = pandocFormat && !state\.pandocStatus\.available;[\s\S]*pandocExportOptions\.classList\.toggle\('hidden', !needsPandocSetup && !customPandoc\)/);
+  assert.match(renderer, /pandocArgumentsField'\)\.classList\.toggle\('hidden', !customPandoc\)/);
+  assert.match(renderer, /custom pandoc arguments cannot override the output path|pandocSecurityHint/);
+  assert.match(styles, /\.export-format-categories[\s\S]*\.export-format-category[\s\S]*\.export-format-advanced/);
+});
+
+test('rich clipboard HTML converts to Markdown and selected source has Markdown or plain-text copy options', () => {
+  assert.match(renderer, /import \{ hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText \} from '\.\/rich-clipboard\.js'/);
+  assert.match(renderer, /async function handleEditorPaste\(event\)[\s\S]*getData\('text\/html'\)[\s\S]*hasRichClipboardHTML\(html\)[\s\S]*htmlToMarkdown\(html\)[\s\S]*replaceSelection\(markdownSource/);
+  assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('contextmenu', openEditorClipboardMenu\)/);
+  assert.match(renderer, /async function copyEditorSelection\(mode\)[\s\S]*markdownToPlainText\(markdownSource\)[\s\S]*navigator\.clipboard\.writeText\(output\)/);
+  assert.match(html, /id="editorClipboardMenu"[\s\S]*data-editor-copy="markdown"[\s\S]*data-editor-copy="plain"/);
+  assert.match(styles, /\.editor-clipboard-menu \{[^}]*width: 218px/);
+  assert.match(renderer, /copyAsMarkdown: '复制为 Markdown'/);
+  assert.match(renderer, /copyAsPlainText: 'Copy as plain text'/);
+});
+
+test('spell check marks English errors and offers correction, ignore, and personal dictionary actions', () => {
+  assert.match(html, /data-spellcheck-toggle/);
+  assert.match(html, /data-spellcheck-language="auto"/);
+  assert.match(html, /data-spellcheck-language="en-US"/);
+  assert.match(html, /data-spellcheck-language="en-GB"/);
+  assert.match(html, /id="spellcheckContextMenu"/);
+  assert.match(renderer, /class: 'cm-spelling-error'/);
+  assert.match(renderer, /activeSpellchecker\.suggest\(normalized\)\.slice\(0, 6\)/);
+  assert.match(renderer, /state\.spellcheckIgnoredWords\.add/);
+  assert.match(renderer, /localStorage\.setItem\('spellcheckPersonalWords'/);
+  assert.match(renderer, /spellcheckPersonalWords: readPersonalDictionary\(\)/);
+  assert.match(styles, /\.cm-spelling-error \{[^}]*text-decoration-style: wavy/);
+  assert.match(renderer, /spellcheck: '拼写检查'/);
+  assert.match(renderer, /spellcheck: 'Spell check'/);
+});
+
+test('PicGo Cloud uploads directly while local PicGo remains compatible and every failure preserves assets', () => {
+  assert.match(html, /data-action="image-upload-settings"/);
+  assert.match(html, /id="imageUploadSettingsDialog"[\s\S]*name="imageUploadMode" value="local"[\s\S]*name="imageUploadMode" value="picgo-cloud"[\s\S]*name="imageUploadMode" value="picgo"/);
+  assert.match(html, /id="picGoCloudSetup"[\s\S]*id="loginPicGoCloud"/);
+  assert.match(html, /id="picGoSetupWizard"[\s\S]*data-picgo-step="1"[\s\S]*data-picgo-step="2"[\s\S]*data-picgo-step="3"/);
+  assert.match(html, /id="downloadPicGo"[\s\S]*id="picGoInstalledNext"[\s\S]*id="testPicGo"/);
+  assert.match(html, /id="picGoAdvancedSettings"[\s\S]*id="picGoServerURL"/);
+  assert.match(html, /id="picGoServerURL"[^>]*value="http:\/\/127\.0\.0\.1:36677"/);
+  assert.match(mainSource, /getImageUploadSettings:[\s\S]*Backend\.GetImageUploadSettings/);
+  assert.match(mainSource, /loginPicGoCloud:[\s\S]*Backend\.LoginPicGoCloud/);
+  assert.match(mainSource, /uploadImageToPicGoCloud:[\s\S]*Backend\.UploadImageToPicGoCloud/);
+  assert.match(mainSource, /uploadImageToPicGo:[\s\S]*Backend\.UploadImageToPicGo/);
+  assert.match(mainSource, /onImageUploadProgress:[\s\S]*EventsOn\('image-upload:progress'/);
+  assert.match(renderer, /function setPicGoWizardStep\(step\)[\s\S]*picGoConnectionReady/);
+  assert.match(renderer, /if \(state\.imageUploadMode === 'picgo'\) testPicGoConnection\(\{ automatic: true \}\)/);
+  assert.match(renderer, /PICGO_DOWNLOAD_URL = 'https:\/\/picgo\.app\/'/);
+  assert.match(renderer, /selectedImageUploadMode\(\) === 'picgo' && !state\.picGoConnectionReady[\s\S]*await testPicGoConnection\(\)/);
+  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath\)[\s\S]*uploadImageToPicGoCloud\(state\.currentFile\.path, localPath\)[\s\S]*uploadImageToPicGo\(state\.currentFile\.path, localPath\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true \}/);
+  assert.match(html, /id="imageUploadProgress"[\s\S]*id="imageUploadProgressPercent"[\s\S]*id="imageUploadProgressBar"/);
+  assert.match(renderer, /function beginImageUploadProgress\(\)[\s\S]*imageUploadPreparing[\s\S]*function updateImageUploadProgress\(progress\)[\s\S]*imageUploadFinalizing/);
+  assert.match(renderer, /finally \{[\s\S]*finishImageUploadProgress\(uploadRun, succeeded\)/);
+  assert.match(renderer, /imageUploadingTitle: '正在上传图片'[^\n]*imageUploadFinalizing: '正在生成在线链接…'/);
+  assert.match(renderer, /imageUploadingTitle: 'Uploading image'[^\n]*imageUploadFinalizing: 'Generating the online link…'/);
+  assert.match(renderer, /async function handleEditorPaste\(event\)[\s\S]*savePastedImage[\s\S]*uploadedOrLocalImagePath\(imagePath\)[\s\S]*insertImageReference\(result\.path/);
+  assert.match(renderer, /picGoUploadFailedFallback: '在线图床上传失败，已自动使用本地图片'/);
+  assert.match(styles, /\.picgo-setup-progress \{[^}]*grid-template-columns: repeat\(3, 1fr\)/);
+  assert.match(styles, /\.image-upload-progress \{[^}]*position: fixed[^}]*grid-template-columns/);
 });

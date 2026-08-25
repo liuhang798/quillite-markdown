@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/appicon.png" width="96" alt="Quillite Markdown icon">
   <h1>Quillite Markdown</h1>
-  <p><strong>A fast, local-first Markdown reader, viewer and editor — about 9 MB on Windows.</strong></p>
+  <p><strong>A fast, local-first Markdown reader, viewer and editor — about 12 MB on Windows.</strong></p>
   <p>Live preview · Syntax highlighting · Plain local files · Windows, macOS and Linux</p>
   <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
@@ -58,15 +58,18 @@ The macOS installer image carries a metadata no-index marker. On launch, the ins
 
 Documents and folders opened through macOS system panels, Finder, or file associations are persisted as native security-scoped bookmarks. Recent, Favorites, and Explorer silently restore read and edit access after relaunch and refresh stale bookmarks automatically. A preselected system panel is needed only for legacy records or when an unsigned update changes the app identity.
 
-## What's new in 2.5.2
+## What's new in 2.6.0
 
 > **macOS 2.5.0 migration:** Version 2.5.0 used the retired raw-executable updater and cannot safely upgrade itself to a complete application bundle. Install 2.5.1 or later once from the [official website](https://qm.ssssa.cn/#download); normal in-app updates resume after that one-time migration.
 
-- Fixed the 1–2 second delay when opening More Formats on macOS by replacing the native WebKit selector with an immediate in-app menu.
-- More Formats retains collapsed toolbar commands, Academic Formulas, Diagram Builder, and every extended format, with Arrow, Home/End, and Escape keyboard support.
-- Fixed security-bookmark decoding and release crashes with newer macOS SDKs so Recent, Favorites, and Explorer can continue restoring access reliably.
-- Fixed an application link failure caused by a missing system framework on newer macOS SDKs, restoring Apple Silicon and Universal release builds.
-- Preserved the user's original document path after resolving a security bookmark, preventing path changes or duplicate Recent entries.
+- Added local PicGo Server and direct PicGo Cloud image hosting with first-run guidance, real upload progress, and safe fallback to local `assets`.
+- Added a visual table designer for editing cells, adding, removing, and dragging rows or columns, changing alignment and width, and updating existing Markdown tables in place.
+- Added web/Word rich-paste conversion, Copy as Markdown/plain text, and offline English spell checking with suggestions, ignore rules, and a personal dictionary.
+- Added one Export document center with native DOCX, styled/unstyled HTML, PDF, PNG/JPEG, plus optional Pandoc exports to EPUB, RTF, ODT, LaTeX, MediaWiki, and custom formats.
+- Long PNG/JPEG documents now render as independently generated 2× A4 pages with sequential filenames, avoiding the blurry fit-to-screen result of ultra-tall bitmaps.
+- PDF export now includes heading bookmarks and safely wraps long code, connection strings, wide tables, and diagrams; exports also use a busy lock and top-layer error notifications.
+- The outline now supports title search, hierarchical/flat views, and remembered folds; standalone `[TOC]` markers become live linked contents in reading and HTML/PDF exports.
+- New Document now has a three-second duplicate-click guard for both buttons and keyboard shortcuts.
 
 ## What's new in 2.4.8
 
@@ -153,8 +156,11 @@ Documents and folders opened through macOS system panels, Finder, or file associ
 - Insert images either from local files or by pasting an `http/https` online link with an optional description.
 - Split editing mode: live preview on the left, syntax-highlighted editor on the right.
 - The formatting toolbar covers H1–H6, bold, italic, strikethrough, highlight, text color, links, inline/fenced code, quotes, lists, tasks, horizontal rules, tables and images. The text-color control sits directly after Highlight and offers a complete 48-color square palette with the default color, seven grayscale steps and 40 spectrum shades. Changes preview live, can be recolored or reset, and remain fully undoable. When space runs out, controls move into the immediately responsive in-app More Formats menu instead of creating a horizontal scrollbar. More Formats also adds bold italic, underline, superscript, subscript, Academic Formulas, hard breaks, footnotes, reference links, autolinks, syntax escaping, HTML/collapsible blocks, keyboard keys and comments. Common actions support `Ctrl/Cmd + B`, `Ctrl/Cmd + I`, `Ctrl/Cmd + K`, `Ctrl/Cmd + Shift + X` and `Ctrl/Cmd + Shift + H`.
+- A visual table designer lets you edit cells directly, change row and column counts, add, remove, or drag rows and columns into order, choose left/center/right alignment per column, and drag column borders to resize. Place the cursor inside an existing Markdown table and use the table button to edit it in place; the saved source remains a standard portable GFM table.
+- Rich text pasted from web pages or Word is converted automatically from clipboard HTML to Markdown. Headings, emphasis, lists, quotes, code, links, online images, and GFM tables are preserved while Office-only styling and unsafe addresses are removed. Right-click selected editor text to copy it as Markdown or plain text.
+- Built-in offline English spell checking marks misspellings with a red wavy underline. Right-click to apply a suggestion, ignore the word in the current document, or add it to the persistent personal dictionary. More → Spell check controls Auto/US/UK dictionaries and personal words; code, URLs, formulas, acronyms, and camel-case identifiers are excluded, and document text is never uploaded.
 - Built-in Academic Formulas, KaTeX typesetting, and mhchem chemistry support: one unified entry groups 79 templates by mathematics, algebra and functions, geometry, calculus, linear algebra, probability and statistics, physics, chemistry, and chemical reactions. Fill in values, choose inline/display/numbered output, and insert ready-to-use Markdown; the guide is available directly inside the dialog. Raw `$…$` / `\(…\)` inline math, `$$…$$` / `\[…\]` display math, `\ce{…}` chemistry, and `\tag{…}` numbering remain fully supported. [Open the formula and chemistry guide](https://qm.ssssa.cn/guides/formulas/).
-- Typora-style Mermaid diagrams render directly from fenced ` ```mermaid ` blocks. More Formats → Diagram Builder offers 22 common templates grouped by use case, with descriptions, fully editable source, live preview, and one-click insertion. Invalid syntax stays isolated to an inline error, Word/HTML exports embed a high-resolution image, and system PDF printing preserves the preview. [Open the Mermaid examples](docs/Mermaid-图表完整案例.md).
+- Typora-style Mermaid diagrams render directly from fenced ` ```mermaid ` blocks. More Formats → Diagram Builder offers 22 common templates grouped by use case, with descriptions, fully editable source, live preview, and one-click insertion. Invalid syntax stays isolated to an inline error, and Word/HTML/PDF exports preserve the rendered preview. [Open the Mermaid examples](docs/Mermaid-图表完整案例.md).
 - Diagram Builder also includes 15 offline data charts: bar, line, stacked bar, area, scatter, diverging comparison, bar-and-line combo, funnel, heatmap, box plot, bubble, gauge, doughnut, waterfall, and word cloud. Editable fenced `echarts` JSON stays in the Markdown file, renders locally as SVG, and exports consistently to Word, HTML, and PDF. [Open the data-chart examples](docs/ECharts-数据图表案例.md).
 - Three built-in reference shortcuts—Charts, Formulas, and Formatting—cover all 37 diagram templates, all 79 Academic Formula templates, and the Markdown/HTML formats supported by the editor. Opening a reference does not add it to Recent Reading.
 - Close Preview returns from the reading screen to Home without removing the document from Recent. Home now provides the three complete examples together with a comprehensive shortcut guide for files, reading, editing, and text formatting.
@@ -162,9 +168,10 @@ Documents and folders opened through macOS system panels, Finder, or file associ
 - Undo from the toolbar or with `Ctrl/Cmd + Z`; each document has isolated history that stops at the originally loaded content.
 - `Ctrl/Cmd + F` searches Markdown source in place, highlights matches and scrolls to the selected result; the polished find-and-replace panel follows the selected Chinese or English interface language.
 - Create a Markdown file and begin editing immediately, with autosave every 10 seconds while editing.
-- Export Word, HTML, and PDF documents. Go generates standard DOCX files locally and converts LaTeX and mhchem Academic Formulas into native Word equations. HTML export creates a safe standalone page preserving the current color mode, accent, formulas, code, and images. PDF export uses the system print panel to preserve preview styling.
+- One “Export document” action opens every export option without extra tools for Word, styled HTML, unstyled HTML, PDF with heading bookmarks, and high-resolution PNG/JPEG images. Every image page is rendered independently at 2× resolution with the A4 aspect ratio and saved under sequential filenames, without whole-document scaling or resampling. Even when Single long image is selected, documents longer than three A4 pages automatically switch to A4 HD pages so viewers and social apps cannot reduce a tens-of-thousands-pixel image to a blurry thumbnail. Documents up to three pages can still use a losslessly joined 1280px layout that exports at approximately 2560px wide. It supports reusable presets plus `{title}`, `{date}`, and `{page}` header/footer variables. PDF export uses an installed Edge, Chrome, or Chromium to create navigable bookmarks without increasing Quillite's installer size, with system printing as a fallback. Install [Pandoc](https://pandoc.org/installing.html) locally to add EPUB, RTF, ODT, LaTeX, MediaWiki, or custom writer/extension/argument exports. Pandoc is optional.
+- Direct PicGo Cloud hosting is available under More → Image hosting. Choose PicGo Cloud and sign in securely in the system browser—there is no need to install PicGo or copy a credential, while free allowances and later billing are provided by PicGo Cloud. The login token is stored separately in the local configuration directory rather than normal preferences. Selected, dropped, and pasted images are still saved to the document's local `assets` directory first, then uploaded through presigned or multipart APIs and inserted as an online URL. A loading indicator shows real transfer percentage and the online-link generation stage. Any failure falls back to the portable local path so the image is never lost. Users who already have PicGo can keep using the Local PicGo compatibility mode, whose Server connection remains restricted to localhost/loopback addresses.
 - Built-in feedback for feature suggestions and functional issues, with optional contact details, up to five screenshots, and automatic app/system version information. Administrators can review, resolve, or delete feedback together with all attached images.
-- A collapsible hierarchical outline with clickable navigation, active section tracking and per-document folding memory. Its typography and default width adapt continuously across 1080p, 2K and 4K displays while remaining manually resizable. Document search, printing and back-to-top navigation remain available.
+- The document outline now supports title search and hierarchical/flat views. Hierarchical search keeps matching headings in context with their ancestors and remembers per-document folding; flat view makes every title quick to scan. Put `[TOC]` on its own Markdown line to generate a live linked table of contents that is retained in HTML/PDF exports. Active-section tracking, manual resizing, display-aware typography, document search, printing, and back-to-top navigation remain available.
 - Recent documents update immediately and show their source directory below the filename, with the full path available on hover for distinguishing duplicate names. Right-click to pin, unpin, edit, save as, favorite, reveal or remove a record. Multiple pins persist above up to ten ordinary recent entries and can be reordered with the drag handle or keyboard arrow keys. Deleted, moved or temporarily unavailable pinned files can still be unpinned or removed from the menu.
 - Favorite documents from Recent or Explorer and manage them in a dedicated persistent Favorites view with Open, Edit, Show in Folder, and Remove from Favorites actions.
 - On macOS, closing the main window leaves the app running in the background. Clicking the Dock icon again restores and foregrounds the window, and Markdown files opened from Finder display directly.
@@ -201,7 +208,7 @@ Preview is based on CommonMark/GFM. Highlight uses `==text==`; footnotes use `[^
 
 ## Go + Wails v2
 
-Version 2.0 and later replace Electron with Go and Wails while retaining the existing HTML/CSS interface and CodeMirror editor. The current Windows installer is about **9 MB**, compared with about 90 MB for the previous Electron build.
+Version 2.0 and later replace Electron with Go and Wails while retaining the existing HTML/CSS interface and CodeMirror editor. The current Windows installer is about **12 MB**, compared with about 90 MB for the previous Electron build.
 
 - Backend: Go 1.23+
 - Desktop framework: Wails 2.13

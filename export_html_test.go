@@ -16,6 +16,11 @@ func TestBuildStandaloneHTMLPreservesDocumentAndAppearance(t *testing.T) {
 			t.Fatalf("standalone HTML missing %q: %s", expected, document)
 		}
 	}
+	for _, printRule := range []string{`white-space:pre-wrap!important`, `overflow-wrap:anywhere`, `table-layout:fixed`} {
+		if !strings.Contains(document, printRule) {
+			t.Fatalf("standalone HTML print CSS missing %q", printRule)
+		}
+	}
 }
 
 func TestBuildStandaloneHTMLRemovesFlattenedKatexSource(t *testing.T) {
@@ -65,5 +70,23 @@ func TestSafeStandaloneURLAllowsOnlyExportableSchemes(t *testing.T) {
 	}
 	if !safeStandaloneURL("data:image/png;base64,AA==", true) || safeStandaloneURL("data:text/html,test", true) {
 		t.Fatal("image data URL policy is incorrect")
+	}
+}
+
+func TestBuildPlainHTMLHasSemanticContentWithoutThemeCSS(t *testing.T) {
+	data, err := buildPlainHTML(`<h1>Title</h1><p>Body</p>`, "Guide", "en", "{title}", "Page {page}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(data)
+	for _, expected := range []string{`<header>Guide</header>`, `<main><h1>Title</h1><p>Body</p></main>`, `<footer>Page 1</footer>`} {
+		if !strings.Contains(document, expected) {
+			t.Fatalf("plain HTML missing %q: %s", expected, document)
+		}
+	}
+	for _, themed := range []string{`<style>`, `--accent`, `markdown-body`, `color-mix`} {
+		if strings.Contains(document, themed) {
+			t.Fatalf("plain HTML unexpectedly contains theme styling %q", themed)
+		}
 	}
 }

@@ -8,6 +8,8 @@ export function CanEditFile(arg1:string):Promise<boolean>;
 
 export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
 
+export function DetectPandoc():Promise<main.PandocStatus>;
+
 export function Dirname(arg1:string):Promise<string>;
 
 export function DownloadAndApplyUpdate():Promise<void>;
@@ -16,7 +18,17 @@ export function ExportDOCX(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ExportHTML(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
+export function ExportPDF(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+
+export function ExportPlainHTML(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+
+export function ExportWithPandoc(arg1:main.PandocExportInput):Promise<string>;
+
+export function GetExportSettings():Promise<main.ExportSettings>;
+
 export function GetFeedbackSystemInfo():Promise<main.FeedbackSystemInfo>;
+
+export function GetImageUploadSettings():Promise<main.ImageUploadSettings>;
 
 export function GetInitialFile():Promise<main.Document>;
 
@@ -27,6 +39,10 @@ export function GetStartupMode():Promise<string>;
 export function ImportImage(arg1:string,arg2:string):Promise<string>;
 
 export function ListFolder(arg1:string):Promise<main.FolderResult>;
+
+export function LoginPicGoCloud():Promise<main.PicGoCloudStatus>;
+
+export function LogoutPicGoCloud():Promise<main.ImageUploadSettings>;
 
 export function NeedsLanguageSelection():Promise<boolean>;
 
@@ -62,6 +78,12 @@ export function RequestQuit():Promise<boolean>;
 
 export function SaveAs(arg1:string,arg2:string):Promise<main.Document>;
 
+export function SaveExportImage(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function SaveExportImagePages(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<Array<string>>;
+
+export function SaveExportImageSlices(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<string>;
+
 export function SaveFile(arg1:string,arg2:string):Promise<main.Document>;
 
 export function SavePastedImage(arg1:string,arg2:string):Promise<string>;
@@ -70,7 +92,13 @@ export function SelectFeedbackImages():Promise<Array<main.FeedbackImageSelection
 
 export function SelectImage(arg1:string):Promise<string>;
 
+export function SelectPandoc():Promise<main.PandocStatus>;
+
 export function SetDirty(arg1:boolean):Promise<void>;
+
+export function SetExportSettings(arg1:main.ExportSettings):Promise<main.ExportSettings>;
+
+export function SetImageUploadSettings(arg1:main.ImageUploadSettingsInput):Promise<main.ImageUploadSettings>;
 
 export function SetLanguage(arg1:string):Promise<string>;
 
@@ -85,3 +113,11 @@ export function ShowInFolder(arg1:string):Promise<void>;
 export function SnoozeUpdates(arg1:number):Promise<void>;
 
 export function SubmitFeedback(arg1:main.FeedbackSubmission):Promise<void>;
+
+export function TestPicGo(arg1:main.ImageUploadSettingsInput):Promise<void>;
+
+export function TestPicGoCloud():Promise<main.PicGoCloudStatus>;
+
+export function UploadImageToPicGo(arg1:string,arg2:string):Promise<string>;
+
+export function UploadImageToPicGoCloud(arg1:string,arg2:string):Promise<string>;

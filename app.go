@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.5.2"
+	appVersion      = "2.6.0"
 	maxRecent       = 10
 )
 
@@ -103,14 +103,18 @@ type Preferences struct {
 	LastUpdateCheck      string             `json:"lastUpdateCheck,omitempty"`
 	SuppressUpdateUntil  string             `json:"suppressUpdateUntil,omitempty"`
 	UsageAnalytics       bool               `json:"usageAnalytics"`
+	ImageUploadMode      string             `json:"imageUploadMode,omitempty"`
+	PicGoServerURL       string             `json:"picGoServerUrl,omitempty"`
 	AnonymousInstallID   string             `json:"anonymousInstallId,omitempty"`
 	LastActiveReport     string             `json:"lastActiveReport,omitempty"`
+	ExportSettings       ExportSettings     `json:"exportSettings,omitempty"`
 }
 
 type App struct {
 	ctx                 context.Context
 	mu                  sync.RWMutex
 	preferencesMu       sync.Mutex
+	picGoCloudLoginMu   sync.Mutex
 	securityBookmarksMu sync.Mutex
 	draftsMu            sync.Mutex
 	draftFiles          map[string]bool
@@ -242,7 +246,11 @@ func (a *App) languageSelectionMarkerPath() string {
 }
 
 func defaultPreferences() Preferences {
-	return Preferences{RecentFiles: []string{}, PinnedRecentFiles: []string{}, FavoriteFiles: []string{}, DraftFiles: []string{}, Language: "zh-CN", UsageAnalytics: true}
+	return Preferences{
+		RecentFiles: []string{}, PinnedRecentFiles: []string{}, FavoriteFiles: []string{}, DraftFiles: []string{},
+		Language: "zh-CN", UsageAnalytics: true, ImageUploadMode: imageUploadModeLocal, PicGoServerURL: defaultPicGoServerURL,
+		ExportSettings: defaultExportSettings(),
+	}
 }
 
 func normaliseLanguage(language string) string {
@@ -272,6 +280,13 @@ func (a *App) readPreferencesUnlocked() (Preferences, error) {
 		return defaultPreferences(), nil
 	}
 	prefs.Language = normaliseLanguage(prefs.Language)
+	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
+	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
+	if normalisedURL, normaliseErr := normalisePicGoServerURL(prefs.PicGoServerURL); normaliseErr == nil {
+		prefs.PicGoServerURL = normalisedURL
+	} else {
+		prefs.PicGoServerURL = defaultPicGoServerURL
+	}
 	if prefs.RecentFiles == nil {
 		prefs.RecentFiles = []string{}
 	}
@@ -306,6 +321,13 @@ func (a *App) writePreferences(prefs Preferences) error {
 
 func (a *App) writePreferencesUnlocked(prefs Preferences) error {
 	prefs.Language = normaliseLanguage(prefs.Language)
+	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
+	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
+	if normalisedURL, err := normalisePicGoServerURL(prefs.PicGoServerURL); err == nil {
+		prefs.PicGoServerURL = normalisedURL
+	} else {
+		prefs.PicGoServerURL = defaultPicGoServerURL
+	}
 	normaliseRecentPreferences(&prefs)
 	path := a.preferencePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -1592,6 +1614,7 @@ func (a *App) text(key string) string {
 			"markdownDocument": "Markdown 文档", "textFile": "文本文件", "allFiles": "所有文件", "openFolder": "打开文档文件夹",
 			"saveAsMarkdown": "另存为 Markdown 文档", "newDocument": "新建文档.md", "newMarkdown": "新建 Markdown 文档",
 			"selectImage": "选择要插入的图片", "imageFile": "图片文件", "exportWord": "导出 Word 文档", "wordDocument": "Word 文档", "exportHTML": "导出 HTML 网页", "htmlDocument": "HTML 网页",
+			"exportDocument": "导出文档", "exportPDF": "导出 PDF", "selectPandoc": "选择 Pandoc 可执行文件", "pandocExecutable": "Pandoc 可执行文件", "exportImage": "导出长图", "pngImage": "PNG 图片", "jpegImage": "JPEG 图片",
 		},
 		"en": {
 			"unsavedTitle": "Unsaved Changes", "openUnsavedMessage": "The current document has unsaved changes. Opening another document will discard them.",
@@ -1600,6 +1623,7 @@ func (a *App) text(key string) string {
 			"markdownDocument": "Markdown Document", "textFile": "Text File", "allFiles": "All Files", "openFolder": "Open Document Folder",
 			"saveAsMarkdown": "Save Markdown Document As", "newDocument": "New document.md", "newMarkdown": "New Markdown Document",
 			"selectImage": "Choose an image to insert", "imageFile": "Image files", "exportWord": "Export Word Document", "wordDocument": "Word Document", "exportHTML": "Export HTML Page", "htmlDocument": "HTML Page",
+			"exportDocument": "Export Document", "exportPDF": "Export PDF", "selectPandoc": "Select Pandoc Executable", "pandocExecutable": "Pandoc Executable", "exportImage": "Export Long Image", "pngImage": "PNG Image", "jpegImage": "JPEG Image",
 		},
 	}
 	if value := translations[a.language][key]; value != "" {

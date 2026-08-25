@@ -20,13 +20,44 @@ export function buildTocTree(items = []) {
   return roots;
 }
 
+export function normalizeTocMode(value) {
+  return value === 'flat' ? 'flat' : 'tree';
+}
+
+export function filterTocTree(nodes = [], query = '') {
+  const needle = String(query || '').trim().toLocaleLowerCase();
+  if (!needle) return nodes;
+  const filter = items => items.flatMap(node => {
+    const children = filter(node.children || []);
+    if (!String(node.text || '').toLocaleLowerCase().includes(needle) && children.length === 0) return [];
+    return [{ ...node, children }];
+  });
+  return filter(nodes);
+}
+
+export function replaceDynamicTocMarkers(markdown = '') {
+  const lines = String(markdown).split('\n');
+  let fence = '';
+  return lines.map(line => {
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (opening) {
+      const marker = opening[1][0];
+      if (!fence) fence = marker.repeat(opening[1].length);
+      else if (marker === fence[0] && opening[1].length >= fence.length) fence = '';
+      return line;
+    }
+    if (!fence && /^ {0,3}\[toc\]\s*$/i.test(line)) return '<nav class="markdown-dynamic-toc" data-dynamic-toc></nav>';
+    return line;
+  }).join('\n');
+}
+
 export function readCollapsedToc(storage, filePath) {
   const key = documentKey(filePath);
   if (!key) return new Set();
   try {
     const values = JSON.parse(storage.getItem(STORAGE_KEY) || '{}')[key];
     return new Set(Array.isArray(values) ? values : []);
-  } catch {
+  } catch (error) {
     return new Set();
   }
 }

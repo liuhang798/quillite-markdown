@@ -127,6 +127,10 @@ test('Mermaid diagrams use safe SVG labels, avoid stale rendering work, and expo
   assert.doesNotMatch(diagramModule, /primaryColor:\s*value\('--accent-soft'/);
   assert.match(diagramModule, /htmlLabels:\s*false/);
   assert.match(diagramModule, /function normalizeSVGTypography\(svg, type = ''\)/);
+  assert.match(diagramModule, /function applyReadableSVGWidth\(svg, type = ''\)/);
+  assert.match(diagramModule, /const targetFontSize = \(type === 'gantt' \? 14 : 13\) \* fontScale/);
+  assert.match(diagramModule, /Math\.max\(320, Math\.min\(6000, readableWidth\)\)/);
+  assert.match(diagramModule, /--mermaid-readable-width/);
   assert.match(diagramModule, /const PIE_COLORS = \[/);
   for (const color of ['#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F', '#EDC948']) {
     assert.match(diagramModule, new RegExp(color));
@@ -179,6 +183,8 @@ test('Mermaid diagrams use safe SVG labels, avoid stale rendering work, and expo
   assert.match(diagramModule, /\.edgeLabel rect\.background/);
   assert.match(diagramModule, /box\.style\.setProperty\('stroke', 'none', 'important'\)/);
   assert.match(styles, /data-mermaid-type="c4context"[^}]+1400px/);
+  assert.match(styles, /width:\s*max\(100%, var\(--mermaid-readable-width, 0px\)\)/);
+  assert.match(styles, /data-mermaid-type="flowchart"[\s\S]+680px, var\(--mermaid-readable-width, 0px\)/);
   assert.match(styles, /\.mermaid-diagram svg text[^}]+font-weight:\s*400\s*!important[^}]+stroke:\s*none\s*!important/s);
   assert.match(diagramModule, /FORBID_TAGS:\s*\[[^\]]*'foreignObject'/);
   assert.match(diagramModule, /renderGenerations\.get\(container\)\s*===\s*generation/);

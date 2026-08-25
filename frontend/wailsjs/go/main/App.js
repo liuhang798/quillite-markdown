@@ -14,6 +14,10 @@ export function CheckForUpdates(arg1) {
   return window['go']['main']['App']['CheckForUpdates'](arg1);
 }
 
+export function DetectPandoc() {
+  return window['go']['main']['App']['DetectPandoc']();
+}
+
 export function Dirname(arg1) {
   return window['go']['main']['App']['Dirname'](arg1);
 }
@@ -30,8 +34,28 @@ export function ExportHTML(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['ExportHTML'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ExportPDF(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ExportPDF'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function ExportPlainHTML(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ExportPlainHTML'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function ExportWithPandoc(arg1) {
+  return window['go']['main']['App']['ExportWithPandoc'](arg1);
+}
+
+export function GetExportSettings() {
+  return window['go']['main']['App']['GetExportSettings']();
+}
+
 export function GetFeedbackSystemInfo() {
   return window['go']['main']['App']['GetFeedbackSystemInfo']();
+}
+
+export function GetImageUploadSettings() {
+  return window['go']['main']['App']['GetImageUploadSettings']();
 }
 
 export function GetInitialFile() {
@@ -52,6 +76,14 @@ export function ImportImage(arg1, arg2) {
 
 export function ListFolder(arg1) {
   return window['go']['main']['App']['ListFolder'](arg1);
+}
+
+export function LoginPicGoCloud() {
+  return window['go']['main']['App']['LoginPicGoCloud']();
+}
+
+export function LogoutPicGoCloud() {
+  return window['go']['main']['App']['LogoutPicGoCloud']();
 }
 
 export function NeedsLanguageSelection() {
@@ -122,6 +154,18 @@ export function SaveAs(arg1, arg2) {
   return window['go']['main']['App']['SaveAs'](arg1, arg2);
 }
 
+export function SaveExportImage(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveExportImage'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveExportImagePages(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveExportImagePages'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveExportImageSlices(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveExportImageSlices'](arg1, arg2, arg3, arg4);
+}
+
 export function SaveFile(arg1, arg2) {
   return window['go']['main']['App']['SaveFile'](arg1, arg2);
 }
@@ -138,8 +182,20 @@ export function SelectImage(arg1) {
   return window['go']['main']['App']['SelectImage'](arg1);
 }
 
+export function SelectPandoc() {
+  return window['go']['main']['App']['SelectPandoc']();
+}
+
 export function SetDirty(arg1) {
   return window['go']['main']['App']['SetDirty'](arg1);
+}
+
+export function SetExportSettings(arg1) {
+  return window['go']['main']['App']['SetExportSettings'](arg1);
+}
+
+export function SetImageUploadSettings(arg1) {
+  return window['go']['main']['App']['SetImageUploadSettings'](arg1);
 }
 
 export function SetLanguage(arg1) {
@@ -168,4 +224,20 @@ export function SnoozeUpdates(arg1) {
 
 export function SubmitFeedback(arg1) {
   return window['go']['main']['App']['SubmitFeedback'](arg1);
+}
+
+export function TestPicGo(arg1) {
+  return window['go']['main']['App']['TestPicGo'](arg1);
+}
+
+export function TestPicGoCloud() {
+  return window['go']['main']['App']['TestPicGoCloud']();
+}
+
+export function UploadImageToPicGo(arg1, arg2) {
+  return window['go']['main']['App']['UploadImageToPicGo'](arg1, arg2);
+}
+
+export function UploadImageToPicGoCloud(arg1, arg2) {
+  return window['go']['main']['App']['UploadImageToPicGoCloud'](arg1, arg2);
 }

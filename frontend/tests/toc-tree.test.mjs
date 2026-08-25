@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildTocTree, readCollapsedToc, writeCollapsedToc } from '../src/toc-tree.js';
+import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from '../src/toc-tree.js';
 
 function memoryStorage() {
   const values = new Map();
@@ -31,4 +31,26 @@ test('collapsed table-of-contents nodes persist independently for each document'
 
   assert.deepEqual([...readCollapsedToc(storage, 'd:/docs/one.md')], ['section-a', 'section-b']);
   assert.deepEqual([...readCollapsedToc(storage, 'D:/DOCS/TWO.MD')], ['section-c']);
+});
+
+test('outline search keeps matching headings together with their ancestors', () => {
+  const tree = buildTocTree([
+    { id: 'guide', text: 'Guide', level: 1 },
+    { id: 'install', text: 'Installation', level: 2 },
+    { id: 'edit', text: 'Editing', level: 2 },
+    { id: 'syntax', text: 'Markdown syntax', level: 3 }
+  ]);
+  const filtered = filterTocTree(tree, 'syntax');
+  assert.deepEqual(filtered.map(node => node.id), ['guide']);
+  assert.deepEqual(filtered[0].children.map(node => node.id), ['edit']);
+  assert.deepEqual(filtered[0].children[0].children.map(node => node.id), ['syntax']);
+  assert.equal(normalizeTocMode('flat'), 'flat');
+  assert.equal(normalizeTocMode('invalid'), 'tree');
+});
+
+test('[TOC] markers become dynamic placeholders outside fenced code only', () => {
+  const source = ['# Guide', '[TOC]', '```md', '[TOC]', '```', '[toc]'].join('\n');
+  const converted = replaceDynamicTocMarkers(source);
+  assert.equal((converted.match(/data-dynamic-toc/g) || []).length, 2);
+  assert.match(converted, /```md\n\[TOC\]\n```/);
 });

@@ -6,11 +6,11 @@
 
 - 项目名称：轻阅 Markdown / Quillite Markdown
 - 仓库：`https://github.com/liuhang798/quillite-markdown`
-- 当前版本：`2.5.2`
+- 当前版本：`2.6.0`
 - 开源协议：MIT
 - 产品定位：极度轻量、美观、跨平台的 Markdown 阅读与编辑工具
 - 支持平台：Windows x64、macOS Universal、Linux x64
-- Windows 安装包：约 7 MB
+- Windows 安装包：约 12 MB
 - UI 语言：简体中文、English
 
 核心产品体验是“阅读优先、编辑顺手”：普通状态显示沉浸式阅读页面；进入编辑状态后，左侧实时预览，右侧显示 Markdown 语法高亮编辑器。
@@ -57,6 +57,8 @@ app.go / updates.go（Go 后端）
 | `app.go` | 文档、文件夹、偏好设置、最近阅读、临时草稿、本地图片和系统集成 |
 | `export_docx.go` | 将前端安全渲染后的文档转换为标准 DOCX（OOXML），处理文字样式、列表、表格、代码、链接和图片 |
 | `export_html.go` | 将安全渲染后的文档导出为独立 HTML，保留主题、公式、代码和图片，并过滤可执行内容 |
+| `export_center.go` | 保存导出预设、检测本机 Pandoc、执行扩展格式转换及保存 PNG/JPEG 长图 |
+| `export_pdf.go` | 使用本机 Edge／Chrome／Chromium 无头打印生成带标题书签的 PDF，并在引擎间自动容错 |
 | `updates.go` | 官网版本库更新检查、版本比较、30 天暂停提醒 |
 | `app_test.go` | 后端单元测试、版本一致性和关键业务规则回归测试 |
 | `frontend/index.html` | 标题栏、侧栏、阅读页、分栏编辑器、菜单及弹窗结构 |
@@ -84,7 +86,8 @@ app.go / updates.go（Go 后端）
 ### 阅读
 
 - Markdown 渲染、代码高亮、表格、引用、列表和图片。
-- 自动生成右侧本页目录，点击后滚动到标题位置；目录字号和默认宽度按显示器物理短边适配。
+- 自动生成右侧本页目录，支持标题搜索、层级／平铺切换、折叠记忆和准确章节定位；目录字号和默认宽度按显示器物理短边适配。
+- 正文独立一行的 `[TOC]` 在阅读页与编辑预览中生成动态可点击目录，并随标题变化刷新。
 - 当前章节跟随、阅读进度、阅读时长和字数估算。
 - 文档内搜索、打印、定位文件、回到顶部。
 - 明暗主题和阅读字号缩放。
@@ -94,8 +97,11 @@ app.go / updates.go（Go 后端）
 - 左侧实时预览、右侧 CodeMirror Markdown 编辑。
 - Markdown 语法颜色高亮。
 - `Ctrl/Cmd + B` 加粗、`Ctrl/Cmd + I` 斜体、`Ctrl/Cmd + K` 链接。
-- 标题、引用、有序列表、无序列表、任务列表。
+- 标题、引用、有序列表、无序列表、任务列表；可视化表格设计器支持编辑单元格、增删／拖动行列、列对齐和持久列宽，并可原位编辑已有 GFM 表格。
+- 从网页或 Word 粘贴富文本时自动将剪贴板 HTML 转换为 Markdown，保留常见结构并过滤危险地址；编辑器选区右键支持复制为 Markdown 或纯文本。
+- 离线英文拼写检查提供错词波浪线、美式／英式词典、右键候选纠错、本文忽略和持久个人词典；代码、URL、公式等非正文区域不参与检查，文档内容不离开本机。
 - 行内代码、代码块、表格行列选择、图片选择。
+- 图片选择、拖拽和粘贴默认复制到文档旁的 `assets`；可选直接登录 PicGo Cloud 在线上传，或通过本机 PicGo 服务兼容其他图床，失败均自动回退本地相对路径。
 - “学科公式”工具（按基础数学、代数与函数、几何、微积分、线性代数、概率统计、物理、基础化学和化学反应分类 79 种模板，参数填写、行内/块级/编号输出、实时预览和弹窗内教程入口）、LaTeX 行内/块级公式、mhchem 化学公式和 `\tag{…}` 公式编号。
 - 工具栏撤回和 `Ctrl/Cmd + Z`。
 - 编辑时每 10 秒自动保存。
@@ -110,6 +116,16 @@ app.go / updates.go（Go 后端）
 - 打开文档后立即进入最近阅读，支持多条持久置顶、拖动排序和删除单条记录。
 - 单实例：再次打开 `.md` 文件时交给已有窗口处理。
 - 支持拖放文件和系统文件关联。
+
+### 导出
+
+- 阅读页顶部和“更多”菜单只显示一个“导出文档”入口，打开统一导出界面；不得重新加入分散的 Word／HTML／PDF 快捷按钮。
+- 统一导出界面原生提供 DOCX、带样式 HTML、无样式 HTML、带标题书签 PDF 与 PNG/JPEG 长图。
+- PDF 优先依次调用本机 Edge、Chrome 或 Chromium 无头打印并启用文档大纲；全部引擎不可用时前端回退系统打印，软件不捆绑浏览器。
+- 页眉页脚支持 `{title}`、`{date}`、`{page}`；PDF 为重复页眉页脚，其他格式放在文档首尾。
+- 导出预设保存在偏好中，最多 24 条；包含格式、页眉页脚、图片清晰度和 Pandoc 参数。
+- EPUB、RTF、ODT、LaTeX、MediaWiki 与自定义格式依赖用户本机 Pandoc；软件只检测或选择可执行文件，不捆绑 Pandoc。
+- Pandoc 参数通过 `exec.CommandContext` 直接传递且不经过 shell，禁止参数覆盖保存窗口确定的输出路径。
 
 ### 平台与发布
 
@@ -145,6 +161,9 @@ app.go / updates.go（Go 后端）
 - `lastUpdateCheck`：上次更新检查时间。
 - `suppressUpdateUntil`：暂停自动更新提醒的截止时间。
 - `usageAnalytics`：是否允许软件异常时自动回传已清理的错误日志；不控制每日活跃统计。
+- `imageUploadMode`：`local`、`picgo-cloud` 或 `picgo`；分别表示本地 `assets`、PicGo Cloud API 直连和本机 PicGo Server，默认继续使用本地 `assets`。
+- `picGoServerUrl`：PicGo 本地 HTTP 服务地址，仅允许 localhost／回环 IP；可选服务密钥独立保存在用户配置目录，不进入偏好 JSON。
+- `exportSettings`：本机 Pandoc 路径与最多 24 条导出预设；旧偏好缺失时使用空设置。
 - `anonymousInstallId`：本地随机匿名标识，仅用于每日活跃按设备去重；服务器只保存不可逆哈希。
 - `lastActiveReport`：最近一次成功提交每日活跃的 UTC 日期，保证每台设备每天最多一次。
 
@@ -177,6 +196,18 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 
 - `SelectImage(currentFile)`：选择图片，尽可能返回相对文档路径。
 - `ReadImageData(imagePath, documentDirectory)`：读取本地图片并返回 data URL。
+- `GetImageUploadSettings()` / `SetImageUploadSettings(input)`：读取或保存本地／PicGo 图片插入方式。
+- `LoginPicGoCloud()` / `LogoutPicGoCloud()` / `TestPicGoCloud()` / `UploadImageToPicGoCloud(currentFile, imagePath)`：通过系统浏览器完成 PKCE 登录，测试 PicGo Cloud 令牌，并使用预签名／分片 API 上传已复制到 `assets` 的图片。
+- `TestPicGo(input)` / `UploadImageToPicGo(currentFile, imagePath)`：测试本机 PicGo 服务并以 multipart 上传已复制到 `assets` 的图片，作为兼容其他图床的高级方式。
+
+### 导出
+
+- `ExportPlainHTML(sourcePath, title, renderedHTML, header, footer)`：生成不包含主题 CSS 的安全语义化 HTML。
+- `ExportPDF(sourcePath, title, renderedHTML, header, footer)`：将安全渲染内容写入临时独立 HTML，再用本机 Chromium 系浏览器生成带标题书签的 PDF。
+- `GetExportSettings()` / `SetExportSettings(settings)`：读取或保存 Pandoc 路径与导出预设。
+- `DetectPandoc()` / `SelectPandoc()`：检测 PATH、常见安装路径或让用户选择并验证 Pandoc 可执行文件。
+- `ExportWithPandoc(input)`：通过标准输入转换 EPUB、RTF、ODT、LaTeX、MediaWiki 或自定义 writer，输出位置固定由保存窗口决定。
+- `SaveExportImage(sourcePath, title, dataURL, format)`：校验并保存前端生成的 PNG/JPEG 长图。
 
 ### 系统
 
@@ -239,6 +270,8 @@ macOS 会把用户通过系统文件／文件夹窗口、Finder 或文件关联�
 ### 本地图片
 
 WebView 会限制直接访问 `file://` 图片。Markdown 源码仍保存正常的绝对或相对路径，但预览时必须调用 `ReadImageData`，由 Go 读取文件并返回 base64 data URL。不要重新改回直接设置 `file:///...`。
+
+启用 PicGo Cloud 时，选择、拖拽或粘贴的图片仍必须先写入当前文档旁的 `assets`，再由 Go 后端通过官方 HTTPS API 获取预签名地址并上传；10 MB 及以上文件使用分片流程。登录必须使用系统浏览器 PKCE，令牌独立保存在用户配置目录，不得写入偏好 JSON。启用本机 PicGo 时，仍通过 multipart 提交给仅限 localhost／回环 IP 的 PicGo HTTP 服务。两种在线模式成功后插入安全的 HTTPS URL；连接、鉴权、响应或上传失败时前端必须插入已经保存好的本地相对路径，不得丢失图片或自动重复上传。
 
 ### 更新检查
 

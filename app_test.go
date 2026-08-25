@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -9,6 +11,9 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -342,6 +347,293 @@ func TestSavePastedImageWritesClipboardDataIntoAssets(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Fatal("pasted image asset is empty")
+	}
+}
+
+func TestPicGoSettingsOnlyAllowLoopbackAndKeepSecretOutOfPreferences(t *testing.T) {
+	app := testApp(t)
+	if _, err := app.SetImageUploadSettings(ImageUploadSettingsInput{
+		Mode: imageUploadModePicGo, ServerURL: "https://example.com:36677",
+	}); err == nil {
+		t.Fatal("a remote PicGo server address must be rejected")
+	}
+
+	settings, err := app.SetImageUploadSettings(ImageUploadSettingsInput{
+		Mode: imageUploadModePicGo, ServerURL: "http://localhost:36677/", Secret: "shared-local-secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Mode != imageUploadModePicGo || settings.ServerURL != "http://localhost:36677" || !settings.HasSecret {
+		t.Fatalf("unexpected saved image upload settings: %#v", settings)
+	}
+	preferencesData, err := os.ReadFile(app.preferencePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(preferencesData, []byte("shared-local-secret")) {
+		t.Fatal("the PicGo shared secret must not be written to preferences.json")
+	}
+	if secretData, err := os.ReadFile(app.picGoSecretPath()); err != nil || strings.TrimSpace(string(secretData)) != "shared-local-secret" {
+		t.Fatalf("PicGo secret was not stored separately: value=%q err=%v", secretData, err)
+	}
+
+	settings, err = app.SetImageUploadSettings(ImageUploadSettingsInput{
+		Mode: imageUploadModeLocal, ServerURL: defaultPicGoServerURL, ClearSecret: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.HasSecret {
+		t.Fatal("clearing image upload settings retained the PicGo secret")
+	}
+	if _, err := os.Stat(app.picGoSecretPath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cleared PicGo secret file still exists: %v", err)
+	}
+}
+
+func TestUploadImageToPicGoUsesMultipartAndFallsBackOnlyAtTheFrontend(t *testing.T) {
+	app := testApp(t)
+	const secret = "picgo-test-secret"
+	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer "+secret {
+			http.Error(response, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch request.URL.Path {
+		case "/heartbeat":
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = response.Write([]byte(`{"success":true,"result":"alive"}`))
+		case "/upload":
+			if err := request.ParseMultipartForm(maxImportedImageSize + 1024); err != nil {
+				http.Error(response, "invalid multipart upload", http.StatusBadRequest)
+				return
+			}
+			file, header, err := request.FormFile("files")
+			if err != nil {
+				http.Error(response, "missing image", http.StatusBadRequest)
+				return
+			}
+			defer file.Close()
+			uploaded, err := io.ReadAll(file)
+			if err != nil || !bytes.Equal(uploaded, pngBytes) || header.Filename == "" {
+				http.Error(response, "image changed", http.StatusBadRequest)
+				return
+			}
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = response.Write([]byte(`{"success":true,"result":["https://img.example.test/uploaded.png"]}`))
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+
+	settingsInput := ImageUploadSettingsInput{Mode: imageUploadModePicGo, ServerURL: server.URL, Secret: secret}
+	if err := app.TestPicGo(settingsInput); err != nil {
+		t.Fatalf("PicGo heartbeat failed: %v", err)
+	}
+	if _, err := app.SetImageUploadSettings(settingsInput); err != nil {
+		t.Fatal(err)
+	}
+
+	documentRoot := t.TempDir()
+	documentPath := filepath.Join(documentRoot, "notes.md")
+	if err := os.WriteFile(documentPath, []byte("# Notes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assetPath := filepath.Join(documentRoot, "assets", "pasted.png")
+	if err := os.MkdirAll(filepath.Dir(assetPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(assetPath, pngBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uploadedURL, err := app.UploadImageToPicGo(documentPath, "assets/pasted.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uploadedURL != "https://img.example.test/uploaded.png" {
+		t.Fatalf("unexpected uploaded URL: %q", uploadedURL)
+	}
+	if _, err := app.UploadImageToPicGo(documentPath, filepath.Join(documentRoot, "outside.png")); err == nil {
+		t.Fatal("an image outside the document assets folder must not be uploaded")
+	}
+}
+
+func TestPicGoCloudCredentialsStayOutOfPreferencesAndPKCEIsValid(t *testing.T) {
+	app := testApp(t)
+	const token = "picgo-cloud-test-token"
+	if err := app.writePicGoCloudToken(token); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := app.SetImageUploadSettings(ImageUploadSettingsInput{
+		Mode: imageUploadModePicGoCloud, ServerURL: defaultPicGoServerURL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Mode != imageUploadModePicGoCloud || !settings.HasCloudToken {
+		t.Fatalf("unexpected PicGo Cloud settings: %#v", settings)
+	}
+	preferencesData, err := os.ReadFile(app.preferencePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(preferencesData, []byte(token)) {
+		t.Fatal("the PicGo Cloud token must not be written to preferences.json")
+	}
+	if stored := readPrivateText(app.picGoCloudTokenPath()); stored != token {
+		t.Fatalf("PicGo Cloud token was not stored separately: %q", stored)
+	}
+
+	verifier, challenge, state, err := picGoCloudPKCE()
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(verifier))
+	if challenge != base64.RawURLEncoding.EncodeToString(digest[:]) || verifier == "" || state == "" {
+		t.Fatal("PicGo Cloud PKCE values are invalid")
+	}
+
+	loggedOut, err := app.LogoutPicGoCloud()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loggedOut.Mode != imageUploadModeLocal || loggedOut.HasCloudToken {
+		t.Fatalf("logging out did not disable PicGo Cloud: %#v", loggedOut)
+	}
+}
+
+func TestPicGoCloudStatusAndDirectUploadUseOfficialPresignFlow(t *testing.T) {
+	const token = "direct-cloud-token"
+	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/storage/upload.png" && request.Header.Get("Authorization") != "Bearer "+token {
+			http.Error(response, `{"message":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/whoami":
+			_, _ = response.Write([]byte(`{"user":"reader","plan":0}`))
+		case "/api/upload/presign":
+			var input map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&input); err != nil || input["filename"] != "pasted.png" || input["contentType"] != "image/png" {
+				http.Error(response, `{"message":"invalid input"}`, http.StatusBadRequest)
+				return
+			}
+			_, _ = fmt.Fprintf(response, `{"success":true,"objectKey":"object-key","publicId":"public-id","uploadUrl":%q,"method":"PUT","headers":{"x-upload":"allowed"}}`, server.URL+"/storage/upload.png")
+		case "/storage/upload.png":
+			uploaded, _ := io.ReadAll(request.Body)
+			if request.Method != http.MethodPut || request.Header.Get("x-upload") != "allowed" || !bytes.Equal(uploaded, pngBytes) {
+				http.Error(response, "upload changed", http.StatusBadRequest)
+				return
+			}
+			response.WriteHeader(http.StatusOK)
+		case "/api/album-items/complete":
+			_, _ = response.Write([]byte(`{"success":true,"data":{"item":{"imgUrl":"https://cdn.picgo.example/uploaded.png"}}}`))
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+	client := picGoCloudHTTPClient(10 * time.Second)
+	defer client.CloseIdleConnections()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	status, err := picGoCloudStatus(ctx, client, server.URL, token)
+	if err != nil || !status.Connected || status.User != "reader" {
+		t.Fatalf("PicGo Cloud status failed: status=%#v err=%v", status, err)
+	}
+	var uploadedBytes, uploadTotal int64
+	uploadedURL, err := uploadImageToPicGoCloud(ctx, client, server.URL, token, "pasted.png", pngBytes, "image/png", func(done, total int64) {
+		uploadedBytes = done
+		uploadTotal = total
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uploadedURL != "https://cdn.picgo.example/uploaded.png" {
+		t.Fatalf("unexpected PicGo Cloud URL: %q", uploadedURL)
+	}
+	if uploadedBytes != int64(len(pngBytes)) {
+		t.Fatalf("upload progress stopped at %d of %d bytes", uploadedBytes, len(pngBytes))
+	}
+	if uploadTotal != int64(len(pngBytes)) {
+		t.Fatalf("unexpected upload total: got %d want %d", uploadTotal, len(pngBytes))
+	}
+}
+
+func TestPicGoCloudMultipartUploadHandlesAssetsUpToLocalLimit(t *testing.T) {
+	const token = "multipart-cloud-token"
+	data := bytes.Repeat([]byte{0x5a}, picGoCloudMultipartMinimum+1024)
+	partSize := 4 * 1024 * 1024
+	partCount := (len(data) + partSize - 1) / partSize
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if !strings.HasPrefix(request.URL.Path, "/part/") && request.Header.Get("Authorization") != "Bearer "+token {
+			http.Error(response, `{"message":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/upload/multipart/initiate":
+			parts := make([]string, 0, partCount)
+			for number := 1; number <= partCount; number++ {
+				parts = append(parts, fmt.Sprintf(`{"partNumber":%d,"url":%q,"method":"PUT","headers":{}}`, number, fmt.Sprintf("%s/part/%d", server.URL, number)))
+			}
+			_, _ = fmt.Fprintf(response, `{"success":true,"uploadId":"upload-id","objectKey":"object-key","publicId":"public-id","url":"https://cdn.picgo.example/large.png","partSize":%d,"partCount":%d,"parts":[%s]}`, partSize, partCount, strings.Join(parts, ","))
+		case "/api/upload/multipart/complete":
+			var input struct {
+				Parts []picGoCloudCompletedPart `json:"parts"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&input); err != nil || len(input.Parts) != partCount {
+				http.Error(response, `{"message":"missing completed parts"}`, http.StatusBadRequest)
+				return
+			}
+			_, _ = response.Write([]byte(`{"success":true}`))
+		case "/api/album-items/complete":
+			_, _ = response.Write([]byte(`{"success":true,"data":{"item":{"imgUrl":"https://cdn.picgo.example/large.png"}}}`))
+		default:
+			if strings.HasPrefix(request.URL.Path, "/part/") {
+				_, _ = io.Copy(io.Discard, request.Body)
+				response.Header().Set("ETag", `"part-etag"`)
+				response.WriteHeader(http.StatusOK)
+				return
+			}
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+	client := picGoCloudHTTPClient(20 * time.Second)
+	defer client.CloseIdleConnections()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var uploadedBytes, uploadTotal int64
+	uploadedURL, err := uploadImageToPicGoCloud(ctx, client, server.URL, token, "large.png", data, "image/png", func(done, total int64) {
+		uploadedBytes = done
+		uploadTotal = total
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uploadedURL != "https://cdn.picgo.example/large.png" {
+		t.Fatalf("unexpected multipart URL: %q", uploadedURL)
+	}
+	if uploadedBytes != int64(len(data)) {
+		t.Fatalf("multipart upload progress stopped at %d of %d bytes", uploadedBytes, len(data))
+	}
+	if uploadTotal != int64(len(data)) {
+		t.Fatalf("unexpected multipart upload total: got %d want %d", uploadTotal, len(data))
 	}
 }
 

@@ -2,11 +2,49 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [Unreleased]
+## [2.6.0] - 2026-08-25
 
 ### 简体中文
 
+- 新增可选的 PicGo 图床上传。选择、拖拽或粘贴图片时仍会先安全保存到文档旁的 `assets`，启用 PicGo 后再通过仅限本机回环地址的 HTTP 接口上传并插入在线 URL；连接或上传失败会自动回退本地相对路径，避免图片丢失。图床设置支持连接测试和可选服务密钥，密钥独立保存在用户配置目录而不进入普通偏好 JSON。
+- PicGo 图床设置新增类似 Typora 的首次配置向导：分步提示安装并启动 PicGo、配置图床与开启 Server，再自动检测本机连接；普通用户无需填写地址和密钥，高级设置默认折叠，已有配置会在打开时自动检测。
+- 新增 PicGo Cloud 在线 API 直连：用户可在系统浏览器通过 PKCE 安全登录，无需安装百兆 PicGo 客户端或复制密钥；登录令牌独立保存在本机配置目录。小图片使用预签名直传，大图片自动使用分片上传，任何失败仍回退文档旁的本地 `assets`。原有本机 PicGo Server 接入保留为兼容模式。
+- 图片上传时新增常驻加载提示与真实字节进度条，清楚区分准备图片、上传中和生成在线链接三个阶段；慢网络下会持续显示百分比，成功或失败回退后自动收起，并完整支持中英文界面。
+- 表格工具升级为可视化设计器：可直接填写单元格、动态改变行列数量、增删行列、拖动调整行列顺序、设置每列左／中／右对齐，并拖动列边界调整宽度。光标位于已有 Markdown 表格时会自动进入编辑模式并原位回写；列宽使用可忽略的轻阅 HTML 注释保存，不破坏标准 GFM 表格在其他编辑器中的兼容性。
+- 新建文档增加防连点保护：创建请求进行中会立即禁用入口，创建成功后继续锁定 3 秒；按钮点击与 `Ctrl/Cmd + N` 快捷键均无法重复创建，失败或取消时仍可立即重试。
+- 新增网页／Word 富文本粘贴转换：剪贴板 HTML 会自动转为 Markdown，保留标题、强调、列表、引用、代码、链接、在线图片和 GFM 表格，清理 Office 专有样式并过滤不安全链接；编辑器选区右键菜单新增“复制为 Markdown”和“复制为纯文本”。
+- 新增离线英文拼写检查：编辑器使用红色波浪线标记错词，右键可直接采用候选纠错、在当前文档中忽略，或加入持久化个人词典；“更多”菜单可启停检查、选择自动／美式／英式词典及清空个人词典。代码块、行内代码、URL、HTML、公式、缩写和驼峰标识会自动排除，词典随软件提供且不上传文档内容。
+- 新增统一导出中心与可复用导出预设：原生支持 DOCX、带样式 HTML、无样式语义化 HTML、带标题书签 PDF、PNG/JPEG 高清长图，并可配置 `{title}`、`{date}`、`{page}` 页眉页脚。PDF 优先调用本机 Edge／Chrome／Chromium 无头打印并生成可导航书签，不捆绑浏览器；没有可用引擎时回退系统打印。检测或选择本机 Pandoc 后，还可导出 EPUB、RTF、ODT、LaTeX、MediaWiki，或通过 writer、扩展名与附加参数生成自定义格式；参数不经过系统 shell，保存位置不能被自定义参数覆盖。Pandoc 为可选外部工具，不随轻量安装包捆绑。
+- 本页目录新增标题搜索和“层级／平铺”视图切换；层级搜索会保留命中标题的上级路径，折叠状态与视图选择均可持续保存。Markdown 正文中的独立 `[TOC]` 标记会实时生成可点击的动态目录，阅读、编辑预览和 HTML／PDF 导出保持一致。
+- 阅读页顶部和“更多”菜单不再分别显示导出中心、Word、HTML 与 PDF 四个入口，统一合并为“导出文档”；点击后直接进入完整的 12 种格式导出界面，减少重复按钮并保持“另存为”和“打印”独立可用。
+- 修复 PDF 导出中超长代码行、连接字符串和宽表格仍以横向滚动容器打印、导致右侧内容被截断的问题；代码会在 A4 页面内安全换行，表格单元格自动收缩换行，图片与图表限制在可打印宽度内，直接 PDF 与系统打印回退保持一致。
+- 修复 PNG/JPEG 长图导出为纯白图或被压缩成狭长小字图的问题：导出节点改为可正常布局和渲染的隔离容器，等待图片、字体与布局就绪后分段生成画布，再由本地 Go 后端按原始宽度无损拼接，不再触发浏览器 16384px 上限的整图等比缩小。保存前会检查正文像素，并修复十六进制背景色被规范化为 RGB 后导致正常画布被误判为空白图的问题。
+- 修复“导出文档”弹窗中的异常提示被遮罩层覆盖的问题，成功、警告与错误通知现在始终显示在所有业务弹窗之上。
+- “立即导出”按钮现在会在点击瞬间锁定并显示为灰色忙碌状态，导出结束或失败后再恢复，防止慢速长图生成期间重复点击和重复保存。
+- PNG/JPEG 图片导出新增“自动分图（清晰，推荐）”与“单张长图”两种方式。默认自动按竖版阅读比例在内容块之间分页，生成 `文件名-01、-02…` 连续编号图片并避开已有同名批次，解决超长单图被看图软件或社交平台适配到屏幕后仍显模糊的问题；导出预设会保存所选方式。
+- “单张长图”升级为 2.5K 宽版高清画布：排版宽度由 840px 提升至 1280px，2 倍清晰度下输出约 2560px 宽；正文继续保持原有 2 倍文字栅格，并优化左右留白和长宽比例，让整张适配屏幕时保留更多有效宽度。
+- 彻底调整长文档图片导出策略：每页现在按标准 A4 长宽比独立进行 2 倍高清渲染，再保存为连续编号图片，不经过整图缩放或二次采样；即使选择“单张长图”，超过 3 张 A4 的长文档也会自动改为 A4 高清分页并明确提示，避免看图软件把数万像素高的图片缩成只有几百像素宽的模糊预览。短文档仍可无损拼接为单张长图。
+
 ### English
+
+- Added optional PicGo image hosting. Chosen, dropped, and pasted images are still saved safely to the document's local `assets` directory first; when PicGo is enabled, Quillite uploads through a loopback-only HTTP endpoint and inserts the returned online URL. Connection or upload failures automatically fall back to the portable local path so an image is never lost. Settings include connection testing and an optional server secret stored separately from the normal preferences JSON.
+- Added a Typora-style first-time PicGo setup guide: it walks through installing and starting PicGo, configuring an image host and enabling PicGo-Server, then detects the local connection automatically. The address and optional secret are folded under Advanced settings, while existing setups are checked automatically when reopened.
+- Added direct PicGo Cloud API integration. Users sign in securely in their system browser with PKCE, without installing the large PicGo desktop app or copying credentials; the login token is stored separately in the local configuration directory. Small images use presigned direct uploads, larger images switch to multipart uploads, and every failure still falls back to the document's local `assets`. The existing local PicGo Server integration remains available as a compatibility mode.
+- Added a persistent upload indicator with real byte progress. It distinguishes preparation, transfer, and online-link generation, keeps percentage feedback visible on slow networks, then dismisses itself after success or safe local fallback. All status text is available in Chinese and English.
+- Upgraded the table tool to a visual designer. Cells can be edited directly; rows and columns can be resized, added, removed, and reordered by dragging; each column supports left, center, or right alignment; and column borders can be dragged to change width. When the cursor is inside an existing Markdown table, the designer edits it in place. Widths are stored in an ignorable Quillite HTML comment so the underlying GFM table stays portable to other editors.
+- Added double-click protection for New Document. The entry is disabled while creation is in flight and remains locked for three seconds after success; neither the button nor `Ctrl/Cmd + N` can create duplicates during that window, while cancelled or failed attempts can be retried immediately.
+- Added rich-text paste conversion for web pages and Word. Clipboard HTML is converted automatically to Markdown while preserving headings, emphasis, lists, quotes, code, links, online images, and GFM tables; Office-only styling and unsafe links are removed. The editor selection context menu now offers Copy as Markdown and Copy as plain text.
+- Added offline English spell checking. Misspellings receive a red wavy underline, and their context menu offers suggested replacements, per-document ignore, and a persistent personal dictionary. More now controls spell checking, Auto/US/UK dictionaries, and personal-dictionary clearing. Code, URLs, HTML, formulas, acronyms, and camel-case identifiers are excluded automatically; dictionaries ship with the app and document text is never uploaded.
+- Added a unified Export Center with reusable presets. Native exports now cover DOCX, styled HTML, semantic unstyled HTML, PDF with heading bookmarks, and high-resolution PNG/JPEG long images, with `{title}`, `{date}`, and `{page}` header/footer variables. PDF export first uses an installed Edge, Chrome, or Chromium headless print engine to create navigable bookmarks without bundling a browser, and falls back to system printing when none is available. After detecting or selecting a local Pandoc installation, EPUB, RTF, ODT, LaTeX, MediaWiki, and custom writer/extension/argument exports are also available. Arguments bypass the system shell and cannot override the save destination. Pandoc remains an optional external tool and is not bundled into the lightweight installer.
+- Added title search plus hierarchical/flat view switching to the document outline. Hierarchical search retains the ancestor path for matching headings, while fold state and the chosen view persist locally. A standalone `[TOC]` marker in Markdown now becomes a live linked table of contents in reading, editor preview, and HTML/PDF exports.
+- Consolidated the separate Export Center, Word, HTML, and PDF entries in the reader header and More menu into one “Export document” action. It opens the complete 12-format export interface directly, while Save As and Print remain separate actions.
+- Fixed clipped PDF exports caused by long code lines, connection strings, and wide tables retaining horizontal scrolling during printing. Code now wraps safely within the A4 page, table cells shrink and wrap, and images or diagrams stay inside the printable width in both direct PDF export and the system-print fallback.
+- Fixed PNG/JPEG long-image exports producing blank files or narrow images with tiny text. The export node now participates in normal layout, waits for images, fonts, and layout, and renders the document in strips that the local Go backend joins losslessly at the requested width. This avoids the browser's 16384px canvas limit silently scaling the whole image down. The pre-save pixel check also uses the original background value so hexadecimal-to-RGB style normalization cannot falsely reject a valid canvas as blank.
+- Fixed export errors being obscured by the Export document modal. Success, warning, and error notifications now stay above all application dialogs.
+- Export now locks immediately into a visibly grey busy state and only becomes available again after completion or failure, preventing duplicate clicks and duplicate saves during slow long-image rendering.
+- PNG/JPEG export now offers “Split into readable pages (recommended)” and “Single long image.” The default mode breaks at content-block boundaries into portrait pages named `file-01`, `file-02`, and so on, automatically avoiding an existing batch. This keeps text readable when viewers or social apps would otherwise fit an ultra-tall image into a blurry thumbnail; export presets retain the selected mode.
+- Single-long-image export now uses a 2.5K-wide high-definition canvas: layout width increases from 840px to 1280px and produces an approximately 2560px-wide file at 2× resolution, while preserving the existing 2× text rasterization and improving margins and aspect ratio for fit-to-screen previews.
+- Long-document image export now uses a definitive readability-first strategy. Every page is rendered independently at 2× resolution with the standard A4 aspect ratio and saved as a numbered sequence without whole-document scaling or resampling. Even when Single long image is selected, documents longer than three A4 pages automatically switch to A4 HD pages with an explicit notice, preventing image viewers from shrinking a tens-of-thousands-pixel bitmap to a few hundred pixels wide. Short documents can still be joined losslessly into one image.
 
 ## [2.5.2] - 2026-08-23
 
@@ -682,3 +720,4 @@ All notable changes to Quillite Markdown are documented here.
 [2.5.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.0
 [2.5.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.1
 [2.5.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.2
+[2.6.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.0
