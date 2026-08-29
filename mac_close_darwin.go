@@ -51,39 +51,65 @@ static void mdaCenterTrafficLights(NSWindow *window) {
     }
 }
 
-static void mdaInstallTrafficLightCentering(NSWindow *window) {
+static void mdaScheduleTrafficLightCentering(NSWindow *window) {
+    if (window == nil) {
+        return;
+    }
+
+    // AppKit can run another private title-bar layout after resize/key/screen
+    // notifications have already been delivered. Correct immediately for the
+    // common case, on the next main-loop turn, and once more after the native
+    // animation/layout has settled. This prevents the system default inset
+    // position from replacing our 42 pt toolbar alignment after relaunch.
     mdaCenterTrafficLights(window);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        mdaCenterTrafficLights(window);
+    });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 80 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        mdaCenterTrafficLights(window);
+    });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        mdaCenterTrafficLights(window);
+    });
+}
+
+static void mdaInstallTrafficLightCentering(NSWindow *window) {
+    mdaScheduleTrafficLightCentering(window);
     if (objc_getAssociatedObject(window, &mdaTrafficLightObserversKey) != nil) {
         return;
     }
 
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
-    NSMutableArray *tokens = [NSMutableArray arrayWithCapacity:4];
+    NSMutableArray *tokens = [NSMutableArray arrayWithCapacity:8];
     NSArray<NSNotificationName> *names = @[
         NSWindowDidResizeNotification,
+        NSWindowDidEndLiveResizeNotification,
         NSWindowDidBecomeKeyNotification,
+        NSWindowDidDeminiaturizeNotification,
+        NSWindowDidChangeScreenNotification,
         NSWindowDidEnterFullScreenNotification,
         NSWindowDidExitFullScreenNotification,
     ];
     for (NSNotificationName name in names) {
         id token = [center addObserverForName:name object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *notification) {
-            // AppKit lays out the traffic lights during resize and tiling. Apply
-            // our compact-titlebar position in the same notification turn so a
-            // stale native frame is never painted before the correction.
-            mdaCenterTrafficLights(window);
+            mdaScheduleTrafficLightCentering(window);
             if ([notification.name isEqualToString:NSWindowDidExitFullScreenNotification]) {
                 mdaFinishFullscreenClose(window);
             }
         }];
         [tokens addObject:token];
     }
+    id activeToken = [center addObserverForName:NSApplicationDidBecomeActiveNotification object:NSApp queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *notification) {
+        mdaScheduleTrafficLightCentering(window);
+    }];
+    [tokens addObject:activeToken];
     objc_setAssociatedObject(window, &mdaTrafficLightObserversKey, tokens, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-        mdaCenterTrafficLights(window);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 800 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        mdaScheduleTrafficLightCentering(window);
     });
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-        mdaCenterTrafficLights(window);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1600 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        mdaScheduleTrafficLightCentering(window);
     });
 }
 
@@ -93,9 +119,9 @@ static void mdaRefreshWindowChrome(void) {
         if (window == nil) {
             return;
         }
-        mdaCenterTrafficLights(window);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            mdaCenterTrafficLights(window);
+        mdaScheduleTrafficLightCentering(window);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 700 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+            mdaScheduleTrafficLightCentering(window);
         });
     });
 }

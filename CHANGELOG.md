@@ -12,6 +12,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复 macOS 更新或重新启动后，AppKit 在窗口激活、恢复和显示器切换的最终布局阶段再次覆盖三个原生窗口按钮位置的问题；现在会在系统布局完成后的下一帧及短延迟阶段重新确认对齐，避免按钮偶发下移。
 - 修复 macOS 左上角三个原生窗口按钮偏高、窗口重新激活后又恢复旧位置的问题；改用 AppKit 原生内嵌标题栏承载按钮，并在网页标题栏加载完成及窗口尺寸变化后重新对齐，与书本图标和应用名称保持同一水平中心线。
 - “更多”设置新增软件字体选择，支持系统默认、无衬线、衬线、圆体、宋体和楷体六种跨平台字体预设；界面与 Markdown 正文即时切换，代码内容继续使用等宽字体，选择会写入偏好并在重启后恢复。
 - “更多”设置中的软件字体、文档宽度和词典语言改为“当前值 + 二级菜单”的紧凑样式，悬停、点击或键盘均可展开；子菜单会按窗口剩余空间自动选择左右方向，避免设置内容过长或超出屏幕。
@@ -23,6 +24,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Fixed native macOS window controls occasionally moving down again after an update or relaunch when AppKit performed a final title-bar layout during activation, restoration, or display changes. Alignment is now reconfirmed on the next main-loop turn and after native layout settles.
 - Fixed the three native macOS window controls sitting too high and returning to that position after window activation. An AppKit inset title-bar region now owns the controls, with alignment refreshed after the web title bar loads and window layout changes, keeping the same vertical center as the book icon and app name.
 - More settings now offers six cross-platform app-font presets: System, Sans serif, Serif, Rounded, Song style, and Kai style. The interface and Markdown prose update immediately while code remains monospaced, and the choice is restored from preferences after restart.
 - App font, document width, and dictionary language now use compact current-value rows with cascading submenus. They open by hover, click, or keyboard and automatically choose the side with available viewport space, shortening the More menu without losing any options.

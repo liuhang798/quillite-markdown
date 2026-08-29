@@ -1590,7 +1590,10 @@ func TestMacTrafficLightsAlignWithWebTitlebar(t *testing.T) {
 		t.Fatal("macOS traffic lights must share the 42 pt web title-bar center line")
 	}
 	if !strings.Contains(text, "mdaRefreshWindowChrome") ||
-		!strings.Contains(text, "250 * NSEC_PER_MSEC") {
+		!strings.Contains(text, "mdaScheduleTrafficLightCentering") ||
+		!strings.Contains(text, "NSWindowDidChangeScreenNotification") ||
+		!strings.Contains(text, "NSApplicationDidBecomeActiveNotification") ||
+		!strings.Contains(text, "1600 * NSEC_PER_MSEC") {
 		t.Fatal("macOS traffic-light alignment must be reapplied after the frontend becomes ready")
 	}
 

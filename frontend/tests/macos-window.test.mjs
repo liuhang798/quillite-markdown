@@ -26,11 +26,15 @@ test('native macOS traffic lights stay vertically centered in the custom title b
   assert.match(macNativeSource, /targetCenterY = NSHeight\(window\.frame\) - titlebarHeight \/ 2\.0/);
   assert.match(macNativeSource, /NSWindowCloseButton[\s\S]*NSWindowMiniaturizeButton[\s\S]*NSWindowZoomButton/);
   assert.match(macNativeSource, /NSWindowDidResizeNotification/);
+  assert.match(macNativeSource, /NSWindowDidChangeScreenNotification/);
+  assert.match(macNativeSource, /NSApplicationDidBecomeActiveNotification/);
   assert.match(macNativeSource, /NSWindowDidExitFullScreenNotification/);
   assert.match(macNativeSource, /mdaRefreshWindowChrome/);
-  assert.match(macNativeSource, /250 \* NSEC_PER_MSEC/);
-  assert.doesNotMatch(macNativeSource, /mdaScheduleTrafficLightCentering/);
-  assert.match(macNativeSource, /usingBlock:[\s\S]*mdaCenterTrafficLights\(window\);/);
+  assert.match(macNativeSource, /mdaScheduleTrafficLightCentering/);
+  assert.match(macNativeSource, /dispatch_async\(dispatch_get_main_queue\(\), \^\{/);
+  assert.match(macNativeSource, /300 \* NSEC_PER_MSEC/);
+  assert.match(macNativeSource, /1600 \* NSEC_PER_MSEC/);
+  assert.match(macNativeSource, /usingBlock:[\s\S]*mdaScheduleTrafficLightCentering\(window\);/);
 });
 
 test('macOS fullscreen moves the brand left and restores windowed spacing automatically', () => {
