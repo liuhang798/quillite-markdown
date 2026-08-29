@@ -104,6 +104,7 @@ Documents and folders opened through macOS system panels, Finder, or file associ
 
 - Fine-tuned the title-bar book mark downward for a more natural visual baseline with the “Quillite Markdown” label.
 - Removed the trailing hover trash icon from Recent, giving long document names more horizontal space.
+- Document lists use theme-colored outline icons without background tiles, leaving more room for filenames while retaining favorites, pin markers, and selection indicators. Missing files use muted icons.
 - Recent records can still be removed from the document context menu without deleting the original file.
 
 ## What's new in 2.4.3
@@ -111,7 +112,7 @@ Documents and folders opened through macOS system panels, Finder, or file associ
 - Unified the default brand green at the exact `#159A63`; primary controls are no longer automatically darkened to `#10744A`, keeping buttons, selections, accent text, and application icons on the same green.
 - Replaced the top-left brand tile with a transparent open-book mark whose strokes follow the selected accent, with no square plate, border, or shadow.
 - Aligned the title-bar book mark and “Quillite Markdown” label to the same visual height, with dedicated sizing for the compact macOS title bar.
-- Removed drop shadows from accent-colored buttons (New Document, back-to-top, home leaf icon) for a cleaner look; selected states keep their theme-colored outline.
+- Home illustrations, cards, and shortcut keys use flat, shadow-free surfaces with consistent thin borders, corners, and clear typography. Accent buttons such as New Document and back-to-top also remain shadow-free; selected states keep their theme-colored outline.
 - The Windows install, upgrade, and uninstall wizard is now Simplified Chinese only, with no setup-language dialog; compatibility messages, WebView2 progress text, and file-open actions are localized as well.
 - Text zoom now applies globally: the reading content, the recent/explorer sidebar, and the table of contents all scale together.
 - The sidebar and table-of-contents dividers no longer have a maximum width; they can be dragged freely and the width is remembered.

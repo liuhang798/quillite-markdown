@@ -6,7 +6,13 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 文档列表改用无底色的主题色线性图标，收窄图标占位以显示更多文件名；保留选中描边、收藏和置顶标记，失效文件使用灰色图标区分。
+- 首页采用无阴影的平面样式：移除纸张插画与卡片投影、背景光晕和快捷键双层底边，统一细边框与圆角，改善快捷键字号、行距和文字对比度；明暗主题与系统快捷键保持适配。
+
 ### English
+
+- Document lists now use theme-colored outline icons without background tiles, leaving more room for filenames. Selection outlines, favorites, and pin markers are retained; missing files use muted icons.
+- Refined Home with flat, shadow-free surfaces: removed illustration and card shadows, the background glow, and raised keycap edges. Consistent thin borders and corners, clearer shortcut typography, spacing, and contrast retain light/dark theme and platform shortcut support.
 
 ## [2.6.1] - 2026-08-25
 
