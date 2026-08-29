@@ -98,6 +98,8 @@ export function SetDirty(arg1:boolean):Promise<void>;
 
 export function SetExportSettings(arg1:main.ExportSettings):Promise<main.ExportSettings>;
 
+export function SetFontFamily(arg1:string):Promise<string>;
+
 export function SetImageUploadSettings(arg1:main.ImageUploadSettingsInput):Promise<main.ImageUploadSettings>;
 
 export function SetLanguage(arg1:string):Promise<string>;

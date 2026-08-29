@@ -177,7 +177,9 @@ test('returning to the app reloads an externally changed document without overwr
 });
 
 test('document width presets are selectable in the more menu and persist', () => {
-  assert.match(html, /class="doc-width-preset-grid" role="group"/);
+  assert.match(html, /data-settings-submenu="width"[^>]*aria-haspopup="menu"/);
+  assert.match(html, /data-settings-submenu-panel="width"[^>]*role="menu"/);
+  assert.match(html, /id="docWidthCurrent"/);
   assert.match(html, /data-doc-width="narrow"/);
   assert.match(html, /data-doc-width="medium"/);
   assert.match(html, /data-doc-width="wide"/);
@@ -196,8 +198,51 @@ test('document width presets are selectable in the more menu and persist', () =>
   assert.match(styles, /body\[data-doc-width="narrow"\] \{ --doc-width: 640px; --editor-doc-width: 560px; \}/);
   assert.match(styles, /body\[data-doc-width="wide"\] \{ --doc-width: 1100px; --editor-doc-width: 900px; \}/);
   assert.match(styles, /body\[data-doc-width="full"\] \{ --doc-width: 100%; --editor-doc-width: 100%; \}/);
-  assert.match(styles, /\.doc-width-preset-grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(styles, /\.popover \.doc-width-preset-grid button\.active \{[^}]*border-color:[^}]*background: var\(--accent-soft\);[^}]*color: var\(--accent-strong\);/);
+  assert.match(renderer, /function syncDocumentWidthOptions\(\)/);
+  assert.match(renderer, /current\.textContent = t\(`width\$\{state\.docWidth/);
+});
+
+test('software font presets update the interface and persist through preferences', () => {
+  assert.match(html, /data-settings-submenu="font"[^>]*aria-haspopup="menu"/);
+  assert.match(html, /data-settings-submenu-panel="font"[^>]*role="menu"/);
+  assert.match(html, /id="fontFamilyCurrent"/);
+  for (const preset of ['system', 'sans', 'serif', 'rounded', 'songti', 'kaiti']) {
+    assert.match(html, new RegExp(`role="menuitemradio" data-font-family="${preset}"`));
+  }
+  assert.match(mainSource, /setFontFamily: fontFamily => desktopRuntime \? Backend\.SetFontFamily\(fontFamily\)/);
+  assert.match(renderer, /const FONT_FAMILY_PRESETS = new Set\(\['system', 'sans', 'serif', 'rounded', 'songti', 'kaiti'\]\)/);
+  assert.match(renderer, /if \(preset === 'songti'\) return '"Songti SC", STSong, SimSun, NSimSun/);
+  assert.match(renderer, /async function setFontFamily\(fontFamily, silent = false, persist = true\)/);
+  assert.match(renderer, /document\.documentElement\.style\.setProperty\('--app-font-family', fontFamilyCSS\(state\.fontFamily\)\)/);
+  assert.match(renderer, /window\.quilliteMarkdown\.setFontFamily\(state\.fontFamily\)/);
+  assert.match(renderer, /setFontFamily\(prefs\.fontFamily \|\| 'system', true, false\)/);
+  assert.match(styles, /body \{[\s\S]*font-family: var\(--app-font-family\);/);
+  assert.match(styles, /\.markdown-body \{ font-family: var\(--app-font-family\);/);
+  assert.match(styles, /\.plain-text \{[^}]*font-family: "Cascadia Code"/);
+  assert.match(styles, /\.markdown-body code:not\(\.hljs\) \{[^}]*font-family: "Cascadia Code"/);
+});
+
+test('large settings use adaptive cascading submenus without removing their existing controls', () => {
+  assert.match(html, /data-settings-submenu="dictionary"[^>]*aria-haspopup="menu"/);
+  assert.match(html, /data-settings-submenu-panel="dictionary"[^>]*role="menu"/);
+  assert.match(html, /id="spellcheckLanguageCurrent"/);
+  assert.match(renderer, /function positionSettingsSubmenu\(trigger, panel\)/);
+  assert.match(renderer, /rightSpace >= panelRect\.width \+ gap/);
+  assert.match(renderer, /function openSettingsSubmenu\(name, focusSelected = false\)/);
+  assert.match(renderer, /if \(submenu\) \{[\s\S]*openSettingsSubmenu\(submenu, true\);[\s\S]*return;/);
+  assert.match(renderer, /\['ArrowRight', 'Enter', ' '\]\.includes\(event\.key\)/);
+  assert.match(renderer, /event\.key !== 'ArrowLeft' && event\.key !== 'Escape'/);
+  assert.match(styles, /\.settings-submenu\.popover \{[^}]*position:/);
+  assert.match(styles, /\.popover \.settings-submenu-trigger\[aria-expanded="true"\]/);
+});
+
+test('the More settings menu aligns to the three-dot button on every platform', () => {
+  assert.match(html, /id="moreButton"[^>]*aria-haspopup="menu"/);
+  assert.match(renderer, /function positionMoreMenu\(\)/);
+  assert.match(renderer, /anchorRect\.right - menuRect\.width/);
+  assert.match(renderer, /els\.moreMenu\.style\.left = `\$\{left\}px`/);
+  assert.match(renderer, /if \(opening\) positionMoreMenu\(\)/);
+  assert.match(renderer, /window\.addEventListener\('resize', positionMoreMenu\)/);
 });
 
 test('English settings menu uses larger readable type and extra width', () => {
@@ -411,7 +456,7 @@ test('code blocks let the user pick a common programming language', () => {
   assert.match(renderer, /function insertCodeBlock\(lang = ''\)/);
   assert.match(renderer, /els\.codeLangMenu\.addEventListener\('click', event => \{\s*event\.stopPropagation\(\);/);
   assert.match(renderer, /insertCodeBlock\(button\.dataset\.codeLang\)/);
-  assert.match(renderer, /document\.addEventListener\('click', \(\) => \{\s*els\.moreMenu\.classList\.add\('hidden'\);\s*els\.codeLangMenu\.classList\.add\('hidden'\);/);
+  assert.match(renderer, /document\.addEventListener\('click', \(\) => \{\s*closeMoreMenu\(\);\s*els\.codeLangMenu\.classList\.add\('hidden'\);/);
   assert.match(styles, /\.code-lang-menu \{ right: auto; top: auto;/);
 });
 

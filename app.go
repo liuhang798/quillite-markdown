@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.6.1"
+	appVersion      = "2.6.2"
 	maxRecent       = 10
 )
 
@@ -100,6 +100,7 @@ type Preferences struct {
 	LastFile             string             `json:"lastFile,omitempty"`
 	ExplorerRoot         string             `json:"explorerRoot,omitempty"`
 	Language             string             `json:"language"`
+	FontFamily           string             `json:"fontFamily,omitempty"`
 	LastUpdateCheck      string             `json:"lastUpdateCheck,omitempty"`
 	SuppressUpdateUntil  string             `json:"suppressUpdateUntil,omitempty"`
 	UsageAnalytics       bool               `json:"usageAnalytics"`
@@ -248,7 +249,7 @@ func (a *App) languageSelectionMarkerPath() string {
 func defaultPreferences() Preferences {
 	return Preferences{
 		RecentFiles: []string{}, PinnedRecentFiles: []string{}, FavoriteFiles: []string{}, DraftFiles: []string{},
-		Language: "zh-CN", UsageAnalytics: true, ImageUploadMode: imageUploadModeLocal, PicGoServerURL: defaultPicGoServerURL,
+		Language: "zh-CN", FontFamily: "system", UsageAnalytics: true, ImageUploadMode: imageUploadModeLocal, PicGoServerURL: defaultPicGoServerURL,
 		ExportSettings: defaultExportSettings(),
 	}
 }
@@ -258,6 +259,15 @@ func normaliseLanguage(language string) string {
 		return "en"
 	}
 	return "zh-CN"
+}
+
+func normaliseFontFamily(fontFamily string) string {
+	switch strings.ToLower(strings.TrimSpace(fontFamily)) {
+	case "sans", "serif", "rounded", "songti", "kaiti":
+		return strings.ToLower(strings.TrimSpace(fontFamily))
+	default:
+		return "system"
+	}
 }
 
 func (a *App) readPreferences() (Preferences, error) {
@@ -280,6 +290,7 @@ func (a *App) readPreferencesUnlocked() (Preferences, error) {
 		return defaultPreferences(), nil
 	}
 	prefs.Language = normaliseLanguage(prefs.Language)
+	prefs.FontFamily = normaliseFontFamily(prefs.FontFamily)
 	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
 	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
 	if normalisedURL, normaliseErr := normalisePicGoServerURL(prefs.PicGoServerURL); normaliseErr == nil {
@@ -321,6 +332,7 @@ func (a *App) writePreferences(prefs Preferences) error {
 
 func (a *App) writePreferencesUnlocked(prefs Preferences) error {
 	prefs.Language = normaliseLanguage(prefs.Language)
+	prefs.FontFamily = normaliseFontFamily(prefs.FontFamily)
 	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
 	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
 	if normalisedURL, err := normalisePicGoServerURL(prefs.PicGoServerURL); err == nil {
@@ -1504,6 +1516,9 @@ func (a *App) GetInitialFile() (*Document, error) {
 	filePath := a.initialFile
 	a.initialFile = ""
 	a.mu.Unlock()
+	// Wails can perform one final native title-bar layout after startup. Align
+	// the macOS traffic lights again once the web toolbar is actually ready.
+	refreshMacWindowChrome()
 	if filePath == "" {
 		return nil, nil
 	}
@@ -1567,6 +1582,14 @@ func (a *App) SetLanguage(language string) (string, error) {
 		}
 	}
 	return a.language, err
+}
+
+func (a *App) SetFontFamily(fontFamily string) (string, error) {
+	normalised := normaliseFontFamily(fontFamily)
+	_, err := a.updatePreferences(func(prefs *Preferences) {
+		prefs.FontFamily = normalised
+	})
+	return normalised, err
 }
 
 func (a *App) RequestQuit() bool {

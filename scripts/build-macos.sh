@@ -9,8 +9,15 @@ if [[ $# -gt 0 ]]; then
   shift
 fi
 app_name="轻阅 Markdown.app"
+target_app="build/bin/${app_name}"
 
 cd "${project_dir}"
+# Wails cleans its own default output name, but a previously normalized Chinese
+# bundle name is outside that cleanup set. Remove only that generated bundle so
+# the discovery below can never select and re-sign a stale build.
+if [[ -d "${target_app}" ]]; then
+  rm -rf -- "${target_app}"
+fi
 wails build -clean -platform "${platform}" -o QuilliteMarkdown -trimpath -nocolour "$@"
 
 source_app="$(find build/bin -maxdepth 1 -type d -name '*.app' -print -quit)"
@@ -20,12 +27,7 @@ if [[ -z "${source_app}" ]]; then
   exit 1
 fi
 
-target_app="build/bin/${app_name}"
 if [[ "${source_app}" != "${target_app}" ]]; then
-  if [[ -e "${target_app}" ]]; then
-    echo "Refusing to overwrite existing ${target_app}" >&2
-    exit 1
-  fi
   mv "${source_app}" "${target_app}"
 fi
 

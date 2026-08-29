@@ -194,6 +194,10 @@ export function SetExportSettings(arg1) {
   return window['go']['main']['App']['SetExportSettings'](arg1);
 }
 
+export function SetFontFamily(arg1) {
+  return window['go']['main']['App']['SetFontFamily'](arg1);
+}
+
 export function SetImageUploadSettings(arg1) {
   return window['go']['main']['App']['SetImageUploadSettings'](arg1);
 }

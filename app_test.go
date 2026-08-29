@@ -1571,6 +1571,38 @@ func TestMacApplicationMenuProvidesConventionalCloseAndQuitShortcuts(t *testing.
 	}
 }
 
+func TestMacTrafficLightsAlignWithWebTitlebar(t *testing.T) {
+	mainSource, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainSource), "TitleBar: mac.TitleBarHiddenInset()") {
+		t.Fatal("macOS must reserve a native inset title-bar region so AppKit keeps the traffic lights aligned")
+	}
+
+	source, err := os.ReadFile("mac_close_darwin.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if !strings.Contains(text, "const CGFloat titlebarHeight = 42.0") ||
+		!strings.Contains(text, "NSHeight(window.frame) - titlebarHeight / 2.0") {
+		t.Fatal("macOS traffic lights must share the 42 pt web title-bar center line")
+	}
+	if !strings.Contains(text, "mdaRefreshWindowChrome") ||
+		!strings.Contains(text, "250 * NSEC_PER_MSEC") {
+		t.Fatal("macOS traffic-light alignment must be reapplied after the frontend becomes ready")
+	}
+
+	appSource, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(appSource), "refreshMacWindowChrome()") {
+		t.Fatal("frontend readiness must trigger the final macOS window-chrome alignment")
+	}
+}
+
 func TestFolderListingAndRecentRemoval(t *testing.T) {
 	app := testApp(t)
 	root := t.TempDir()
@@ -1673,6 +1705,48 @@ func TestLanguagePersistenceAndArgumentDetection(t *testing.T) {
 	}
 	if actual := findMarkdownArgument([]string{"app.exe", "image.png"}); actual != "" {
 		t.Fatalf("unexpected argument detection: %q", actual)
+	}
+}
+
+func TestFontFamilyPersistenceAndValidation(t *testing.T) {
+	app := testApp(t)
+	prefs, err := app.GetPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefs.FontFamily != "system" {
+		t.Fatalf("legacy preferences must default to the system font, got %q", prefs.FontFamily)
+	}
+
+	fontFamily, err := app.SetFontFamily("rounded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fontFamily != "rounded" {
+		t.Fatalf("expected rounded, got %q", fontFamily)
+	}
+	prefs, err = app.GetPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefs.FontFamily != "rounded" {
+		t.Fatalf("font family was not persisted: %#v", prefs)
+	}
+
+	fontFamily, err = app.SetFontFamily("songti")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fontFamily != "songti" {
+		t.Fatalf("expected songti, got %q", fontFamily)
+	}
+
+	fontFamily, err = app.SetFontFamily("unknown-font")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fontFamily != "system" {
+		t.Fatalf("unsupported font family must fall back to system, got %q", fontFamily)
 	}
 }
 
@@ -1906,6 +1980,9 @@ func TestMacBundleUsesProductDisplayNameAndCanonicalFilename(t *testing.T) {
 	}
 	if !strings.Contains(string(buildScript), `app_name="轻阅 Markdown.app"`) {
 		t.Fatal("macOS build wrapper must normalize the bundle filename to 轻阅 Markdown.app")
+	}
+	if !strings.Contains(string(buildScript), `rm -rf -- "${target_app}"`) {
+		t.Fatal("macOS build wrapper must remove the stale normalized bundle before locating the current Wails output")
 	}
 	if !strings.Contains(string(buildScript), `codesign --force --deep --sign -`) ||
 		!strings.Contains(string(buildScript), `codesign --verify --deep --strict`) {

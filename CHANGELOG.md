@@ -6,11 +6,29 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+### English
+
+## [2.6.2] - 2026-08-29
+
+### 简体中文
+
+- 修复 macOS 左上角三个原生窗口按钮偏高、窗口重新激活后又恢复旧位置的问题；改用 AppKit 原生内嵌标题栏承载按钮，并在网页标题栏加载完成及窗口尺寸变化后重新对齐，与书本图标和应用名称保持同一水平中心线。
+- “更多”设置新增软件字体选择，支持系统默认、无衬线、衬线、圆体、宋体和楷体六种跨平台字体预设；界面与 Markdown 正文即时切换，代码内容继续使用等宽字体，选择会写入偏好并在重启后恢复。
+- “更多”设置中的软件字体、文档宽度和词典语言改为“当前值 + 二级菜单”的紧凑样式，悬停、点击或键盘均可展开；子菜单会按窗口剩余空间自动选择左右方向，避免设置内容过长或超出屏幕。
+- 修复鼠标移入已展开二级菜单触发器后紧接着点击会反而关闭菜单的问题；点击现在始终保持对应二级菜单打开并聚焦当前选项。
+- 修复 macOS“更多”设置弹框沿用 Windows 固定右边距、导致弹框偏离三个点按钮的问题；现在按按钮实际位置对齐，并在窗口缩放时保持贴边可见。
+- 修复 macOS 重复本地打包时可能误用并重新签名上一次已改名应用包、导致新代码未进入安装包的问题；统一构建脚本现在会先清理精确的旧生成包，再规范化本次 Wails 输出。
 - 文档列表改用无底色的主题色线性图标，收窄图标占位以显示更多文件名；保留选中描边、收藏和置顶标记，失效文件使用灰色图标区分。
 - 首页采用无阴影的平面样式：移除纸张插画与卡片投影、背景光晕和快捷键双层底边，统一细边框与圆角，改善快捷键字号、行距和文字对比度；明暗主题与系统快捷键保持适配。
 
 ### English
 
+- Fixed the three native macOS window controls sitting too high and returning to that position after window activation. An AppKit inset title-bar region now owns the controls, with alignment refreshed after the web title bar loads and window layout changes, keeping the same vertical center as the book icon and app name.
+- More settings now offers six cross-platform app-font presets: System, Sans serif, Serif, Rounded, Song style, and Kai style. The interface and Markdown prose update immediately while code remains monospaced, and the choice is restored from preferences after restart.
+- App font, document width, and dictionary language now use compact current-value rows with cascading submenus. They open by hover, click, or keyboard and automatically choose the side with available viewport space, shortening the More menu without losing any options.
+- Fixed a click immediately following hover closing an already revealed settings flyout. Clicking a parent row now always keeps its flyout open and focuses the current choice.
+- Fixed the More settings popover inheriting a Windows-oriented fixed right offset on macOS. It now aligns to the actual three-dot button and stays within the viewport while resizing.
+- Fixed repeated local macOS builds potentially selecting and re-signing the previous renamed app bundle, leaving new code out of the installer. The shared build script now removes only that stale generated bundle before normalizing the current Wails output.
 - Document lists now use theme-colored outline icons without background tiles, leaving more room for filenames. Selection outlines, favorites, and pin markers are retained; missing files use muted icons.
 - Refined Home with flat, shadow-free surfaces: removed illustration and card shadows, the background glow, and raised keycap edges. Consistent thin borders and corners, clearer shortcut typography, spacing, and contrast retain light/dark theme and platform shortcut support.
 
@@ -754,3 +772,4 @@ All notable changes to Quillite Markdown are documented here.
 [2.5.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.5.2
 [2.6.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.0
 [2.6.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.1
+[2.6.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.2

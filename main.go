@@ -47,7 +47,10 @@ func main() {
 			Theme: windows.SystemDefault, DisableFramelessWindowDecorations: false,
 			IsZoomControlEnabled: false, DisablePinchZoom: true,
 		},
-		Mac:  &mac.Options{TitleBar: mac.TitleBarHidden(), OnFileOpen: app.onFileOpen},
+		// The inset native title bar gives AppKit a real 42 pt toolbar region, so
+		// the traffic lights remain vertically centred after activation, resize,
+		// Spaces changes, and fullscreen transitions.
+		Mac:  &mac.Options{TitleBar: mac.TitleBarHiddenInset(), OnFileOpen: app.onFileOpen},
 		Bind: []interface{}{app},
 	})
 	if err != nil {

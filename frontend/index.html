@@ -49,7 +49,7 @@
         <svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         <svg class="moon-icon" viewBox="0 0 24 24"><path d="M20 15.4A8 8 0 0 1 8.6 4 8 8 0 1 0 20 15.4Z"/></svg>
       </button>
-      <button id="moreButton" class="icon-button" data-i18n-title="moreTitle" title="更多选项">
+      <button id="moreButton" class="icon-button" data-i18n-title="moreTitle" title="更多选项" aria-haspopup="menu">
         <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
       </button>
     </div>
@@ -359,6 +359,21 @@
     <button class="language-option" data-language="zh-CN">简体中文 <span class="language-check">✓</span></button>
     <button class="language-option" data-language="en">English <span class="language-check">✓</span></button>
     <hr>
+    <div class="settings-submenu-group">
+      <button type="button" class="settings-submenu-trigger" data-settings-submenu="font" aria-haspopup="menu" aria-expanded="false">
+        <span class="menu-label" data-i18n="softwareFont">软件字体</span>
+        <span class="settings-submenu-summary"><span id="fontFamilyCurrent" data-i18n="fontSystem">系统默认</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      </button>
+      <div class="settings-submenu popover hidden" data-settings-submenu-panel="font" role="menu" data-i18n-aria-label="softwareFont" aria-label="软件字体">
+        <button type="button" role="menuitemradio" data-font-family="system" aria-checked="true"><span data-i18n="fontSystem">系统默认</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-font-family="sans" aria-checked="false"><span data-i18n="fontSans">无衬线</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-font-family="serif" aria-checked="false"><span data-i18n="fontSerif">衬线</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-font-family="rounded" aria-checked="false"><span data-i18n="fontRounded">圆体</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-font-family="songti" aria-checked="false"><span data-i18n="fontSongti">宋体</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-font-family="kaiti" aria-checked="false"><span data-i18n="fontKaiti">楷体</span><span class="settings-option-check">✓</span></button>
+      </div>
+    </div>
+    <hr>
     <button data-action="default-app"><span class="menu-label" data-i18n="defaultApp">设为默认 MD 应用</span> <span data-i18n="windowsSettings">Windows 设置</span></button>
     <hr>
     <div class="font-scale-control" role="group" data-i18n-aria-label="textSizePresets" aria-label="文字大小调节">
@@ -374,23 +389,33 @@
       <button type="button" class="font-scale-auto" role="menuitemradio" data-font-scale="auto" aria-checked="false"><span class="menu-label" data-i18n="fontScaleAuto">自动适配显示器</span><span id="fontScaleAutoValue">100%</span></button>
     </div>
     <hr>
-    <div class="popover-label" data-i18n="docWidth">文档宽度</div>
-    <div class="doc-width-preset-grid" role="group" data-i18n-aria-label="docWidth" aria-label="文档宽度">
-      <button type="button" class="width-option" role="menuitemradio" data-doc-width="narrow" aria-checked="false" data-i18n="widthNarrow">窄</button>
-      <button type="button" class="width-option" role="menuitemradio" data-doc-width="medium" aria-checked="false" data-i18n="widthMedium">中</button>
-      <button type="button" class="width-option" role="menuitemradio" data-doc-width="wide" aria-checked="false" data-i18n="widthWide">宽</button>
-      <button type="button" class="width-option" role="menuitemradio" data-doc-width="full" aria-checked="false" data-i18n="widthFull">全宽</button>
+    <div class="settings-submenu-group">
+      <button type="button" class="settings-submenu-trigger" data-settings-submenu="width" aria-haspopup="menu" aria-expanded="false">
+        <span class="menu-label" data-i18n="docWidth">文档宽度</span>
+        <span class="settings-submenu-summary"><span id="docWidthCurrent" data-i18n="widthMedium">中</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      </button>
+      <div class="settings-submenu popover hidden" data-settings-submenu-panel="width" role="menu" data-i18n-aria-label="docWidth" aria-label="文档宽度">
+        <button type="button" role="menuitemradio" data-doc-width="narrow" aria-checked="false"><span data-i18n="widthNarrow">窄</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-doc-width="medium" aria-checked="true"><span data-i18n="widthMedium">中</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-doc-width="wide" aria-checked="false"><span data-i18n="widthWide">宽</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-doc-width="full" aria-checked="false"><span data-i18n="widthFull">全宽</span><span class="settings-option-check">✓</span></button>
+      </div>
     </div>
     <hr>
     <div class="popover-label" data-i18n="spellcheck">拼写检查</div>
     <button type="button" class="spellcheck-toggle" role="menuitemcheckbox" data-spellcheck-toggle aria-checked="true">
       <span class="menu-label" data-i18n="spellcheckEnabled">标记英文错词</span><span class="spellcheck-check" aria-hidden="true">✓</span>
     </button>
-    <div class="popover-label spellcheck-language-label" data-i18n="spellcheckLanguage">词典语言</div>
-    <div class="spellcheck-language-options" role="group" data-i18n-aria-label="spellcheckLanguage" aria-label="词典语言">
-      <button type="button" role="menuitemradio" data-spellcheck-language="auto" aria-checked="true" data-i18n="spellcheckAuto">自动</button>
-      <button type="button" role="menuitemradio" data-spellcheck-language="en-US" aria-checked="false" data-i18n="spellcheckUS">English (US)</button>
-      <button type="button" role="menuitemradio" data-spellcheck-language="en-GB" aria-checked="false" data-i18n="spellcheckGB">English (UK)</button>
+    <div class="settings-submenu-group">
+      <button type="button" class="settings-submenu-trigger" data-settings-submenu="dictionary" aria-haspopup="menu" aria-expanded="false">
+        <span class="menu-label" data-i18n="spellcheckLanguage">词典语言</span>
+        <span class="settings-submenu-summary"><span id="spellcheckLanguageCurrent" data-i18n="spellcheckAuto">自动</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      </button>
+      <div class="settings-submenu popover hidden" data-settings-submenu-panel="dictionary" role="menu" data-i18n-aria-label="spellcheckLanguage" aria-label="词典语言">
+        <button type="button" role="menuitemradio" data-spellcheck-language="auto" aria-checked="true"><span data-i18n="spellcheckAuto">自动</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-spellcheck-language="en-US" aria-checked="false"><span data-i18n="spellcheckUS">English (US)</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-spellcheck-language="en-GB" aria-checked="false"><span data-i18n="spellcheckGB">English (UK)</span><span class="settings-option-check">✓</span></button>
+      </div>
     </div>
     <button type="button" data-spellcheck-clear><span class="menu-label" data-i18n="clearPersonalDictionary">清空个人词典</span><span id="personalDictionaryCount">0 个词</span></button>
     <hr>
@@ -401,7 +426,7 @@
     <button data-action="image-upload-settings"><span class="menu-label" data-i18n="imageUploadSettings">图床设置</span> <span>PicGo</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.6.1</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.6.2</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -537,7 +562,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.6.1</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.6.2</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -593,7 +618,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.6.1</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.6.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -615,9 +640,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.6.1</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.6.2</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.6.1</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.6.2</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

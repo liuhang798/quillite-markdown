@@ -314,6 +314,7 @@ export namespace main {
 	    lastFile?: string;
 	    explorerRoot?: string;
 	    language: string;
+	    fontFamily?: string;
 	    lastUpdateCheck?: string;
 	    suppressUpdateUntil?: string;
 	    usageAnalytics: boolean;
@@ -338,6 +339,7 @@ export namespace main {
 	        this.lastFile = source["lastFile"];
 	        this.explorerRoot = source["explorerRoot"];
 	        this.language = source["language"];
+	        this.fontFamily = source["fontFamily"];
 	        this.lastUpdateCheck = source["lastUpdateCheck"];
 	        this.suppressUpdateUntil = source["suppressUpdateUntil"];
 	        this.usageAnalytics = source["usageAnalytics"];

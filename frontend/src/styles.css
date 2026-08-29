@@ -1,5 +1,6 @@
 :root {
   --font-scale: 1;
+  --app-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
   --doc-width: 850px;
   --editor-doc-width: 700px;
   --titlebar-height: 52px;
@@ -156,7 +157,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
-  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-family: var(--app-font-family);
   color: var(--text);
   background: var(--bg);
   transition: background .25s ease, color .25s ease;
@@ -193,7 +194,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 /* macOS owns its title-bar controls and application menu. Keep web content clear
    of the native traffic lights while retaining the shared toolbar and styling. */
 :root[data-platform="darwin"] body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+  font-family: var(--app-font-family);
 }
 :root[data-platform="darwin"] {
   --titlebar-height: 42px;
@@ -342,8 +343,8 @@ body.resizing-panes .sidebar, body.resizing-panes .toc-panel { transition: none;
 .paper-front span:nth-child(3) { width: 74%; }
 .leaf-float { position: absolute; right: 0; top: 0; width: 48px; height: 48px; border-radius: 50%; background: var(--accent-strong); color: var(--accent-contrast); display: grid; place-items: center; }
 .leaf-float svg { width: 31px; height: 31px; stroke: none; fill: currentColor; }
-.welcome h1 { font-family: Georgia, "STSong", serif; font-weight: 500; font-size: clamp(30px, 3.4vw, 43px); letter-spacing: 1px; margin: 9px 0 8px; }
-.welcome-hero-copy > p { max-width: 650px; color: var(--muted); font-family: Georgia, "STSong", serif; font-size: 14px; line-height: 1.65; margin: 0 0 16px; }
+.welcome h1 { font-family: var(--app-font-family); font-weight: 500; font-size: clamp(30px, 3.4vw, 43px); letter-spacing: 1px; margin: 9px 0 8px; }
+.welcome-hero-copy > p { max-width: 650px; color: var(--muted); font-family: var(--app-font-family); font-size: 14px; line-height: 1.65; margin: 0 0 16px; }
 .welcome-actions { display: flex; gap: 10px; }
 .large-button { border: 0; min-width: 148px; height: 43px; border-radius: 10px; padding: 0 18px; cursor: pointer; font-size: 13px; font-weight: 650; }
 .large-button.secondary { background: var(--paper-strong); border: 1px solid var(--line); }
@@ -404,8 +405,8 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
   .document-actions-more { display: block; }
 }
 
-.markdown-body { font-family: Georgia, "Source Han Serif SC", "Noto Serif CJK SC", "STSong", serif; font-size: calc(17px * var(--font-scale)); line-height: 1.86; letter-spacing: .02em; user-select: text; color: var(--text); overflow-wrap: break-word; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { font-family: "Segoe UI Variable", "Microsoft YaHei UI", sans-serif; scroll-margin-top: 24px; line-height: 1.35; color: var(--text); letter-spacing: -.025em; }
+.markdown-body { font-family: var(--app-font-family); font-size: calc(17px * var(--font-scale)); line-height: 1.86; letter-spacing: .02em; user-select: text; color: var(--text); overflow-wrap: break-word; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { font-family: var(--app-font-family); scroll-margin-top: 24px; line-height: 1.35; color: var(--text); letter-spacing: -.025em; }
 .markdown-body h1 { font-size: calc(38px * var(--font-scale)); font-weight: 720; margin: 0 0 30px; }
 .markdown-body h2 { font-size: calc(25px * var(--font-scale)); font-weight: 690; margin: 2.2em 0 .8em; padding-bottom: .45em; border-bottom: 1px solid var(--line); }
 .markdown-body h3 { font-size: calc(20px * var(--font-scale)); margin: 1.8em 0 .55em; }
@@ -480,7 +481,7 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .markdown-body img { display: block; max-width: 100%; margin: 2em auto; border-radius: 10px; box-shadow: var(--shadow); }
 .markdown-body img.local-image-loading { min-width: 180px; min-height: 72px; background: linear-gradient(90deg, var(--panel), var(--paper-strong), var(--panel)); box-shadow: none; }
 .markdown-body img.local-image-error { min-width: 180px; min-height: 48px; padding: 12px; border: 1px dashed var(--line); background: var(--panel); box-shadow: none; }
-.markdown-body table { width: 100%; border-collapse: collapse; margin: 1.8em 0; font-family: "Segoe UI", sans-serif; font-size: .88em; }
+.markdown-body table { width: 100%; border-collapse: collapse; margin: 1.8em 0; font-family: var(--app-font-family); font-size: .88em; }
 .markdown-body th, .markdown-body td { padding: 10px 13px; border: 1px solid var(--line); text-align: left; }
 .markdown-body th { background: var(--panel); font-weight: 650; }
 .markdown-table-scroll { max-width: 100%; margin: 1.8em 0; overflow-x: auto; border-radius: 8px; scrollbar-width: thin; }
@@ -707,17 +708,24 @@ html[lang="en"] #moreMenu .popover-label { font-size: 10.5px; }
 .font-scale-shortcut em { color: var(--muted); font-size: 10.5px; font-style: normal; white-space: nowrap; }
 .font-scale-control .font-scale-auto { border: 1px solid transparent; }
 .font-scale-control .font-scale-auto.active { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
-.doc-width-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px 5px 2px; }
-.popover .doc-width-preset-grid button { min-width: 0; justify-content: center; padding: 8px 5px; border: 1px solid var(--line); color: var(--muted); }
-.popover .doc-width-preset-grid button.active { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
 .spellcheck-toggle { align-items: center; }
 .popover .spellcheck-toggle .spellcheck-check { opacity: 0; color: var(--accent-strong); font-size: 12px; font-weight: 800; }
 .popover .spellcheck-toggle.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
 .popover .spellcheck-toggle.active .spellcheck-check { opacity: 1; }
-.spellcheck-language-label { padding-top: 9px; }
-.spellcheck-language-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 2px 5px 6px; }
-.popover .spellcheck-language-options button { min-width: 0; align-items: center; justify-content: center; padding: 7px 3px; border: 1px solid var(--line); color: var(--muted); font-size: 10px; text-align: center; white-space: nowrap; }
-.popover .spellcheck-language-options button.active { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; }
+.settings-submenu-group { position: relative; }
+.popover .settings-submenu-trigger { align-items: center; }
+.popover .settings-submenu-trigger[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent-strong); }
+.popover .settings-submenu-summary { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 5px; color: var(--faint); }
+.popover .settings-submenu-summary > span { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.popover .settings-submenu-summary svg { width: 13px; height: 13px; flex: 0 0 13px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.settings-submenu.popover { position: fixed; z-index: 97; right: auto; width: 176px; max-height: calc(100vh - 16px); overflow-y: auto; padding: 5px; }
+.settings-submenu.popover button { align-items: center; color: var(--text); }
+.settings-submenu.popover button > span:first-child { color: inherit; font-size: 12px; }
+.settings-submenu.popover .settings-option-check { opacity: 0; color: var(--accent-strong); font-size: 12px; font-weight: 800; }
+.settings-submenu.popover button.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
+.settings-submenu.popover button.active .settings-option-check { opacity: 1; }
+html[lang="en"] .settings-submenu.popover { width: 194px; }
+html[lang="en"] #moreMenu .settings-submenu.popover button > span:first-child { font-size: 13px; }
 .cm-spelling-error { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: #d64141; text-decoration-thickness: 1.4px; text-underline-offset: 3px; }
 .recent-context-menu { z-index: 90; right: auto; width: 190px; }
 .recent-context-menu button { align-items: center; justify-content: flex-start; gap: 10px; color: var(--text); }

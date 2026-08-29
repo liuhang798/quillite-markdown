@@ -58,6 +58,14 @@ The macOS installer image carries a metadata no-index marker. On launch, the ins
 
 Documents and folders opened through macOS system panels, Finder, or file associations are persisted as native security-scoped bookmarks. Recent, Favorites, and Explorer silently restore read and edit access after relaunch and refresh stale bookmarks automatically. A preselected system panel is needed only for legacy records or when an unsigned update changes the app identity.
 
+## What's new in 2.6.2
+
+- More settings now offers six persistent app-font presets: System, Sans serif, Serif, Rounded, Song style, and Kai style, updating both the interface and Markdown prose immediately.
+- App font, document width, and dictionary language now use compact adaptive flyouts. The release also fixes the macOS More popover drifting away from its three-dot button and clicks unexpectedly closing a revealed submenu.
+- Fixed the three native macOS window controls sitting too high or returning there after activation. An AppKit-owned inset title bar keeps them centered with the book mark and product name.
+- Refined Home and document lists with flatter surfaces, clearer outline icons, more filename space, and improved light/dark contrast.
+- Fixed repeated local macOS builds potentially reusing a previous app bundle, ensuring current code is always embedded in the Universal package.
+
 ## What's new in 2.6.1
 
 - Flowcharts, state diagrams, and mind maps now use a visual node canvas for adding, connecting, dragging, and editing nodes without hand-writing Mermaid; sequence, Gantt, timeline, Kanban, and common data charts retain structured field editors.
@@ -172,6 +180,7 @@ Documents and folders opened through macOS system panels, Finder, or file associ
 - A canvas badge marks every template with visual editing. State diagrams and mind maps now share the complete node canvas used by flowcharts, including full screen, zoom, free panning, node dragging, select-all group movement, connections, and automatic layout. State diagrams retain transition semantics, while mind maps retain a cycle-safe parent-child hierarchy; all three canvas types reopen from document fences and save in place. Sequence, Gantt, timeline, Kanban, pie, bar, line, and doughnut charts expose structured fields and data rows with a live preview. Advanced syntax stays safely in Source mode rather than being converted with data loss.
 - Diagram Builder also includes 15 offline data charts: bar, line, stacked bar, area, scatter, diverging comparison, bar-and-line combo, funnel, heatmap, box plot, bubble, gauge, doughnut, waterfall, and word cloud. Editable fenced `echarts` JSON stays in the Markdown file, renders locally as SVG, and exports consistently to Word, HTML, and PDF. [Open the data-chart examples](docs/ECharts-数据图表案例.md).
 - Three built-in reference shortcuts—Charts, Formulas, and Formatting—cover all 37 diagram templates, all 79 Academic Formula templates, and the Markdown/HTML formats supported by the editor. Opening a reference does not add it to Recent Reading.
+- More settings offers System, Sans serif, Serif, Rounded, Song-style, and Kai-style app fonts. The interface and Markdown prose update immediately and remember the choice, while code remains monospaced.
 - Close Preview returns from the reading screen to Home without removing the document from Recent. Home now provides the three complete examples together with a comprehensive shortcut guide for files, reading, editing, and text formatting.
 - Inserting a code block lets you pick a common programming language (JavaScript, Python, Go, Java, C/C++, Rust, HTML, SQL, and more) and writes a language-tagged fenced block with highlighting. An “Exit editing” button in the editor header returns you to the immersive reading view at any time.
 - Undo from the toolbar or with `Ctrl/Cmd + Z`; each document has isolated history that stops at the originally loaded content.

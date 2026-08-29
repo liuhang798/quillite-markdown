@@ -5,3 +5,5 @@ package main
 func installMacFullscreenCloseWorkaround() {}
 
 func closeMacWindow() {}
+
+func refreshMacWindowChrome() {}

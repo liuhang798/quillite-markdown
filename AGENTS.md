@@ -6,7 +6,7 @@
 
 - 项目名称：轻阅 Markdown / Quillite Markdown
 - 仓库：`https://github.com/liuhang798/quillite-markdown`
-- 当前版本：`2.6.0`
+- 当前版本：`2.6.2`
 - 开源协议：MIT
 - 产品定位：极度轻量、美观、跨平台的 Markdown 阅读与编辑工具
 - 支持平台：Windows x64、macOS Universal、Linux x64
@@ -158,6 +158,7 @@ app.go / updates.go（Go 后端）
 - `draftFiles`：自动创建但尚未完成“另存为”替换的草稿路径。
 - `lastFile`：最近一个文档。
 - `language`：`zh-CN` 或 `en`。
+- `fontFamily`：软件字体预设，支持 `system`、`sans`、`serif`、`rounded`、`songti`、`kaiti`；缺失或非法值回退为 `system`。
 - `lastUpdateCheck`：上次更新检查时间。
 - `suppressUpdateUntil`：暂停自动更新提醒的截止时间。
 - `usageAnalytics`：是否允许软件异常时自动回传已清理的错误日志；不控制每日活跃统计。
@@ -212,7 +213,7 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 ### 系统
 
 - `ShowInFolder(path)`、`OpenExternal(url)`、`OpenDefaultApps()`、`Print()`。
-- `SetTheme(dark)`、`SetLanguage(language)`、`RequestQuit()`。
+- `SetTheme(dark)`、`SetLanguage(language)`、`SetFontFamily(fontFamily)`、`RequestQuit()`。
 - `GetInitialFile()`、`GetStartupMode()`、`Dirname(path)`。
 
 ### 更新
@@ -230,7 +231,7 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 - `files`、`recentFiles`、`pinnedRecentFiles`、`favoriteFiles`、`explorerFiles`：侧栏数据。
 - `root`、`sidebarMode`：资源浏览器状态。
 - `editing`、`dirty`、`savedContent`、`saving`：编辑与保存状态。
-- `dark`、`fontScale`、`language`：用户界面偏好。
+- `dark`、`fontScale`、`fontFamily`、`language`：用户界面偏好。
 - `updateInfo`：更新弹窗内容。
 
 当前项目没有状态管理库。新增状态应优先扩展现有 `state`，避免出现第二套状态源。

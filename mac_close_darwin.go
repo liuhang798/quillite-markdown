@@ -20,6 +20,7 @@ static NSWindow *mdaFullscreenCloseWindow = nil;
 static char mdaTrafficLightObserversKey;
 
 static void mdaFinishFullscreenClose(NSWindow *window);
+static NSWindow *mdaApplicationWindow(void);
 
 static void mdaCenterTrafficLights(NSWindow *window) {
     if (window == nil || window.contentView == nil) {
@@ -27,8 +28,10 @@ static void mdaCenterTrafficLights(NSWindow *window) {
     }
 
     const CGFloat titlebarHeight = 42.0;
-    NSRect contentInWindow = [window.contentView convertRect:window.contentView.bounds toView:nil];
-    CGFloat targetCenterY = NSMaxY(contentInWindow) - titlebarHeight / 2.0;
+    // FullSizeContent makes the web title bar start at the top edge of the
+    // complete NSWindow, not at contentLayoutRect. Use that same edge as the
+    // reference so the native controls line up with the 42 pt web toolbar.
+    CGFloat targetCenterY = NSHeight(window.frame) - titlebarHeight / 2.0;
     const NSWindowButton buttonTypes[] = {
         NSWindowCloseButton,
         NSWindowMiniaturizeButton,
@@ -78,6 +81,22 @@ static void mdaInstallTrafficLightCentering(NSWindow *window) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         mdaCenterTrafficLights(window);
+    });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        mdaCenterTrafficLights(window);
+    });
+}
+
+static void mdaRefreshWindowChrome(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSWindow *window = mdaApplicationWindow();
+        if (window == nil) {
+            return;
+        }
+        mdaCenterTrafficLights(window);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+            mdaCenterTrafficLights(window);
+        });
     });
 }
 
@@ -257,4 +276,8 @@ func installMacFullscreenCloseWorkaround() {
 
 func closeMacWindow() {
 	C.mdaPerformClose()
+}
+
+func refreshMacWindowChrome() {
+	C.mdaRefreshWindowChrome()
 }
