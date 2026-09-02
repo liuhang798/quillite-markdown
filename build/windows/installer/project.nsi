@@ -28,7 +28,7 @@
 !define INFO_PROJECTNAME    "quillite-markdown"
 !define INFO_COMPANYNAME    "Quillite Open Source"
 !define INFO_PRODUCTNAME    "轻阅 Markdown"
-!define INFO_PRODUCTVERSION "2.6.2"
+!define INFO_PRODUCTVERSION "2.7.0"
 !define INFO_COPYRIGHT      "Copyright © 2026 柳航"
 !define PRODUCT_EXECUTABLE  "QuilliteMarkdown.exe"
 !define LEGACY_PRODUCTNAME  "MD阅读助手"
@@ -53,6 +53,8 @@
 !define WAILS_WIN10_REQUIRED "轻阅 Markdown 仅支持 Windows 10（Server 2016）及更高版本。"
 !define WAILS_ARCHITECTURE_NOT_SUPPORTED "当前 Windows 系统架构不受支持。支持的架构：${ARCH}"
 !define WAILS_INSTALL_WEBVIEW_DETAILPRINT "正在安装 Microsoft WebView2 运行时"
+SetCompressor /SOLID lzma
+SetDatablockOptimize on
 !include "wails_tools.nsh"
 
 # The version information for this two must consist of 4 parts
@@ -93,12 +95,28 @@ LangString FinishRunText ${LANG_SIMPCHINESE} "运行 ${INFO_PRODUCTNAME}"
 LangString CloseRunningAppPrompt ${LANG_SIMPCHINESE} "${INFO_PRODUCTNAME} 仍在运行，升级前必须关闭。是否立即关闭并继续安装？未保存的修改可能会丢失。"
 LangString CloseRunningAppFailed ${LANG_SIMPCHINESE} "无法关闭正在运行的软件。请手动关闭后点击重试。"
 
+Var ExternalCancelFile
+Var ExternalInstallDir
+Var ExternalAppLanguage
+
+!macro ExitIfExternalCancelled LABEL
+    StrCmp $ExternalCancelFile "" externalCancelDone_${LABEL}
+    IfFileExists "$ExternalCancelFile" 0 externalCancelDone_${LABEL}
+    SetErrorLevel 66
+    Quit
+    externalCancelDone_${LABEL}:
+!macroend
+
 ## The following two statements can be used to sign the installer and the uninstaller. The path to the binaries are provided in %1
 #!uninstfinalize 'signtool --file "%1"'
 #!finalize 'signtool --file "%1"'
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\bin\quillite-markdown-${INFO_PRODUCTVERSION}-windows-${ARCH}.exe" # Keep release filenames ASCII-safe for CI.
+!ifdef ARG_WAILS_INSTALLER_OUTPUT
+  OutFile "${ARG_WAILS_INSTALLER_OUTPUT}"
+!else
+  OutFile "..\..\bin\quillite-markdown-${INFO_PRODUCTVERSION}-windows-${ARCH}.exe" # Keep release filenames ASCII-safe for CI.
+!endif
 !ifdef WAILS_INSTALL_SCOPE
   !if "${WAILS_INSTALL_SCOPE}" == "user"
     InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
@@ -113,8 +131,14 @@ ShowInstDetails nevershow # Hide NSIS' English technical log; the localized prog
 
 Function .onInit
    StrCpy $LANGUAGE ${LANG_SIMPCHINESE}
+   ${GetOptions} $CMDLINE "/CANCELFILE=" $ExternalCancelFile
+   ${GetOptions} $CMDLINE "/INSTALLDIR=" $ExternalInstallDir
+   ${GetOptions} $CMDLINE "/APP-LANGUAGE=" $ExternalAppLanguage
    !insertmacro wails.checkArchitecture
    Call ResolvePreviousInstallDir
+   StrCmp $ExternalInstallDir "" externalInstallDirDone
+   StrCpy $INSTDIR "$ExternalInstallDir"
+   externalInstallDirDone:
 FunctionEnd
 
 Function un.onInit
@@ -231,19 +255,24 @@ FunctionEnd
 Section
     !insertmacro wails.setShellContext
 
+    !insertmacro ExitIfExternalCancelled 01
     Call EnsureApplicationClosed
+    !insertmacro ExitIfExternalCancelled 02
 
     Call RemoveLegacyUninstallEntries
 
+    !insertmacro ExitIfExternalCancelled 03
     !insertmacro wails.webview2runtime
+    !insertmacro ExitIfExternalCancelled 04
 
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
+    !insertmacro ExitIfExternalCancelled 05
 
     # Preserve preferences written by MD阅读助手 during the product rename.
-    # Windows setup is Simplified Chinese only, so only a genuinely fresh
-    # installation receives the default Chinese preferences.
+    # Only a genuinely fresh installation receives the language currently
+    # selected in the bilingual launcher. Upgrades keep the user's preference.
     CreateDirectory "$APPDATA\${INFO_PRODUCTNAME}"
     Delete "$APPDATA\${INFO_PRODUCTNAME}\first-run-language.flag"
     IfFileExists "$APPDATA\${INFO_PRODUCTNAME}\preferences.json" installerLanguageDone
@@ -251,8 +280,14 @@ Section
     CopyFiles /SILENT "$APPDATA\${LEGACY_PRODUCTNAME}\preferences.json" "$APPDATA\${INFO_PRODUCTNAME}\preferences.json"
     Goto installerLanguageDone
     installerFreshPreferences:
+    StrCmp $ExternalAppLanguage "en" installerFreshPreferencesEnglish
     FileOpen $0 "$APPDATA\${INFO_PRODUCTNAME}\preferences.json" w
     FileWrite $0 "{$\"recentFiles$\":[],$\"favoriteFiles$\":[],$\"draftFiles$\":[],$\"language$\":$\"zh-CN$\"}"
+    FileClose $0
+    Goto installerLanguageDone
+    installerFreshPreferencesEnglish:
+    FileOpen $0 "$APPDATA\${INFO_PRODUCTNAME}\preferences.json" w
+    FileWrite $0 "{$\"recentFiles$\":[],$\"favoriteFiles$\":[],$\"draftFiles$\":[],$\"language$\":$\"en$\"}"
     FileClose $0
     installerLanguageDone:
 
@@ -260,6 +295,7 @@ Section
     # user execution-level define. Try to remove both locations. If Windows
     # does not permit deleting the public link, keep it and do not create a
     # second per-user link.
+    !insertmacro ExitIfExternalCancelled 06
     SetShellVarContext current
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
@@ -292,11 +328,13 @@ Section
     Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"
     Delete /REBOOTOK "$INSTDIR\${LEGACY_EXECUTABLE}"
 
+    !insertmacro ExitIfExternalCancelled 07
     !insertmacro AssociateMarkdownFiles
     Delete /REBOOTOK "$INSTDIR\mdFileIcon.ico"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
     !insertmacro wails.associateCustomProtocols
 
+    !insertmacro ExitIfExternalCancelled 08
     !insertmacro wails.writeUninstaller
     # Persist the actual directory selected by the user so future upgrades
     # open the directory page at the same location.

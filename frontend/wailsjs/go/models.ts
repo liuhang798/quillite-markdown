@@ -1,5 +1,144 @@
 export namespace main {
-
+	
+	export class AIDocumentReviewRequest {
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIDocumentReviewRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	    }
+	}
+	export class AIDocumentSuggestion {
+	    id: string;
+	    category: string;
+	    severity: string;
+	    original: string;
+	    replacement: string;
+	    reason: string;
+	    occurrence: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIDocumentSuggestion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.category = source["category"];
+	        this.severity = source["severity"];
+	        this.original = source["original"];
+	        this.replacement = source["replacement"];
+	        this.reason = source["reason"];
+	        this.occurrence = source["occurrence"];
+	    }
+	}
+	export class AIDocumentReviewResponse {
+	    suggestions: AIDocumentSuggestion[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AIDocumentReviewResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.suggestions = this.convertValues(source["suggestions"], AIDocumentSuggestion);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class AIRewriteRequest {
+	    action: string;
+	    text: string;
+	    instruction: string;
+	    targetLanguage: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIRewriteRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.action = source["action"];
+	        this.text = source["text"];
+	        this.instruction = source["instruction"];
+	        this.targetLanguage = source["targetLanguage"];
+	    }
+	}
+	export class AIRewriteResponse {
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIRewriteResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	    }
+	}
+	export class AISettings {
+	    provider: string;
+	    baseUrl: string;
+	    model: string;
+	    hasApiKey: boolean;
+	    maskedApiKey?: string;
+	    isDefault: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AISettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.baseUrl = source["baseUrl"];
+	        this.model = source["model"];
+	        this.hasApiKey = source["hasApiKey"];
+	        this.maskedApiKey = source["maskedApiKey"];
+	        this.isDefault = source["isDefault"];
+	    }
+	}
+	export class AISettingsInput {
+	    provider: string;
+	    baseUrl: string;
+	    model: string;
+	    apiKey: string;
+	    clearApiKey: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AISettingsInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.baseUrl = source["baseUrl"];
+	        this.model = source["model"];
+	        this.apiKey = source["apiKey"];
+	        this.clearApiKey = source["clearApiKey"];
+	    }
+	}
 	export class Document {
 	    path: string;
 	    name: string;
@@ -9,11 +148,11 @@ export namespace main {
 	    size: number;
 	    replacedPath?: string;
 	    readOnly?: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -37,11 +176,11 @@ export namespace main {
 	    customExtension?: string;
 	    imageScale?: number;
 	    imageLayout?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportPreset(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -59,17 +198,17 @@ export namespace main {
 	export class ExportSettings {
 	    pandocPath?: string;
 	    presets?: ExportPreset[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pandocPath = source["pandocPath"];
 	        this.presets = this.convertValues(source["presets"], ExportPreset);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -92,11 +231,11 @@ export namespace main {
 	    path: string;
 	    name: string;
 	    size: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FeedbackImageSelection(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -110,11 +249,11 @@ export namespace main {
 	    email: string;
 	    phone: string;
 	    imagePaths: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FeedbackSubmission(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.category = source["category"];
@@ -128,11 +267,11 @@ export namespace main {
 	    appVersion: string;
 	    os: string;
 	    systemVersion: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FeedbackSystemInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.appVersion = source["appVersion"];
@@ -145,11 +284,11 @@ export namespace main {
 	    name: string;
 	    relativePath: string;
 	    directory: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FolderFile(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -162,18 +301,18 @@ export namespace main {
 	    root: string;
 	    name: string;
 	    files: FolderFile[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FolderResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.root = source["root"];
 	        this.name = source["name"];
 	        this.files = this.convertValues(source["files"], FolderFile);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -197,11 +336,11 @@ export namespace main {
 	    serverUrl: string;
 	    hasSecret: boolean;
 	    hasCloudToken: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ImageUploadSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -215,11 +354,11 @@ export namespace main {
 	    serverUrl: string;
 	    secret: string;
 	    clearSecret: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ImageUploadSettingsInput(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -239,11 +378,11 @@ export namespace main {
 	    extraArguments?: string;
 	    customWriter?: string;
 	    customExtension?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PandocExportInput(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sourcePath = source["sourcePath"];
@@ -262,11 +401,11 @@ export namespace main {
 	    available: boolean;
 	    path?: string;
 	    version?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PandocStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.available = source["available"];
@@ -278,11 +417,11 @@ export namespace main {
 	    connected: boolean;
 	    user?: string;
 	    plan?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PicGoCloudStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.connected = source["connected"];
@@ -293,11 +432,11 @@ export namespace main {
 	export class RecentFileStatus {
 	    path: string;
 	    exists: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RecentFileStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -320,14 +459,17 @@ export namespace main {
 	    usageAnalytics: boolean;
 	    imageUploadMode?: string;
 	    picGoServerUrl?: string;
+	    aiProvider?: string;
+	    aiBaseUrl?: string;
+	    aiModel?: string;
 	    anonymousInstallId?: string;
 	    lastActiveReport?: string;
 	    exportSettings?: ExportSettings;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Preferences(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.recentFiles = source["recentFiles"];
@@ -345,11 +487,14 @@ export namespace main {
 	        this.usageAnalytics = source["usageAnalytics"];
 	        this.imageUploadMode = source["imageUploadMode"];
 	        this.picGoServerUrl = source["picGoServerUrl"];
+	        this.aiProvider = source["aiProvider"];
+	        this.aiBaseUrl = source["aiBaseUrl"];
+	        this.aiModel = source["aiModel"];
 	        this.anonymousInstallId = source["anonymousInstallId"];
 	        this.lastActiveReport = source["lastActiveReport"];
 	        this.exportSettings = this.convertValues(source["exportSettings"], ExportSettings);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -368,7 +513,7 @@ export namespace main {
 		    return a;
 		}
 	}
-
+	
 	export class UpdateInfo {
 	    checked: boolean;
 	    suppressed: boolean;
@@ -380,11 +525,11 @@ export namespace main {
 	    releaseNotes: string;
 	    releaseUrl: string;
 	    publishedAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.checked = source["checked"];
@@ -401,3 +546,4 @@ export namespace main {
 	}
 
 }
+

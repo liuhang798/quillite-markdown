@@ -260,6 +260,14 @@
               <strong id="editorFileName">未命名文档</strong>
             </div>
             <div class="editor-status">
+              <button id="aiEditButton" class="ai-edit-button" type="button" data-i18n-title="aiEditTitle" title="使用 AI 编辑或生成内容">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1L6.5 8.5l4.1-1.4L12 3Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg>
+                <span data-i18n="aiEdit">AI编辑</span>
+              </button>
+              <button id="aiReviewButton" class="ai-edit-button ai-review-button" type="button" data-i18n-title="aiReviewTitle" title="检查整篇文档并给出可选修改建议">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4Z"/><path d="M15 4v4h4M8 12l2 2 4-5M8 17h7"/></svg>
+                <span data-i18n="aiReview">AI检查</span>
+              </button>
               <span id="editorSaveState">已保存</span>
               <button id="saveAsButton" class="text-button" data-i18n="saveAs">另存为</button>
               <button id="exitEditButton" class="text-button exit-edit-button" data-i18n="exitEdit" title="退出编辑">退出编辑</button>
@@ -296,6 +304,22 @@
             <span class="format-divider" data-divider-before="asset"></span>
             <button type="button" data-format="table" data-format-overflow="table" data-format-label="insertTable" data-format-group="asset" data-overflow-priority="20" data-i18n-title="insertTable" title="插入表格"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16M15 4v16"/></svg></button>
             <button type="button" data-format="image" data-format-overflow="image" data-format-label="insertImage" data-format-group="asset" data-overflow-priority="10" data-i18n-title="insertImage" title="插入图片"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 2-2 6 5"/></svg></button>
+            <span class="format-divider" data-divider-before="extended"></span>
+            <button type="button" class="extended-format-button" data-format="bold-italic" data-format-overflow="bold-italic" data-format-label="boldItalic" data-format-group="extended" data-overflow-priority="-4" data-format-command="bold-italic" data-i18n="boldItalic">粗斜体</button>
+            <button type="button" class="extended-format-button" data-format="underline" data-format-overflow="underline" data-format-label="underline" data-format-group="extended" data-overflow-priority="-3" data-format-command="underline" data-i18n="underline">下划线</button>
+            <button type="button" class="extended-format-button" data-format="superscript" data-format-overflow="superscript" data-format-label="superscript" data-format-group="extended" data-overflow-priority="-8" data-format-command="superscript" data-i18n="superscript">上标</button>
+            <button type="button" class="extended-format-button" data-format="subscript" data-format-overflow="subscript" data-format-label="subscript" data-format-group="extended" data-overflow-priority="-9" data-format-command="subscript" data-i18n="subscript">下标</button>
+            <button type="button" class="extended-format-button popular-format-button" data-format="formula-builder" data-format-overflow="formula-builder" data-format-label="formulaBuilder" data-format-group="extended" data-overflow-priority="-1" data-format-command="formula-builder" data-i18n="formulaBuilder">学科公式 🔥</button>
+            <button type="button" class="extended-format-button popular-format-button" data-format="diagram-builder" data-format-overflow="diagram-builder" data-format-label="diagramBuilder" data-format-group="extended" data-overflow-priority="-2" data-format-command="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥</button>
+            <button type="button" class="extended-format-button" data-format="hard-break" data-format-overflow="hard-break" data-format-label="hardBreak" data-format-group="extended" data-overflow-priority="-6" data-format-command="hard-break" data-i18n="hardBreak">强制换行</button>
+            <button type="button" class="extended-format-button" data-format="footnote" data-format-overflow="footnote" data-format-label="footnote" data-format-group="extended" data-overflow-priority="-5" data-format-command="footnote" data-i18n="footnote">脚注</button>
+            <button type="button" class="extended-format-button" data-format="reference-link" data-format-overflow="reference-link" data-format-label="referenceLink" data-format-group="extended" data-overflow-priority="-10" data-format-command="reference-link" data-i18n="referenceLink">引用式链接</button>
+            <button type="button" class="extended-format-button" data-format="collapsible" data-format-overflow="collapsible" data-format-label="collapsible" data-format-group="extended" data-overflow-priority="-7" data-format-command="collapsible" data-i18n="collapsible">折叠区块</button>
+            <button type="button" class="extended-format-button" data-format="keyboard-key" data-format-overflow="keyboard-key" data-format-label="keyboardKey" data-format-group="extended" data-overflow-priority="-11" data-format-command="keyboard-key" data-i18n="keyboardKey">键盘按键</button>
+            <button type="button" class="extended-format-button" data-format="autolink" data-format-overflow="autolink" data-format-label="autolink" data-format-group="extended" data-overflow-priority="-12" data-format-command="autolink" data-i18n="autolink">自动链接</button>
+            <button type="button" class="extended-format-button" data-format="escape" data-format-overflow="escape" data-format-label="escapeSyntax" data-format-group="extended" data-overflow-priority="-15" data-format-command="escape" data-i18n="escapeSyntax">转义符号</button>
+            <button type="button" class="extended-format-button" data-format="html-block" data-format-overflow="html-block" data-format-label="htmlBlock" data-format-group="extended" data-overflow-priority="-13" data-format-command="html-block" data-i18n="htmlBlock">HTML 区块</button>
+            <button type="button" class="extended-format-button" data-format="comment" data-format-overflow="comment" data-format-label="comment" data-format-group="extended" data-overflow-priority="-14" data-format-command="comment" data-i18n="comment">注释</button>
             <span class="format-divider" data-divider-before="more"></span>
             <button id="moreFormatButton" class="more-format-button" type="button" data-i18n-title="moreFormats" title="更多格式" aria-haspopup="menu" aria-expanded="false">
               <span data-i18n="moreFormats">更多格式</span>
@@ -355,9 +379,16 @@
   </div>
 
   <div id="moreMenu" class="popover hidden no-drag">
-    <div class="popover-label" data-i18n="interfaceLanguage">界面语言</div>
-    <button class="language-option" data-language="zh-CN">简体中文 <span class="language-check">✓</span></button>
-    <button class="language-option" data-language="en">English <span class="language-check">✓</span></button>
+    <div class="settings-submenu-group">
+      <button type="button" class="settings-submenu-trigger" data-settings-submenu="language" aria-haspopup="menu" aria-expanded="false">
+        <span class="menu-label" data-i18n="interfaceLanguage">界面语言</span>
+        <span class="settings-submenu-summary"><span id="interfaceLanguageCurrent">简体中文</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      </button>
+      <div class="settings-submenu popover hidden" data-settings-submenu-panel="language" role="menu" data-i18n-aria-label="interfaceLanguage" aria-label="界面语言">
+        <button type="button" role="menuitemradio" data-language="zh-CN" aria-checked="true"><span>简体中文</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-language="en" aria-checked="false"><span>English</span><span class="settings-option-check">✓</span></button>
+      </div>
+    </div>
     <hr>
     <div class="settings-submenu-group">
       <button type="button" class="settings-submenu-trigger" data-settings-submenu="font" aria-haspopup="menu" aria-expanded="false">
@@ -392,12 +423,12 @@
     <div class="settings-submenu-group">
       <button type="button" class="settings-submenu-trigger" data-settings-submenu="width" aria-haspopup="menu" aria-expanded="false">
         <span class="menu-label" data-i18n="docWidth">文档宽度</span>
-        <span class="settings-submenu-summary"><span id="docWidthCurrent" data-i18n="widthMedium">中</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+        <span class="settings-submenu-summary"><span id="docWidthCurrent" data-i18n="widthWide">宽</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
       </button>
       <div class="settings-submenu popover hidden" data-settings-submenu-panel="width" role="menu" data-i18n-aria-label="docWidth" aria-label="文档宽度">
         <button type="button" role="menuitemradio" data-doc-width="narrow" aria-checked="false"><span data-i18n="widthNarrow">窄</span><span class="settings-option-check">✓</span></button>
-        <button type="button" role="menuitemradio" data-doc-width="medium" aria-checked="true"><span data-i18n="widthMedium">中</span><span class="settings-option-check">✓</span></button>
-        <button type="button" role="menuitemradio" data-doc-width="wide" aria-checked="false"><span data-i18n="widthWide">宽</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-doc-width="medium" aria-checked="false"><span data-i18n="widthMedium">中</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-doc-width="wide" aria-checked="true"><span data-i18n="widthWide">宽</span><span class="settings-option-check">✓</span></button>
         <button type="button" role="menuitemradio" data-doc-width="full" aria-checked="false"><span data-i18n="widthFull">全宽</span><span class="settings-option-check">✓</span></button>
       </div>
     </div>
@@ -424,9 +455,10 @@
     <button data-action="print"><span class="menu-label" data-i18n="printDocument">打印文档</span> <span>Ctrl P</span></button>
     <hr>
     <button data-action="image-upload-settings"><span class="menu-label" data-i18n="imageUploadSettings">图床设置</span> <span>PicGo</span></button>
+    <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.6.2</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.0</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -444,24 +476,7 @@
     <div id="overflowFormatGroup" hidden>
       <div class="popover-label" data-i18n="toolbarOverflow">工具栏折叠</div>
       <div id="overflowFormatOptions"></div>
-      <hr>
     </div>
-    <div class="popover-label" data-i18n="extendedFormats">扩展格式</div>
-    <button type="button" role="menuitem" data-format-command="bold-italic" data-i18n="boldItalic">粗斜体</button>
-    <button type="button" role="menuitem" data-format-command="underline" data-i18n="underline">下划线</button>
-    <button type="button" role="menuitem" data-format-command="superscript" data-i18n="superscript">上标</button>
-    <button type="button" role="menuitem" data-format-command="subscript" data-i18n="subscript">下标</button>
-    <button type="button" role="menuitem" data-format-command="formula-builder" data-i18n="formulaBuilder">学科公式 🔥</button>
-    <button type="button" role="menuitem" data-format-command="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥</button>
-    <button type="button" role="menuitem" data-format-command="hard-break" data-i18n="hardBreak">强制换行</button>
-    <button type="button" role="menuitem" data-format-command="footnote" data-i18n="footnote">脚注</button>
-    <button type="button" role="menuitem" data-format-command="reference-link" data-i18n="referenceLink">引用式链接</button>
-    <button type="button" role="menuitem" data-format-command="collapsible" data-i18n="collapsible">折叠区块</button>
-    <button type="button" role="menuitem" data-format-command="keyboard-key" data-i18n="keyboardKey">键盘按键</button>
-    <button type="button" role="menuitem" data-format-command="autolink" data-i18n="autolink">自动链接</button>
-    <button type="button" role="menuitem" data-format-command="escape" data-i18n="escapeSyntax">转义符号</button>
-    <button type="button" role="menuitem" data-format-command="html-block" data-i18n="htmlBlock">HTML 区块</button>
-    <button type="button" role="menuitem" data-format-command="comment" data-i18n="comment">注释</button>
   </div>
 
   <div id="recentContextMenu" class="popover recent-context-menu hidden no-drag" role="menu" data-i18n-aria-label="recentContextMenuTitle" aria-label="最近阅读文档操作">
@@ -501,6 +516,11 @@
     <button type="button" role="menuitem" data-editor-copy="plain">
       <svg viewBox="0 0 24 24"><path d="M7 4h10v16H7V4ZM9.5 9h5M9.5 12h5M9.5 15h3"/></svg>
       <span class="menu-label" data-i18n="copyAsPlainText">复制为纯文本</span>
+    </button>
+    <hr>
+    <button type="button" role="menuitem" data-editor-ai="open">
+      <svg viewBox="0 0 24 24"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1L6.5 8.5l4.1-1.4L12 3Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg>
+      <span class="menu-label" data-i18n="aiSelectionAction">用 AI 处理选中文字</span>
     </button>
   </div>
 
@@ -562,7 +582,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.6.2</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.7.0</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -594,6 +614,100 @@
     </section>
   </div>
 
+  <div id="aiSettingsDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="aiSettingsTitle">
+    <section class="ai-settings-dialog">
+      <button id="closeAISettings" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+      <span class="eyebrow" data-i18n="aiSettingsLabel">AI WRITING</span>
+      <h2 id="aiSettingsTitle" data-i18n="aiSettingsTitle">AI 助手设置</h2>
+      <p class="ai-dialog-intro" data-i18n="aiSettingsIntro">选择 AI 服务并配置对应 API Key，即可使用 AI 编辑与文档检查。</p>
+      <form id="aiSettingsForm" class="ai-settings-form">
+        <label class="ai-provider-field"><span data-i18n="aiProvider">服务类型</span><select id="aiProvider"><option value="deepseek" data-i18n="aiProviderDeepSeek">DeepSeek</option><option value="zhipu" data-i18n="aiProviderZhipu">智谱 GLM</option><option value="qwen" data-i18n="aiProviderQwen">通义千问</option><option value="openai" data-i18n="aiProviderOpenAI">OpenAI</option><option value="kimi" data-i18n="aiProviderKimi">Kimi</option></select></label>
+        <input id="aiBaseURL" type="hidden" value="https://api.deepseek.com">
+        <div class="ai-provider-card">
+          <span class="ai-provider-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 6.5h14v8.2c0 2.1-1.7 3.8-3.8 3.8H11l-4.2 2v-2.3A3.8 3.8 0 0 1 5 14.7V6.5Z"/><path d="M9 11.8c1.9 1.7 4.1 1.7 6 0M16.8 8.5l2.7-2"/></svg></span>
+          <span><strong id="aiProviderName">DeepSeek</strong><small data-i18n="aiProviderDescription">官方接口 · 自动配置模型和服务地址</small></span>
+          <span class="ai-provider-meta"><em id="aiProviderModel">deepseek-v4-flash</em><button id="setDefaultAIProvider" class="ai-default-provider-button" type="button" data-i18n="aiDefaultModel">默认模型</button></span>
+        </div>
+        <label class="ai-model-field"><span class="ai-model-label"><span data-i18n="aiModel">模型</span><button id="refreshAIModels" class="text-button" type="button" data-i18n="aiRefreshModels">刷新模型</button></span><select id="aiModel"><option value="deepseek-v4-flash">deepseek-v4-flash</option></select><small id="aiModelState" data-i18n="aiModelKeyRequired">保存所选服务的 Key 后，将自动加载可用模型。</small></label>
+        <section id="aiKeyOnboarding" class="ai-key-onboarding">
+          <span class="ai-key-step">1</span>
+          <span><strong data-i18n="aiKeyGuideTitle">填写所选服务的 API Key</strong><small data-i18n="aiKeyGuideHint">前往所选 AI 服务的开放平台创建 Key，然后粘贴到下方。Key 仅保存在系统凭据库。</small></span>
+        </section>
+        <section id="aiKeySavedCard" class="ai-key-saved-card hidden">
+          <span class="ai-key-saved-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span>
+          <span><small data-i18n="aiCurrentAPIKey">当前 API Key</small><code id="aiMaskedAPIKey"></code><b data-i18n="aiKeyReady">已安全保存，可以使用 AI 编辑与检查</b></span>
+          <div><button id="editAIAPIKey" class="text-button" type="button" data-i18n="aiEditKey">修改</button><button id="deleteAIAPIKey" class="text-button danger-text-button" type="button" data-i18n="aiDeleteKey">删除</button></div>
+        </section>
+        <label id="aiAPIKeyField" class="ai-key-field"><span data-i18n="aiAPIKey">API Key</span><input id="aiAPIKey" type="password" autocomplete="new-password" spellcheck="false" data-i18n-placeholder="aiAPIKeyPlaceholder" placeholder="例如：sk-xxxxxxxx"><small id="aiAPIKeyState"></small></label>
+        <p class="ai-privacy-note" data-i18n="aiPrivacyNote">只有你主动选择或确认检查的文档内容会发送给所选 AI 服务；不同服务的 API Key 独立保存在系统凭据库，不会写入偏好设置、日志或文档。</p>
+        <p id="aiSettingsStatus" class="feedback-status" role="status"></p>
+        <div class="ai-dialog-actions"><button id="testAIConnection" class="large-button secondary" type="button" data-i18n="aiTestConnection">测试连接</button><span></span><button id="cancelAISettings" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="saveAISettings" class="large-button primary" type="submit" data-i18n="aiSaveAndEnable">保存并启用</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div id="aiRewriteDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="aiRewriteTitle">
+    <section class="ai-rewrite-dialog">
+      <button id="closeAIRewrite" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+      <span class="eyebrow" data-i18n="aiAssistant">AI 助手</span>
+      <h2 id="aiRewriteTitle" data-i18n="aiRewriteTitle">AI编辑</h2>
+      <div id="aiRewriteControls" class="ai-rewrite-controls">
+        <div id="aiRewriteFields" class="ai-rewrite-fields">
+          <label><span data-i18n="aiAction">处理方式</span><select id="aiRewriteAction"><option value="polish" data-i18n="aiActionPolish">润色</option><option value="rewrite" data-i18n="aiActionRewrite">改写</option><option value="concise" data-i18n="aiActionConcise">精简</option><option value="expand" data-i18n="aiActionExpand">扩写</option><option value="summarize" data-i18n="aiActionSummarize">总结</option><option value="translate" data-i18n="aiActionTranslate">翻译</option><option value="custom" data-i18n="aiActionCustom">自定义要求</option></select></label>
+          <label id="aiTargetLanguageField" class="hidden"><span data-i18n="aiTargetLanguage">目标语言</span><select id="aiTargetLanguage"><option value="简体中文">简体中文</option><option value="English">English</option><option value="日本語">日本語</option><option value="한국어">한국어</option></select></label>
+        </div>
+        <button id="generateAIRewrite" class="large-button primary ai-generate-button" type="button" data-i18n="aiGenerate">生成</button>
+      </div>
+      <label id="aiInstructionField" class="ai-instruction-field hidden"><span data-i18n="aiInstruction">具体要求</span><textarea id="aiInstruction" maxlength="1000" data-i18n-placeholder="aiInstructionPlaceholder" placeholder="例如：改成更专业、友好的产品说明"></textarea></label>
+      <div id="aiCompareGrid" class="ai-compare-grid">
+        <label id="aiOriginalTextField"><span data-i18n="aiOriginalText">原文</span><textarea id="aiOriginalText" readonly></textarea></label>
+        <label><span data-i18n="aiResultText">AI 结果</span><textarea id="aiResultText" data-i18n-placeholder="aiResultPlaceholder" placeholder="生成后可在这里继续微调"></textarea></label>
+      </div>
+      <div id="aiRewriteProgress" class="ai-rewrite-progress hidden" role="status" aria-live="polite" aria-hidden="true">
+        <span class="ai-rewrite-spinner" aria-hidden="true"></span>
+        <span class="ai-rewrite-progress-copy"><strong id="aiRewriteProgressPhase"></strong><small id="aiRewriteProgressMeta"></small><span class="ai-rewrite-progress-track" aria-hidden="true"><i id="aiRewriteProgressBar"></i></span></span>
+        <b id="aiRewriteProgressPercent">0%</b>
+      </div>
+      <label id="aiCloudConsentRow" class="ai-cloud-consent hidden"><input id="aiCloudConsent" type="checkbox" checked><span data-i18n="aiCloudConsent">我确认将上述内容和要求发送给当前选择的 AI 服务处理</span></label>
+      <p id="aiRewriteStatus" class="feedback-status" role="status"></p>
+      <div class="ai-dialog-actions"><button id="openAISettingsFromRewrite" class="large-button ghost" type="button" data-i18n="aiOpenSettings">设置</button><span></span><button id="cancelAIRewrite" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="replaceWithAIResult" class="large-button primary" type="button" disabled data-i18n="aiReplaceSelection">替换选中文字</button></div>
+    </section>
+  </div>
+
+  <div id="aiReviewDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="aiReviewDialogTitle">
+    <section class="ai-review-dialog">
+      <button id="closeAIReview" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+      <span class="eyebrow" data-i18n="aiReviewLabel">AI DOCUMENT REVIEW</span>
+      <h2 id="aiReviewDialogTitle" data-i18n="aiReviewDialogTitle">AI 文档检查</h2>
+      <p class="ai-dialog-intro" data-i18n="aiReviewIntro">检查整篇文档的表达、拼写、标点、一致性和 Markdown 语法，并逐条选择要应用的修改。</p>
+      <div id="aiReviewToolbar" class="ai-review-toolbar hidden">
+        <strong id="aiReviewSummary"></strong>
+        <span></span>
+        <button id="selectAllAIReview" class="text-button" type="button" data-i18n="aiSelectAllSuggestions">全选</button>
+        <button id="clearAllAIReview" class="text-button" type="button" data-i18n="aiClearAllSuggestions">取消全选</button>
+      </div>
+      <div id="aiReviewEmpty" class="ai-review-empty">
+        <span class="ai-review-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5V4Z"/><path d="M15 4v4h4M8 12l2 2 4-5M8 17h7"/></svg></span>
+        <strong data-i18n="aiReviewReadyTitle">准备检查当前文档</strong>
+        <p data-i18n="aiReviewReadyHint">AI 只会返回可定位的修改建议，不会直接改动文档。</p>
+        <div id="aiReviewProgress" class="ai-review-progress hidden" aria-hidden="true">
+          <span class="ai-review-progress-track"><i id="aiReviewProgressBar"></i></span>
+          <small id="aiReviewProgressMeta"></small>
+        </div>
+      </div>
+      <div id="aiReviewSuggestions" class="ai-review-suggestions hidden"></div>
+      <label id="aiReviewConsentRow" class="ai-cloud-consent"><input id="aiReviewConsent" type="checkbox" checked><span data-i18n="aiReviewConsent">我确认将当前整篇文档发送给默认 AI 服务进行检查</span></label>
+      <p id="aiReviewStatus" class="feedback-status" role="status"></p>
+      <div class="ai-dialog-actions ai-review-actions"><button id="openAISettingsFromReview" class="large-button ghost" type="button" data-i18n="aiOpenSettings">设置</button><span></span><button id="rerunAIReview" class="large-button secondary hidden" type="button" data-i18n="aiReviewAgain">重新检查</button><button id="cancelAIReview" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="runAIReview" class="large-button primary" type="button" data-i18n="aiStartReview">开始检查</button><button id="applyAIReview" class="large-button primary hidden" type="button" disabled data-i18n="aiApplySelected">一键修改所选项</button></div>
+    </section>
+  </div>
+
   <div id="feedbackDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
     <section class="feedback-dialog">
       <button id="closeFeedback" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
@@ -618,7 +732,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.6.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -640,9 +754,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.6.2</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.0</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.6.2</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.0</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

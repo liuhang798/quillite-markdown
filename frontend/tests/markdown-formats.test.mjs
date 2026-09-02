@@ -71,6 +71,9 @@ test('toolbar hides overflow and dynamically mirrors collapsed commands into Mor
   assert.match(renderer, /new ResizeObserver\(scheduleFormatToolbarLayout\)/);
   assert.match(renderer, /bar\.scrollWidth <= bar\.clientWidth \+ 1/);
   assert.match(renderer, /rebuildOverflowFormatOptions\(\)/);
+  assert.match(html, /class="extended-format-button popular-format-button"[^>]*data-format="formula-builder"[^>]*data-overflow-priority="-1"/);
+  assert.match(html, /class="extended-format-button popular-format-button"[^>]*data-format="diagram-builder"[^>]*data-overflow-priority="-2"/);
+  assert.match(renderer, /const hasOverflow = candidates\.some\(element => element\.hidden\);[\s\S]*els\.moreFormatButton\.hidden = !hasOverflow/);
 });
 
 test('double equals syntax renders a semantic highlight', () => {

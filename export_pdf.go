@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,7 +16,10 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const maxExportPDFSize = 256 * 1024 * 1024
+const (
+	maxExportPDFSize       = 256 * 1024 * 1024
+	pdfGenerationWaitLimit = 30 * time.Second
+)
 
 func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) (string, error) {
 	browsers := findPDFBrowsers()
@@ -56,13 +60,13 @@ func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) 
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		command := exec.CommandContext(ctx, browser, pdfBrowserArguments(profilePath, pdfPath, htmlPath)...)
 		output, runErr := command.CombinedOutput()
-		timedOut := ctx.Err() == context.DeadlineExceeded
-		cancel()
-		if timedOut {
+		if ctx.Err() == context.DeadlineExceeded {
+			cancel()
 			lastErr = errors.New("PDF_EXPORT_TIMEOUT")
 			continue
 		}
 		if runErr != nil {
+			cancel()
 			message := strings.TrimSpace(string(output))
 			if len(message) > 1200 {
 				message = message[:1200]
@@ -70,14 +74,16 @@ func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) 
 			lastErr = fmt.Errorf("PDF_EXPORT_FAILED: %s", message)
 			continue
 		}
-		pdfData, err = os.ReadFile(pdfPath)
+		// On Windows, current Edge and Chrome launchers can exit successfully before
+		// the detached headless browser has finished creating the requested PDF.
+		// Wait for a complete PDF instead of treating that short hand-off window as
+		// an export failure.
+		waitCtx, waitCancel := context.WithTimeout(ctx, pdfGenerationWaitLimit)
+		pdfData, err = waitForGeneratedPDF(waitCtx, pdfPath)
+		waitCancel()
+		cancel()
 		if err != nil {
-			lastErr = fmt.Errorf("PDF_EXPORT_FAILED: %w", err)
-			continue
-		}
-		if len(pdfData) < 5 || len(pdfData) > maxExportPDFSize || string(pdfData[:5]) != "%PDF-" {
-			lastErr = errors.New("PDF_EXPORT_FAILED: browser returned an invalid PDF")
-			pdfData = nil
+			lastErr = err
 			continue
 		}
 		break
@@ -92,6 +98,47 @@ func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) 
 		return "", err
 	}
 	return outputPath, nil
+}
+
+func waitForGeneratedPDF(ctx context.Context, pdfPath string) ([]byte, error) {
+	ticker := time.NewTicker(80 * time.Millisecond)
+	defer ticker.Stop()
+	var lastErr error
+	for {
+		pdfData, err := os.ReadFile(pdfPath)
+		if err == nil {
+			if validationErr := validateGeneratedPDF(pdfData); validationErr == nil {
+				return pdfData, nil
+			} else {
+				lastErr = validationErr
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			lastErr = err
+		}
+
+		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, errors.New("PDF_EXPORT_TIMEOUT")
+			}
+			if lastErr != nil {
+				return nil, fmt.Errorf("PDF_EXPORT_FAILED: %w", lastErr)
+			}
+			return nil, fmt.Errorf("PDF_EXPORT_FAILED: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func validateGeneratedPDF(pdfData []byte) error {
+	if len(pdfData) < 5 || len(pdfData) > maxExportPDFSize || string(pdfData[:5]) != "%PDF-" {
+		return errors.New("browser returned an invalid PDF")
+	}
+	tailStart := max(0, len(pdfData)-4096)
+	if !bytes.Contains(pdfData[tailStart:], []byte("%%EOF")) {
+		return errors.New("browser returned an incomplete PDF")
+	}
+	return nil
 }
 
 func pdfBrowserArguments(profilePath, pdfPath, htmlPath string) []string {

@@ -11,6 +11,24 @@ import {
 const desktopRuntime = Boolean(window.go?.main?.App && window.runtime);
 const resolved = value => Promise.resolve(value);
 const mockUpdate = new URLSearchParams(window.location.search).has('mockUpdate');
+const maskBrowserAIKey = value => value.length > 8 ? `${value.slice(0, 4)}••••••••${value.slice(-4)}` : '••••••••';
+const browserAIProviders = {
+  deepseek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
+  zhipu: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.7-flash' },
+  qwen: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+  openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-mini' },
+  kimi: { baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k3' }
+};
+const normalizeBrowserAIProvider = provider => Object.hasOwn(browserAIProviders, provider) ? provider : 'deepseek';
+const browserAIKeyName = provider => `aiMaskedApiKey:${normalizeBrowserAIProvider(provider)}`;
+const browserAISettings = provider => {
+  provider = normalizeBrowserAIProvider(provider);
+  const maskedApiKey = sessionStorage.getItem(browserAIKeyName(provider)) || '';
+  const defaultProvider = normalizeBrowserAIProvider(sessionStorage.getItem('activeAIProvider') || 'deepseek');
+  const defaultModel = sessionStorage.getItem('activeAIModel') || browserAIProviders[defaultProvider].model;
+  const model = provider === defaultProvider ? defaultModel : browserAIProviders[provider].model;
+  return { provider, ...browserAIProviders[provider], model, hasApiKey: Boolean(maskedApiKey), maskedApiKey, isDefault: provider === defaultProvider };
+};
 
 const browserPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : 'browser';
 let platform = browserPlatform;
@@ -79,8 +97,39 @@ window.quilliteMarkdown = {
   setLanguage: language => desktopRuntime ? Backend.SetLanguage(language) : resolved(),
   setFontFamily: fontFamily => desktopRuntime ? Backend.SetFontFamily(fontFamily) : resolved(fontFamily),
   setUsageAnalytics: enabled => desktopRuntime ? Backend.SetUsageAnalytics(enabled) : resolved({ usageAnalytics: enabled }),
+  getAISettings: () => desktopRuntime ? Backend.GetAISettings() : resolved(browserAISettings(sessionStorage.getItem('activeAIProvider') || 'deepseek')),
+  getAIProviderSettings: provider => desktopRuntime ? Backend.GetAIProviderSettings(provider) : resolved(browserAISettings(provider)),
+  setAISettings: input => {
+    if (desktopRuntime) return Backend.SetAISettings(input);
+    const provider = normalizeBrowserAIProvider(input?.provider);
+    const keyName = browserAIKeyName(provider);
+    if (input?.clearApiKey) sessionStorage.removeItem(keyName);
+    else if (input?.apiKey) {
+      sessionStorage.setItem(keyName, maskBrowserAIKey(input.apiKey.trim()));
+      sessionStorage.setItem('activeAIProvider', provider);
+      sessionStorage.setItem('activeAIModel', input?.model || browserAIProviders[provider].model);
+    }
+    return resolved(browserAISettings(provider));
+  },
+  setDefaultAIProvider: (provider, model) => {
+    if (desktopRuntime) return Backend.SetDefaultAIProvider(provider, model);
+    provider = normalizeBrowserAIProvider(provider);
+    if (!sessionStorage.getItem(browserAIKeyName(provider))) return Promise.reject(new Error('Save an API key before making this provider the default.'));
+    sessionStorage.setItem('activeAIProvider', provider);
+    sessionStorage.setItem('activeAIModel', model || browserAIProviders[provider].model);
+    return resolved(browserAISettings(provider));
+  },
+  listAIModels: provider => desktopRuntime
+    ? Backend.ListAIModels(provider)
+    : resolved([browserAISettings(provider).model, browserAIProviders[normalizeBrowserAIProvider(provider)].model]),
+  testAIProviderConnection: (provider, model) => desktopRuntime ? Backend.TestAIProviderConnection(provider, model) : resolved(),
+  testAIConnection: () => desktopRuntime ? Backend.TestAIConnection() : resolved(),
+  rewriteWithAI: input => desktopRuntime ? Backend.RewriteWithAI(input) : resolved({ text: input?.text || `# AI generated content\n\n${input?.instruction || ''}`.trim() }),
+  reviewDocumentWithAI: input => desktopRuntime
+    ? Backend.ReviewDocumentWithAI(input)
+    : resolved({ suggestions: input?.text?.includes('重复重复') ? [{ id: 'suggestion-1', category: 'spelling', severity: 'medium', original: '重复重复', replacement: '重复', reason: '删除重复词', occurrence: 1 }] : [] }),
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.6.2', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   checkForUpdates: force => desktopRuntime
@@ -90,14 +139,14 @@ window.quilliteMarkdown = {
           checked: true,
           available: true,
           currentVersion: '2.4.4',
-          latestVersion: '2.6.2',
-          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.6.2' : '轻阅 Markdown 2.6.2',
+          latestVersion: '2.7.0',
+          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.7.0' : '轻阅 Markdown 2.7.0',
           releaseNotes: localStorage.getItem('language') === 'en'
             ? 'Added visual table editing, rich paste, and spell checking\nAdded PicGo image hosting with upload progress\nAdded a 12-format Export Center and crisp A4 image pages'
             : '新增可视化表格、富文本粘贴与拼写检查\n新增 PicGo 图床和上传进度\n新增 12 种格式导出中心与 A4 高清图片分页',
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '2.6.2', latestVersion: '2.6.2' }),
+      : { checked: true, available: false, currentVersion: '2.7.0', latestVersion: '2.7.0' }),
   snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},

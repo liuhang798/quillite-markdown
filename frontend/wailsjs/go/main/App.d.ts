@@ -24,6 +24,10 @@ export function ExportPlainHTML(arg1:string,arg2:string,arg3:string,arg4:string,
 
 export function ExportWithPandoc(arg1:main.PandocExportInput):Promise<string>;
 
+export function GetAIProviderSettings(arg1:string):Promise<main.AISettings>;
+
+export function GetAISettings():Promise<main.AISettings>;
+
 export function GetExportSettings():Promise<main.ExportSettings>;
 
 export function GetFeedbackSystemInfo():Promise<main.FeedbackSystemInfo>;
@@ -37,6 +41,8 @@ export function GetPreferences():Promise<main.Preferences>;
 export function GetStartupMode():Promise<string>;
 
 export function ImportImage(arg1:string,arg2:string):Promise<string>;
+
+export function ListAIModels(arg1:string):Promise<Array<string>>;
 
 export function ListFolder(arg1:string):Promise<main.FolderResult>;
 
@@ -76,6 +82,10 @@ export function ReportErrorLog(arg1:string,arg2:string,arg3:string):Promise<void
 
 export function RequestQuit():Promise<boolean>;
 
+export function ReviewDocumentWithAI(arg1:main.AIDocumentReviewRequest):Promise<main.AIDocumentReviewResponse>;
+
+export function RewriteWithAI(arg1:main.AIRewriteRequest):Promise<main.AIRewriteResponse>;
+
 export function SaveAs(arg1:string,arg2:string):Promise<main.Document>;
 
 export function SaveExportImage(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
@@ -93,6 +103,10 @@ export function SelectFeedbackImages():Promise<Array<main.FeedbackImageSelection
 export function SelectImage(arg1:string):Promise<string>;
 
 export function SelectPandoc():Promise<main.PandocStatus>;
+
+export function SetAISettings(arg1:main.AISettingsInput):Promise<main.AISettings>;
+
+export function SetDefaultAIProvider(arg1:string,arg2:string):Promise<main.AISettings>;
 
 export function SetDirty(arg1:boolean):Promise<void>;
 
@@ -115,6 +129,10 @@ export function ShowInFolder(arg1:string):Promise<void>;
 export function SnoozeUpdates(arg1:number):Promise<void>;
 
 export function SubmitFeedback(arg1:main.FeedbackSubmission):Promise<void>;
+
+export function TestAIConnection():Promise<void>;
+
+export function TestAIProviderConnection(arg1:string,arg2:string):Promise<void>;
 
 export function TestPicGo(arg1:main.ImageUploadSettingsInput):Promise<void>;
 

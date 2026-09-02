@@ -24,6 +24,15 @@ Thumbs.db
 .site-publish/
 .superpowers/
 
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+secrets*.json
+
 # Local test and coverage output
 coverage/
 *.coverprofile

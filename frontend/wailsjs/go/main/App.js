@@ -46,6 +46,14 @@ export function ExportWithPandoc(arg1) {
   return window['go']['main']['App']['ExportWithPandoc'](arg1);
 }
 
+export function GetAIProviderSettings(arg1) {
+  return window['go']['main']['App']['GetAIProviderSettings'](arg1);
+}
+
+export function GetAISettings() {
+  return window['go']['main']['App']['GetAISettings']();
+}
+
 export function GetExportSettings() {
   return window['go']['main']['App']['GetExportSettings']();
 }
@@ -72,6 +80,10 @@ export function GetStartupMode() {
 
 export function ImportImage(arg1, arg2) {
   return window['go']['main']['App']['ImportImage'](arg1, arg2);
+}
+
+export function ListAIModels(arg1) {
+  return window['go']['main']['App']['ListAIModels'](arg1);
 }
 
 export function ListFolder(arg1) {
@@ -150,6 +162,14 @@ export function RequestQuit() {
   return window['go']['main']['App']['RequestQuit']();
 }
 
+export function ReviewDocumentWithAI(arg1) {
+  return window['go']['main']['App']['ReviewDocumentWithAI'](arg1);
+}
+
+export function RewriteWithAI(arg1) {
+  return window['go']['main']['App']['RewriteWithAI'](arg1);
+}
+
 export function SaveAs(arg1, arg2) {
   return window['go']['main']['App']['SaveAs'](arg1, arg2);
 }
@@ -184,6 +204,14 @@ export function SelectImage(arg1) {
 
 export function SelectPandoc() {
   return window['go']['main']['App']['SelectPandoc']();
+}
+
+export function SetAISettings(arg1) {
+  return window['go']['main']['App']['SetAISettings'](arg1);
+}
+
+export function SetDefaultAIProvider(arg1, arg2) {
+  return window['go']['main']['App']['SetDefaultAIProvider'](arg1, arg2);
 }
 
 export function SetDirty(arg1) {
@@ -228,6 +256,14 @@ export function SnoozeUpdates(arg1) {
 
 export function SubmitFeedback(arg1) {
   return window['go']['main']['App']['SubmitFeedback'](arg1);
+}
+
+export function TestAIConnection() {
+  return window['go']['main']['App']['TestAIConnection']();
+}
+
+export function TestAIProviderConnection(arg1, arg2) {
+  return window['go']['main']['App']['TestAIProviderConnection'](arg1, arg2);
 }
 
 export function TestPicGo(arg1) {

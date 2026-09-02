@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.6.2"
+	appVersion      = "2.7.0"
 	maxRecent       = 10
 )
 
@@ -106,6 +106,9 @@ type Preferences struct {
 	UsageAnalytics       bool               `json:"usageAnalytics"`
 	ImageUploadMode      string             `json:"imageUploadMode,omitempty"`
 	PicGoServerURL       string             `json:"picGoServerUrl,omitempty"`
+	AIProvider           string             `json:"aiProvider,omitempty"`
+	AIBaseURL            string             `json:"aiBaseUrl,omitempty"`
+	AIModel              string             `json:"aiModel,omitempty"`
 	AnonymousInstallID   string             `json:"anonymousInstallId,omitempty"`
 	LastActiveReport     string             `json:"lastActiveReport,omitempty"`
 	ExportSettings       ExportSettings     `json:"exportSettings,omitempty"`
@@ -126,6 +129,7 @@ type App struct {
 	frontendReady       bool
 	preferencesOverride string
 	referenceOverride   string
+	aiCredentials       aiCredentialStore
 }
 
 func NewApp() *App {
@@ -250,6 +254,7 @@ func defaultPreferences() Preferences {
 	return Preferences{
 		RecentFiles: []string{}, PinnedRecentFiles: []string{}, FavoriteFiles: []string{}, DraftFiles: []string{},
 		Language: "zh-CN", FontFamily: "system", UsageAnalytics: true, ImageUploadMode: imageUploadModeLocal, PicGoServerURL: defaultPicGoServerURL,
+		AIProvider: aiProviderDeepSeek, AIBaseURL: defaultDeepSeekBaseURL, AIModel: defaultDeepSeekModel,
 		ExportSettings: defaultExportSettings(),
 	}
 }
@@ -292,6 +297,9 @@ func (a *App) readPreferencesUnlocked() (Preferences, error) {
 	prefs.Language = normaliseLanguage(prefs.Language)
 	prefs.FontFamily = normaliseFontFamily(prefs.FontFamily)
 	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
+	prefs.AIProvider = normaliseAIProvider(prefs.AIProvider)
+	prefs.AIBaseURL = normaliseAIBaseURLForStorage(prefs.AIProvider, prefs.AIBaseURL)
+	prefs.AIModel = normaliseAIModelForStorage(prefs.AIProvider, prefs.AIModel)
 	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
 	if normalisedURL, normaliseErr := normalisePicGoServerURL(prefs.PicGoServerURL); normaliseErr == nil {
 		prefs.PicGoServerURL = normalisedURL
@@ -334,6 +342,9 @@ func (a *App) writePreferencesUnlocked(prefs Preferences) error {
 	prefs.Language = normaliseLanguage(prefs.Language)
 	prefs.FontFamily = normaliseFontFamily(prefs.FontFamily)
 	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
+	prefs.AIProvider = normaliseAIProvider(prefs.AIProvider)
+	prefs.AIBaseURL = normaliseAIBaseURLForStorage(prefs.AIProvider, prefs.AIBaseURL)
+	prefs.AIModel = normaliseAIModelForStorage(prefs.AIProvider, prefs.AIModel)
 	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
 	if normalisedURL, err := normalisePicGoServerURL(prefs.PicGoServerURL); err == nil {
 		prefs.PicGoServerURL = normalisedURL

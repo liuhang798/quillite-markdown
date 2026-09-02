@@ -1753,7 +1753,7 @@ func TestFontFamilyPersistenceAndValidation(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerIsSimplifiedChineseOnly(t *testing.T) {
+func TestWindowsInstallerKeepsSilentCoreChineseAndUsesLauncherLanguageForFreshPreferences(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("build", "windows", "installer", "project.nsi"))
 	if err != nil {
 		t.Fatal(err)
@@ -1766,9 +1766,13 @@ func TestWindowsInstallerIsSimplifiedChineseOnly(t *testing.T) {
 		`!insertmacro MUI_LANGUAGE "SimpChinese"`,
 		`StrCpy $LANGUAGE ${LANG_SIMPCHINESE}`,
 		`ShowInstDetails nevershow`,
+		`Var ExternalAppLanguage`,
+		`${GetOptions} $CMDLINE "/APP-LANGUAGE=" $ExternalAppLanguage`,
 		`Delete "$APPDATA\${INFO_PRODUCTNAME}\first-run-language.flag"`,
 		`IfFileExists "$APPDATA\${INFO_PRODUCTNAME}\preferences.json" installerLanguageDone`,
+		`StrCmp $ExternalAppLanguage "en" installerFreshPreferencesEnglish`,
 		`$\"language$\":$\"zh-CN$\"`,
+		`$\"language$\":$\"en$\"`,
 		`"使用 ${INFO_PRODUCTNAME} 打开"`,
 	} {
 		if !strings.Contains(installer, required) {
@@ -1783,11 +1787,10 @@ func TestWindowsInstallerIsSimplifiedChineseOnly(t *testing.T) {
 		`MUI_LANGDLL_DISPLAY`,
 		`MUI_UNGETLANGUAGE`,
 		`${LANG_ENGLISH}`,
-		`$\"language$\":$\"en$\"`,
 		`Open with ${INFO_PRODUCTNAME}`,
 	} {
 		if strings.Contains(installer, forbidden) {
-			t.Errorf("Windows installer must not contain English/multilingual setup rule %q", forbidden)
+			t.Errorf("silent NSIS core must remain Simplified Chinese even when the launcher selects English app defaults: %q", forbidden)
 		}
 	}
 }
@@ -1806,6 +1809,23 @@ func TestWindowsInstallerDefaultsToPerUserNonElevatedInstallation(t *testing.T) 
 	}
 	if strings.Contains(installer[:includeIndex], `!define REQUEST_EXECUTION_LEVEL "admin"`) {
 		t.Fatal("Windows installer must not launch the application at a higher integrity level than Explorer")
+	}
+}
+
+func TestWindowsInstallerAppliesLauncherSelectedDirectoryAfterUpgradeLookup(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("build", "windows", "installer", "project.nsi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installer := string(data)
+	parseIndex := strings.Index(installer, `${GetOptions} $CMDLINE "/INSTALLDIR=" $ExternalInstallDir`)
+	upgradeIndex := strings.Index(installer, `Call ResolvePreviousInstallDir`)
+	overrideIndex := strings.Index(installer, `StrCpy $INSTDIR "$ExternalInstallDir"`)
+	if parseIndex < 0 || upgradeIndex < 0 || overrideIndex < 0 {
+		t.Fatal("Windows installer must parse and apply the launcher's custom install directory")
+	}
+	if !(parseIndex < upgradeIndex && upgradeIndex < overrideIndex) {
+		t.Fatal("custom install directory must override the recorded upgrade location after it is resolved")
 	}
 }
 

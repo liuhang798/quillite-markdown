@@ -19,11 +19,13 @@ import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentE
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
 import { createTableModel, findMarkdownTableAt, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
 import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from './rich-clipboard.js';
+import { hasOverlappingReviewSuggestions, locateAIReviewSuggestions } from './ai-review.js';
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
 
 const $ = selector => document.querySelector(selector);
 const DOC_WIDTH_LEVELS = ['narrow', 'medium', 'wide', 'full'];
+const DEFAULT_DOC_WIDTH = 'wide';
 const MATH_GUIDE_URL = 'https://qm.ssssa.cn/guides/formulas/';
 const DIAGRAM_GUIDE_URL = 'https://qm.ssssa.cn/guides/diagrams/';
 const PICGO_DOWNLOAD_URL = 'https://picgo.app/';
@@ -79,6 +81,24 @@ let newFileRequestInProgress = false;
 let newFileCooldownUntil = 0;
 let newFileCooldownTimer = null;
 let editorClipboardSelection = null;
+let aiRewriteSelection = null;
+let pendingAIRewriteSelection = null;
+let pendingAIRewriteAction = '';
+let aiRewriteRequest = 0;
+let aiRewriteProgressTimer = 0;
+let aiRewriteStartedAt = 0;
+let pendingAIDocumentReview = false;
+let resumeAIDocumentReviewAfterSettings = false;
+let aiReviewSnapshot = '';
+let aiReviewSuggestions = [];
+let aiReviewSessionActive = false;
+let aiReviewApplied = false;
+let aiReviewRequest = 0;
+let aiReviewProgressTimer = 0;
+let aiReviewStartedAt = 0;
+let currentAISettings = null;
+let aiSettingsEditingKey = false;
+let aiModelLoadRequest = 0;
 let spellingContext = null;
 let spellcheckDecorationEffect;
 let spellcheckDecorationField;
@@ -276,7 +296,7 @@ const translations = {
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.6.2', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.7.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -323,7 +343,7 @@ const translations = {
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.6.2', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.7.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -398,6 +418,41 @@ Object.assign(translations.en, {
   exportDescriptionPdf: 'Creates a PDF directly and adds a clickable bookmark outline from H1–H6 headings.'
 });
 
+Object.assign(translations['zh-CN'], {
+  aiAssistant: 'AI 助手', aiSettingsHint: '多模型', aiSelectionAction: '用 AI 编辑选中文字', aiEdit: 'AI编辑', aiEditTitle: '使用 AI 编辑或生成内容',
+  aiSettingsLabel: 'AI 写作', aiSettingsTitle: 'AI 助手设置', aiSettingsIntro: '支持 DeepSeek、智谱 GLM、通义千问、OpenAI 和 Kimi。选择服务并配置对应 API Key，即可使用 AI 编辑与文档检查。',
+  aiProvider: '服务类型', aiProviderDeepSeek: 'DeepSeek', aiProviderZhipu: '智谱 GLM', aiProviderQwen: '通义千问', aiProviderOpenAI: 'OpenAI', aiProviderKimi: 'Kimi', aiProviderDescription: '官方接口 · 自动配置服务地址', aiModel: '模型', aiRefreshModels: '刷新模型', aiModelLoading: '正在通过所选服务加载可用模型…', aiModelLoaded: '已加载 {count} 个可用模型', aiModelLoadFailed: '模型接口暂时不可用，已保留推荐模型', aiModelKeyRequired: '保存所选服务的 Key 后，将自动加载可用模型。', aiAPIKey: 'API Key',
+  aiAPIKeyPlaceholder: '例如：sk-xxxxxxxx', aiAPIKeySaved: '已保存在系统凭据库', aiAPIKeyNotSaved: '尚未配置 API Key', aiCurrentAPIKey: '当前 API Key', aiKeyReady: '已安全保存，可以使用 AI 编辑与检查',
+  aiKeyGuideTitle: '填写所选服务的 API Key', aiKeyGuideHint: '前往所选 AI 服务的开放平台创建 Key，然后粘贴到下方。Key 仅保存在系统凭据库。', aiKeyRequiredGuide: '首次使用 AI 编辑，请先设置所选服务的 API Key。', aiReplacingKeyHint: '输入新的 Key，保存后将替换当前服务的 Key。', aiKeyRequired: '请输入所选服务的 API Key', aiSaveAndEnable: '保存并启用', aiSaveNewKey: '保存新 Key', aiEditKey: '修改', aiDeleteKey: '删除', aiDeleteKeyConfirm: '确定删除所选服务已保存的 API Key 吗？', aiKeyDeleted: 'API Key 已删除', aiKeyDeleteFailed: 'API Key 删除失败', aiDefaultModel: '默认模型', aiSetDefaultModel: '设为默认模型', aiDefaultModelChanged: '已将 {provider} 设为默认模型', aiDefaultModelChangeFailed: '无法设置默认模型',
+  aiPrivacyNote: '只有你主动选择或确认检查的文档内容会发送给所选 AI 服务；不同服务的 API Key 独立保存在系统凭据库，不会写入偏好设置、日志或文档。', aiTestConnection: '测试连接', aiTestingConnection: '正在测试连接…', aiConnectionSuccess: '连接成功', aiConnectionFailed: '连接失败',
+  aiSettingsSaved: 'AI 服务与 API Key 已保存', aiSettingsSaveFailed: 'AI 设置保存失败',
+  aiRewriteTitle: 'AI编辑', aiAction: '处理方式', aiActionPolish: '润色', aiActionRewrite: '改写', aiActionConcise: '精简', aiActionExpand: '扩写', aiActionSummarize: '总结', aiActionTranslate: '翻译', aiActionCustom: '自定义要求',
+  aiTargetLanguage: '目标语言', aiInstruction: '具体要求', aiInstructionPlaceholder: '例如：改成更专业、友好的产品说明', aiOriginalText: '原文', aiResultText: 'AI 结果', aiResultPlaceholder: '生成后可在这里继续微调',
+  aiCloudConsent: '我确认将上述内容和要求发送给当前选择的 AI 服务处理', aiOpenSettings: '设置', aiGenerate: '生成', aiGenerating: '生成中…', aiRewriteConnecting: '正在连接 AI 服务', aiRewriteGenerating: 'AI 正在生成内容', aiRewriteRefining: '正在整理并检查生成结果', aiRewriteProgressMeta: '{provider} · {model} · 已用时 {seconds} 秒', aiReplaceSelection: '替换选中文字', aiInsertAtCursor: '插入到光标位置', aiSelectionReplaced: '已替换，可使用撤销恢复原文', aiContentInserted: '内容已插入，可使用撤销恢复',
+  aiNeedSelection: '请先选择要处理的文字', aiNeedInstruction: '请填写具体要求', aiNeedCloudConsent: '请先确认同意发送选中文字', aiEmptyResult: 'AI 没有返回可用内容', aiSelectionChanged: '原文已发生变化，请重新选择后再试', aiRequestFailed: 'AI 处理失败',
+  aiReview: 'AI检查', aiReviewTitle: '检查整篇文档并给出可选修改建议', aiReviewLabel: 'AI 文档检查', aiReviewDialogTitle: 'AI 文档检查', aiReviewIntro: '检查整篇文档的表达、拼写、标点、一致性和 Markdown 语法，并逐条选择要应用的修改。',
+  aiReviewReadyTitle: '准备检查当前文档', aiReviewReadyHint: 'AI 只会返回可定位的修改建议，不会直接改动文档。', aiReviewConsent: '我确认将当前整篇文档发送给默认 AI 服务进行检查', aiStartReview: '开始检查', aiReviewChecking: '检查中…', aiReviewConnecting: '正在连接 AI 服务', aiReviewReading: 'AI 正在通读文档', aiReviewAnalysing: '正在分析错误与表达问题', aiReviewFormatting: '正在整理可选择的修改建议', aiReviewProgressMeta: '{provider} · {model} · 已用时 {seconds} 秒', aiReviewFailedTitle: '本次检查未完成', aiReviewFailedHint: '没有修改文档。你可以直接重新检查，或在“设置”中更换模型。', aiReviewNoIssuesTitle: '没有发现明确错误', aiReviewNoIssuesHint: '当前模型未返回需要修改的内容。你可以关闭窗口或再次检查。',
+  aiReviewSummary: '共 {count} 条建议，已选择 {selected} 条', aiSelectAllSuggestions: '全选', aiClearAllSuggestions: '取消全选', aiApplySelected: '一键修改所选项', aiReviewAgain: '重新检查', aiReviewApplied: '已应用 {count} 条修改，检查结果将保留到退出编辑', aiReviewNothingSelected: '请至少选择一条建议', aiReviewDocumentChanged: '文档在检查后发生了变化，请重新检查，避免修改错位', aiReviewOverlap: '所选建议存在重叠，请只保留其中一条后再应用', aiReviewRequestFailed: 'AI 文档检查失败', aiReviewEmptyDocument: '当前文档没有可检查的内容', aiReviewTooLong: '当前文档超过 8 万字符，请分段使用 AI 编辑检查', aiReviewDeleteContent: '删除此内容',
+  aiReviewOriginal: '原文', aiReviewReplacement: '建议修改', aiReviewCategoryGrammar: '语法', aiReviewCategorySpelling: '拼写', aiReviewCategoryPunctuation: '标点', aiReviewCategoryClarity: '表达', aiReviewCategoryConsistency: '一致性', aiReviewCategoryMarkdown: 'Markdown', aiReviewSeverityHigh: '重要', aiReviewSeverityMedium: '建议', aiReviewSeverityLow: '轻微'
+});
+Object.assign(translations.en, {
+  aiAssistant: 'AI Assistant', aiSettingsHint: 'Multi-model', aiSelectionAction: 'Edit selection with AI', aiEdit: 'AI Edit', aiEditTitle: 'Edit or generate content with AI',
+  aiSettingsLabel: 'AI WRITING', aiSettingsTitle: 'AI Assistant settings', aiSettingsIntro: 'Supports DeepSeek, Zhipu GLM, Qwen, OpenAI, and Kimi. Select a provider and configure its API key to use AI Edit and document checks.',
+  aiProvider: 'Provider', aiProviderDeepSeek: 'DeepSeek', aiProviderZhipu: 'Zhipu GLM', aiProviderQwen: 'Qwen', aiProviderOpenAI: 'OpenAI', aiProviderKimi: 'Kimi', aiProviderDescription: 'Official API · endpoint configured automatically', aiModel: 'Model', aiRefreshModels: 'Refresh models', aiModelLoading: 'Loading available models from the selected provider…', aiModelLoaded: '{count} available models loaded', aiModelLoadFailed: 'The model API is unavailable; the recommended model remains available', aiModelKeyRequired: 'Save this provider key to load its available models automatically.', aiAPIKey: 'API Key',
+  aiAPIKeyPlaceholder: 'For example: sk-xxxxxxxx', aiAPIKeySaved: 'Stored in the system credential vault', aiAPIKeyNotSaved: 'No API key configured', aiCurrentAPIKey: 'Current API key', aiKeyReady: 'Stored securely and ready for AI Edit and document checks',
+  aiKeyGuideTitle: 'Enter the selected provider API key', aiKeyGuideHint: 'Create a key on the selected AI provider platform, then paste it below. It is stored only in the system credential vault.', aiKeyRequiredGuide: 'Set an API key for the selected provider before using AI Edit.', aiReplacingKeyHint: 'Enter a new key. Saving replaces this provider’s current key.', aiKeyRequired: 'Enter the selected provider API key', aiSaveAndEnable: 'Save and enable', aiSaveNewKey: 'Save new key', aiEditKey: 'Change', aiDeleteKey: 'Delete', aiDeleteKeyConfirm: 'Delete the saved API key for the selected provider?', aiKeyDeleted: 'API key deleted', aiKeyDeleteFailed: 'Unable to delete API key', aiDefaultModel: 'Default model', aiSetDefaultModel: 'Set as default', aiDefaultModelChanged: '{provider} is now the default model', aiDefaultModelChangeFailed: 'Unable to set the default model',
+  aiPrivacyNote: 'Only document content you select or explicitly confirm for checking is sent to the selected AI provider. Provider keys are stored separately in the system credential vault and never written to preferences, logs, or documents.', aiTestConnection: 'Test connection', aiTestingConnection: 'Testing connection…', aiConnectionSuccess: 'Connection successful', aiConnectionFailed: 'Connection failed',
+  aiSettingsSaved: 'AI provider and API key saved', aiSettingsSaveFailed: 'Unable to save AI settings',
+  aiRewriteTitle: 'AI Edit', aiAction: 'Action', aiActionPolish: 'Polish', aiActionRewrite: 'Rewrite', aiActionConcise: 'Make concise', aiActionExpand: 'Expand', aiActionSummarize: 'Summarize', aiActionTranslate: 'Translate', aiActionCustom: 'Custom instruction',
+  aiTargetLanguage: 'Target language', aiInstruction: 'Instruction', aiInstructionPlaceholder: 'For example: make this more professional and friendly', aiOriginalText: 'Original', aiResultText: 'AI result', aiResultPlaceholder: 'You can refine the generated result here',
+  aiCloudConsent: 'I agree to send the content and instruction above to the currently selected AI provider', aiOpenSettings: 'Settings', aiGenerate: 'Generate', aiGenerating: 'Generating…', aiRewriteConnecting: 'Connecting to the AI service', aiRewriteGenerating: 'AI is generating content', aiRewriteRefining: 'Preparing and checking the result', aiRewriteProgressMeta: '{provider} · {model} · {seconds}s elapsed', aiReplaceSelection: 'Replace selection', aiInsertAtCursor: 'Insert at cursor', aiSelectionReplaced: 'Selection replaced. Undo restores the original text.', aiContentInserted: 'Content inserted. Undo removes it.',
+  aiNeedSelection: 'Select some text first', aiNeedInstruction: 'Enter an instruction', aiNeedCloudConsent: 'Confirm before sending selected text', aiEmptyResult: 'The AI returned no usable content', aiSelectionChanged: 'The source text changed. Select it again and retry.', aiRequestFailed: 'AI request failed',
+  aiReview: 'AI Check', aiReviewTitle: 'Review the whole document and propose selectable fixes', aiReviewLabel: 'AI DOCUMENT REVIEW', aiReviewDialogTitle: 'AI document check', aiReviewIntro: 'Check the whole document for writing, spelling, punctuation, consistency, and Markdown issues, then choose which fixes to apply.',
+  aiReviewReadyTitle: 'Ready to check this document', aiReviewReadyHint: 'AI returns only locatable suggestions and never changes the document automatically.', aiReviewConsent: 'I agree to send the current full document to the default AI provider for review', aiStartReview: 'Start check', aiReviewChecking: 'Checking…', aiReviewConnecting: 'Connecting to the AI service', aiReviewReading: 'AI is reading the document', aiReviewAnalysing: 'Analysing errors and unclear writing', aiReviewFormatting: 'Preparing selectable suggestions', aiReviewProgressMeta: '{provider} · {model} · {seconds}s elapsed', aiReviewFailedTitle: 'This check did not finish', aiReviewFailedHint: 'The document was not changed. Retry now, or choose another model in Settings.', aiReviewNoIssuesTitle: 'No clear errors found', aiReviewNoIssuesHint: 'The current model returned no changes that need to be applied. You can close this window or check again.',
+  aiReviewSummary: '{count} suggestions, {selected} selected', aiSelectAllSuggestions: 'Select all', aiClearAllSuggestions: 'Clear selection', aiApplySelected: 'Apply selected fixes', aiReviewAgain: 'Check again', aiReviewApplied: '{count} fixes applied. Results remain available until you exit editing.', aiReviewNothingSelected: 'Select at least one suggestion', aiReviewDocumentChanged: 'The document changed after the check. Run it again to avoid applying a fix at the wrong position.', aiReviewOverlap: 'Selected suggestions overlap. Keep only one of them before applying.', aiReviewRequestFailed: 'AI document check failed', aiReviewEmptyDocument: 'The current document has no content to check', aiReviewTooLong: 'This document exceeds 80,000 characters. Review it in smaller selections with AI Edit.', aiReviewDeleteContent: 'Delete this content',
+  aiReviewOriginal: 'Original', aiReviewReplacement: 'Suggested change', aiReviewCategoryGrammar: 'Grammar', aiReviewCategorySpelling: 'Spelling', aiReviewCategoryPunctuation: 'Punctuation', aiReviewCategoryClarity: 'Clarity', aiReviewCategoryConsistency: 'Consistency', aiReviewCategoryMarkdown: 'Markdown', aiReviewSeverityHigh: 'Important', aiReviewSeverityMedium: 'Suggestion', aiReviewSeverityLow: 'Minor'
+});
+
 const codeMirrorTranslations = {
   'zh-CN': {
     Find: '查找内容', Replace: '替换为', next: '下一个', previous: '上一个', all: '全部选择',
@@ -433,7 +488,7 @@ function applyStaticTranslations() {
     renderTableDesigner();
   }
   applyPlatformShortcuts();
-  document.querySelectorAll('[data-language]').forEach(button => button.classList.toggle('active', button.dataset.language === state.language));
+  syncInterfaceLanguageOptions();
   syncFontFamilyOptions();
   syncDocumentWidthOptions();
   document.querySelectorAll('[data-accent-option]').forEach(button => {
@@ -495,10 +550,14 @@ const els = {
   editorResizer: $('#editorResizer'),
   searchInput: $('#searchInput'), searchCount: $('#searchCount'), dropOverlay: $('#dropOverlay'),
   moreMenu: $('#moreMenu'), accentMenu: $('#accentMenu'), recentContextMenu: $('#recentContextMenu'), editorClipboardMenu: $('#editorClipboardMenu'), spellcheckContextMenu: $('#spellcheckContextMenu'), spellingContextWord: $('#spellingContextWord'), spellingSuggestions: $('#spellingSuggestions'), spellingNoSuggestions: $('#spellingNoSuggestions'), personalDictionaryCount: $('#personalDictionaryCount'), toast: $('#toast'), imageUploadProgress: $('#imageUploadProgress'), imageUploadProgressTitle: $('#imageUploadProgressTitle'), imageUploadProgressDetail: $('#imageUploadProgressDetail'), imageUploadProgressPercent: $('#imageUploadProgressPercent'), imageUploadProgressBar: $('#imageUploadProgressBar'), editorView: $('#editorView'), fontScaleSlider: $('#fontScaleSlider'), fontScaleValue: $('#fontScaleValue'),
-  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'),
+  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiEditButton: $('#aiEditButton'), aiReviewButton: $('#aiReviewButton'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
-  saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'), feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
+  saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'),
+  aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURL: $('#aiBaseURL'), aiModel: $('#aiModel'), aiModelState: $('#aiModelState'), refreshAIModels: $('#refreshAIModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'),
+  aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteFields: $('#aiRewriteFields'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiInstructionField: $('#aiInstructionField'), aiInstruction: $('#aiInstruction'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
+  aiReviewDialog: $('#aiReviewDialog'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
+  feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
   recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramFullscreenButton: $('#toggleDiagramFullscreen'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'), flowchartModeBar: $('#flowchartModeBar'), flowchartVisualEditor: $('#flowchartVisualEditor'), structuredDiagramEditor: $('#structuredDiagramEditor'), structuredDiagramSettings: $('#structuredDiagramSettings'), structuredDiagramHead: $('#structuredDiagramHead'), structuredDiagramRows: $('#structuredDiagramRows'), flowchartCanvasViewport: $('#flowchartCanvasViewport'), flowchartCanvas: $('#flowchartCanvas'), flowchartZoomOut: $('#flowchartZoomOut'), flowchartZoomReset: $('#flowchartZoomReset'), flowchartZoomIn: $('#flowchartZoomIn'), flowchartZoomValue: $('#flowchartZoomValue'), flowchartNodeLayer: $('#flowchartNodeLayer'), flowchartEdgeLayer: $('#flowchartEdgeLayer'), flowchartDirection: $('#flowchartDirection'), flowchartNodeProperties: $('#flowchartNodeProperties'), flowchartEdgeProperties: $('#flowchartEdgeProperties'), flowchartNodeLabel: $('#flowchartNodeLabel'), flowchartNodeShape: $('#flowchartNodeShape'), flowchartEdgeLabel: $('#flowchartEdgeLabel'), flowchartEdgeStyle: $('#flowchartEdgeStyle'), flowchartSelectionHint: $('#flowchartSelectionHint'),
   imageUploadSettingsDialog: $('#imageUploadSettingsDialog'), picGoCloudSetup: $('#picGoCloudSetup'), picGoCloudAccount: $('#picGoCloudAccount'), picGoCloudUser: $('#picGoCloudUser'), picGoCloudStatus: $('#picGoCloudStatus'), picGoSetupWizard: $('#picGoSetupWizard'), picGoSetupInstall: $('#picGoSetupInstall'), picGoSetupConnect: $('#picGoSetupConnect'), picGoSetupReady: $('#picGoSetupReady'), picGoAdvancedSettings: $('#picGoAdvancedSettings'), localAssetsSummary: $('#localAssetsSummary'), picGoSettingsFields: $('#picGoSettingsFields'), picGoServerURL: $('#picGoServerURL'), picGoSecret: $('#picGoSecret'), clearPicGoSecretRow: $('#clearPicGoSecretRow'), clearPicGoSecret: $('#clearPicGoSecret'), picGoTestStatus: $('#picGoTestStatus'),
   editorUndoButton: $('#editorUndoButton')
@@ -1321,6 +1380,7 @@ function layoutFormatToolbar() {
   const bar = $('#editorFormatBar');
   if (!bar || bar.clientWidth === 0) return;
   const candidates = [...bar.querySelectorAll('[data-format-overflow]')];
+  els.moreFormatButton.hidden = false;
   candidates.forEach(element => { element.hidden = false; });
   syncFormatDividers();
 
@@ -1333,6 +1393,10 @@ function layoutFormatToolbar() {
     syncFormatDividers();
   }
   rebuildOverflowFormatOptions();
+  const hasOverflow = candidates.some(element => element.hidden);
+  els.moreFormatButton.hidden = !hasOverflow;
+  bar.querySelector('[data-divider-before="more"]')?.toggleAttribute('hidden', !hasOverflow);
+  if (!hasOverflow) closeMoreFormatMenu();
 }
 
 function scheduleFormatToolbarLayout() {
@@ -3590,6 +3654,8 @@ function openEditorClipboardMenu(event) {
   closeRecentContextMenu();
   closeSpellcheckContextMenu();
   editorClipboardSelection = {
+    from: selection.from,
+    to: selection.to,
     markdown: codeEditor.state.doc.sliceString(selection.from, selection.to)
   };
   els.editorClipboardMenu.classList.remove('hidden');
@@ -3792,6 +3858,16 @@ function syncFontScaleOptions() {
   });
 }
 
+function syncInterfaceLanguageOptions() {
+  document.querySelectorAll('#moreMenu button[data-language]').forEach(button => {
+    const active = button.dataset.language === state.language;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
+  const current = $('#interfaceLanguageCurrent');
+  if (current) current.textContent = state.language === 'en' ? 'English' : '简体中文';
+}
+
 function syncFontFamilyOptions() {
   document.querySelectorAll('#moreMenu button[data-font-family]').forEach(button => {
     const active = button.dataset.fontFamily === state.fontFamily;
@@ -3849,7 +3925,7 @@ function scheduleAutomaticFontScaleRefresh() {
 }
 
 function normalizeDocWidth(value) {
-  return DOC_WIDTH_LEVELS.includes(value) ? value : 'medium';
+  return DOC_WIDTH_LEVELS.includes(value) ? value : DEFAULT_DOC_WIDTH;
 }
 
 function syncDocumentWidthOptions() {
@@ -4494,7 +4570,7 @@ function renderToc() {
     const children = state.tocMode === 'tree' && hasChildren
       ? `<div class="toc-children${isCollapsed ? ' hidden' : ''}">${renderNodes(node.children)}</div>`
       : '';
-    return `<li class="toc-node level-${node.level}${isCollapsed ? ' collapsed' : ''}" data-toc-node="${escapeHtml(node.id)}"><div class="toc-row">${toggle}<a href="#${escapeHtml(node.id)}" data-target="${escapeHtml(node.id)}">${title}</a></div>${children}</li>`;
+    return `<li class="toc-node level-${node.level}${isCollapsed ? ' collapsed' : ''}" data-toc-node="${escapeHtml(node.id)}"><div class="toc-row">${toggle}<a href="#${escapeHtml(node.id)}" data-target="${escapeHtml(node.id)}"><span class="toc-link-text">${title}</span></a></div>${children}</li>`;
   }).join('')}</ul>`;
   els.toc.innerHTML = renderNodes(tree);
   els.toc.classList.toggle('is-flat', state.tocMode === 'flat');
@@ -4828,6 +4904,7 @@ function renderCurrentDocument() {
 
 function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
+  resetAIDocumentReviewSession();
   if (!sameDocumentPath(state.currentFile?.path, doc.path)) state.spellcheckIgnoredWords = new Set();
   state.currentFile = doc;
   missingCurrentFilePath = '';
@@ -4859,6 +4936,7 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  resetAIDocumentReviewSession();
   closeSearch();
   closeDocumentActionsMenu();
   releaseEChartsDiagrams(els.content);
@@ -5179,6 +5257,7 @@ async function toggleEditor(forceEditing) {
     }
     state.editing = nextEditing;
     if (state.editing) {
+      resetAIDocumentReviewSession();
       if (editorContent() !== state.currentFile.content) replaceEditorContent(state.currentFile.content, true);
       renderEditorPreview(state.currentFile.content);
       els.documentView.classList.add('hidden');
@@ -5192,6 +5271,7 @@ async function toggleEditor(forceEditing) {
       updateEditorPosition();
       updateExistingFlowchartButton();
     } else {
+      resetAIDocumentReviewSession();
       state.currentFile.content = editorContent();
       renderCurrentDocument();
       els.editorView.classList.add('hidden');
@@ -6349,6 +6429,790 @@ function closeAbout() {
   $('#moreButton').focus();
 }
 
+function aiErrorMessage(error) {
+  return String(error?.message || error || '').replace(/^Error:\s*/i, '').trim();
+}
+
+const aiProviderConfigs = Object.freeze({
+  deepseek: { nameKey: 'aiProviderDeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
+  zhipu: { nameKey: 'aiProviderZhipu', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.7-flash' },
+  qwen: { nameKey: 'aiProviderQwen', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+  openai: { nameKey: 'aiProviderOpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-mini' },
+  kimi: { nameKey: 'aiProviderKimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k3' }
+});
+
+function normalizeAIProvider(provider) {
+  return Object.hasOwn(aiProviderConfigs, provider) ? provider : 'deepseek';
+}
+
+function selectedAIModel() {
+  const provider = normalizeAIProvider(els.aiProvider.value);
+  return els.aiModel.value || aiProviderConfigs[provider].model;
+}
+
+function setAIModelOptions(provider, models = [], selectedModel = '') {
+  provider = normalizeAIProvider(provider);
+  const recommendedModel = aiProviderConfigs[provider].model;
+  selectedModel = String(selectedModel || recommendedModel).trim() || recommendedModel;
+  const availableModels = [...new Set([selectedModel, recommendedModel, ...models]
+    .map(model => String(model || '').trim())
+    .filter(Boolean))];
+  els.aiModel.replaceChildren(...availableModels.map(model => {
+    const option = document.createElement('option');
+    option.value = model;
+    option.textContent = model;
+    return option;
+  }));
+  els.aiModel.value = availableModels.includes(selectedModel) ? selectedModel : availableModels[0];
+  els.aiProviderModel.textContent = els.aiModel.value;
+}
+
+function renderAIProvider(provider, model = '') {
+  provider = normalizeAIProvider(provider);
+  const config = aiProviderConfigs[provider];
+  els.aiProvider.value = provider;
+  els.aiProviderName.dataset.i18n = config.nameKey;
+  els.aiProviderName.textContent = t(config.nameKey);
+  els.aiBaseURL.value = config.baseUrl;
+  setAIModelOptions(provider, [], model || config.model);
+}
+
+function renderAISettingsKeyUI() {
+  const hasKey = Boolean(currentAISettings?.hasApiKey);
+  const isDefault = Boolean(currentAISettings?.isDefault) && selectedAIModel() === currentAISettings?.model;
+  const showInput = !hasKey || aiSettingsEditingKey;
+  els.aiKeyOnboarding.classList.toggle('hidden', hasKey);
+  els.aiKeySavedCard.classList.toggle('hidden', !hasKey || aiSettingsEditingKey);
+  els.aiAPIKeyField.classList.toggle('hidden', !showInput);
+  els.aiMaskedAPIKey.textContent = currentAISettings?.maskedApiKey || '••••••••';
+  els.aiAPIKeyState.textContent = aiSettingsEditingKey ? t('aiReplacingKeyHint') : (hasKey ? t('aiAPIKeySaved') : t('aiAPIKeyNotSaved'));
+  const saveButton = $('#saveAISettings');
+  saveButton.classList.toggle('hidden', hasKey && !aiSettingsEditingKey);
+  const saveLabel = hasKey ? 'aiSaveNewKey' : 'aiSaveAndEnable';
+  saveButton.dataset.i18n = saveLabel;
+  saveButton.textContent = t(saveLabel);
+  els.setDefaultAIProvider.disabled = !hasKey || isDefault;
+  els.setDefaultAIProvider.classList.toggle('active', isDefault);
+  const defaultLabel = isDefault ? 'aiDefaultModel' : 'aiSetDefaultModel';
+  els.setDefaultAIProvider.dataset.i18n = defaultLabel;
+  els.setDefaultAIProvider.textContent = t(defaultLabel);
+  els.refreshAIModels.disabled = !hasKey;
+}
+
+function syncAISelectedModel() {
+  els.aiProviderModel.textContent = selectedAIModel();
+  renderAISettingsKeyUI();
+}
+
+async function loadAIModels() {
+  const provider = normalizeAIProvider(els.aiProvider.value);
+  const selectedModel = selectedAIModel();
+  const requestID = ++aiModelLoadRequest;
+  if (!currentAISettings?.hasApiKey) {
+    setAIModelOptions(provider, [], selectedModel);
+    els.aiModelState.textContent = t('aiModelKeyRequired');
+    renderAISettingsKeyUI();
+    return;
+  }
+  els.aiModel.disabled = true;
+  els.refreshAIModels.disabled = true;
+  els.aiModelState.textContent = t('aiModelLoading');
+  try {
+    const models = await window.quilliteMarkdown.listAIModels(provider);
+    if (requestID !== aiModelLoadRequest || provider !== normalizeAIProvider(els.aiProvider.value)) return;
+    setAIModelOptions(provider, Array.isArray(models) ? models : [], selectedModel);
+    els.aiModelState.textContent = t('aiModelLoaded', { count: Array.isArray(models) ? models.length : 0 });
+  } catch (error) {
+    if (requestID !== aiModelLoadRequest || provider !== normalizeAIProvider(els.aiProvider.value)) return;
+    setAIModelOptions(provider, [], selectedModel);
+    els.aiModelState.textContent = `${t('aiModelLoadFailed')}: ${aiErrorMessage(error)}`;
+  } finally {
+    if (requestID === aiModelLoadRequest) {
+      els.aiModel.disabled = false;
+      renderAISettingsKeyUI();
+    }
+  }
+}
+
+async function openAISettings(options = {}) {
+  els.aiSettingsStatus.textContent = '';
+  els.aiAPIKey.value = '';
+  aiSettingsEditingKey = false;
+  try {
+    currentAISettings = await window.quilliteMarkdown.getAISettings();
+  } catch (error) {
+    currentAISettings = { provider: 'deepseek', ...aiProviderConfigs.deepseek, hasApiKey: false, maskedApiKey: '' };
+    els.aiSettingsStatus.textContent = `${t('aiSettingsSaveFailed')}: ${aiErrorMessage(error)}`;
+  }
+  renderAIProvider(currentAISettings?.provider, currentAISettings?.model);
+  renderAISettingsKeyUI();
+  if (options.required && !currentAISettings?.hasApiKey) els.aiSettingsStatus.textContent = t('aiKeyRequiredGuide');
+  els.aiSettingsDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  await loadAIModels();
+  requestAnimationFrame(() => (currentAISettings?.hasApiKey ? els.editAIAPIKey : els.aiAPIKey).focus());
+}
+
+function closeAISettings() {
+  if (els.aiSettingsDialog.classList.contains('hidden')) return;
+  els.aiSettingsDialog.classList.add('hidden');
+  pendingAIRewriteSelection = null;
+  pendingAIRewriteAction = '';
+  pendingAIDocumentReview = false;
+  if (resumeAIDocumentReviewAfterSettings) {
+    resumeAIDocumentReviewAfterSettings = false;
+    els.aiReviewDialog.classList.remove('hidden');
+    document.body.classList.add('dialog-open');
+    return;
+  }
+  if (els.aiRewriteDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
+  $('#moreButton').focus();
+}
+
+function aiSettingsInput(clearApiKey = false) {
+  return {
+    provider: normalizeAIProvider(els.aiProvider.value),
+    baseUrl: els.aiBaseURL.value,
+    model: els.aiModel.value,
+    apiKey: els.aiAPIKey.value.trim(),
+    clearApiKey
+  };
+}
+
+async function changeAIProvider() {
+  const provider = normalizeAIProvider(els.aiProvider.value);
+  renderAIProvider(provider);
+  els.aiSettingsStatus.textContent = '';
+  els.aiAPIKey.value = '';
+  aiSettingsEditingKey = false;
+  try {
+    currentAISettings = await window.quilliteMarkdown.getAIProviderSettings(provider);
+  } catch (error) {
+    currentAISettings = { provider, ...aiProviderConfigs[provider], hasApiKey: false, maskedApiKey: '' };
+    els.aiSettingsStatus.textContent = `${t('aiSettingsSaveFailed')}: ${aiErrorMessage(error)}`;
+  }
+  renderAIProvider(provider, currentAISettings?.model);
+  renderAISettingsKeyUI();
+  await loadAIModels();
+  requestAnimationFrame(() => (currentAISettings?.hasApiKey ? els.editAIAPIKey : els.aiAPIKey).focus());
+}
+
+async function setDefaultAIProvider() {
+  const model = selectedAIModel();
+  if (!currentAISettings?.hasApiKey || (currentAISettings?.isDefault && currentAISettings?.model === model)) return;
+  els.setDefaultAIProvider.disabled = true;
+  els.aiSettingsStatus.textContent = '';
+  try {
+    currentAISettings = await window.quilliteMarkdown.setDefaultAIProvider(currentAISettings.provider, model);
+    els.aiProviderModel.textContent = currentAISettings.model;
+    renderAISettingsKeyUI();
+    const providerName = t(aiProviderConfigs[currentAISettings.provider].nameKey);
+    const message = t('aiDefaultModelChanged', { provider: providerName });
+    els.aiSettingsStatus.textContent = message;
+    showToast(message, 'success');
+  } catch (error) {
+    els.aiSettingsStatus.textContent = `${t('aiDefaultModelChangeFailed')}: ${aiErrorMessage(error)}`;
+    renderAISettingsKeyUI();
+  }
+}
+
+function requireAIKeyInput() {
+  if (els.aiAPIKey.value.trim()) return true;
+  els.aiSettingsStatus.textContent = t('aiKeyRequired');
+  els.aiAPIKey.focus();
+  return false;
+}
+
+async function saveAISettings(event) {
+  event?.preventDefault();
+  els.aiSettingsStatus.textContent = '';
+  if ((!currentAISettings?.hasApiKey || aiSettingsEditingKey) && !requireAIKeyInput()) return;
+  const button = $('#saveAISettings');
+  button.disabled = true;
+  try {
+    currentAISettings = await window.quilliteMarkdown.setAISettings(aiSettingsInput());
+    els.aiAPIKey.value = '';
+    aiSettingsEditingKey = false;
+    renderAIProvider(currentAISettings.provider, currentAISettings.model);
+    renderAISettingsKeyUI();
+    await loadAIModels();
+    els.aiSettingsStatus.textContent = t('aiSettingsSaved');
+    showToast(t('aiSettingsSaved'), 'success');
+    if (resumeAIDocumentReviewAfterSettings) {
+      resumeAIDocumentReviewAfterSettings = false;
+      els.aiSettingsDialog.classList.add('hidden');
+      els.aiReviewDialog.classList.remove('hidden');
+      return;
+    }
+    if (pendingAIDocumentReview && currentAISettings?.hasApiKey) {
+      pendingAIDocumentReview = false;
+      els.aiSettingsDialog.classList.add('hidden');
+      await openAIDocumentReview();
+      return;
+    }
+    if (pendingAIRewriteSelection && currentAISettings?.hasApiKey) {
+      const selection = { ...pendingAIRewriteSelection };
+      const action = pendingAIRewriteAction || (selection.markdown ? 'polish' : 'custom');
+      pendingAIRewriteSelection = null;
+      pendingAIRewriteAction = '';
+      els.aiSettingsDialog.classList.add('hidden');
+      await openAIRewrite(selection, action);
+    }
+  } catch (error) {
+    els.aiSettingsStatus.textContent = `${t('aiSettingsSaveFailed')}: ${aiErrorMessage(error)}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function testAIConnection() {
+  if ((!currentAISettings?.hasApiKey || aiSettingsEditingKey) && !requireAIKeyInput()) return;
+  els.aiSettingsStatus.textContent = t('aiTestingConnection');
+  const button = $('#testAIConnection');
+  button.disabled = true;
+  try {
+    const provider = normalizeAIProvider(els.aiProvider.value);
+    const model = selectedAIModel();
+    if (!currentAISettings?.hasApiKey || aiSettingsEditingKey) {
+      currentAISettings = await window.quilliteMarkdown.setAISettings(aiSettingsInput());
+      els.aiAPIKey.value = '';
+      aiSettingsEditingKey = false;
+    }
+    await window.quilliteMarkdown.testAIProviderConnection(provider, model);
+    renderAISettingsKeyUI();
+    els.aiSettingsStatus.textContent = t('aiConnectionSuccess');
+  } catch (error) {
+    els.aiSettingsStatus.textContent = `${t('aiConnectionFailed')}: ${aiErrorMessage(error)}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function editAIAPIKey() {
+  aiSettingsEditingKey = true;
+  els.aiSettingsStatus.textContent = '';
+  renderAISettingsKeyUI();
+  requestAnimationFrame(() => els.aiAPIKey.focus());
+}
+
+async function deleteAIAPIKey() {
+  if (!window.confirm(t('aiDeleteKeyConfirm'))) return;
+  els.editAIAPIKey.disabled = true;
+  els.deleteAIAPIKey.disabled = true;
+  try {
+    currentAISettings = await window.quilliteMarkdown.setAISettings(aiSettingsInput(true));
+    aiSettingsEditingKey = false;
+    els.aiAPIKey.value = '';
+    renderAISettingsKeyUI();
+    await loadAIModels();
+    els.aiSettingsStatus.textContent = t('aiKeyDeleted');
+    showToast(t('aiKeyDeleted'), 'success');
+    requestAnimationFrame(() => els.aiAPIKey.focus());
+  } catch (error) {
+    els.aiSettingsStatus.textContent = `${t('aiKeyDeleteFailed')}: ${aiErrorMessage(error)}`;
+  } finally {
+    els.editAIAPIKey.disabled = false;
+    els.deleteAIAPIKey.disabled = false;
+  }
+}
+
+function updateAIRewriteControls() {
+  const insertMode = aiRewriteSelection?.mode === 'insert';
+  if (insertMode) els.aiRewriteAction.value = 'custom';
+  const action = els.aiRewriteAction.value;
+  els.aiRewriteFields.classList.toggle('hidden', insertMode);
+  els.aiRewriteControls.classList.toggle('is-insert-mode', insertMode);
+  els.aiTargetLanguageField.classList.toggle('hidden', action !== 'translate');
+  els.aiInstructionField.classList.toggle('hidden', action !== 'custom');
+}
+
+function currentAIEditContext() {
+  if (!codeEditor || !state.editing) return { from: null, to: null, markdown: '', mode: 'insert' };
+  const selection = codeEditor.state.selection.main;
+  if (selection.empty) {
+    const cursor = Number.isInteger(selection.head) ? selection.head : null;
+    return { from: cursor, to: cursor, markdown: '', mode: 'insert' };
+  }
+  return {
+    from: selection.from,
+    to: selection.to,
+    markdown: codeEditor.state.doc.sliceString(selection.from, selection.to),
+    mode: 'replace'
+  };
+}
+
+function stopAIRewriteProgress() {
+  if (aiRewriteProgressTimer) window.clearInterval(aiRewriteProgressTimer);
+  aiRewriteProgressTimer = 0;
+  aiRewriteStartedAt = 0;
+  els.aiRewriteProgress.classList.add('hidden');
+  els.aiRewriteProgress.setAttribute('aria-hidden', 'true');
+}
+
+function updateAIRewriteProgress() {
+  if (!aiRewriteStartedAt) return;
+  const elapsed = Math.max(0, (Date.now() - aiRewriteStartedAt) / 1000);
+  let phaseKey = 'aiRewriteConnecting';
+  if (elapsed >= 3) phaseKey = 'aiRewriteGenerating';
+  if (elapsed >= 18) phaseKey = 'aiRewriteRefining';
+  const percent = Math.min(92, Math.round(8 + 84 * (1 - Math.exp(-elapsed / 24))));
+  const provider = normalizeAIProvider(currentAISettings?.provider);
+  const providerName = t(aiProviderConfigs[provider].nameKey);
+  const model = currentAISettings?.model || aiProviderConfigs[provider].model;
+  els.aiRewriteProgressPhase.textContent = t(phaseKey);
+  els.aiRewriteProgressMeta.textContent = t('aiRewriteProgressMeta', { provider: providerName, model, seconds: Math.floor(elapsed) });
+  els.aiRewriteProgressBar.style.width = `${percent}%`;
+  els.aiRewriteProgressPercent.textContent = `${percent}%`;
+}
+
+function startAIRewriteProgress() {
+  stopAIRewriteProgress();
+  aiRewriteStartedAt = Date.now();
+  els.aiRewriteProgress.classList.remove('hidden');
+  els.aiRewriteProgress.setAttribute('aria-hidden', 'false');
+  updateAIRewriteProgress();
+  aiRewriteProgressTimer = window.setInterval(updateAIRewriteProgress, 500);
+}
+
+async function openAIEditor() {
+  const context = currentAIEditContext();
+  await openAIRewrite(context, context.markdown ? 'polish' : 'custom');
+}
+
+async function openAIRewrite(selection = editorClipboardSelection, preferredAction = '') {
+  if (!selection) {
+    showToast(t('aiNeedSelection'), 'warning');
+    return;
+  }
+  const editContext = {
+    from: Number.isInteger(selection.from) ? selection.from : null,
+    to: Number.isInteger(selection.to) ? selection.to : null,
+    markdown: selection.markdown || '',
+    mode: selection.markdown ? 'replace' : 'insert'
+  };
+  closeEditorClipboardMenu();
+  try {
+    currentAISettings = await window.quilliteMarkdown.getAISettings();
+  } catch {
+    currentAISettings = { provider: 'deepseek', hasApiKey: false };
+  }
+  if (!currentAISettings?.hasApiKey) {
+    pendingAIRewriteSelection = { ...editContext };
+    pendingAIRewriteAction = preferredAction || (editContext.markdown ? 'polish' : 'custom');
+    await openAISettings({ required: true });
+    return;
+  }
+  aiRewriteSelection = editContext;
+  aiRewriteRequest += 1;
+  stopAIRewriteProgress();
+  const insertMode = editContext.mode === 'insert';
+  els.aiRewriteAction.value = insertMode ? 'custom' : (preferredAction || 'polish');
+  els.aiInstruction.value = '';
+  els.aiOriginalText.value = aiRewriteSelection.markdown;
+  els.aiOriginalTextField.classList.toggle('hidden', insertMode);
+  els.aiCompareGrid.classList.toggle('is-insert-mode', insertMode);
+  els.aiResultText.value = '';
+  els.aiRewriteStatus.textContent = '';
+  els.aiCloudConsent.checked = true;
+  $('#replaceWithAIResult').disabled = true;
+  $('#generateAIRewrite').disabled = false;
+  $('#generateAIRewrite').dataset.i18n = 'aiGenerate';
+  $('#generateAIRewrite').textContent = t('aiGenerate');
+  const applyButton = $('#replaceWithAIResult');
+  const applyLabel = insertMode ? 'aiInsertAtCursor' : 'aiReplaceSelection';
+  applyButton.dataset.i18n = applyLabel;
+  applyButton.textContent = t(applyLabel);
+  updateAIRewriteControls();
+  els.aiCloudConsentRow.classList.remove('hidden');
+  els.aiRewriteDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  requestAnimationFrame(() => (insertMode ? els.aiInstruction : els.aiRewriteAction).focus());
+}
+
+function closeAIRewrite() {
+  if (els.aiRewriteDialog.classList.contains('hidden')) return;
+  aiRewriteRequest += 1;
+  stopAIRewriteProgress();
+  $('#generateAIRewrite').disabled = false;
+  $('#generateAIRewrite').dataset.i18n = 'aiGenerate';
+  $('#generateAIRewrite').textContent = t('aiGenerate');
+  els.aiRewriteDialog.classList.add('hidden');
+  aiRewriteSelection = null;
+  if (els.aiSettingsDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
+  focusCodeEditor();
+}
+
+async function generateAIRewrite() {
+  if (!aiRewriteSelection) return;
+  const action = els.aiRewriteAction.value;
+  const instruction = els.aiInstruction.value.trim();
+  if (action === 'custom' && !instruction) {
+    els.aiRewriteStatus.textContent = t('aiNeedInstruction');
+    els.aiInstruction.focus();
+    return;
+  }
+  if (!els.aiCloudConsent.checked) {
+    els.aiRewriteStatus.textContent = t('aiNeedCloudConsent');
+    els.aiCloudConsent.focus();
+    return;
+  }
+  const button = $('#generateAIRewrite');
+  const requestID = ++aiRewriteRequest;
+  button.disabled = true;
+  button.dataset.i18n = 'aiGenerating';
+  button.textContent = t('aiGenerating');
+  $('#replaceWithAIResult').disabled = true;
+  els.aiRewriteStatus.textContent = '';
+  startAIRewriteProgress();
+  try {
+    const result = await window.quilliteMarkdown.rewriteWithAI({
+      action,
+      text: aiRewriteSelection.markdown,
+      instruction,
+      targetLanguage: els.aiTargetLanguage.value
+    });
+    if (requestID !== aiRewriteRequest) return;
+    stopAIRewriteProgress();
+    els.aiResultText.value = result?.text || '';
+    if (!els.aiResultText.value.trim()) throw new Error(t('aiEmptyResult'));
+    els.aiRewriteStatus.textContent = '';
+    $('#replaceWithAIResult').disabled = false;
+  } catch (error) {
+    if (requestID !== aiRewriteRequest) return;
+    stopAIRewriteProgress();
+    els.aiRewriteStatus.textContent = `${t('aiRequestFailed')}: ${aiErrorMessage(error)}`;
+    void window.quilliteMarkdown.reportErrorLog?.('ai.edit', aiErrorMessage(error), '');
+  } finally {
+    if (requestID === aiRewriteRequest) {
+      button.disabled = false;
+      button.dataset.i18n = 'aiGenerate';
+      button.textContent = t('aiGenerate');
+    }
+  }
+}
+
+function replaceWithAIResult() {
+  if (!codeEditor || !aiRewriteSelection) return;
+  const replacement = els.aiResultText.value;
+  if (!replacement.trim()) {
+    els.aiRewriteStatus.textContent = t('aiEmptyResult');
+    return;
+  }
+  const { from, to, markdown, mode } = aiRewriteSelection;
+  const insertMode = mode === 'insert';
+  if (!insertMode && codeEditor.state.doc.sliceString(from, to) !== markdown) {
+    els.aiRewriteStatus.textContent = t('aiSelectionChanged');
+    return;
+  }
+  const documentLength = codeEditor.state.doc.length;
+  const insertAt = insertMode && Number.isInteger(from) && from >= 0 && from <= documentLength ? from : documentLength;
+  const changeFrom = insertMode ? insertAt : from;
+  const changeTo = insertMode ? insertAt : to;
+  codeEditor.dispatch({
+    changes: { from: changeFrom, to: changeTo, insert: replacement },
+    selection: { anchor: changeFrom + replacement.length },
+    scrollIntoView: true,
+    userEvent: 'input.ai'
+  });
+  closeAIRewrite();
+  showToast(t(insertMode ? 'aiContentInserted' : 'aiSelectionReplaced'), 'success', 3600);
+}
+
+function aiReviewCategoryLabel(category) {
+  const key = `aiReviewCategory${category.charAt(0).toUpperCase()}${category.slice(1)}`;
+  return t(key);
+}
+
+function aiReviewSeverityLabel(severity) {
+  const key = `aiReviewSeverity${severity.charAt(0).toUpperCase()}${severity.slice(1)}`;
+  return t(key);
+}
+
+function updateAIReviewSelectionUI() {
+  const selected = aiReviewSuggestions.filter(suggestion => suggestion.selected).length;
+  els.aiReviewSummary.textContent = t('aiReviewSummary', { count: aiReviewSuggestions.length, selected });
+  els.applyAIReview.disabled = aiReviewApplied || selected === 0;
+  els.selectAllAIReview.disabled = aiReviewApplied;
+  els.clearAllAIReview.disabled = aiReviewApplied;
+  els.aiReviewSuggestions.querySelectorAll('[data-ai-review-index]').forEach(checkbox => {
+    const index = Number(checkbox.dataset.aiReviewIndex);
+    checkbox.checked = Boolean(aiReviewSuggestions[index]?.selected);
+    checkbox.disabled = aiReviewApplied;
+    checkbox.closest('.ai-review-suggestion')?.classList.toggle('selected', checkbox.checked);
+    checkbox.closest('.ai-review-suggestion')?.classList.toggle('applied', aiReviewApplied && checkbox.checked);
+  });
+}
+
+function renderAIReviewSuggestions() {
+  els.aiReviewSuggestions.replaceChildren();
+  aiReviewSuggestions.forEach((suggestion, index) => {
+    const card = document.createElement('article');
+    card.className = 'ai-review-suggestion selected';
+
+    const heading = document.createElement('div');
+    heading.className = 'ai-review-suggestion-heading';
+    const choice = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = suggestion.selected;
+    checkbox.dataset.aiReviewIndex = String(index);
+    const title = document.createElement('strong');
+    title.textContent = `${index + 1}. ${suggestion.reason}`;
+    choice.append(checkbox, title);
+    const badges = document.createElement('span');
+    badges.className = 'ai-review-badges';
+    const category = document.createElement('em');
+    category.textContent = aiReviewCategoryLabel(suggestion.category);
+    const severity = document.createElement('em');
+    severity.className = `severity-${suggestion.severity}`;
+    severity.textContent = aiReviewSeverityLabel(suggestion.severity);
+    badges.append(category, severity);
+    heading.append(choice, badges);
+
+    const comparison = document.createElement('div');
+    comparison.className = 'ai-review-comparison';
+    const original = document.createElement('section');
+    const originalLabel = document.createElement('small');
+    const originalText = document.createElement('pre');
+    originalLabel.textContent = t('aiReviewOriginal');
+    originalText.textContent = suggestion.original;
+    original.append(originalLabel, originalText);
+    const replacement = document.createElement('section');
+    const replacementLabel = document.createElement('small');
+    const replacementText = document.createElement('pre');
+    replacementLabel.textContent = t('aiReviewReplacement');
+    replacementText.textContent = suggestion.replacement || t('aiReviewDeleteContent');
+    replacement.append(replacementLabel, replacementText);
+    comparison.append(original, replacement);
+
+    card.append(heading, comparison);
+    els.aiReviewSuggestions.append(card);
+  });
+  updateAIReviewSelectionUI();
+}
+
+function setAIReviewEmptyState(titleKey, hintKey) {
+  stopAIReviewProgress();
+  els.aiReviewEmpty.querySelector('strong').textContent = t(titleKey);
+  els.aiReviewEmpty.querySelector('p').textContent = t(hintKey);
+}
+
+function stopAIReviewProgress() {
+  if (aiReviewProgressTimer) window.clearInterval(aiReviewProgressTimer);
+  aiReviewProgressTimer = 0;
+  aiReviewStartedAt = 0;
+  els.aiReviewEmpty.classList.remove('is-checking');
+  els.aiReviewEmpty.removeAttribute('aria-busy');
+  els.aiReviewProgress.classList.add('hidden');
+  els.aiReviewProgress.setAttribute('aria-hidden', 'true');
+}
+
+function resetAIDocumentReviewSession() {
+  aiReviewRequest += 1;
+  stopAIReviewProgress();
+  els.aiReviewDialog.classList.add('hidden');
+  if (els.aiSettingsDialog.classList.contains('hidden') && els.aiRewriteDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
+  aiReviewSessionActive = false;
+  aiReviewApplied = false;
+  aiReviewSnapshot = '';
+  aiReviewSuggestions = [];
+  els.aiReviewSuggestions.replaceChildren();
+  els.aiReviewSuggestions.classList.add('hidden');
+  els.aiReviewToolbar.classList.add('hidden');
+  els.aiReviewEmpty.classList.remove('hidden');
+  els.aiReviewConsentRow.classList.remove('hidden');
+  els.aiReviewConsent.checked = true;
+  els.aiReviewStatus.textContent = '';
+  els.runAIReview.disabled = false;
+  els.runAIReview.dataset.i18n = 'aiStartReview';
+  els.runAIReview.textContent = t('aiStartReview');
+  els.runAIReview.classList.remove('hidden');
+  els.rerunAIReview.classList.add('hidden');
+  els.applyAIReview.classList.add('hidden');
+  els.applyAIReview.disabled = true;
+  els.selectAllAIReview.disabled = false;
+  els.clearAllAIReview.disabled = false;
+  setAIReviewEmptyState('aiReviewReadyTitle', 'aiReviewReadyHint');
+}
+
+function updateAIReviewProgress() {
+  if (!aiReviewStartedAt) return;
+  const elapsed = Math.max(0, (Date.now() - aiReviewStartedAt) / 1000);
+  let phaseKey = 'aiReviewConnecting';
+  if (elapsed >= 3) phaseKey = 'aiReviewReading';
+  if (elapsed >= 11) phaseKey = 'aiReviewAnalysing';
+  if (elapsed >= 28) phaseKey = 'aiReviewFormatting';
+  const percent = Math.min(92, Math.round(8 + 84 * (1 - Math.exp(-elapsed / 23))));
+  const provider = normalizeAIProvider(currentAISettings?.provider);
+  const providerName = t(aiProviderConfigs[provider].nameKey);
+  const model = currentAISettings?.model || aiProviderConfigs[provider].model;
+  els.aiReviewEmpty.querySelector('strong').textContent = t(phaseKey);
+  els.aiReviewEmpty.querySelector('p').textContent = t('aiReviewProgressMeta', { provider: providerName, model, seconds: Math.floor(elapsed) });
+  els.aiReviewProgressBar.style.width = `${percent}%`;
+  els.aiReviewProgressMeta.textContent = `${percent}%`;
+}
+
+function startAIReviewProgress() {
+  stopAIReviewProgress();
+  aiReviewStartedAt = Date.now();
+  els.aiReviewEmpty.classList.add('is-checking');
+  els.aiReviewEmpty.setAttribute('aria-busy', 'true');
+  els.aiReviewProgress.classList.remove('hidden');
+  els.aiReviewProgress.setAttribute('aria-hidden', 'false');
+  updateAIReviewProgress();
+  aiReviewProgressTimer = window.setInterval(updateAIReviewProgress, 500);
+}
+
+function aiReviewErrorMessage(error) {
+  const message = aiErrorMessage(error);
+  const lower = message.toLowerCase();
+  if (lower.includes('deadline exceeded') || lower.includes('timeout') || lower.includes('timed out')) {
+    return state.language === 'en' ? 'The model took too long to respond. Retry or choose a faster model.' : '模型响应超时，请重试或选择响应更快的模型。';
+  }
+  if (lower.includes('unreadable response') || lower.includes('unsupported message format') || lower.includes('usable document review') || lower.includes('invalid response')) {
+    return state.language === 'en' ? 'The model returned an incompatible result even after automatic repair. Retry or choose another model.' : '模型返回格式异常，自动修复后仍无法读取。请重试或更换模型。';
+  }
+  if (lower.includes('http 429') || lower.includes('rate limit')) {
+    return state.language === 'en' ? 'The AI service is busy or rate-limited. Wait briefly and retry.' : 'AI 服务繁忙或已触发频率限制，请稍后重试。';
+  }
+  if (lower.includes('api key')) {
+    return state.language === 'en' ? 'The API Key is missing or invalid. Check it in Settings.' : 'API Key 缺失或无效，请在“设置”中检查。';
+  }
+  return message;
+}
+
+async function openAIDocumentReview() {
+  if (!codeEditor || !state.editing) return;
+  try {
+    currentAISettings = await window.quilliteMarkdown.getAISettings();
+  } catch {
+    currentAISettings = { provider: 'deepseek', hasApiKey: false };
+  }
+  if (!currentAISettings?.hasApiKey) {
+    pendingAIDocumentReview = true;
+    await openAISettings({ required: true });
+    return;
+  }
+  if (!aiReviewSessionActive) {
+    resetAIDocumentReviewSession();
+    aiReviewSessionActive = true;
+  }
+  els.aiReviewDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  requestAnimationFrame(() => {
+    const action = !els.rerunAIReview.classList.contains('hidden') ? els.rerunAIReview : els.runAIReview;
+    action.focus();
+  });
+}
+
+function closeAIDocumentReview() {
+  if (els.aiReviewDialog.classList.contains('hidden')) return;
+  els.aiReviewDialog.classList.add('hidden');
+  if (els.aiSettingsDialog.classList.contains('hidden') && els.aiRewriteDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
+  focusCodeEditor();
+}
+
+async function runAIDocumentReview() {
+  if (!codeEditor) return;
+  if (!els.aiReviewConsent.checked) {
+    els.aiReviewStatus.textContent = t('aiNeedCloudConsent');
+    els.aiReviewConsent.focus();
+    return;
+  }
+  const source = editorContent();
+  if (!source.trim()) {
+    els.aiReviewStatus.textContent = t('aiReviewEmptyDocument');
+    return;
+  }
+  if ([...source].length > 80000) {
+    els.aiReviewStatus.textContent = t('aiReviewTooLong');
+    return;
+  }
+  const requestID = ++aiReviewRequest;
+  aiReviewSessionActive = true;
+  aiReviewApplied = false;
+  aiReviewSnapshot = source;
+  aiReviewSuggestions = [];
+  els.runAIReview.disabled = true;
+  els.applyAIReview.disabled = true;
+  els.aiReviewSuggestions.classList.add('hidden');
+  els.aiReviewToolbar.classList.add('hidden');
+  els.aiReviewEmpty.classList.remove('hidden');
+  els.aiReviewStatus.textContent = '';
+  els.runAIReview.dataset.i18n = 'aiReviewChecking';
+  els.runAIReview.textContent = t('aiReviewChecking');
+  els.runAIReview.classList.remove('hidden');
+  els.rerunAIReview.classList.add('hidden');
+  els.applyAIReview.classList.add('hidden');
+  els.aiReviewConsentRow.classList.remove('hidden');
+  startAIReviewProgress();
+  try {
+    const result = await window.quilliteMarkdown.reviewDocumentWithAI({ text: source });
+    if (requestID !== aiReviewRequest) return;
+    stopAIReviewProgress();
+    aiReviewSuggestions = locateAIReviewSuggestions(result?.suggestions, source);
+    els.aiReviewStatus.textContent = '';
+    els.runAIReview.classList.add('hidden');
+    els.rerunAIReview.classList.remove('hidden');
+    if (aiReviewSuggestions.length === 0) {
+      els.aiReviewConsentRow.classList.add('hidden');
+      setAIReviewEmptyState('aiReviewNoIssuesTitle', 'aiReviewNoIssuesHint');
+      return;
+    }
+    renderAIReviewSuggestions();
+    els.aiReviewEmpty.classList.add('hidden');
+    els.aiReviewSuggestions.classList.remove('hidden');
+    els.aiReviewToolbar.classList.remove('hidden');
+    els.aiReviewConsentRow.classList.add('hidden');
+    els.applyAIReview.classList.remove('hidden');
+  } catch (error) {
+    if (requestID !== aiReviewRequest) return;
+    stopAIReviewProgress();
+    els.aiReviewStatus.textContent = `${t('aiReviewRequestFailed')}: ${aiReviewErrorMessage(error)}`;
+    setAIReviewEmptyState('aiReviewFailedTitle', 'aiReviewFailedHint');
+    els.runAIReview.classList.add('hidden');
+    els.rerunAIReview.classList.remove('hidden');
+    void window.quilliteMarkdown.reportErrorLog?.('ai.review', aiErrorMessage(error), '');
+  } finally {
+    if (requestID === aiReviewRequest) els.runAIReview.disabled = false;
+  }
+}
+
+function setAllAIReviewSuggestions(selected) {
+  aiReviewSuggestions.forEach(suggestion => { suggestion.selected = selected; });
+  updateAIReviewSelectionUI();
+}
+
+function applySelectedAIReviewSuggestions() {
+  if (!codeEditor) return;
+  if (editorContent() !== aiReviewSnapshot) {
+    els.aiReviewStatus.textContent = t('aiReviewDocumentChanged');
+    return;
+  }
+  const selected = aiReviewSuggestions.filter(suggestion => suggestion.selected).sort((left, right) => left.start - right.start);
+  if (selected.length === 0) {
+    els.aiReviewStatus.textContent = t('aiReviewNothingSelected');
+    return;
+  }
+  if (hasOverlappingReviewSuggestions(selected)) {
+    els.aiReviewStatus.textContent = t('aiReviewOverlap');
+    return;
+  }
+  codeEditor.dispatch({
+    changes: selected.map(suggestion => ({ from: suggestion.start, to: suggestion.end, insert: suggestion.replacement })),
+    scrollIntoView: true,
+    userEvent: 'input.ai-review'
+  });
+  const count = selected.length;
+  aiReviewApplied = true;
+  aiReviewSuggestions.forEach(suggestion => { suggestion.applied = suggestion.selected; });
+  updateAIReviewSelectionUI();
+  els.applyAIReview.classList.add('hidden');
+  els.aiReviewStatus.textContent = t('aiReviewApplied', { count });
+  closeAIDocumentReview();
+  showToast(t('aiReviewApplied', { count }), 'success', 4200);
+}
+
 function renderFeedbackImages() {
   els.feedbackImageList.replaceChildren();
   state.feedbackImages.forEach((image, index) => {
@@ -6383,9 +7247,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.6.2', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.7.0', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.6.2';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.0';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -6441,7 +7305,7 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
-  $('#currentVersion').textContent = info.currentVersion || '2.6.2';
+  $('#currentVersion').textContent = info.currentVersion || '2.7.0';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -7327,6 +8191,7 @@ els.moreMenu.addEventListener('click', event => {
   }
   if (action === 'export-center') openExportCenter();
   if (action === 'image-upload-settings') openImageUploadSettings();
+  if (action === 'ai-settings') openAISettings();
   if (action === 'feedback') openFeedback();
   if (action === 'check-update') checkForUpdates(true);
   if (action === 'about') openAbout();
@@ -7378,9 +8243,61 @@ els.recentContextMenu.addEventListener('click', async event => {
 });
 els.editorClipboardMenu.addEventListener('click', event => {
   event.stopPropagation();
+  const aiButton = event.target.closest('[data-editor-ai]');
+  if (aiButton) {
+    const selection = editorClipboardSelection ? { ...editorClipboardSelection } : null;
+    void openAIRewrite(selection);
+    return;
+  }
   const button = event.target.closest('[data-editor-copy]');
   if (!button) return;
   copyEditorSelection(button.dataset.editorCopy);
+});
+
+$('#closeAISettings').addEventListener('click', closeAISettings);
+$('#cancelAISettings').addEventListener('click', closeAISettings);
+els.aiSettingsForm.addEventListener('submit', saveAISettings);
+els.aiProvider.addEventListener('change', changeAIProvider);
+els.aiModel.addEventListener('change', syncAISelectedModel);
+els.refreshAIModels.addEventListener('click', loadAIModels);
+els.setDefaultAIProvider.addEventListener('click', setDefaultAIProvider);
+els.editAIAPIKey.addEventListener('click', editAIAPIKey);
+els.deleteAIAPIKey.addEventListener('click', deleteAIAPIKey);
+$('#testAIConnection').addEventListener('click', testAIConnection);
+els.aiEditButton.addEventListener('click', openAIEditor);
+els.aiReviewButton.addEventListener('click', openAIDocumentReview);
+
+$('#closeAIRewrite').addEventListener('click', closeAIRewrite);
+$('#cancelAIRewrite').addEventListener('click', closeAIRewrite);
+els.aiRewriteAction.addEventListener('change', updateAIRewriteControls);
+els.aiResultText.addEventListener('input', () => {
+  $('#replaceWithAIResult').disabled = !els.aiResultText.value.trim();
+});
+$('#generateAIRewrite').addEventListener('click', generateAIRewrite);
+$('#replaceWithAIResult').addEventListener('click', replaceWithAIResult);
+$('#openAISettingsFromRewrite').addEventListener('click', () => {
+  els.aiRewriteDialog.classList.add('hidden');
+  void openAISettings();
+});
+$('#closeAIReview').addEventListener('click', closeAIDocumentReview);
+$('#cancelAIReview').addEventListener('click', closeAIDocumentReview);
+els.runAIReview.addEventListener('click', runAIDocumentReview);
+els.rerunAIReview.addEventListener('click', runAIDocumentReview);
+els.applyAIReview.addEventListener('click', applySelectedAIReviewSuggestions);
+els.selectAllAIReview.addEventListener('click', () => setAllAIReviewSuggestions(true));
+els.clearAllAIReview.addEventListener('click', () => setAllAIReviewSuggestions(false));
+els.aiReviewSuggestions.addEventListener('change', event => {
+  const checkbox = event.target.closest('[data-ai-review-index]');
+  if (!checkbox) return;
+  const index = Number(checkbox.dataset.aiReviewIndex);
+  if (!aiReviewSuggestions[index]) return;
+  aiReviewSuggestions[index].selected = checkbox.checked;
+  updateAIReviewSelectionUI();
+});
+$('#openAISettingsFromReview').addEventListener('click', () => {
+  resumeAIDocumentReviewAfterSettings = true;
+  els.aiReviewDialog.classList.add('hidden');
+  void openAISettings();
 });
 els.spellcheckContextMenu.addEventListener('click', event => {
   event.stopPropagation();
@@ -7467,6 +8384,9 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.exportCenterDialog.classList.contains('hidden')) closeExportCenter();
   else if (event.key === 'Escape' && !els.pdfTutorialDialog.classList.contains('hidden')) closePDFTutorial();
   else if (event.key === 'Escape' && !els.updateDialog.classList.contains('hidden')) closeUpdate();
+  else if (event.key === 'Escape' && !els.aiReviewDialog.classList.contains('hidden')) closeAIDocumentReview();
+  else if (event.key === 'Escape' && !els.aiRewriteDialog.classList.contains('hidden')) closeAIRewrite();
+  else if (event.key === 'Escape' && !els.aiSettingsDialog.classList.contains('hidden')) closeAISettings();
   else if (event.key === 'Escape' && !els.feedbackDialog.classList.contains('hidden')) closeFeedback();
   else if (event.key === 'Escape' && !els.aboutDialog.classList.contains('hidden')) closeAbout();
   else if (event.key === 'Escape' && !els.searchBar.classList.contains('hidden')) closeSearch();

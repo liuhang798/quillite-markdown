@@ -2,11 +2,51 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [Unreleased]
+## [2.7.0] - 2026-09-02
 
 ### 简体中文
 
+- 新安装或尚未选择文档宽度时，阅读与编辑区域现在默认使用“宽”；已手动保存的窄、中、宽或全宽设置继续保持不变。
+- 修复 Windows 新版 Edge／Chrome 的启动器先退出、实际无头浏览器稍后才写入 PDF 时，直接导出被误判为“找不到 document.pdf”的问题；现在会等待并校验 PDF 完整写入后再保存，不再产生连续失败日志。
+- “更多”设置中的界面语言改为与文档宽度一致的“当前值 + 二级菜单”折叠样式，中文与 English 选项默认收起，减少设置面板占用空间。
+- Windows 安装程序改为更简洁的双状态原生界面：准备页与完成页共用同一张白色至翡翠绿背景，居中显示应用图标、标题、副标题和两个操作按钮，不再显示百分比、进度条或阶段动画。安装期间保留精简的“正在安装”反馈与安全退出；完成后提供“立即打开”，会按注册表记录或默认目录启动已安装的轻阅 Markdown。窗口继续按原设计等比缩放为 640×427，并使用真实圆角裁切。旧玻璃／能量／高光素材、进度轮询和浏览器动画预览均已删除，正式界面只保留两份 WebP（约 41 KB）；NSIS 改用 Solid LZMA 压缩，全部图文源码仍受 800 KB 构建硬限制。
+- 精修 Windows 安装界面的原生分层窗口渲染：四角改用逐像素透明覆盖，图标、文字与按钮在最终 640×427 分辨率直接合成；图标透明边缘会去除暗色底边，按钮使用 8×8 子像素圆角并移除白色外框。标题、说明与按钮文字恢复 Windows 标准 Microsoft YaHei UI 常规字重及 ClearType Natural 渲染，不再使用会让笔画变粗变硬的自定义覆盖率锐化。
+- Windows 安装准备页新增“安装位置”与“更改”操作：默认显示当前用户目录，升级时优先沿用注册表记录的原安装目录；用户可通过系统文件夹窗口选择自定义路径，包含中文或空格的路径会作为单个参数安全传给静默 NSIS 核心，并在旧目录解析完成后明确覆盖默认位置。
+- Windows 安装准备、安装中与完成三个状态统一为右上角关闭图标和单个居中绿色主按钮；准备页保留“开始安装”，安装中按钮循环显示“正在安装.／..／...”，完成页按钮改为“完成安装”并关闭安装器，同时在完成后3秒自动关闭。所有可点击操作悬停时显示手型光标。安装路径不再常驻占用页面空间，点击左下角“自定义安装”选择目录后会直接开始安装，无需再次确认。
+- Windows 安装流程新增中英文双语言切换：默认显示简体中文，右下角可随时切换 English／中文；准备安装、安装中、完成、失败、主按钮、动态安装文字、错误提示、文件夹选择提示和窗口标题都会立即使用所选语言，切换过程中不重置安装状态。
+- 全新安装会将安装器当前语言作为软件首次启动语言：使用 English 流程安装后默认进入英文界面，使用中文流程则默认进入简体中文；升级安装继续保留原有语言偏好，不会被安装器覆盖。
+- 新增可选的 AI 助手：选中 Markdown 后可进行润色、改写、精简、扩写、总结、翻译或按自定义要求处理，结果会先并排预览，确认后才替换原文，并可通过撤销恢复。
+- AI 助手现内置 DeepSeek、智谱 GLM、通义千问、OpenAI 与 Kimi，选择服务并填写对应 API Key 即可使用，官方接口与推荐模型自动配置。各服务的 Key 在 Windows 凭据管理器、macOS 钥匙串或 Linux Secret Service 中分开安全保存，切换或删除某一服务不会影响其他服务，且所有 Key 均不会写入偏好、日志或反馈数据。使用云端接口前会逐次确认发送选中文字。
+- AI 助手设置现在会使用所选服务已安全保存的 Key 调用模型列表接口，提供真实可用模型下拉选择，并允许将“服务 + 模型”组合设为默认项；接口暂不可用时会回退到已选或推荐模型。DeepSeek、智谱 GLM、通义千问、OpenAI 和 Kimi 的 Key 可同时保存，加载模型、设置新默认项、测试连接或删除其他服务的 Key 都不会清除任何其他 Key。
+- 新增“AI检查”：用户确认后可检查当前整篇 Markdown，按语法、拼写、标点、表达、一致性和 Markdown 语法分类展示可定位的原文与建议修改；支持逐条勾选、全选/取消全选和一键应用所选项。应用前会校验文档快照并阻止错位或重叠建议，全部修改合并为一次可撤销编辑。
+- 优化“AI检查”的运行反馈与模型兼容性：检查期间显示动态扫描状态、当前服务与模型、已用时间、阶段说明和渐进进度；失败后保留清晰原因并可直接重试。现在兼容文本块、思考标签、代码围栏、顶层数组和单条 SSE 等常见返回形式，格式不规范时会自动请求模型修复一次，避免长时间静止后只显示“invalid response”。
+- “AI检查”不再设置固定超时时间：只要接口连接保持正常，就会持续等待模型完成检查及必要的结果格式修复，直到成功返回或网络/API 明确报错；模型列表和连接测试继续使用较短的超时，避免影响设置页面响应。
+- 普通“AI编辑”同样取消固定超时时间，并新增当前服务与模型、已用时间、连接/生成/整理阶段、动态转轮和渐进进度；关闭窗口后旧请求结果不会覆盖后来打开的编辑任务，网络或 API 明确报错时会停止进度并显示原因。
+- “AI检查”结果现在会在当前文档的整个编辑会话中保留：关闭弹窗或应用所选修改后再次打开，仍可查看上一次建议；新增独立“重新检查”按钮，只有主动重新检查、退出编辑或切换文档时才清理旧结果，已应用的建议会锁定以避免重复替换。
+- 优化“AI检查”长建议的显示：每条原文与建议修改区域随内容自动增高，最高 300 像素后独立滚动；建议数量较多时由整个检查弹框统一滚动，不再压缩卡片或截断末尾文字。
+
 ### English
+
+- New installs, or profiles without a saved document-width choice, now default to Wide. Existing Narrow, Medium, Wide, or Full width preferences remain unchanged.
+- Fixed direct PDF export being misreported as a missing `document.pdf` when current Windows Edge or Chrome launchers exit before the detached headless browser finishes writing the file. Quillite now waits for and validates a complete PDF before saving it, avoiding repeated false failure logs.
+- Interface language in More settings now uses the same compact current-value row and cascading submenu as Document width. Simplified Chinese and English stay collapsed until needed, reducing the menu height.
+- The Windows installer now uses a simpler native interface. Ready, installing, and completed states share one white-to-emerald background and center the app icon, title, subtitle, and two actions. Installation adds a smooth numeric percentage without restoring the old progress bar or layered animation; it remains below 100% until the installer core actually succeeds, then completes at 100%. Safe exit and Open now remain available, resolving the installed app from the recorded registry location or the default directory before launch. The genuinely rounded window remains proportionally sized at 640×427. Legacy glass, energy, flare, progress-file polling, and browser-preview code/assets stay removed; production keeps only two WebP files (about 41 KB), while Solid LZMA compresses the NSIS payload and the hard 800 KB source budget remains enforced.
+- Ready, installing, and completed Windows installer states now share one top-right close icon and one centered green action. The ready state says Start installation, the installing state cycles `Installing.`, `Installing..`, and `Installing...`, and the completed state uses Finish installation to close the installer while also closing automatically after three seconds. Every interactive action shows a hand cursor on hover. The path row stays hidden, while choosing a folder through Custom installation starts immediately without another confirmation.
+- The Windows installation flow is now bilingual. It starts in Simplified Chinese and offers an always-available English／中文 switch in the bottom-right corner. Ready, installing, completed, and failed states—including actions, animated installation text, error messages, folder-picker prompts, and the window title—change immediately without resetting installation progress.
+- A fresh install now carries the launcher's selected language into the app: installing through the English flow starts Quillite in English, while the Chinese flow starts it in Simplified Chinese. Upgrades preserve the existing language preference instead of overwriting it.
+- Refined the Windows installer surface with per-pixel alpha corners instead of a binary Win32 region, removing visible stair-stepping on all four rounded corners. The primary action now uses a same-color outline rather than a white rim, preserving a clean solid-green silhouette at native scale.
+- The installer icon, labels, and buttons are now rendered directly at the final 640×427 display resolution instead of being downsampled together with the 960×640 backdrop. The icon uses cached Catmull–Rom resizing plus transparent-edge color bleeding to remove dark matte halos; buttons use 8×8 subpixel coverage, and layered-window text uses grayscale antialiasing instead of colored ClearType fringes.
+- Installer typography now uses standard Microsoft YaHei UI weights and native ClearType Natural rendering at the final resolution. The custom high-contrast coverage mask has been removed so titles, subtitles, percentages, and button labels keep the smooth, balanced appearance of normal Windows text instead of looking heavy or pixel-sharpened.
+- The Windows ready screen now shows the installation directory with a Change action. Fresh installs default to the current-user Programs folder, upgrades retain the registered prior location, and an explicitly selected folder safely overrides that location after upgrade detection. Chinese and space-containing paths are passed to the silent NSIS core as one argument.
+- Added an optional AI Assistant for selected Markdown: polish, rewrite, shorten, expand, summarize, translate, or follow a custom instruction. Results are reviewed side by side before replacement and remain undoable.
+- The AI Assistant now includes DeepSeek, Zhipu GLM, Qwen, OpenAI, and Kimi. Choose a provider and enter its API key; the official endpoint and recommended model are configured automatically. Provider keys are isolated in Windows Credential Manager, macOS Keychain, or Linux Secret Service, so switching or deleting one provider never affects another, and no key is written to preferences, logs, or feedback data. Every cloud operation requires explicit consent before selected text is sent.
+- AI settings now use the selected provider's securely stored key to load its available models and present a model picker. A provider-and-model pair can be made the default, while the selected or recommended model remains available as a fallback if model discovery is temporarily unavailable. Keys for DeepSeek, Zhipu GLM, Qwen, OpenAI, and Kimi coexist independently; loading models, changing the default, testing a connection, or deleting one key never removes another.
+- Added AI Check for whole-document review after explicit confirmation. It presents precisely locatable grammar, spelling, punctuation, clarity, consistency, and Markdown suggestions with original/replacement comparisons, individual selection, select/clear all, and one-step apply. A source snapshot and overlap checks prevent misplaced edits, while all accepted fixes remain one undoable editor transaction.
+- Improved AI Check progress feedback and model compatibility. While checking, the dialog now shows animated scanning, the active provider and model, elapsed time, phase details, and gradual progress; failures retain a clear explanation and an immediate retry path. Common text-block, thinking-tag, fenced, top-level-array, and single-event SSE responses are accepted, and malformed review output gets one automatic format-repair attempt instead of ending with a generic `invalid response`.
+- AI Check no longer has a fixed deadline. As long as the connection remains healthy, it keeps waiting for the model and any required output-format repair until completion or an explicit network/API failure. Model discovery and connection tests retain shorter limits so the settings page remains responsive.
+- Ordinary AI Edit now also has no fixed deadline and displays the active provider/model, elapsed time, connection/generation/refinement phases, a spinner, and gradual progress. Closing the dialog prevents a stale response from overwriting a later editing task, while explicit network or API errors stop progress and remain visible.
+- AI Check results now persist for the entire editing session. Closing the dialog or applying selected fixes no longer discards the previous suggestions, and reopening the dialog shows them again. A dedicated Check again action refreshes them on demand; applied suggestions are locked against duplicate replacement, while exiting editing or switching documents clears the session.
+- Improved long AI Check suggestions: original and replacement panes now grow with their content up to 300 pixels before scrolling internally. When many suggestions exceed the available viewport, the complete dialog scrolls as one surface instead of compressing cards or clipping their final lines.
 
 ## [2.6.2] - 2026-08-29
 
@@ -775,3 +815,4 @@ All notable changes to Quillite Markdown are documented here.
 [2.6.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.0
 [2.6.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.1
 [2.6.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.2
+[2.7.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.0

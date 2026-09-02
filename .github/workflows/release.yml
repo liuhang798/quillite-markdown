@@ -133,6 +133,8 @@ jobs:
             throw "Expected NSIS installer was not found: $installer"
           }
 
+          ./scripts/build-windows-launcher.ps1 -CoreInstaller $installer -Output $installer
+
           $releaseDir = New-Item -ItemType Directory -Force build/bin/release
           $target = Join-Path $releaseDir.FullName "quillite-markdown-$env:APP_VERSION-windows-amd64.exe"
           Copy-Item -LiteralPath $installer -Destination $target -Force
