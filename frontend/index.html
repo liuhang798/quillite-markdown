@@ -348,17 +348,27 @@
       </button>
     </section>
 
+    <button id="compactTocButton" class="rail-button compact-toc-button hidden" type="button" aria-controls="tocPanel" aria-expanded="false" data-i18n-title="openCompactToc" data-i18n-aria-label="openCompactToc" title="展开本页目录" aria-label="展开本页目录">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 7-5 5 5 5"/></svg>
+    </button>
+    <button id="compactTocBackdrop" class="compact-toc-backdrop hidden" type="button" tabindex="-1" data-i18n-aria-label="closeCompactToc" aria-label="收起本页目录"></button>
+
     <div id="tocResizer" class="pane-resizer toc-resizer hidden" role="separator" tabindex="0" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="2000" aria-valuenow="205" data-i18n-title="resizeToc" data-i18n-aria-label="resizeToc" title="拖动调整目录宽度" aria-label="拖动调整目录宽度"></div>
 
     <aside id="tocPanel" class="toc-panel hidden">
       <div class="toc-panel-header">
         <span class="eyebrow" data-i18n="toc">本页目录</span>
-        <div class="toc-view-switch" role="group" data-i18n-aria-label="tocViewMode" aria-label="目录显示方式">
-          <button id="tocTreeMode" type="button" data-toc-mode="tree" aria-pressed="true" data-i18n-title="tocTreeMode" title="折叠目录">
-            <svg viewBox="0 0 24 24"><path d="M5 6h4M5 12h4M5 18h4M12 6h7M12 12h7M12 18h7"/></svg>
-          </button>
-          <button id="tocFlatMode" type="button" data-toc-mode="flat" aria-pressed="false" data-i18n-title="tocFlatMode" title="平铺目录">
-            <svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
+        <div class="toc-panel-actions">
+          <div class="toc-view-switch" role="group" data-i18n-aria-label="tocViewMode" aria-label="目录显示方式">
+            <button id="tocTreeMode" type="button" data-toc-mode="tree" aria-pressed="true" data-i18n-title="tocTreeMode" title="折叠目录">
+              <svg viewBox="0 0 24 24"><path d="M5 6h4M5 12h4M5 18h4M12 6h7M12 12h7M12 18h7"/></svg>
+            </button>
+            <button id="tocFlatMode" type="button" data-toc-mode="flat" aria-pressed="false" data-i18n-title="tocFlatMode" title="平铺目录">
+              <svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
+            </button>
+          </div>
+          <button id="closeCompactToc" class="small-icon toc-panel-close" type="button" data-i18n-title="closeCompactToc" data-i18n-aria-label="closeCompactToc" title="收起本页目录" aria-label="收起本页目录">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 7 5 5-5 5"/></svg>
           </button>
         </div>
       </div>
@@ -458,7 +468,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.0</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.1</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -582,7 +592,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.7.0</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.7.1</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -732,7 +742,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.1</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -754,9 +764,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.0</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.1</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.0</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.1</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

@@ -202,6 +202,8 @@ test('document width presets are selectable in the more menu and persist', () =>
   assert.match(styles, /body\[data-doc-width="narrow"\] \{ --doc-width: 640px; --editor-doc-width: 560px; \}/);
   assert.match(styles, /body\[data-doc-width="wide"\] \{ --doc-width: 1100px; --editor-doc-width: 900px; \}/);
   assert.match(styles, /body\[data-doc-width="full"\] \{ --doc-width: 100%; --editor-doc-width: 100%; \}/);
+  assert.match(styles, /@media \(max-width: 1120px\)[\s\S]*body:not\(\[data-doc-width="full"\]\) \.document-view \{ max-width: min\(var\(--doc-width\), 790px\); \}/);
+  assert.doesNotMatch(styles, /@media \(max-width: 1120px\) \{[\s\S]*?\n\s*\.document-view \{ max-width: min\(var\(--doc-width\), 790px\); \}/);
   assert.match(renderer, /function syncDocumentWidthOptions\(\)/);
   assert.match(renderer, /current\.textContent = t\(`width\$\{state\.docWidth/);
 });
@@ -590,6 +592,44 @@ test('the document outline renders as a persistent searchable tree or flat list'
   assert.match(renderer, /class="toc-link-text"/);
   assert.match(styles, /\.toc-link-text \{[^}]*display: -webkit-box;[^}]*max-height: 3em;[^}]*overflow: hidden;[^}]*-webkit-box-orient: vertical;[^}]*-webkit-line-clamp: 2;[^}]*line-clamp: 2;/);
   assert.match(styles, /\.toc-search-box:focus-within/);
+});
+
+test('narrow screens keep the document outline as a non-resizing overlay', () => {
+  assert.match(html, /id="compactTocButton"[^>]*aria-controls="tocPanel"[^>]*aria-expanded="false"/);
+  assert.match(html, /id="compactTocBackdrop"/);
+  assert.match(html, /id="closeCompactToc"/);
+  assert.match(renderer, /const compactTocMediaQuery = window\.matchMedia\?\.\('\(max-width: 1120px\)'\)/);
+  assert.match(renderer, /compactTocOpen: false/);
+  assert.match(renderer, /function setCompactTocOpen\(open, restoreFocus = false\)/);
+  assert.doesNotMatch(renderer, /state\.compactTocOpen\) requestAnimationFrame\(\(\) => els\.closeCompactToc\.focus\(\)\)/);
+  assert.match(renderer, /compactTocButton\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(renderer, /const tocVisible = !isCompactTocLayout\(\) && paneParticipates/);
+  assert.match(renderer, /if \(isCompactTocLayout\(\)\) setCompactTocOpen\(false\)/);
+  assert.match(renderer, /event\.key === 'Escape' && state\.compactTocOpen/);
+  assert.match(html, /id="compactTocButton" class="rail-button compact-toc-button hidden"/);
+  assert.match(styles, /@media \(max-width: 1120px\) \{[\s\S]*\.compact-toc-button \{[^}]*z-index: 26;/);
+  assert.match(renderer, /compactTocButton\.classList\.toggle\('compact-open', open\)/);
+  assert.match(styles, /\.compact-toc-button\.compact-open \{[^}]*right: calc\(min\(clamp\(280px, var\(--toc-width\), 360px\), calc\(100% - 48px\)\) \+ 10px\);/);
+  assert.match(styles, /\.compact-toc-button\.compact-open svg \{ transform: rotate\(180deg\); \}/);
+  assert.match(styles, /\.toc-panel \{[^}]*position: absolute;[^}]*transform: translateX\(100%\);/);
+  assert.match(styles, /\.toc-panel\.compact-open \{[^}]*transform: translateX\(0\);/);
+  assert.match(renderer, /compactTocBackdrop\.classList\.toggle\('compact-open', open\)/);
+  assert.match(styles, /\.compact-toc-backdrop \{[^}]*opacity: 0;[^}]*visibility: hidden;[^}]*pointer-events: none;[^}]*transition: opacity/);
+  assert.match(styles, /\.compact-toc-backdrop\.compact-open \{[^}]*opacity: 1;[^}]*visibility: visible;[^}]*pointer-events: auto;/);
+  assert.doesNotMatch(styles, /body\.compact-toc-open \.reader-pane \{ overflow: hidden; \}/);
+  assert.doesNotMatch(styles, /@media \(max-width: 1120px\) \{\s*\.toc-panel, \.toc-resizer \{ display: none; \}/);
+});
+
+test('wide screens can collapse and restore the document outline like the recent-reading sidebar', () => {
+  assert.match(renderer, /tocPanelCollapsed: localStorage\.getItem\('tocPanelCollapsed'\) === 'true'/);
+  assert.match(renderer, /function setWideTocCollapsed\(collapsed\)/);
+  assert.match(renderer, /localStorage\.setItem\('tocPanelCollapsed', String\(state\.tocPanelCollapsed\)\)/);
+  assert.match(renderer, /tocPanel\.classList\.toggle\('collapsed', wideCollapsed\)/);
+  assert.match(renderer, /tocPanel\.classList\.contains\('collapsed'\)/);
+  assert.match(styles, /\.toc-panel\.collapsed \{ width: 0; flex-basis: 0;/);
+  assert.match(html, /id="closeCompactToc" class="small-icon toc-panel-close"/);
+  assert.match(renderer, /else setWideTocCollapsed\(false\)/);
+  assert.match(renderer, /else setWideTocCollapsed\(true\)/);
 });
 
 test('body [TOC] markers render a dynamic linked outline and PDF export requests heading bookmarks', () => {

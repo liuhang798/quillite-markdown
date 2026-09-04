@@ -6,7 +6,7 @@
 
 - 项目名称：轻阅 Markdown / Quillite Markdown
 - 仓库：`https://github.com/liuhang798/quillite-markdown`
-- 当前版本：`2.7.0`
+- 当前版本：`2.7.1`
 - 开源协议：MIT
 - 产品定位：极度轻量、美观、跨平台的 Markdown 阅读与编辑工具
 - 支持平台：Windows x64、macOS Universal、Linux x64
@@ -345,9 +345,20 @@ npm run build
 
 Windows 安装包：
 
-```bash
+```powershell
+$version = (Get-Content wails.json | ConvertFrom-Json).info.productVersion
+$installer = "build/bin/quillite-markdown-$version-windows-amd64.exe"
 wails build -clean -platform windows/amd64 -nsis -installscope user -webview2 embed -trimpath
+./scripts/build-windows-launcher.ps1 -CoreInstaller $installer -Output $installer
 ```
+
+Windows 安装包交付规则（强制）：
+
+1. `wails build -nsis` 生成的文件只是 NSIS 核心安装包，不是可交付成品；不得将其作为最终安装包报告给用户。
+2. 必须继续执行 `scripts/build-windows-launcher.ps1`，将新版自定义安装界面和 NSIS 核心包封装为同一个 `.exe`。
+3. 封装脚本必须通过文件长度及末尾 `QUILLITE_PAYLOAD` 标记校验；任一步失败都视为打包失败，不能报告“已完成”。
+4. 交付前必须再次读取成品的文件大小、修改时间和 SHA-256，并向用户提供 `build/bin/quillite-markdown-<version>-windows-amd64.exe` 的完整路径。
+5. 每次代码修改完成且验证通过后自动执行上述完整流程，不等待用户再次提醒；禁止只运行第一步。
 
 macOS 应用包应通过统一脚本构建，脚本会把 Wails 的原始输出规范为 `轻阅 Markdown.app`，避免 Spotlight 或启动台显示项目内部名称：
 

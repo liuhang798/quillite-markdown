@@ -2,6 +2,28 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [2.7.1] - 2026-09-04
+
+### 简体中文
+
+- 宽屏本页目录补齐与最近阅读侧栏一致的折叠能力：目录标题栏可收起，收起后在右侧保留边缘箭头按钮，并记住用户选择；窄屏展开时不再把焦点移入尚在动画中的抽屉，消除整页短暂位移后复位的问题。
+- 窄屏本页目录入口改为与左侧最近阅读一致的边缘箭头按钮；展开后按钮随目录边缘移动并反向，可直接再次点击自主收起或展开。
+- 修复窄屏展开本页目录时，正文滚动条瞬间消失导致页面横向闪动的问题；目录现在不再改变正文滚动与尺寸，遮罩改为平滑淡入。
+- 窄屏与竖屏下不再直接关闭本页目录功能：目录默认收起并显示独立入口，展开后作为覆盖正文的右侧抽屉呈现，不再挤压文档；点击章节、关闭按钮、外部遮罩或按 Esc 均可收起，宽屏目录和拖动宽度保持原有行为。
+- 修复竖屏显示器或较窄窗口中选择“全宽”后，正文仍被响应式规则限制为 790 像素的问题；全宽模式现在始终使用阅读窗格的全部可用宽度，窄、中、宽模式继续保留适合阅读的响应式上限。
+- 修复 macOS 导出 PDF 时，Chrome／Edge 已写完完整 PDF 但无头进程仍保持运行，最终被误报为 `PDF_EXPORT_TIMEOUT` 的问题；导出现在同时监听文件完成与浏览器退出，PDF 一旦校验完整便立即保存并安全结束临时进程，同时保留 Windows 启动器提前退出后的异步写入兼容。
+- 强化 Windows 正式打包流程：NSIS 核心包必须继续封装新版自定义安装启动器，并校验文件长度及末尾 `QUILLITE_PAYLOAD` 标记；覆盖已有成品时改用可靠的同目录原子替换，防止误交付旧安装界面。
+
+### English
+
+- Wide layouts now give the on-page outline the same collapsible behavior as the Recent Reading sidebar: a header control collapses it, a right-edge arrow restores it, and the choice persists. Opening the narrow drawer no longer focuses an element while it is still moving in from off-screen, preventing the entire page from briefly shifting and snapping back.
+- The narrow-screen outline trigger now matches the edge-arrow treatment used by the Recent Reading sidebar. It follows the drawer edge and reverses direction while open, so the same button can independently expand or collapse the outline.
+- Fixed the horizontal page flash when opening the narrow-screen outline, which was caused by temporarily removing the document scrollbar. The outline no longer changes document scrolling or dimensions, and its backdrop now fades in smoothly.
+- Narrow and portrait layouts no longer remove the on-page outline. It starts collapsed behind a dedicated trigger and opens as a right-side drawer over the document without changing document width. Selecting a heading, using Close, clicking the backdrop, or pressing Escape dismisses it, while wide-screen resizing remains unchanged.
+- Fixed Full width still being capped at 790 pixels on portrait displays or narrower windows. Full width now always uses all available space in the reading pane, while Narrow, Medium, and Wide retain their readable responsive limits.
+- Fixed macOS PDF exports being misreported as `PDF_EXPORT_TIMEOUT` when Chrome or Edge had already written a complete PDF but kept its headless process alive. Export now watches file completion and process exit concurrently, saves as soon as the PDF validates, and safely stops the temporary process while retaining support for Windows launchers that exit before detached writing finishes.
+- Hardened the official Windows packaging flow: the NSIS core must be wrapped with the current custom installer launcher and pass final-length plus trailing `QUILLITE_PAYLOAD` validation. Replacing an existing output now uses a reliable same-directory atomic move so the legacy installer UI cannot be delivered by mistake.
+
 ## [2.7.0] - 2026-09-02
 
 ### 简体中文
@@ -26,7 +48,6 @@ All notable changes to Quillite Markdown are documented here.
 - 优化“AI检查”长建议的显示：每条原文与建议修改区域随内容自动增高，最高 300 像素后独立滚动；建议数量较多时由整个检查弹框统一滚动，不再压缩卡片或截断末尾文字。
 
 ### English
-
 - New installs, or profiles without a saved document-width choice, now default to Wide. Existing Narrow, Medium, Wide, or Full width preferences remain unchanged.
 - Fixed direct PDF export being misreported as a missing `document.pdf` when current Windows Edge or Chrome launchers exit before the detached headless browser finishes writing the file. Quillite now waits for and validates a complete PDF before saving it, avoiding repeated false failure logs.
 - Interface language in More settings now uses the same compact current-value row and cascading submenu as Document width. Simplified Chinese and English stay collapsed until needed, reducing the menu height.
@@ -816,3 +837,4 @@ All notable changes to Quillite Markdown are documented here.
 [2.6.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.1
 [2.6.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.2
 [2.7.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.0
+[2.7.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.1

@@ -207,6 +207,9 @@ const state = {
   tocWidth: initialTocPreferredWidth,
   tocMode: normalizeTocMode(localStorage.getItem('tocMode')),
   tocQuery: '',
+  tocAvailable: false,
+  tocPanelCollapsed: localStorage.getItem('tocPanelCollapsed') === 'true',
+  compactTocOpen: false,
   editorPreviewWidth: Number(localStorage.getItem('editorPreviewWidth') || 47),
   searchMatches: [],
   searchIndex: 0,
@@ -281,7 +284,7 @@ const translations = {
     untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器',
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
-    toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
+    toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', openCompactToc: '展开本页目录', closeCompactToc: '收起本页目录', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
     exportHTML: '导出 HTML', htmlExported: 'HTML 网页已导出', htmlExportFailed: 'HTML 导出失败', exportFileInUse: '导出文件正被其他程序占用，请关闭该文件后重试，或选择其他文件名',
     zoomIn: '放大文字', zoomOut: '缩小文字', zoomReset: '恢复字号', textSizePresets: '文字大小调节', textSizeControl: '文字大小', fontScaleDefault: '默认 100%', fontScaleShortcuts: '<span class="font-scale-shortcut"><kbd>Ctrl +</kbd><em>放大</em></span><span class="font-scale-shortcut"><kbd>Ctrl −</kbd><em>缩小</em></span><span class="font-scale-shortcut"><kbd>Ctrl 0</kbd><em>默认</em></span>', fontScaleAuto: '自动适配显示器', autoFontScaleEnabled: '已自动适配显示器：{percent}%', exportDocument: '导出文档', exportWord: '导出 Word', exportPDF: '导出 PDF', systemPrint: '系统打印', wordExported: 'Word 文档已导出', wordExportFailed: 'Word 导出失败', pdfExportHint: '请在系统打印窗口中选择“Microsoft Print to PDF”或“存储为 PDF”', pdfTutorialLabel: 'PDF 导出指南', pdfTutorialTitle: '使用系统打印保存 PDF', pdfTutorialIntro: '为了尽量保持 Markdown 预览中的表格、代码块和图片样式，轻阅将打开系统打印窗口。请按下面步骤保存为 PDF。', pdfTutorialStep1Title: '打开系统打印', pdfTutorialStep1Text: '点击下方继续按钮，等待打印窗口出现。', pdfTutorialStep2Title: '选择 PDF 选项', pdfTutorialStep2Text: 'Windows 选择“Microsoft Print to PDF”；macOS 选择“存储为 PDF”。', pdfTutorialStep3Title: '选择位置并保存', pdfTutorialStep3Text: '确认打印后，输入文件名并选择保存目录。', pdfWindowsPrintTitle: '打印', pdfPrinterLabel: '打印机', pdfPagesLabel: '页面', pdfAllPages: '全部', pdfPrintButton: '打印', pdfWindowsCallout: '在“打印机”中选择 Microsoft Print to PDF', pdfMacPrintTitle: '打印', pdfSelectedPrinter: '已选择的打印机', pdfPresetsLabel: '预设', pdfDefaultPreset: '默认设置', pdfSaveAsPDF: '存储为 PDF…', pdfMacCallout: '打开左下角 PDF 菜单并选择“存储为 PDF”', pdfTutorialNote: '打印窗口由操作系统提供，实际界面可能因系统版本略有不同。', pdfContinueToPrint: '继续并打开打印窗口', exportNoDocument: '请先打开一个文档', printDocument: '打印文档', copy: '复制', copied: '已复制',
     clipboardOptions: '复制选项', copyAsMarkdown: '复制为 Markdown', copyAsPlainText: '复制为纯文本', copiedAsMarkdown: '已复制 Markdown 源码', copiedAsPlainText: '已复制纯文本', clipboardCopyFailed: '无法写入剪贴板', richPasteConverted: '已将网页或 Word 富文本转换为 Markdown',
@@ -296,7 +299,7 @@ const translations = {
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.7.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.7.1', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -328,7 +331,7 @@ const translations = {
     untitledDocument: 'Untitled document', saved: 'Saved', unsaved: 'Unsaved', autoSaved: 'Autosaved', saveAs: 'Save As', exitEdit: 'Exit editing', markdownEditorAria: 'Markdown editor',
     codeLang: 'Select a language', codeNoLang: 'No language (plain text)',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> Save　 <kbd>Ctrl</kbd> + <kbd>E</kbd> Preview', backToTop: 'Back to top', backToTopAria: 'Back to document top',
-    toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
+    toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', openCompactToc: 'Open table of contents', closeCompactToc: 'Close table of contents', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
     exportHTML: 'Export HTML', htmlExported: 'HTML page exported', htmlExportFailed: 'HTML export failed', exportFileInUse: 'The export file is open in another app. Close it and try again, or choose a different file name.',
     zoomIn: 'Increase text size', zoomOut: 'Decrease text size', zoomReset: 'Reset text size', textSizePresets: 'Text size control', textSizeControl: 'Text size', fontScaleDefault: 'Default 100%', fontScaleShortcuts: '<span class="font-scale-shortcut"><kbd>Ctrl +</kbd><em>Larger</em></span><span class="font-scale-shortcut"><kbd>Ctrl −</kbd><em>Smaller</em></span><span class="font-scale-shortcut"><kbd>Ctrl 0</kbd><em>Default</em></span>', fontScaleAuto: 'Fit to display automatically', autoFontScaleEnabled: 'Display-adapted text size: {percent}%', exportDocument: 'Export document', exportWord: 'Export Word', exportPDF: 'Export PDF', systemPrint: 'System print', wordExported: 'Word document exported', wordExportFailed: 'Word export failed', pdfExportHint: 'Choose “Microsoft Print to PDF” or “Save as PDF” in the system print dialog', pdfTutorialLabel: 'PDF EXPORT GUIDE', pdfTutorialTitle: 'Save a PDF with system printing', pdfTutorialIntro: 'To preserve the tables, code blocks, images, and overall Markdown preview styling, Quillite opens the system print window. Follow these steps to save a PDF.', pdfTutorialStep1Title: 'Open system printing', pdfTutorialStep1Text: 'Select Continue below and wait for the print window to appear.', pdfTutorialStep2Title: 'Choose the PDF option', pdfTutorialStep2Text: 'On Windows choose “Microsoft Print to PDF”; on macOS choose “Save as PDF”.', pdfTutorialStep3Title: 'Choose a location and save', pdfTutorialStep3Text: 'Confirm printing, enter a file name, and choose the destination folder.', pdfWindowsPrintTitle: 'Print', pdfPrinterLabel: 'Printer', pdfPagesLabel: 'Pages', pdfAllPages: 'All', pdfPrintButton: 'Print', pdfWindowsCallout: 'Choose Microsoft Print to PDF under Printer', pdfMacPrintTitle: 'Print', pdfSelectedPrinter: 'Selected printer', pdfPresetsLabel: 'Presets', pdfDefaultPreset: 'Default Settings', pdfSaveAsPDF: 'Save as PDF…', pdfMacCallout: 'Open the PDF menu at bottom left and choose “Save as PDF”', pdfTutorialNote: 'The print window is provided by your operating system, so its appearance may vary slightly by system version.', pdfContinueToPrint: 'Continue to print window', exportNoDocument: 'Open a document first', printDocument: 'Print document', copy: 'Copy', copied: 'Copied',
     clipboardOptions: 'Copy options', copyAsMarkdown: 'Copy as Markdown', copyAsPlainText: 'Copy as plain text', copiedAsMarkdown: 'Markdown source copied', copiedAsPlainText: 'Plain text copied', clipboardCopyFailed: 'Unable to write to the clipboard', richPasteConverted: 'Web or Word rich text converted to Markdown',
@@ -343,7 +346,7 @@ const translations = {
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.7.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.7.1', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -544,7 +547,7 @@ function setLanguage(language, silent = false, persist = true) {
 
 const els = {
   welcome: $('#welcome'), documentView: $('#documentView'), content: $('#markdownContent'),
-  fileList: $('#fileList'), libraryName: $('#libraryName'), tocPanel: $('#tocPanel'), toc: $('#toc'), tocSearchInput: $('#tocSearchInput'), clearTocSearch: $('#clearTocSearch'), tocEmpty: $('#tocEmpty'),
+  fileList: $('#fileList'), libraryName: $('#libraryName'), tocPanel: $('#tocPanel'), toc: $('#toc'), tocSearchInput: $('#tocSearchInput'), clearTocSearch: $('#clearTocSearch'), tocEmpty: $('#tocEmpty'), compactTocButton: $('#compactTocButton'), compactTocBackdrop: $('#compactTocBackdrop'), closeCompactToc: $('#closeCompactToc'),
   breadcrumb: $('#breadcrumb'), documentActions: $('#documentActions'), documentActionsMenu: $('#documentActionsMenu'), documentActionsMoreButton: $('#documentActionsMoreButton'), readingTime: $('#readingTime'), progressBar: $('#progressBar'),
   appShell: $('.app-shell'), sidebar: $('#sidebar'), expandSidebar: $('#expandSidebar'), sidebarResizer: $('#sidebarResizer'), tocResizer: $('#tocResizer'), searchBar: $('#searchBar'),
   editorResizer: $('#editorResizer'),
@@ -4547,6 +4550,60 @@ function highlightedTocTitle(text, query) {
   return `${escapeHtml(text.slice(0, index))}<mark>${escapeHtml(text.slice(index, index + needle.length))}</mark>${escapeHtml(text.slice(index + needle.length))}`;
 }
 
+const compactTocMediaQuery = window.matchMedia?.('(max-width: 1120px)');
+
+function isCompactTocLayout() {
+  return compactTocMediaQuery?.matches ?? window.innerWidth <= 1120;
+}
+
+function syncCompactTocControls(tocAvailable = state.tocAvailable) {
+  state.tocAvailable = Boolean(tocAvailable && state.currentFile && !state.editing);
+  const compact = isCompactTocLayout();
+  if (!compact || !state.tocAvailable) state.compactTocOpen = false;
+  const open = compact && state.tocAvailable && state.compactTocOpen;
+  const wideCollapsed = !compact && state.tocAvailable && state.tocPanelCollapsed;
+  const expanded = state.tocAvailable && (compact ? open : !wideCollapsed);
+  els.tocPanel.classList.toggle('compact-open', open);
+  els.tocPanel.classList.toggle('collapsed', wideCollapsed);
+  els.compactTocButton.classList.toggle('hidden', !state.tocAvailable || (!compact && !wideCollapsed));
+  els.compactTocButton.classList.toggle('compact-open', open);
+  els.compactTocButton.setAttribute('aria-expanded', String(expanded));
+  els.compactTocButton.setAttribute('aria-label', t(expanded ? 'closeCompactToc' : 'openCompactToc'));
+  els.compactTocButton.title = t(expanded ? 'closeCompactToc' : 'openCompactToc');
+  els.compactTocBackdrop.classList.toggle('hidden', !compact || !state.tocAvailable);
+  els.compactTocBackdrop.classList.toggle('compact-open', open);
+  els.tocPanel.setAttribute('aria-hidden', String(!expanded));
+  els.tocPanel.inert = !expanded;
+}
+
+function setCompactTocOpen(open, restoreFocus = false) {
+  state.compactTocOpen = Boolean(open && isCompactTocLayout() && state.tocAvailable);
+  syncCompactTocControls();
+  if (!state.compactTocOpen && restoreFocus && !els.compactTocButton.classList.contains('hidden')) {
+    requestAnimationFrame(() => els.compactTocButton.focus({ preventScroll: true }));
+  }
+}
+
+function setWideTocCollapsed(collapsed) {
+  if (isCompactTocLayout() || !state.tocAvailable) return;
+  state.tocPanelCollapsed = Boolean(collapsed);
+  localStorage.setItem('tocPanelCollapsed', String(state.tocPanelCollapsed));
+  syncCompactTocControls();
+  updatePaneResizerVisibility();
+  schedulePaneWidthRefresh();
+  requestAnimationFrame(() => {
+    const target = state.tocPanelCollapsed ? els.compactTocButton : els.closeCompactToc;
+    target?.focus({ preventScroll: true });
+  });
+}
+
+function handleCompactTocLayoutChange() {
+  state.compactTocOpen = false;
+  syncCompactTocControls();
+  updatePaneResizerVisibility();
+  applyPaneWidths();
+}
+
 function renderToc() {
   const headings = collectDocumentHeadings(els.content);
   const allItems = headings.map(heading => ({
@@ -4577,7 +4634,9 @@ function renderToc() {
   els.tocEmpty.classList.toggle('hidden', !query || tree.length > 0);
   els.clearTocSearch.classList.toggle('hidden', !query);
   document.querySelectorAll('[data-toc-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.tocMode === state.tocMode)));
-  els.tocPanel.classList.toggle('hidden', headings.length < 2);
+  const tocAvailable = headings.length >= 2;
+  els.tocPanel.classList.toggle('hidden', !tocAvailable);
+  syncCompactTocControls(tocAvailable);
   updatePaneResizerVisibility();
   applyPaneWidths();
   els.toc.querySelectorAll('[data-toc-toggle]').forEach(button => button.addEventListener('click', () => {
@@ -4598,6 +4657,7 @@ function renderToc() {
     event.preventDefault();
     if (!scrollReaderToHeading(link.dataset.target)) return;
     els.toc.querySelectorAll('a').forEach(item => item.classList.toggle('active', item === link));
+    if (isCompactTocLayout()) setCompactTocOpen(false);
   }));
   updateActiveToc();
 }
@@ -4912,6 +4972,7 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
   state.saveAsRequired = false;
   state.saveWarningShown = false;
   state.tocQuery = '';
+  state.compactTocOpen = false;
   els.tocSearchInput.value = '';
   if (addToLibrary) addRecentDocument(doc);
   state.editing = false;
@@ -4959,6 +5020,7 @@ function closePreview() {
   els.documentView.classList.remove('reference-document');
   els.editorView.classList.add('hidden');
   els.tocPanel.classList.add('hidden');
+  syncCompactTocControls(false);
   els.welcome.classList.remove('hidden');
   els.editButton.disabled = true;
   els.saveButton.disabled = true;
@@ -5263,6 +5325,7 @@ async function toggleEditor(forceEditing) {
       els.documentView.classList.add('hidden');
       els.editorView.classList.remove('hidden');
       els.tocPanel.classList.add('hidden');
+      syncCompactTocControls(false);
       updatePaneResizerVisibility();
       els.backToTop.classList.remove('visible');
       els.editButton.classList.add('active');
@@ -6176,7 +6239,7 @@ function paneParticipates(element, additionallyHidden = false) {
 
 function readerSidePanelLayout() {
   const sidebarVisible = paneParticipates(els.sidebar, els.sidebar.classList.contains('collapsed'));
-  const tocVisible = paneParticipates(els.tocPanel, state.editing || els.tocPanel.classList.contains('hidden'));
+  const tocVisible = !isCompactTocLayout() && paneParticipates(els.tocPanel, state.editing || els.tocPanel.classList.contains('hidden') || els.tocPanel.classList.contains('collapsed'));
   const dividerWidth = visibleElementWidth(els.sidebarResizer) + visibleElementWidth(els.tocResizer);
   const availableWidth = Math.max(0, els.appShell.clientWidth - dividerWidth - 240);
   return { sidebarVisible, tocVisible, availableWidth };
@@ -6226,7 +6289,7 @@ function applyPaneWidths() {
 function updatePaneResizerVisibility() {
   if (!els.sidebarResizer || !els.tocResizer) return;
   els.sidebarResizer.classList.toggle('hidden', els.sidebar.classList.contains('collapsed'));
-  els.tocResizer.classList.toggle('hidden', state.editing || els.tocPanel.classList.contains('hidden'));
+  els.tocResizer.classList.toggle('hidden', state.editing || els.tocPanel.classList.contains('hidden') || els.tocPanel.classList.contains('collapsed'));
   els.editorResizer?.classList.toggle('hidden', !state.editing);
   schedulePaneWidthRefresh();
 }
@@ -6325,6 +6388,8 @@ function initializePaneResizers() {
   window.screen?.addEventListener?.('change', scheduleTocDisplayRefresh);
   window.screen?.orientation?.addEventListener?.('change', scheduleTocDisplayRefresh);
   bindTocResolutionWatcher();
+  if (compactTocMediaQuery?.addEventListener) compactTocMediaQuery.addEventListener('change', handleCompactTocLayoutChange);
+  else compactTocMediaQuery?.addListener?.(handleCompactTocLayoutChange);
   window.setInterval(detectTocDisplayChange, 1500);
   document.addEventListener('visibilitychange', detectTocDisplayChange);
   const configure = (handle, panelName, direction) => {
@@ -7247,9 +7312,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.7.0', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.7.1', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.0';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.1';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -7305,7 +7370,7 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
-  $('#currentVersion').textContent = info.currentVersion || '2.7.0';
+  $('#currentVersion').textContent = info.currentVersion || '2.7.1';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -7510,6 +7575,15 @@ els.explorerTab.addEventListener('click', () => {
 els.refreshExplorer.addEventListener('click', refreshExplorer);
 $('#collapseSidebar').addEventListener('click', () => toggleSidebar(true));
 $('#expandSidebar').addEventListener('click', () => toggleSidebar(false));
+els.compactTocButton.addEventListener('click', () => {
+  if (isCompactTocLayout()) setCompactTocOpen(!state.compactTocOpen);
+  else setWideTocCollapsed(false);
+});
+els.compactTocBackdrop.addEventListener('click', () => setCompactTocOpen(false, true));
+els.closeCompactToc.addEventListener('click', () => {
+  if (isCompactTocLayout()) setCompactTocOpen(false, true);
+  else setWideTocCollapsed(true);
+});
 $('#searchButton').addEventListener('click', openSearch);
 $('#closeSearch').addEventListener('click', closeSearch);
 $('#searchPrev').addEventListener('click', () => goToSearch(-1));
@@ -8364,6 +8438,7 @@ document.addEventListener('keydown', event => {
   else if (primaryModifier && (event.key === '+' || event.key === '=')) { event.preventDefault(); setFontScale(state.fontScale + .08); }
   else if (primaryModifier && event.key === '-') { event.preventDefault(); setFontScale(state.fontScale - .08); }
   else if (primaryModifier && event.key === '0') { event.preventDefault(); setFontScale(1); }
+  else if (event.key === 'Escape' && state.compactTocOpen) { event.preventDefault(); setCompactTocOpen(false, true); }
   else if (event.key === 'Escape' && !els.spellcheckContextMenu.classList.contains('hidden')) { closeSpellcheckContextMenu(); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.editorClipboardMenu.classList.contains('hidden')) { closeEditorClipboardMenu(); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.recentContextMenu.classList.contains('hidden')) closeRecentContextMenu();

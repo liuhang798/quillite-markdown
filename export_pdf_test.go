@@ -59,6 +59,49 @@ func TestWaitForGeneratedPDFHandlesAsynchronousBrowserOutput(t *testing.T) {
 	}
 }
 
+func TestWaitForBrowserPDFAcceptsCompleteFileBeforeProcessExit(t *testing.T) {
+	pdfPath := filepath.Join(t.TempDir(), "document.pdf")
+	processDone := make(chan pdfBrowserProcessResult)
+	go func() {
+		time.Sleep(120 * time.Millisecond)
+		_ = os.WriteFile(pdfPath, []byte("%PDF-1.7\nmacOS browser remains alive\n%%EOF\n"), 0o600)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	started := time.Now()
+	pdfData, err := waitForBrowserPDF(ctx, pdfPath, processDone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(started) >= time.Second {
+		t.Fatal("waited for the browser process even though the PDF was complete")
+	}
+	if !strings.Contains(string(pdfData), "macOS browser remains alive") {
+		t.Fatalf("unexpected PDF data: %q", pdfData)
+	}
+}
+
+func TestWaitForBrowserPDFKeepsWaitingAfterLauncherExit(t *testing.T) {
+	pdfPath := filepath.Join(t.TempDir(), "document.pdf")
+	processDone := make(chan pdfBrowserProcessResult, 1)
+	processDone <- pdfBrowserProcessResult{}
+	go func() {
+		time.Sleep(120 * time.Millisecond)
+		_ = os.WriteFile(pdfPath, []byte("%PDF-1.7\ndetached writer completed\n%%EOF\n"), 0o600)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	pdfData, err := waitForBrowserPDF(ctx, pdfPath, processDone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pdfData), "detached writer completed") {
+		t.Fatalf("unexpected PDF data: %q", pdfData)
+	}
+}
+
 func TestValidateGeneratedPDFRejectsIncompleteOutput(t *testing.T) {
 	if err := validateGeneratedPDF([]byte("%PDF-1.7\npartial")); err == nil || !strings.Contains(err.Error(), "incomplete") {
 		t.Fatalf("expected an incomplete PDF error, got %v", err)

@@ -19,7 +19,13 @@ import (
 const (
 	maxExportPDFSize       = 256 * 1024 * 1024
 	pdfGenerationWaitLimit = 30 * time.Second
+	pdfExportProcessLimit  = 90 * time.Second
 )
+
+type pdfBrowserProcessResult struct {
+	output string
+	err    error
+}
 
 func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) (string, error) {
 	browsers := findPDFBrowsers()
@@ -57,30 +63,8 @@ func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) 
 	for index, browser := range browsers {
 		_ = os.Remove(pdfPath)
 		profilePath := filepath.Join(temporaryDirectory, fmt.Sprintf("browser-profile-%d", index))
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		command := exec.CommandContext(ctx, browser, pdfBrowserArguments(profilePath, pdfPath, htmlPath)...)
-		output, runErr := command.CombinedOutput()
-		if ctx.Err() == context.DeadlineExceeded {
-			cancel()
-			lastErr = errors.New("PDF_EXPORT_TIMEOUT")
-			continue
-		}
-		if runErr != nil {
-			cancel()
-			message := strings.TrimSpace(string(output))
-			if len(message) > 1200 {
-				message = message[:1200]
-			}
-			lastErr = fmt.Errorf("PDF_EXPORT_FAILED: %s", message)
-			continue
-		}
-		// On Windows, current Edge and Chrome launchers can exit successfully before
-		// the detached headless browser has finished creating the requested PDF.
-		// Wait for a complete PDF instead of treating that short hand-off window as
-		// an export failure.
-		waitCtx, waitCancel := context.WithTimeout(ctx, pdfGenerationWaitLimit)
-		pdfData, err = waitForGeneratedPDF(waitCtx, pdfPath)
-		waitCancel()
+		ctx, cancel := context.WithTimeout(context.Background(), pdfExportProcessLimit)
+		pdfData, err = runPDFBrowser(ctx, browser, profilePath, pdfPath, htmlPath)
 		cancel()
 		if err != nil {
 			lastErr = err
@@ -98,6 +82,120 @@ func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) 
 		return "", err
 	}
 	return outputPath, nil
+}
+
+// runPDFBrowser considers the export complete when the PDF itself is complete,
+// rather than waiting for the browser process to exit first. Chrome and Edge can
+// keep their macOS headless process alive after writing the requested file.
+func runPDFBrowser(ctx context.Context, browser, profilePath, pdfPath, htmlPath string) ([]byte, error) {
+	processCtx, cancelProcess := context.WithCancel(ctx)
+	command := exec.CommandContext(processCtx, browser, pdfBrowserArguments(profilePath, pdfPath, htmlPath)...)
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = &output
+	if err := command.Start(); err != nil {
+		cancelProcess()
+		return nil, formatPDFBrowserFailure("", err)
+	}
+
+	processDone := make(chan pdfBrowserProcessResult, 1)
+	processReaped := make(chan struct{})
+	go func() {
+		err := command.Wait()
+		processDone <- pdfBrowserProcessResult{output: output.String(), err: err}
+		close(processReaped)
+	}()
+
+	pdfData, err := waitForBrowserPDF(ctx, pdfPath, processDone)
+	cancelProcess()
+	select {
+	case <-processReaped:
+	case <-time.After(2 * time.Second):
+		if command.Process != nil {
+			_ = command.Process.Kill()
+		}
+		<-processReaped
+	}
+	return pdfData, err
+}
+
+// waitForBrowserPDF handles both browser behaviours used in production:
+// Windows launchers may exit before a detached process finishes the PDF, while
+// macOS browser processes may stay alive after the PDF has already been written.
+func waitForBrowserPDF(ctx context.Context, pdfPath string, processDone <-chan pdfBrowserProcessResult) ([]byte, error) {
+	ticker := time.NewTicker(80 * time.Millisecond)
+	defer ticker.Stop()
+
+	var postExitTimer *time.Timer
+	var postExit <-chan time.Time
+	defer func() {
+		if postExitTimer != nil {
+			postExitTimer.Stop()
+		}
+	}()
+
+	var lastErr error
+	for {
+		pdfData, err := os.ReadFile(pdfPath)
+		if err == nil {
+			if validationErr := validateGeneratedPDF(pdfData); validationErr == nil {
+				return pdfData, nil
+			} else {
+				lastErr = validationErr
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			lastErr = err
+		}
+
+		select {
+		case result := <-processDone:
+			processDone = nil
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, errors.New("PDF_EXPORT_TIMEOUT")
+			}
+			if result.err != nil {
+				// The process and filesystem notifications can arrive in either
+				// order. Prefer a complete PDF written just before a non-zero exit.
+				if pdfData, readErr := os.ReadFile(pdfPath); readErr == nil && validateGeneratedPDF(pdfData) == nil {
+					return pdfData, nil
+				}
+				return nil, formatPDFBrowserFailure(result.output, result.err)
+			}
+			// Some Windows browser launchers hand work to another process and exit.
+			// Give that detached writer a bounded grace period to finish the file.
+			postExitTimer = time.NewTimer(pdfGenerationWaitLimit)
+			postExit = postExitTimer.C
+		case <-postExit:
+			return nil, errors.New("PDF_EXPORT_TIMEOUT")
+		case <-ctx.Done():
+			// Resolve a file/deadline race in favour of a complete PDF.
+			if pdfData, readErr := os.ReadFile(pdfPath); readErr == nil && validateGeneratedPDF(pdfData) == nil {
+				return pdfData, nil
+			}
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, errors.New("PDF_EXPORT_TIMEOUT")
+			}
+			if lastErr != nil {
+				return nil, fmt.Errorf("PDF_EXPORT_FAILED: %w", lastErr)
+			}
+			return nil, fmt.Errorf("PDF_EXPORT_FAILED: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func formatPDFBrowserFailure(output string, runErr error) error {
+	message := strings.TrimSpace(output)
+	if message == "" && runErr != nil {
+		message = runErr.Error()
+	}
+	if len(message) > 1200 {
+		message = message[:1200]
+	}
+	if message == "" {
+		return errors.New("PDF_EXPORT_FAILED")
+	}
+	return fmt.Errorf("PDF_EXPORT_FAILED: %s", message)
 }
 
 func waitForGeneratedPDF(ctx context.Context, pdfPath string) ([]byte, error) {

@@ -26,7 +26,7 @@
 
 ## Why Quillite Markdown?
 
-- **Lightweight by design:** the Windows installer is about **9 MB**, built with Go and Wails instead of Electron.
+- **Lightweight by design:** the Windows installer is about **12 MB**, built with Go and Wails instead of Electron.
 - **Local-first and private:** open and edit ordinary Markdown files on your computer—no account, proprietary vault or cloud lock-in.
 - **Reading and editing together:** switch from a focused Markdown reader to split-view editing with live preview and syntax highlighting; the preview uses a clearer split-pane text size and continues to follow global text scaling.
 - **Practical desktop integration:** recent files, document favorites, resource explorer, autosave, native dialogs, file associations and update notifications.
@@ -60,6 +60,13 @@ The macOS build follows the computer's light/dark appearance automatically while
 The macOS installer image carries a metadata no-index marker. On launch, the installed app also verifies the installer layout and Bundle Identifier before safely ejecting a still-mounted official DMG, preventing its bundled copy from appearing as a second Quillite Markdown icon.
 
 Documents and folders opened through macOS system panels, Finder, or file associations are persisted as native security-scoped bookmarks. Recent, Favorites, and Explorer silently restore read and edit access after relaunch and refresh stale bookmarks automatically. A preselected system panel is needed only for legacy records or when an unsigned update changes the app identity.
+
+## What's new in 2.7.1
+
+- Narrow and portrait layouts retain the on-page outline as a collapsed overlay drawer that never squeezes the document. Opening no longer triggers a page-wide focus shift, and headings, backdrop, edge arrow, or `Escape` can close it.
+- Wide layouts now give the outline the same collapsible controls as Recent Reading, retain a right-edge restore button, and remember the choice. Full width also uses the complete available reading width on portrait displays.
+- Fixed macOS PDF exports being falsely reported as timed out after the headless browser had already written a complete file; valid PDFs now save immediately and the temporary process is stopped safely.
+- Windows release builds now require and validate the current custom installer launcher, preventing the internal NSIS core from being delivered with the legacy installer UI.
 
 ## What's new in 2.7.0
 

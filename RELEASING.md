@@ -25,9 +25,14 @@ npm run build
 
 On Windows, build the installer with:
 
-```bash
+```powershell
+$version = (Get-Content wails.json | ConvertFrom-Json).info.productVersion
+$installer = "build/bin/quillite-markdown-$version-windows-amd64.exe"
 wails build -clean -platform windows/amd64 -nsis -installscope user -webview2 embed -trimpath
+./scripts/build-windows-launcher.ps1 -CoreInstaller $installer -Output $installer
 ```
+
+The raw NSIS output is only the internal installer core. A Windows release is complete only after `build-windows-launcher.ps1` adds the custom launcher and validates the final `QUILLITE_PAYLOAD` marker.
 
 On macOS, use the repository wrapper so both the bundle filename and display name are `轻阅 Markdown`:
 
@@ -50,8 +55,8 @@ git push origin main
 创建与 `wails.json` 完全一致的 tag 并推送到 GitHub（`release.yml` 由 push tag 自动触发）：
 
 ```bash
-git tag -a v2.7.0 -m "Quillite Markdown v2.7.0"
-git push origin v2.7.0
+git tag -a v2.7.1 -m "Quillite Markdown v2.7.1"
+git push origin v2.7.1
 ```
 
 The `Build and Release` workflow validates the tag/version match, builds Windows, macOS, and Linux packages, uploads them to GitHub Release, then synchronizes the version and all platform assets to the official website. The Windows installer is published directly as an `.exe`; it is not wrapped in a ZIP. The Windows in-app asset is a standalone `.bin`, while the macOS in-app asset is a ZIP containing the complete verified `轻阅 Markdown.app`. Never publish a raw macOS executable for in-app updates: replacing only `Contents/MacOS/QuilliteMarkdown` breaks the application code seal and macOS terminates the next launch with `CODESIGNING / Invalid Page`.
@@ -68,7 +73,7 @@ If a platform build fails after the tag and Release have already been created:
 
 1. Fix and push the workflow or source changes to `main`.
 2. Open **Actions → Build and Release → Run workflow**.
-3. Keep the branch set to `main` and enter the existing tag, such as `v2.7.0`.
+3. Keep the branch set to `main` and enter the existing tag, such as `v2.7.1`.
 4. Run the workflow. Successful assets are uploaded to the existing Release and files with the same names are replaced.
 
 The manual tag must exactly match the version in `wails.json`.

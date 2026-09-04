@@ -90,11 +90,37 @@ try {
     if ($outputDirectory) {
         New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
     }
-    Move-Item -LiteralPath $temporaryOutput -Destination $resolvedOutput -Force
+    # Stage beside the destination before replacing it. Move-Item -Force can still
+    # fail when CoreInstaller and Output resolve to the same existing file on
+    # Windows, which is the normal release workflow.
+    $stagedOutput = Join-Path $outputDirectory ((Split-Path -Leaf $resolvedOutput) + "." + [Guid]::NewGuid().ToString("N") + ".tmp")
+    try {
+        Copy-Item -LiteralPath $temporaryOutput -Destination $stagedOutput -Force
+        [IO.File]::Move($stagedOutput, $resolvedOutput, $true)
+    } finally {
+        Remove-Item -LiteralPath $stagedOutput -Force -ErrorAction SilentlyContinue
+    }
 
     $coreSize = (Get-Item -LiteralPath $temporaryCore).Length
     $launcherSize = (Get-Item -LiteralPath $temporaryLauncher).Length
     $finalSize = (Get-Item -LiteralPath $resolvedOutput).Length
+    $expectedSize = $coreSize + $launcherSize + 8 + $markerBytes.Length
+    if ($finalSize -ne $expectedSize) {
+        throw "Final installer length validation failed: expected $expectedSize bytes, found $finalSize bytes."
+    }
+
+    $finalStream = [IO.File]::OpenRead($resolvedOutput)
+    try {
+        $finalStream.Seek(-$markerBytes.Length, [IO.SeekOrigin]::End) | Out-Null
+        $actualMarker = New-Object byte[] $markerBytes.Length
+        $read = $finalStream.Read($actualMarker, 0, $actualMarker.Length)
+        if ($read -ne $markerBytes.Length -or -not [Linq.Enumerable]::SequenceEqual[byte]($actualMarker, $markerBytes)) {
+            throw "Final installer payload marker validation failed."
+        }
+    } finally {
+        $finalStream.Dispose()
+    }
+
     Write-Host "Custom installer launcher created successfully."
     Write-Host "  UI asset budget: $visualAssetBytes / $visualAssetBudget bytes"
     Write-Host "  Core installer : $coreSize bytes"

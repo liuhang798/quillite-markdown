@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
-  <assemblyIdentity type="win32" name="com.liuhang.quillite-markdown.installer" version="2.7.0.0" processorArchitecture="*"/>
+  <assemblyIdentity type="win32" name="com.liuhang.quillite-markdown.installer" version="2.7.1.0" processorArchitecture="*"/>
   <description>轻阅 Markdown 安装启动器</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>

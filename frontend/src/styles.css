@@ -590,9 +590,15 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .back-to-top.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
 body:has(.toc-panel.hidden) .back-to-top { right: 24px; }
 
-.toc-panel { width: var(--toc-width); flex: 0 0 var(--toc-width); background: var(--paper); padding: calc(var(--toc-base-font-size) * 2.8) clamp(18px, calc(var(--toc-base-font-size) * 1.5), 28px) calc(var(--toc-base-font-size) * 1.65); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.toc-panel { width: var(--toc-width); flex: 0 0 var(--toc-width); background: var(--paper); padding: calc(var(--toc-base-font-size) * 2.8) clamp(18px, calc(var(--toc-base-font-size) * 1.5), 28px) calc(var(--toc-base-font-size) * 1.65); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; transition: width .2s ease, flex-basis .2s ease, padding .2s ease; }
+.toc-panel.collapsed { width: 0; flex-basis: 0; padding-left: 0; padding-right: 0; border: 0; overflow: hidden; }
 .toc-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .toc-panel-header > .eyebrow { font-size: calc(var(--toc-eyebrow-font-size) * var(--toc-font-user-scale)); }
+.toc-panel-actions { display: flex; align-items: center; gap: 7px; }
+.compact-toc-button { left: auto; right: 10px; z-index: 9; color: var(--muted); }
+.compact-toc-button:hover, .compact-toc-button:focus-visible { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--paper-strong); outline: none; }
+.compact-toc-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transition: transform .2s ease; }
+.compact-toc-backdrop { display: none; }
 .toc-view-switch { display: flex; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
 .toc-view-switch button { width: 25px; height: 23px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; color: var(--faint); background: transparent; cursor: pointer; }
 .toc-view-switch button:hover, .toc-view-switch button:focus-visible { color: var(--text); outline: none; }
@@ -1344,9 +1350,21 @@ body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; 
 ::-webkit-scrollbar-track { background: transparent; }
 
 @media (max-width: 1120px) {
-  .toc-panel, .toc-resizer { display: none; }
-  .document-view { max-width: min(var(--doc-width), 790px); }
+  .toc-resizer { display: none; }
+  .compact-toc-button { z-index: 26; transition: right .2s ease, color .15s ease, border-color .15s ease, background .15s ease; }
+  .compact-toc-button.compact-open { right: calc(min(clamp(280px, var(--toc-width), 360px), calc(100% - 48px)) + 10px); }
+  .compact-toc-button.compact-open svg { transform: rotate(180deg); }
+  .compact-toc-backdrop { position: absolute; z-index: 24; inset: 0; display: block; padding: 0; border: 0; background: color-mix(in srgb, var(--text) 18%, transparent); cursor: default; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .16s ease, visibility 0s linear .16s; }
+  .compact-toc-backdrop.compact-open { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+  .toc-panel { position: absolute; z-index: 25; top: 0; right: 0; bottom: 0; width: min(clamp(280px, var(--toc-width), 360px), calc(100% - 48px)); max-width: none; flex: none; border-left: 1px solid var(--line); box-shadow: -14px 0 34px rgba(20, 28, 23, .12); visibility: hidden; pointer-events: none; transform: translateX(100%); transition: transform .2s ease, visibility 0s linear .2s; }
+  .toc-panel.compact-open { visibility: visible; pointer-events: auto; transform: translateX(0); transition-delay: 0s; }
+  .toc-panel-close { display: none; }
+  body:not([data-doc-width="full"]) .document-view { max-width: min(var(--doc-width), 790px); }
   .back-to-top { right: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 1120px) {
+  .toc-panel, .compact-toc-backdrop, .compact-toc-button, .compact-toc-button svg { transition-duration: .01ms; }
 }
 @media (max-width: 1180px) {
   .diagram-dialog #diagramBuilderPanel { grid-template-columns: minmax(300px, .95fr) minmax(360px, 1.05fr); }
