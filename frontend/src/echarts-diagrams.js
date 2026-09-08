@@ -1,5 +1,8 @@
 import * as echarts from 'echarts';
+// Preserve the existing chart layout when using the security-patched v6 engine.
+import 'echarts/theme/v5';
 import 'echarts-wordcloud';
+import { secureChartOption } from './chart-security.js';
 import { svgToPNGDataURL } from './mermaid-diagrams.js';
 
 const chartInstances = new WeakMap();
@@ -209,7 +212,7 @@ function normalizePieSeries(item) {
 function prepareOption(rawOption, appearance = null) {
   // Sources are JSON by design; JSON cloning also works in older WebView2 and
   // WKWebView versions where structuredClone may not be available.
-  const option = JSON.parse(JSON.stringify(rawOption));
+  const option = secureChartOption(JSON.parse(JSON.stringify(rawOption)));
   const metadata = option.__quillite || {};
   delete option.__quillite;
   const text = appearance?.text || cssColor('--text', '#1F2924');
@@ -238,6 +241,7 @@ function prepareOption(rawOption, appearance = null) {
   option.tooltip = {
     trigger: 'item',
     ...(option.tooltip || {}),
+    renderMode: 'richText',
     backgroundColor: paper,
     borderColor: line,
     textStyle: normalTextStyle(option.tooltip?.textStyle, text, 12),
@@ -276,7 +280,9 @@ function prepareOption(rawOption, appearance = null) {
       };
     }
     if (item.type === 'wordCloud' && Array.isArray(item.data)) {
-      item.data = item.data.map((word, index) => ({ ...word, textStyle: normalTextStyle({ color: palette[index % palette.length], ...(word.textStyle || {}) }, text, word.textStyle?.fontSize || 14) }));
+      // An explicit per-word fontSize overrides the plugin's sizeRange mapping.
+      // Supply color and family only unless the document requested a size.
+      item.data = item.data.map((word, index) => ({ ...word, textStyle: { ...NORMAL_TEXT, color: palette[index % palette.length], ...(word.textStyle || {}), fontWeight: 400 } }));
     }
     if (metadata.transform === 'bubble' && item.type === 'scatter') {
       item.symbolSize = value => Math.max(12, Math.min(54, Number(value?.[2]) || 16));
@@ -350,7 +356,7 @@ function renderDiagram(element, messages) {
     element.classList.remove('echarts-error');
     element.style.height = `${height}px`;
     element.replaceChildren();
-    const chart = echarts.init(element, null, { renderer: 'svg', devicePixelRatio: 1 });
+    const chart = echarts.init(element, 'v5', { renderer: 'svg', devicePixelRatio: 1 });
     chart.setOption(option, { notMerge: true, lazyUpdate: false });
     chartInstances.set(element, chart);
     element.dataset.echartsRendered = 'true';
@@ -419,7 +425,7 @@ export async function convertEChartsDiagramsToImages(container, altText) {
         pointerEvents: 'none'
       });
       document.body.append(exportHost);
-        exportChart = echarts.init(exportHost, null, { renderer: 'svg', devicePixelRatio: 1, width, height });
+        exportChart = echarts.init(exportHost, 'v5', { renderer: 'svg', devicePixelRatio: 1, width, height });
         exportChart.setOption(option, { notMerge: true, lazyUpdate: false });
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const exportSVG = exportHost.querySelector('svg');

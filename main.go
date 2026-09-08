@@ -37,6 +37,8 @@ func main() {
 		AssetServer:       &assetserver.Options{Assets: assets},
 		BackgroundColour:  &options.RGBA{R: 246, G: 244, B: 239, A: 255},
 		OnStartup:         app.startup,
+		StartHidden:       goruntime.GOOS == "windows",
+		OnDomReady:        startupWindowReady(),
 		OnBeforeClose:     app.beforeClose,
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId:               "com.liuhang.quillite-markdown",

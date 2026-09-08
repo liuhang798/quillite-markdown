@@ -243,12 +243,15 @@
               <span class="eyebrow" data-i18n="livePreview">实时预览</span>
               <strong data-i18n="readingEffect">阅读效果</strong>
             </div>
+            <button id="swapEditorLayoutButton" class="icon-button" type="button" data-i18n-title="swapEditorLayout" data-i18n-aria-label="swapEditorLayout" title="切换编辑与预览位置" aria-label="切换编辑与预览位置">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>
+            </button>
           </div>
           <div class="editor-preview-scroll">
             <article id="editorPreviewContent" class="markdown-body editor-preview-content"></article>
             <div id="previewLocateHint" class="preview-locate-hint hidden" role="status" aria-live="polite">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3.5 18.2 14l-6.4 1.1-3.4 5.4L4 3.5Z"/><path d="m14.8 15.3 4.1 4.1"/></svg>
-              <span data-i18n="previewLocateHint">右键定位到右侧编辑器</span>
+              <span data-i18n="previewLocateHint">右键定位到编辑器</span>
             </div>
           </div>
         </section>
@@ -260,7 +263,7 @@
               <strong id="editorFileName">未命名文档</strong>
             </div>
             <div class="editor-status">
-              <button id="aiEditButton" class="ai-edit-button" type="button" data-i18n-title="aiEditTitle" title="使用 AI 编辑或生成内容">
+              <button id="aiEditButton" class="ai-edit-button" type="button" data-i18n-title="aiEditTitle" title="选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1L6.5 8.5l4.1-1.4L12 3Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg>
                 <span data-i18n="aiEdit">AI编辑</span>
               </button>
@@ -327,9 +330,9 @@
             </button>
           </div>
           <div id="markdownEditor" data-i18n-aria-label="markdownEditorAria" aria-label="Markdown 编辑器">
-            <button id="editFlowchartButton" class="edit-flowchart-button hidden" type="button" data-i18n-title="editFlowchartVisually" data-i18n-aria-label="editFlowchartVisually" title="在画布中编辑流程图" aria-label="在画布中编辑流程图">
+            <button id="editFlowchartButton" class="edit-flowchart-button hidden" type="button" data-i18n-title="editThisDiagram" data-i18n-aria-label="editThisDiagram" title="编辑此图表" aria-label="编辑此图表">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h3a4 4 0 0 1 4 4v3M14 11l3 3 3-3"/></svg>
-              <span data-i18n="editFlowchartVisually">画布编辑流程图</span>
+              <span data-i18n="editThisDiagram">编辑此图表</span>
             </button>
             <button id="editFormulaButton" class="edit-flowchart-button hidden" type="button" title="编辑当前公式" aria-label="编辑当前公式">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4l10-10-4-4L4 14v4Z"/><path d="m12 6 4 4M5 6h5M7.5 3.5v5"/></svg>
@@ -443,6 +446,17 @@
       </div>
     </div>
     <hr>
+    <div class="settings-submenu-group">
+      <button type="button" class="settings-submenu-trigger" data-settings-submenu="editor-layout" aria-haspopup="menu" aria-expanded="false">
+        <span class="menu-label" data-i18n="editorLayout">编辑布局</span>
+        <span class="settings-submenu-summary"><span id="editorLayoutCurrent">预览在左</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      </button>
+      <div class="settings-submenu popover hidden" data-settings-submenu-panel="editor-layout" role="menu" data-i18n-aria-label="editorLayout" aria-label="编辑布局">
+        <button type="button" role="menuitemradio" data-editor-layout="preview-left" aria-checked="true"><span data-i18n="previewOnLeft">预览在左</span><span class="settings-option-check">✓</span></button>
+        <button type="button" role="menuitemradio" data-editor-layout="editor-left" aria-checked="false"><span data-i18n="editorOnLeft">编辑在左</span><span class="settings-option-check">✓</span></button>
+      </div>
+    </div>
+    <hr>
     <div class="popover-label" data-i18n="spellcheck">拼写检查</div>
     <button type="button" class="spellcheck-toggle" role="menuitemcheckbox" data-spellcheck-toggle aria-checked="true">
       <span class="menu-label" data-i18n="spellcheckEnabled">标记英文错词</span><span class="spellcheck-check" aria-hidden="true">✓</span>
@@ -468,7 +482,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.1</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.2</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -592,7 +606,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.7.1</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.7.2</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -742,7 +756,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.1</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -764,9 +778,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.1</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.2</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.1</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.2</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

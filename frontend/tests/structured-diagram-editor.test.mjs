@@ -12,10 +12,10 @@ import {
 test('the first visual-editing batch covers popular structured diagram types', () => {
   assert.deepEqual(STRUCTURED_VISUAL_DIAGRAM_IDS, [
     'sequence', 'gantt', 'state', 'timeline', 'kanban', 'mindmap', 'pie',
-    'bar-chart', 'line-chart', 'doughnut-chart'
+    'bar-chart', 'line-chart', 'doughnut-chart', 'sankey'
   ]);
   const marked = DIAGRAM_TEMPLATES.filter(template => template.visualEditor).map(template => template.id);
-  assert.deepEqual(marked, ['flowchart', ...STRUCTURED_VISUAL_DIAGRAM_IDS.filter(id => id !== 'mindmap'), 'mindmap']);
+  assert.deepEqual(new Set(marked), new Set(['flowchart', ...STRUCTURED_VISUAL_DIAGRAM_IDS]));
   assert.equal(hasStructuredVisualEditor('flowchart'), false);
   assert.equal(DIAGRAM_TEMPLATES.find(template => template.id === 'state').visualEditor, 'canvas');
   assert.equal(DIAGRAM_TEMPLATES.find(template => template.id === 'mindmap').visualEditor, 'canvas');

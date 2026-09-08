@@ -5,8 +5,9 @@ import hljs from 'highlight.js/lib/common';
 import { convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
 import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory } from './diagram-templates.js';
-import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, findCanvasDiagramFenceAt, layoutFlowchart, parseFlowchartSource, removeFlowchartEdge, removeFlowchartNode, serializeFlowchart } from './flowchart-designer.js';
+import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, layoutFlowchart, parseFlowchartSource, removeFlowchartEdge, removeFlowchartNode, serializeFlowchart } from './flowchart-designer.js';
 import { hasStructuredVisualEditor, parseStructuredDiagram, serializeStructuredDiagram, structuredDiagramDefinition } from './structured-diagram-editor.js';
+import { findEditableDiagramFenceAt, diagramReplacementMarkdown } from './diagram-editing.js';
 import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearanceStorage, resolveMacColorMode, temporaryMacColorModeAfterToggle } from './appearance.js';
 import { previewWheelZoomDirection } from './font-wheel-zoom.js';
 import { clampFontScale, readFontScaleStorage, recommendedFontScale } from './font-scaling.js';
@@ -181,6 +182,8 @@ function fontFamilyCSS(value) {
 
 const state = {
   currentFile: null,
+  documentSession: 0,
+  documentOpenRequest: 0,
   root: null,
   files: [],
   explorerFiles: [],
@@ -194,6 +197,7 @@ const state = {
   fontScaleMode: initialFontScale.mode,
   fontFamily: normalizeFontFamily(localStorage.getItem('fontFamily')),
   docWidth: normalizeDocWidth(localStorage.getItem('docWidth')),
+  editorLayout: normalizeEditorLayout(localStorage.getItem('editorLayout')),
   language: localStorage.getItem('language') === 'en' ? 'en' : 'zh-CN',
   spellcheckEnabled: localStorage.getItem('spellcheckEnabled') !== 'false',
   spellcheckLanguage: normalizeSpellcheckLanguage(localStorage.getItem('spellcheckLanguage')),
@@ -280,7 +284,7 @@ const translations = {
     openFolder: '打开文件夹', quickOpenHint: '快速打开，也可以将文件拖到这里', revealFile: '定位文件', revealFileTitle: '在资源管理器中显示', closePreview: '关闭预览', closePreviewTitle: '关闭当前预览并返回首页',
     homeQuickStart: '快速上手', homeExamplesTitle: '从完整案例开始', homeExamplesDescription: '打开内置案例，直接查看所有图表、学科公式和 Markdown 排版格式。', homeShortcutEyebrow: '效率指南', homeShortcutsTitle: '功能快捷键', homeShortcutsDescription: '下列快捷键在对应页面生效。', homeShortcutsDescriptionWindows: '当前为 Windows / Linux 快捷键，使用 Ctrl 组合键。', homeShortcutsDescriptionMac: '当前为 macOS 快捷键，使用 Cmd 组合键。',
     shortcutFiles: '文档与文件', shortcutReading: '阅读与编辑', shortcutFormatting: '文字格式', shortcutNew: '新建文档', shortcutOpen: '打开文档', shortcutOpenFolder: '打开文件夹', shortcutSave: '保存文档', shortcutSaveAs: '另存为', shortcutPrint: '打印文档', shortcutEditPreview: '切换编辑/预览', shortcutSearch: '查找内容', shortcutZoomIn: '放大文字', shortcutZoomOut: '缩小文字', shortcutZoomReset: '恢复字号', shortcutUndo: '撤回', shortcutRedo: '重做', shortcutBold: '加粗', shortcutItalic: '斜体', shortcutLink: '插入链接', shortcutStrike: '删除线', shortcutHighlight: '高亮',
-    print: '打印', printTitle: '打印文档', moreDocumentActions: '更多', readingEnd: '阅读结束', livePreview: '实时预览', readingEffect: '阅读效果', previewLocateHint: '右键定位到右侧编辑器 · 第 {line} 行', markdownEditorLabel: 'MARKDOWN 编辑器',
+    print: '打印', printTitle: '打印文档', moreDocumentActions: '更多', readingEnd: '阅读结束', livePreview: '实时预览', readingEffect: '阅读效果', previewLocateHint: '右键定位到编辑器 · 第 {line} 行', markdownEditorLabel: 'MARKDOWN 编辑器',
     untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器',
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
@@ -290,6 +294,7 @@ const translations = {
     clipboardOptions: '复制选项', copyAsMarkdown: '复制为 Markdown', copyAsPlainText: '复制为纯文本', copiedAsMarkdown: '已复制 Markdown 源码', copiedAsPlainText: '已复制纯文本', clipboardCopyFailed: '无法写入剪贴板', richPasteConverted: '已将网页或 Word 富文本转换为 Markdown',
     spellcheck: '拼写检查', spellcheckEnabled: '标记英文错词', spellcheckLanguage: '词典语言', spellcheckAuto: '自动', spellcheckUS: 'English (US)', spellcheckGB: 'English (UK)', clearPersonalDictionary: '清空个人词典', personalDictionaryCount: '{count} 个词', spellcheckLoadFailed: '拼写词典加载失败', spellingSuggestions: '拼写建议', noSpellingSuggestions: '暂无纠错建议', ignoreSpellingWord: '在本文中忽略', addToPersonalDictionary: '加入个人词典', spellingIgnored: '已在本文中忽略“{word}”', spellingAdded: '已将“{word}”加入个人词典', clearPersonalDictionaryConfirm: '确定清空个人词典吗？已加入的词将重新参与拼写检查。', personalDictionaryCleared: '个人词典已清空', personalDictionaryEmpty: '个人词典中还没有词',
     docWidth: '文档宽度', widthNarrow: '窄', widthMedium: '中', widthWide: '宽', widthFull: '全宽', docWidthChanged: '文档宽度：{level}',
+    editorLayout: '编辑布局', previewOnLeft: '预览在左', editorOnLeft: '编辑在左', swapEditorLayout: '切换编辑与预览位置', editorLayoutChanged: '编辑布局：{layout}',
     bodyFontScale: '文字字号 {percent}%', recentOpened: '最近打开', pinnedRecentGroup: '置顶', ordinaryRecentGroup: '最近', pinnedRecent: '已置顶', pinRecent: '置顶', unpinRecent: '取消置顶', pinRecentAdded: '已置顶文档', pinRecentRemoved: '已取消置顶', pinRecentUnavailable: '文件已不可用，未能置顶；最近列表已重新同步', reorderPinnedRecent: '拖动或使用上下方向键调整“{name}”的置顶顺序', pinnedOrderPosition: '已将“{name}”移到置顶第 {position} 项，共 {total} 项', pinRecentSaveFailed: '置顶状态保存失败，已恢复并重新同步', pinnedOrderSaveFailed: '置顶顺序保存失败，已恢复并重新同步', favorited: '已收藏', favoriteDocument: '收藏文档', unfavoriteDocument: '取消收藏', favoriteAdded: '已收藏文档', favoriteRemoved: '已取消收藏，原文件未删除', recentContextHint: '右键打开文档操作菜单', recentContextMenuTitle: '文档操作', recentEdit: '编辑', recentSaveAs: '另存为', recentReveal: '打开所在文件夹', recentRemove: '移除', recentRevealFailed: '无法打开文件所在目录', recentMissing: '文件不存在', recentMissingTitle: '文件已删除、移动，或所在磁盘当前不可用', currentDocumentMissing: '原文件已移动或删除，当前预览内容已保留', recentMissingAria: '{name}，文件不存在', recentRemoved: '已从最近阅读中移除，原文件未删除', emptyRecent: '还没有最近文档', emptyFavorites: '还没有收藏文档', emptyExplorer: '请先打开一个文件夹',
     markdownDocument: 'Markdown 文档',
     discardConfirm: '当前文档有尚未保存的更改。\n\n确定要放弃更改并继续吗？', previewError: '暂时无法渲染当前内容',
@@ -299,7 +304,7 @@ const translations = {
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.7.1', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.7.2', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -337,6 +342,7 @@ const translations = {
     clipboardOptions: 'Copy options', copyAsMarkdown: 'Copy as Markdown', copyAsPlainText: 'Copy as plain text', copiedAsMarkdown: 'Markdown source copied', copiedAsPlainText: 'Plain text copied', clipboardCopyFailed: 'Unable to write to the clipboard', richPasteConverted: 'Web or Word rich text converted to Markdown',
     spellcheck: 'Spell check', spellcheckEnabled: 'Mark misspelled English words', spellcheckLanguage: 'Dictionary language', spellcheckAuto: 'Auto', spellcheckUS: 'English (US)', spellcheckGB: 'English (UK)', clearPersonalDictionary: 'Clear personal dictionary', personalDictionaryCount: '{count} words', spellcheckLoadFailed: 'Unable to load the spelling dictionary', spellingSuggestions: 'Spelling suggestions', noSpellingSuggestions: 'No suggestions available', ignoreSpellingWord: 'Ignore in this document', addToPersonalDictionary: 'Add to personal dictionary', spellingIgnored: '“{word}” ignored in this document', spellingAdded: '“{word}” added to your personal dictionary', clearPersonalDictionaryConfirm: 'Clear the personal dictionary? Added words will be checked again.', personalDictionaryCleared: 'Personal dictionary cleared', personalDictionaryEmpty: 'Your personal dictionary is empty',
     docWidth: 'Document width', widthNarrow: 'Narrow', widthMedium: 'Medium', widthWide: 'Wide', widthFull: 'Full width', docWidthChanged: 'Document width: {level}',
+    editorLayout: 'Editor layout', previewOnLeft: 'Preview on left', editorOnLeft: 'Editor on left', swapEditorLayout: 'Swap editor and preview', editorLayoutChanged: 'Editor layout: {layout}',
     bodyFontScale: 'Text size {percent}%', recentOpened: 'Recently opened', pinnedRecentGroup: 'PINNED', ordinaryRecentGroup: 'RECENT', pinnedRecent: 'Pinned', pinRecent: 'Pin', unpinRecent: 'Unpin', pinRecentAdded: 'Document pinned', pinRecentRemoved: 'Document unpinned', pinRecentUnavailable: 'The file is no longer available and was not pinned. Recent documents were synced again.', reorderPinnedRecent: 'Drag or use the up and down arrow keys to reorder pinned document “{name}”', pinnedOrderPosition: 'Moved “{name}” to pinned position {position} of {total}', pinRecentSaveFailed: 'Could not save the pinned state. The list was restored and synced again.', pinnedOrderSaveFailed: 'Could not save the pinned order. The list was restored and synced again.', favorited: 'Favorited', favoriteDocument: 'Add to Favorites', unfavoriteDocument: 'Remove from Favorites', favoriteAdded: 'Document added to Favorites', favoriteRemoved: 'Removed from Favorites. The original file was not deleted.', recentContextHint: 'Right-click for document actions', recentContextMenuTitle: 'Document actions', recentEdit: 'Edit', recentSaveAs: 'Save As', recentReveal: 'Show in Folder', recentRemove: 'Remove', recentRevealFailed: 'Unable to show the file in its folder', recentMissing: 'File unavailable', recentMissingTitle: 'The file was deleted, moved, or its disk is currently unavailable', currentDocumentMissing: 'The original file was moved or deleted. The current preview has been preserved.', recentMissingAria: '{name}, file unavailable', recentRemoved: 'Removed from Recent. The original file was not deleted.', emptyRecent: 'No recent documents', emptyFavorites: 'No favorite documents', emptyExplorer: 'Open a folder to browse files',
     markdownDocument: 'Markdown document',
     discardConfirm: 'This document has unsaved changes.\n\nDiscard the changes and continue?', previewError: 'The current content cannot be rendered',
@@ -346,7 +352,7 @@ const translations = {
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.7.1', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.7.2', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -383,6 +389,8 @@ Object.assign(translations['zh-CN'], {
   canvasStateHint: '拖动状态调整位置；连接模式下依次点击起始状态和目标状态；拖动空白处移动画布。',
   canvasMindmapHint: '选择主题后添加子主题或同级主题；连接模式下先点父主题再点子主题；拖动空白处移动画布。',
   editDiagramVisually: '在画布中编辑图表',
+  editThisDiagram: '编辑此图表',
+  diagramSourceChanged: '文档或图表内容已变化，请重新打开图表后编辑。',
   flowchartVisualSafeHint: '操作会自动生成兼容的图表源码',
   flowchartEditModeAria: '图表编辑方式',
   diagramVisualUnsupported: '当前源码包含循环、注释、元数据或其他高级配置，请继续使用源码模式，避免内容丢失。',
@@ -410,6 +418,8 @@ Object.assign(translations.en, {
   canvasStateHint: 'Drag states to move them; in Connect mode, click the source then target state; drag empty space to pan.',
   canvasMindmapHint: 'Select a topic to add a child or sibling; in Connect mode, click the parent then child; drag empty space to pan.',
   editDiagramVisually: 'Edit diagram on canvas',
+  editThisDiagram: 'Edit this diagram',
+  diagramSourceChanged: 'The document or diagram has changed. Reopen the diagram to edit it.',
   flowchartVisualSafeHint: 'Actions automatically generate compatible diagram source',
   flowchartEditModeAria: 'Diagram editing mode',
   diagramVisualUnsupported: 'This source contains loops, notes, metadata, or other advanced configuration. Keep using Source mode so no content is lost.',
@@ -422,7 +432,7 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations['zh-CN'], {
-  aiAssistant: 'AI 助手', aiSettingsHint: '多模型', aiSelectionAction: '用 AI 编辑选中文字', aiEdit: 'AI编辑', aiEditTitle: '使用 AI 编辑或生成内容',
+  aiAssistant: 'AI 助手', aiSettingsHint: '多模型', aiSelectionAction: '用 AI 编辑选中文字', aiEdit: 'AI编辑', aiEditTitle: '选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。',
   aiSettingsLabel: 'AI 写作', aiSettingsTitle: 'AI 助手设置', aiSettingsIntro: '支持 DeepSeek、智谱 GLM、通义千问、OpenAI 和 Kimi。选择服务并配置对应 API Key，即可使用 AI 编辑与文档检查。',
   aiProvider: '服务类型', aiProviderDeepSeek: 'DeepSeek', aiProviderZhipu: '智谱 GLM', aiProviderQwen: '通义千问', aiProviderOpenAI: 'OpenAI', aiProviderKimi: 'Kimi', aiProviderDescription: '官方接口 · 自动配置服务地址', aiModel: '模型', aiRefreshModels: '刷新模型', aiModelLoading: '正在通过所选服务加载可用模型…', aiModelLoaded: '已加载 {count} 个可用模型', aiModelLoadFailed: '模型接口暂时不可用，已保留推荐模型', aiModelKeyRequired: '保存所选服务的 Key 后，将自动加载可用模型。', aiAPIKey: 'API Key',
   aiAPIKeyPlaceholder: '例如：sk-xxxxxxxx', aiAPIKeySaved: '已保存在系统凭据库', aiAPIKeyNotSaved: '尚未配置 API Key', aiCurrentAPIKey: '当前 API Key', aiKeyReady: '已安全保存，可以使用 AI 编辑与检查',
@@ -439,7 +449,7 @@ Object.assign(translations['zh-CN'], {
   aiReviewOriginal: '原文', aiReviewReplacement: '建议修改', aiReviewCategoryGrammar: '语法', aiReviewCategorySpelling: '拼写', aiReviewCategoryPunctuation: '标点', aiReviewCategoryClarity: '表达', aiReviewCategoryConsistency: '一致性', aiReviewCategoryMarkdown: 'Markdown', aiReviewSeverityHigh: '重要', aiReviewSeverityMedium: '建议', aiReviewSeverityLow: '轻微'
 });
 Object.assign(translations.en, {
-  aiAssistant: 'AI Assistant', aiSettingsHint: 'Multi-model', aiSelectionAction: 'Edit selection with AI', aiEdit: 'AI Edit', aiEditTitle: 'Edit or generate content with AI',
+  aiAssistant: 'AI Assistant', aiSettingsHint: 'Multi-model', aiSelectionAction: 'Edit selection with AI', aiEdit: 'AI Edit', aiEditTitle: 'Select text first, then choose AI Edit to edit only the selected content',
   aiSettingsLabel: 'AI WRITING', aiSettingsTitle: 'AI Assistant settings', aiSettingsIntro: 'Supports DeepSeek, Zhipu GLM, Qwen, OpenAI, and Kimi. Select a provider and configure its API key to use AI Edit and document checks.',
   aiProvider: 'Provider', aiProviderDeepSeek: 'DeepSeek', aiProviderZhipu: 'Zhipu GLM', aiProviderQwen: 'Qwen', aiProviderOpenAI: 'OpenAI', aiProviderKimi: 'Kimi', aiProviderDescription: 'Official API · endpoint configured automatically', aiModel: 'Model', aiRefreshModels: 'Refresh models', aiModelLoading: 'Loading available models from the selected provider…', aiModelLoaded: '{count} available models loaded', aiModelLoadFailed: 'The model API is unavailable; the recommended model remains available', aiModelKeyRequired: 'Save this provider key to load its available models automatically.', aiAPIKey: 'API Key',
   aiAPIKeyPlaceholder: 'For example: sk-xxxxxxxx', aiAPIKeySaved: 'Stored in the system credential vault', aiAPIKeyNotSaved: 'No API key configured', aiCurrentAPIKey: 'Current API key', aiKeyReady: 'Stored securely and ready for AI Edit and document checks',
@@ -494,6 +504,7 @@ function applyStaticTranslations() {
   syncInterfaceLanguageOptions();
   syncFontFamilyOptions();
   syncDocumentWidthOptions();
+  syncEditorLayoutOptions();
   document.querySelectorAll('[data-accent-option]').forEach(button => {
     const name = ACCENT_THEMES[button.dataset.accentOption]?.[state.language === 'en' ? 'en' : 'zhCN'];
     const label = button.querySelector('.accent-option-name');
@@ -848,13 +859,13 @@ function updateExistingFlowchartButton() {
   }
   const selection = codeEditor.state.selection.main;
   const source = codeEditor.state.doc.toString();
-  activeFlowchartFence = findCanvasDiagramFenceAt(source, selection.head)
-    || findCanvasDiagramFenceAt(source, selection.from);
+  activeFlowchartFence = findEditableDiagramFenceAt(source, selection.head)
+    || findEditableDiagramFenceAt(source, selection.from);
   els.editFlowchartButton.classList.toggle('hidden', !activeFlowchartFence);
   activeFormulaMatch = activeFlowchartFence ? null : findFormulaAt(source, selection.from, selection.to);
   els.editFormulaButton.classList.toggle('hidden', !activeFormulaMatch);
   if (activeFlowchartFence) {
-    const label = t(activeFlowchartFence.templateId === 'flowchart' ? 'editFlowchartVisually' : 'editDiagramVisually');
+    const label = t('editThisDiagram');
     els.editFlowchartButton.title = label;
     els.editFlowchartButton.setAttribute('aria-label', label);
     els.editFlowchartButton.querySelector('span').textContent = label;
@@ -2558,7 +2569,11 @@ function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart 
     indent: existingFlowchart.indent,
     marker: existingFlowchart.marker,
     lineEnding: existingFlowchart.lineEnding,
-    templateId: template.id
+    templateId: template.id,
+    language: existingFlowchart.language,
+    engine: existingFlowchart.engine,
+    original: existingFlowchart.original,
+    documentSession: state.documentSession
   } : null;
   if (existingFlowchart) diagramWizardState.valuesByTemplate.set(template.id, existingFlowchart.source);
   flowchartDesignerState.mode = 'visual';
@@ -2634,11 +2649,11 @@ function closeDiagramDialog() {
 
 function replaceExistingFlowchart(range, source) {
   if (!codeEditor || !range) return;
-  const indent = range.indent || '';
-  const marker = range.marker || '```';
-  const lineEnding = range.lineEnding === '\r\n' ? '\r\n' : '\n';
-  const body = String(source || '').split(/\r?\n/u).map(line => `${indent}${line}`).join(lineEnding);
-  const markdown = `${indent}${marker}mermaid${lineEnding}${body}${lineEnding}${indent}${marker}`;
+  if (!state.editing || range.documentSession !== state.documentSession || codeEditor.state.doc.sliceString(range.from, range.to) !== range.original) {
+    showToast(t('diagramSourceChanged'), 'warning');
+    return;
+  }
+  const markdown = diagramReplacementMarkdown(range, source);
   codeEditor.dispatch({
     changes: { from: range.from, to: range.to, insert: markdown },
     selection: { anchor: range.from + markdown.length },
@@ -3931,6 +3946,35 @@ function normalizeDocWidth(value) {
   return DOC_WIDTH_LEVELS.includes(value) ? value : DEFAULT_DOC_WIDTH;
 }
 
+function normalizeEditorLayout(value) {
+  return value === 'editor-left' ? 'editor-left' : 'preview-left';
+}
+
+function editorResizeDirection() {
+  return state.editorLayout === 'editor-left' ? -1 : 1;
+}
+
+function syncEditorLayoutOptions() {
+  document.querySelectorAll('#moreMenu button[data-editor-layout]').forEach(button => {
+    const active = button.dataset.editorLayout === state.editorLayout;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
+  const current = $('#editorLayoutCurrent');
+  if (current) current.textContent = t(state.editorLayout === 'editor-left' ? 'editorOnLeft' : 'previewOnLeft');
+}
+
+function setEditorLayout(layout, silent = false) {
+  state.editorLayout = normalizeEditorLayout(layout);
+  document.body.dataset.editorLayout = state.editorLayout;
+  localStorage.setItem('editorLayout', state.editorLayout);
+  syncEditorLayoutOptions();
+  // Reorder visually only: retain the editor, selection, undo and review state.
+  codeEditor?.requestMeasure();
+  scheduleFormatToolbarLayout();
+  if (!silent) showToast(t('editorLayoutChanged', { layout: t(state.editorLayout === 'editor-left' ? 'editorOnLeft' : 'previewOnLeft') }));
+}
+
 function syncDocumentWidthOptions() {
   document.querySelectorAll('#moreMenu button[data-doc-width]').forEach(button => {
     const active = button.dataset.docWidth === state.docWidth;
@@ -4461,8 +4505,11 @@ async function revealFileInFolder(filePath) {
 
 async function editRecentDocument(filePath) {
   if (!maybeDiscardChanges()) return;
+  const request = beginDocumentOpen();
   try {
-    displayDocument(await window.quilliteMarkdown.openRecentFile(filePath));
+    const doc = await window.quilliteMarkdown.openRecentFile(filePath);
+    if (!canApplyDocumentOpen(request) || !doc?.path) return;
+    displayDocument(doc);
     await toggleEditor(true);
   } catch (error) {
     if (isMissingDocumentError(error)) {
@@ -4962,8 +5009,29 @@ function renderCurrentDocument() {
   }
 }
 
+function beginDocumentOpen() {
+  return { id: ++state.documentOpenRequest, session: state.documentSession, content: state.currentFile?.content };
+}
+
+function canApplyDocumentOpen(request) {
+  return request.id === state.documentOpenRequest && request.session === state.documentSession
+    && (request.content === state.currentFile?.content || maybeDiscardChanges());
+}
+
+function syncDocumentAccessControls() {
+  const readOnly = Boolean(state.currentFile?.readOnly);
+  els.documentView.classList.toggle('reference-document', readOnly);
+  els.editButton.disabled = !state.currentFile || readOnly;
+  els.saveButton.disabled = !state.currentFile || readOnly;
+  els.editButton.title = readOnly ? t('referenceReadOnlyTitle') : t('toggleEditorTitle');
+  els.saveButton.title = readOnly ? t('referenceReadOnlyTitle') : t('saveTitle');
+}
+
 function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
+  state.documentSession += 1;
+  closeAIRewrite();
+  pendingAIRewriteSelection = null;
   resetAIDocumentReviewSession();
   if (!sameDocumentPath(state.currentFile?.path, doc.path)) state.spellcheckIgnoredWords = new Set();
   state.currentFile = doc;
@@ -4982,12 +5050,7 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
   els.welcome.classList.add('hidden');
   els.editorView.classList.add('hidden');
   els.documentView.classList.remove('hidden');
-  const readOnly = Boolean(doc.readOnly);
-  els.documentView.classList.toggle('reference-document', readOnly);
-  els.editButton.disabled = readOnly;
-  els.saveButton.disabled = readOnly;
-  els.editButton.title = readOnly ? t('referenceReadOnlyTitle') : t('toggleEditorTitle');
-  els.saveButton.title = readOnly ? t('referenceReadOnlyTitle') : t('saveTitle');
+  syncDocumentAccessControls();
   els.editButton.classList.remove('active');
   els.editButtonLabel.textContent = t('edit');
   renderCurrentDocument();
@@ -4997,6 +5060,9 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  state.documentSession += 1;
+  closeAIRewrite();
+  pendingAIRewriteSelection = null;
   resetAIDocumentReviewSession();
   closeSearch();
   closeDocumentActionsMenu();
@@ -5061,12 +5127,14 @@ function startNewFileCooldown() {
 async function newFile() {
   if (newFileRequestInProgress || Date.now() < newFileCooldownUntil) return;
   if (!maybeDiscardChanges()) return;
+  const request = beginDocumentOpen();
   newFileRequestInProgress = true;
   updateNewFileButtonState();
   try {
     const doc = await window.quilliteMarkdown.newFile();
     if (!doc?.path) return;
     startNewFileCooldown();
+    if (!canApplyDocumentOpen(request)) return;
     displayDocument(doc);
     await toggleEditor(true);
     if (pathIsInsideRoot(doc.path)) await refreshExplorer();
@@ -5082,8 +5150,10 @@ async function newFile() {
 
 async function loadFile(filePath) {
   if (!maybeDiscardChanges()) return;
+  const request = beginDocumentOpen();
   try {
-    displayDocument(await window.quilliteMarkdown.openRecentFile(filePath));
+    const doc = await window.quilliteMarkdown.openRecentFile(filePath);
+    if (canApplyDocumentOpen(request)) displayDocument(doc);
   } catch (error) {
     if (isMissingDocumentError(error)) {
       await refreshLibraryFileStatuses();
@@ -5110,22 +5180,33 @@ async function refreshLibraryAfterReplacement(saved) {
 async function saveLibraryDocumentAs(filePath, { editAfterSave = false } = {}) {
   const current = state.currentFile;
   const isCurrent = current && sameDocumentPath(current.path, filePath);
+  const requestedSession = state.documentSession;
+  if (isCurrent) {
+    const saved = await saveDocument(true);
+    if (!saved || requestedSession !== state.documentSession) return false;
+    if (editAfterSave) await toggleEditor(true);
+    return true;
+  }
   if (!isCurrent && !maybeDiscardChanges()) return;
+  const previousContent = state.currentFile?.content;
   try {
-    const source = isCurrent
-      ? { ...current, content: state.editing ? editorContent() : current.content }
-      : await window.quilliteMarkdown.readFile(filePath);
+    const source = await window.quilliteMarkdown.readFile(filePath);
+    if (requestedSession !== state.documentSession) return false;
     if (!source?.path) return;
     const saved = await window.quilliteMarkdown.saveAs(source.path, source.content);
     if (!saved?.path) return;
+    if (requestedSession !== state.documentSession || previousContent !== state.currentFile?.content) return false;
     displayDocument(saved);
+    const savedSession = state.documentSession;
     await refreshLibraryAfterReplacement(saved);
+    if (savedSession !== state.documentSession) return false;
     showToast(t('saveAsDone'), 'success');
     if (editAfterSave) await toggleEditor(true);
     return true;
   } catch (error) {
     reportSilentError(error, 'document.save-as');
     console.error(error);
+    if (requestedSession !== state.documentSession) return false;
     showToast(t('saveFailed'), 'error');
     return false;
   }
@@ -5134,16 +5215,18 @@ async function saveLibraryDocumentAs(filePath, { editAfterSave = false } = {}) {
 async function refreshCurrentFileFromDisk() {
   if (!state.currentFile?.path || state.dirty || state.saving || externalRefreshInProgress) return;
   const requestedPath = state.currentFile.path;
+  const requestedSession = state.documentSession;
   externalRefreshInProgress = true;
   try {
     if (sameDocumentPath(missingCurrentFilePath, requestedPath)) {
       await refreshLibraryFileStatuses();
+      if (requestedSession !== state.documentSession) return;
       const recentEntry = state.recentFiles.find(file => sameDocumentPath(file.path, requestedPath));
       if (recentEntry?.exists === false) return;
       missingCurrentFilePath = '';
     }
     const refreshed = await window.quilliteMarkdown.readFile(requestedPath);
-    if (!state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath) || state.dirty || state.saving) return;
+    if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath) || state.dirty || state.saving) return;
     if (!refreshed?.path || refreshed.content === state.currentFile.content) return;
     missingCurrentFilePath = '';
 
@@ -5163,11 +5246,12 @@ async function refreshCurrentFileFromDisk() {
     }
     setDirty(false);
   } catch (error) {
+    if (requestedSession !== state.documentSession) return;
     if (isMissingDocumentError(error)) {
       const firstMissingNotice = !sameDocumentPath(missingCurrentFilePath, requestedPath);
       missingCurrentFilePath = requestedPath;
       await refreshLibraryFileStatuses();
-      if (firstMissingNotice) showToast(t('currentDocumentMissing'), 'warning');
+      if (requestedSession === state.documentSession && firstMissingNotice) showToast(t('currentDocumentMissing'), 'warning');
       return;
     }
     reportSilentError(error, 'document.refresh');
@@ -5290,6 +5374,7 @@ async function toggleEditor(forceEditing) {
     return;
   }
   const requestedPath = state.currentFile.path;
+  const requestedSession = state.documentSession;
   editorModeSwitching = true;
   els.editButton.disabled = true;
   try {
@@ -5301,6 +5386,7 @@ async function toggleEditor(forceEditing) {
         reportSilentError(error, 'document.check-write-permission');
         console.warn('Unable to verify document write permission:', error);
       }
+      if (requestedSession !== state.documentSession) return;
       if (!canEdit) {
         state.saveAsRequired = true;
         els.editorSaveState.textContent = t('saveAsRequired');
@@ -5315,7 +5401,7 @@ async function toggleEditor(forceEditing) {
         showToast(t('previewError'), 'error');
         return;
       }
-      if (!state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
+      if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
     }
     state.editing = nextEditing;
     if (state.editing) {
@@ -5361,6 +5447,8 @@ async function saveDocument(saveAs = false, options = {}) {
   if (state.saveAsRequired && !options.auto) saveAs = true;
   const editingContent = state.editing ? editorContent() : state.currentFile.content;
   const originalPath = state.currentFile.path;
+  const requestedSession = state.documentSession;
+  const isCurrentSession = () => requestedSession === state.documentSession && Boolean(state.currentFile);
   let fallbackToSaveAs = false;
   state.saving = true;
   try {
@@ -5368,29 +5456,37 @@ async function saveDocument(saveAs = false, options = {}) {
       ? await window.quilliteMarkdown.saveAs(originalPath, editingContent)
       : await window.quilliteMarkdown.saveFile(originalPath, editingContent);
     if (!saved) return;
-    const unchangedSinceSave = !state.editing || editorContent() === editingContent;
+    if (!isCurrentSession()) return;
+    const currentContent = state.editing ? editorContent() : state.currentFile.content;
+    const unchangedSinceSave = currentContent === editingContent;
     state.currentFile = saved;
     state.saveAsRequired = false;
     state.saveWarningShown = false;
-    state.currentFile.content = unchangedSinceSave ? editingContent : editorContent();
+    state.currentFile.content = currentContent;
     state.savedContent = editingContent;
+    syncDocumentAccessControls();
     addRecentDocument(saved);
-    await refreshLibraryAfterReplacement(saved);
     renderEditorPreview(state.currentFile.content);
+    if (!state.editing) renderCurrentDocument();
     els.editorFileName.textContent = saved.name;
     if (state.sidebarMode === 'recent') state.files = [...state.recentFiles];
     renderFileList();
     setDirty(!unchangedSinceSave);
+    await refreshLibraryAfterReplacement(saved);
+    if (!isCurrentSession()) return;
     if (pathIsInsideRoot(saved.path)) await refreshExplorer();
-    if (options.auto && unchangedSinceSave) {
+    if (!isCurrentSession()) return;
+    if (options.auto && !state.dirty) {
       els.editorSaveState.textContent = t('autoSaved');
       clearTimeout(saveDocument.statusTimer);
-      saveDocument.statusTimer = setTimeout(() => { if (!state.dirty) els.editorSaveState.textContent = t('saved'); }, 1800);
+      saveDocument.statusTimer = setTimeout(() => { if (isCurrentSession() && !state.dirty) els.editorSaveState.textContent = t('saved'); }, 1800);
     } else if (!options.silent) {
       showToast(t(saveAs ? 'saveAsDone' : 'saveDone'), 'success');
     }
+    return saved;
   } catch (error) {
     reportSilentError(error, 'document.save');
+    if (!isCurrentSession()) return;
     if (!saveAs) {
       state.saveAsRequired = true;
       els.editorSaveState.textContent = t('saveAsRequired');
@@ -5410,7 +5506,7 @@ async function saveDocument(saveAs = false, options = {}) {
   } finally {
     state.saving = false;
   }
-  if (fallbackToSaveAs) await saveDocument(true, options);
+  if (fallbackToSaveAs && isCurrentSession()) return await saveDocument(true, options);
 }
 
 function exportPreviewContainer() {
@@ -6065,23 +6161,31 @@ function bindDocumentActions(container = els.content) {
 
 async function openFile() {
   if (!maybeDiscardChanges()) return;
-  const doc = await window.quilliteMarkdown.openFile();
-  if (doc) {
-    setSidebarMode('recent');
-    displayDocument(doc);
+  const request = beginDocumentOpen();
+  try {
+    const doc = await window.quilliteMarkdown.openFile();
+    if (doc && canApplyDocumentOpen(request)) {
+      setSidebarMode('recent');
+      displayDocument(doc);
+    }
+  } catch (error) {
+    reportSilentError(error, 'document.open');
+    showToast(t('openFailed'), 'error');
   }
 }
 
 async function openFolder() {
   if (!maybeDiscardChanges()) return;
+  const request = beginDocumentOpen();
   const folder = await window.quilliteMarkdown.openFolder();
-  if (!folder) return;
+  if (!folder || !canApplyDocumentOpen(request)) return;
   state.root = folder.root;
   state.explorerFiles = folder.files;
   setSidebarMode('explorer');
   if (folder.files[0]) {
     try {
-      displayDocument(await window.quilliteMarkdown.readFile(folder.files[0].path));
+      const doc = await window.quilliteMarkdown.readFile(folder.files[0].path);
+      if (canApplyDocumentOpen(request)) displayDocument(doc);
     } catch {
       showToast(t('folderOpenFailed'), 'error');
     }
@@ -6090,9 +6194,10 @@ async function openFolder() {
 
 async function openReferenceDocument(kind) {
   if (!maybeDiscardChanges()) return;
+  const request = beginDocumentOpen();
   try {
     const doc = await window.quilliteMarkdown.openReferenceDocument(kind);
-    if (doc) displayDocument(doc, { addToLibrary: false });
+    if (doc && canApplyDocumentOpen(request)) displayDocument(doc, { addToLibrary: false });
   } catch (error) {
     reportSilentError(error, 'document.open-reference');
     console.error(error);
@@ -6432,7 +6537,7 @@ function initializePaneResizers() {
   };
   configure(els.sidebarResizer, 'sidebar', 1);
   configure(els.tocResizer, 'toc', -1);
-  // 编辑模式分栏：左侧预览/右侧编辑器，可随意拖动（不设最大宽度，仅保留最小宽度）
+  // Preview width belongs to the preview pane, regardless of which side it is on.
   const editorHandle = els.editorResizer;
   if (editorHandle) {
     editorHandle.addEventListener('pointerdown', event => {
@@ -6446,7 +6551,7 @@ function initializePaneResizers() {
       document.body.classList.add('resizing-panes');
       const move = moveEvent => {
         const total = els.editorView?.clientWidth || 1;
-        const deltaPercent = ((moveEvent.clientX - startX) / total) * 100;
+        const deltaPercent = ((moveEvent.clientX - startX) / total) * 100 * editorResizeDirection();
         const previousPercent = state.editorPreviewWidth;
         setEditorPreviewWidth(startPercent + deltaPercent);
         if (state.editorPreviewWidth !== previousPercent) changed = true;
@@ -6466,7 +6571,7 @@ function initializePaneResizers() {
     editorHandle.addEventListener('keydown', event => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
-      const change = event.key === 'ArrowRight' ? 2 : -2;
+      const change = (event.key === 'ArrowRight' ? 2 : -2) * editorResizeDirection();
       setEditorPreviewWidth(state.editorPreviewWidth + change);
       localStorage.setItem('editorPreviewWidth', String(state.editorPreviewWidth));
     });
@@ -6474,7 +6579,7 @@ function initializePaneResizers() {
 }
 
 function setEditorPreviewWidth(percent) {
-  // 最小保留 12% 预览宽度；不设固定最大宽度，只给右侧编辑器保留最小可用空间
+  // 最小保留 12% 预览宽度，同时给编辑器保留最小可用空间。
   const max = Math.max(12, 100 - 8);
   state.editorPreviewWidth = Math.max(12, Math.min(max, Math.round(percent)));
   document.documentElement.style.setProperty('--editor-preview-width', `${state.editorPreviewWidth}%`);
@@ -6850,6 +6955,7 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
     return;
   }
   const editContext = {
+    documentSession: selection.documentSession ?? state.documentSession,
     from: Number.isInteger(selection.from) ? selection.from : null,
     to: Number.isInteger(selection.to) ? selection.to : null,
     markdown: selection.markdown || '',
@@ -6861,6 +6967,7 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
   } catch {
     currentAISettings = { provider: 'deepseek', hasApiKey: false };
   }
+  if (editContext.documentSession !== state.documentSession || !state.editing) return;
   if (!currentAISettings?.hasApiKey) {
     pendingAIRewriteSelection = { ...editContext };
     pendingAIRewriteAction = preferredAction || (editContext.markdown ? 'polish' : 'custom');
@@ -6958,6 +7065,10 @@ async function generateAIRewrite() {
 
 function replaceWithAIResult() {
   if (!codeEditor || !aiRewriteSelection) return;
+  if (aiRewriteSelection.documentSession !== state.documentSession || !state.editing) {
+    els.aiRewriteStatus.textContent = t('aiSelectionChanged');
+    return;
+  }
   const replacement = els.aiResultText.value;
   if (!replacement.trim()) {
     els.aiRewriteStatus.textContent = t('aiEmptyResult');
@@ -7312,9 +7423,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.7.1', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.7.2', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.1';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.2';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -7370,7 +7481,7 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
-  $('#currentVersion').textContent = info.currentVersion || '2.7.1';
+  $('#currentVersion').textContent = info.currentVersion || '2.7.2';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -7504,6 +7615,7 @@ async function initialize() {
   setFontScale(state.fontScale, true, state.fontScaleMode);
   await setFontFamily(state.fontFamily, true, false);
   setDocumentWidth(state.docWidth, true);
+  setEditorLayout(state.editorLayout, true);
   scheduleMacWindowModeSync();
   const prefs = await window.quilliteMarkdown.getPreferences();
   await setFontFamily(prefs.fontFamily || 'system', true, false);
@@ -8234,6 +8346,9 @@ $('#editorFormatBar').addEventListener('click', event => {
   if (button.dataset.format === 'code-block' || button.dataset.format === 'text-color') event.stopPropagation();
   runFormatCommand(button.dataset.format);
 });
+$('#swapEditorLayoutButton').addEventListener('click', () => {
+  setEditorLayout(state.editorLayout === 'editor-left' ? 'preview-left' : 'editor-left');
+});
 els.moreMenu.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button) return;
@@ -8253,6 +8368,7 @@ els.moreMenu.addEventListener('click', event => {
   if (button?.dataset.fontScale === 'auto') enableAutomaticFontScale();
   else if (button?.dataset.fontScale) setFontScale(Number(button.dataset.fontScale));
   if (button?.dataset.docWidth) setDocumentWidth(button.dataset.docWidth);
+  if (button?.dataset.editorLayout) setEditorLayout(button.dataset.editorLayout);
   if (button.hasAttribute('data-spellcheck-toggle')) setSpellcheckEnabled(!state.spellcheckEnabled);
   if (button.dataset.spellcheckLanguage) setSpellcheckLanguage(button.dataset.spellcheckLanguage);
   if (button.hasAttribute('data-spellcheck-clear')) clearPersonalDictionary();

@@ -155,7 +155,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'sankey', category: 'data', name: name('桑基图', 'Sankey diagram'),
+    id: 'sankey', category: 'data', visualEditor: 'structured', name: name('桑基图', 'Sankey diagram'),
     description: name('流量、能量、资金或数据的去向与占比。', 'Flow and distribution of traffic, energy, money, or data.'),
     source: {
       zh: `sankey-beta\nMarkdown,Parser,100\nParser,Preview,70\nParser,WordExport,15\nParser,HTMLExport,15`,
@@ -313,6 +313,12 @@ export function diagramTemplatesForCategory(category) {
 }
 
 export function diagramTemplateById(id) {
+  if (id === 'source-mermaid' || id === 'source-echarts') return {
+    id, engine: id === 'source-echarts' ? 'echarts' : 'mermaid',
+    name: name('自定义图表', 'Custom diagram'),
+    description: name('编辑原始源码，右侧实时预览；保存时只替换当前图表。', 'Edit the original source with live preview; saving replaces only this diagram.'),
+    source: { zh: '', en: '' }
+  };
   return DIAGRAM_TEMPLATES.find(template => template.id === id) || DIAGRAM_TEMPLATES[0];
 }
 

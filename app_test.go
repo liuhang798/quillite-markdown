@@ -704,8 +704,8 @@ func TestReadSaveAndRecent(t *testing.T) {
 	app.mu.RLock()
 	dirty := app.dirty
 	app.mu.RUnlock()
-	if dirty {
-		t.Fatal("save did not clear dirty state")
+	if !dirty {
+		t.Fatal("save cleared dirty state before frontend snapshot acknowledgement")
 	}
 }
 
@@ -1037,8 +1037,8 @@ func TestSaveDocumentAsAtomicallyMigratesPinnedDraftAtFullCapacity(t *testing.T)
 	app.mu.RLock()
 	dirty := app.dirty
 	app.mu.RUnlock()
-	if dirty {
-		t.Fatal("successful Save As did not clear dirty state")
+	if !dirty {
+		t.Fatal("Save As cleared dirty state before frontend snapshot acknowledgement")
 	}
 }
 

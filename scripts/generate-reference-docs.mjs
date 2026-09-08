@@ -15,7 +15,8 @@ import {
 } from '../frontend/src/diagram-templates.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outputDirectory = resolve(root, 'docs', 'reference');
+// Tests use a temporary output directory, never regenerate tracked examples.
+const outputDirectory = process.argv[2] ? resolve(process.argv[2]) : resolve(root, 'docs', 'reference');
 mkdirSync(outputDirectory, { recursive: true });
 
 const writeReference = (name, content) => {

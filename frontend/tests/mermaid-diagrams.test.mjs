@@ -99,8 +99,8 @@ test('editor offers one localized diagram builder with the full common Mermaid c
 
 test('existing Mermaid flowcharts, state diagrams, and mindmaps reopen on the canvas and save in place', () => {
   assert.match(index, /id="editFlowchartButton"/);
-  assert.match(index, /data-i18n="editFlowchartVisually"/);
-  assert.match(renderer, /findCanvasDiagramFenceAt\(source, selection\.head\)/);
+  assert.match(index, /data-i18n="editThisDiagram"/);
+  assert.match(renderer, /findEditableDiagramFenceAt\(source, selection\.head\)/);
   assert.match(renderer, /openDiagramDialog\(activeFlowchartFence\.templateId, activeFlowchartFence\)/);
   assert.match(renderer, /CANVAS_DIAGRAM_IDS = new Set\(\['flowchart', 'state', 'mindmap'\]\)/);
   assert.match(renderer, /function stateDiagramCanvasModel\(source\)/);

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>图表与公式渲染审计</title>
+<style>body{font:16px/1.6 system-ui;margin:24px auto;max-width:1080px;background:#fafafa;color:#24332a}h1{font-size:24px}section{background:white;border:1px solid #ddd;border-radius:12px;padding:20px;margin:16px 0}.mermaid-diagram{overflow:auto}svg{max-width:100%}.formulas{display:grid;grid-template-columns:1fr 1fr}.formulas section{overflow:auto;margin:8px}#status{position:sticky;top:0;background:#e5f5ec;padding:12px;z-index:10}</style>
+<h1>图表与公式渲染审计 / Rendering audit</h1><p id="status">Rendering…</p><main id="charts"></main><div id="formulas" class="formulas"></div>
+<script type="module">
+import 'katex/dist/katex.min.css';
+import { version as echartsVersion } from 'echarts';
+import { DIAGRAM_TEMPLATES, diagramTemplateSource } from '/src/diagram-templates.js';
+import { FORMULA_TEMPLATES, buildFormulaExpression, formulaValues } from '/src/formula-templates.js';
+import { renderLatex } from '/src/math-rendering.js';
+import { renderMermaidDiagrams } from '/src/mermaid-diagrams.js';
+import { renderEChartsDiagrams } from '/src/echarts-diagrams.js';
+const charts = document.querySelector('#charts');
+const formulas = document.querySelector('#formulas');
+for (const template of DIAGRAM_TEMPLATES) {
+  const section = document.createElement('section');
+  const heading = document.createElement('h2');
+  heading.textContent = template.name.zh;
+  const diagram = document.createElement('div');
+  const engine = template.engine === 'echarts' ? 'echarts' : 'mermaid';
+  diagram.className = `${engine}-diagram`;
+  diagram.dataset[`${engine}Source`] = encodeURIComponent(diagramTemplateSource(template, 'zh-CN'));
+  section.append(heading, diagram);
+  charts.append(section);
+}
+for (const template of FORMULA_TEMPLATES) {
+  const section = document.createElement('section');
+  const heading = document.createElement('h2');
+  heading.textContent = template.name.zh;
+  const formula = document.createElement('div');
+  formula.innerHTML = renderLatex(buildFormulaExpression(template, formulaValues(template)), true);
+  section.append(heading, formula);
+  formulas.append(section);
+}
+await Promise.all([renderMermaidDiagrams(charts, { diagramLabel: 'Diagram', errorTitle: 'Render error', errorHint: 'Review source' }), renderEChartsDiagrams(charts, {})]);
+await document.fonts.ready;
+const errors = document.querySelectorAll('.mermaid-error, .echarts-error, .katex-error');
+const rendered = document.querySelectorAll('[data-mermaid-rendered="true"], [data-echarts-rendered="true"]');
+document.querySelector('#status').textContent = `ECharts ${echartsVersion}; Rendered charts: ${rendered.length}/${DIAGRAM_TEMPLATES.length}; formulas: ${formulas.querySelectorAll('.katex').length}/${FORMULA_TEMPLATES.length}; errors: ${errors.length}`;
+</script></html>

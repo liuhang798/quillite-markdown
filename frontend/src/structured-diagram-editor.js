@@ -1,6 +1,6 @@
 export const STRUCTURED_VISUAL_DIAGRAM_IDS = Object.freeze([
   'sequence', 'gantt', 'state', 'timeline', 'kanban', 'mindmap', 'pie',
-  'bar-chart', 'line-chart', 'doughnut-chart'
+  'bar-chart', 'line-chart', 'doughnut-chart', 'sankey'
 ]);
 
 const text = value => String(value ?? '').trim();
@@ -120,26 +120,56 @@ function parseGantt(source) {
 
 function parseECharts(templateId, source) {
   const option = JSON.parse(source);
+  if (Array.isArray(option.title) || Array.isArray(option.xAxis) || Array.isArray(option.yAxis)) throw new Error('unsupported-components');
   const title = text(option?.title?.text);
   if (templateId === 'doughnut-chart') {
     if (option?.series?.length !== 1 || option.series[0]?.type !== 'pie') throw new Error('unsupported-series');
-    const data = option?.series?.[0]?.data || [];
-    return { settings: { title, seriesName: text(option?.series?.[0]?.name) }, rows: data.map(item => ({ label: text(item.name), value: number(item.value) })) };
+    const data = option?.series?.[0]?.data;
+    if (!Array.isArray(data) || data.some(item => !item || typeof item.name !== 'string' || typeof item.value !== 'number')) throw new Error('unsupported-data');
+    return { originalOption: option, settings: { title, seriesName: text(option?.series?.[0]?.name) }, rows: data.map(item => ({ originalItem: item, label: text(item.name), value: item.value })) };
   }
   const expectedType = templateId === 'line-chart' ? 'line' : 'bar';
   if (option?.series?.length !== 1 || option.series[0]?.type !== expectedType || option?.xAxis?.type !== 'category') throw new Error('unsupported-series');
   const categories = option?.xAxis?.data || [];
   const values = option?.series?.[0]?.data || [];
+  if (!Array.isArray(option?.xAxis?.data) || !Array.isArray(values) || categories.length !== values.length || values.some(value => typeof value !== 'number' || !Number.isFinite(value)) || categories.some(value => typeof value !== 'string' && typeof value !== 'number')) throw new Error('unsupported-data');
   return {
+    originalOption: option,
     settings: { title, seriesName: text(option?.series?.[0]?.name), yAxisName: text(option?.yAxis?.name) },
     rows: categories.map((label, index) => ({ label: text(label), value: number(values[index]) }))
   };
+}
+
+function parseSankey(source) {
+  const lines = String(source).split(/\r?\n/u);
+  if (!/^sankey(?:-beta)?\s*$/iu.test(lines[0])) throw new Error('unsupported-header');
+  const model = { settings: {}, rows: [], unsupportedLines: [] };
+  const field = '("(?:[^"\\r\\n]|"")*"|[^",\\r\\n]*)';
+  const record = new RegExp(`^\\s*${field}\\s*,\\s*${field}\\s*,\\s*${field}\\s*$`, 'u');
+  const decode = value => value.trim().replace(/^"([\s\S]*)"$/u, '$1').replaceAll('""', '"');
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue;
+    const match = line.match(record);
+    const from = match && decode(match[1]);
+    const to = match && decode(match[2]);
+    const rawValue = match && decode(match[3]);
+    const value = Number(rawValue);
+    if (!match || !from || !to || !rawValue || !Number.isFinite(value) || value < 0) model.unsupportedLines.push(line);
+    else model.rows.push({ from, to, value });
+  }
+  return model;
+}
+
+function serializeSankey(model) {
+  const quote = value => `"${text(value).replace(/[\r\n]+/gu, ' ').replaceAll('"', '""')}"`;
+  return ['sankey-beta', ...model.rows.map(row => `${quote(row.from)},${quote(row.to)},${Number(row.value)}`)].join('\n');
 }
 
 export function parseStructuredDiagram(templateId, source) {
   try {
     let model = null;
     if (templateId === 'sequence') model = parseSequence(source);
+    else if (templateId === 'sankey') model = parseSankey(source);
     else if (templateId === 'timeline') model = parseTimeline(source);
     else if (templateId === 'state') model = parseState(source);
     else if (templateId === 'pie') model = parsePie(source);
@@ -230,6 +260,19 @@ function serializeGantt(model) {
 }
 
 function serializeECharts(templateId, model) {
+  if (model.originalOption) {
+    const option = JSON.parse(JSON.stringify(model.originalOption));
+    option.title = { ...(option.title || {}), text: text(model.settings.title) };
+    option.series[0].name = text(model.settings.seriesName);
+    if (templateId === 'doughnut-chart') {
+      option.series[0].data = model.rows.map(row => ({ ...(row.originalItem || {}), name: text(row.label), value: number(row.value) }));
+    } else {
+      option.xAxis.data = model.rows.map(row => text(row.label));
+      option.yAxis = { ...(option.yAxis || {}), name: text(model.settings.yAxisName) };
+      option.series[0].data = model.rows.map(row => number(row.value));
+    }
+    return JSON.stringify(option, null, 2);
+  }
   const title = { text: text(model.settings.title), left: 'center' };
   if (templateId === 'doughnut-chart') {
     return JSON.stringify({ __quillite: { height: 460 }, title, tooltip: { trigger: 'item' }, legend: { bottom: 4, left: 'center' }, series: [{ name: text(model.settings.seriesName) || 'Data', type: 'pie', radius: ['38%', '62%'], data: model.rows.filter(row => row.label).map(row => ({ name: text(row.label), value: number(row.value) })) }] }, null, 2);
@@ -239,6 +282,7 @@ function serializeECharts(templateId, model) {
 }
 
 export function serializeStructuredDiagram(templateId, model) {
+  if (templateId === 'sankey') return serializeSankey(model);
   if (templateId === 'sequence') return serializeSequence(model);
   if (templateId === 'timeline') return serializeTimeline(model);
   if (templateId === 'state') return serializeState(model);
@@ -253,6 +297,7 @@ export function serializeStructuredDiagram(templateId, model) {
 export function structuredDiagramDefinition(templateId, locale = 'zh') {
   const en = locale === 'en';
   const common = { add: en ? 'Add row' : '添加一行', remove: en ? 'Remove' : '删除' };
+  if (templateId === 'sankey') return { ...common, settings: [], columns: [{ key: 'from', label: en ? 'Source' : '来源' }, { key: 'to', label: en ? 'Target' : '目标' }, { key: 'value', label: en ? 'Value' : '数值', type: 'number', min: 0 }], empty: { from: 'Source', to: 'Target', value: 10 } };
   if (templateId === 'sequence') return { ...common, settings: [{ key: 'autonumber', label: en ? 'Auto numbering' : '自动编号', type: 'checkbox' }], columns: [{ key: 'type', label: en ? 'Type' : '类型', type: 'select', options: [['participant', en ? 'Participant' : '参与者'], ['actor', en ? 'Actor' : '角色'], ['->>', en ? 'Request →' : '请求实线 →'], ['-->>', en ? 'Response ⇢' : '响应虚线 ⇢'], ['->', en ? 'Open arrow →' : '开放箭头 →'], ['-->', en ? 'Dashed open arrow ⇢' : '开放虚线 ⇢'], ['-)', en ? 'Async →' : '异步消息 →']] }, { key: 'from', label: en ? 'From / ID' : '发起方／标识' }, { key: 'to', label: en ? 'To' : '接收方' }, { key: 'label', label: en ? 'Name / Message' : '名称／消息' }], empty: { type: '->>', from: 'A', to: 'B', label: en ? 'Message' : '消息' } };
   if (templateId === 'gantt') return { ...common, settings: [{ key: 'title', label: en ? 'Title' : '标题' }, { key: 'dateFormat', label: en ? 'Date format' : '日期格式' }, { key: 'excludes', label: en ? 'Excluded days' : '排除日期' }], columns: [{ key: 'section', label: en ? 'Section' : '阶段' }, { key: 'task', label: en ? 'Task' : '任务' }, { key: 'status', label: en ? 'Status' : '状态', type: 'select', options: [['', en ? 'Normal' : '普通'], ['done', en ? 'Done' : '已完成'], ['active', en ? 'Active' : '进行中'], ['crit', en ? 'Critical' : '关键'], ['milestone', en ? 'Milestone' : '里程碑']] }, { key: 'start', label: en ? 'Start / dependency' : '开始／依赖' }, { key: 'duration', label: en ? 'Duration' : '时长' }], empty: { section: en ? 'Phase' : '阶段', task: en ? 'New task' : '新任务', status: '', start: '', duration: '1d' } };
   if (templateId === 'timeline') return { ...common, settings: [{ key: 'title', label: en ? 'Title' : '标题' }], columns: [{ key: 'period', label: en ? 'Time / Stage' : '时间／阶段' }, { key: 'event', label: en ? 'Event' : '事件' }], empty: { period: en ? 'New stage' : '新阶段', event: en ? 'New event' : '新事件' } };

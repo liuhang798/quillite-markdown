@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -14,10 +15,12 @@ const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
 const docs = resolve(root, 'docs', 'reference');
 
-test('generated reference documents cover every current chart and formula template', () => {
-  execFileSync(process.execPath, [resolve(root, 'scripts', 'generate-reference-docs.mjs')], { cwd: root });
-  const charts = readFileSync(resolve(docs, '图表案例.MD'), 'utf8');
-  const formulas = readFileSync(resolve(docs, '科学公式案例.MD'), 'utf8');
+test('generated reference documents cover every current chart and formula template', t => {
+  const generated = mkdtempSync(resolve(tmpdir(), 'quillite-reference-test-'));
+  t.after(() => rmSync(generated, { recursive: true, force: true }));
+  execFileSync(process.execPath, [resolve(root, 'scripts', 'generate-reference-docs.mjs'), generated], { cwd: root });
+  const charts = readFileSync(resolve(generated, '图表案例.MD'), 'utf8');
+  const formulas = readFileSync(resolve(generated, '科学公式案例.MD'), 'utf8');
 
   assert.ok(!formulas.includes('undefined'), 'formula reference contains an undefined template value');
 
@@ -58,7 +61,7 @@ test('format example and sidebar expose every requested built-in reference', () 
   assert.ok(index.indexOf('data-reference-document="formats"') < index.indexOf('id="folderCta"'));
   assert.match(renderer, /displayDocument\(doc, \{ addToLibrary: false \}\)/);
   assert.match(renderer, /state\.currentFile\.readOnly/);
-  assert.match(renderer, /els\.editButton\.disabled = readOnly/);
+  assert.match(renderer, /els\.editButton\.disabled = !state\.currentFile \|\| readOnly/);
   assert.match(renderer, /els\.documentView\.classList\.toggle\('reference-document', readOnly\)/);
   assert.match(styles, /\.document-view\.reference-document \.breadcrumb,[\s\S]*\.document-view\.reference-document #revealButton \{ display: none; \}/);
   assert.match(main, /Backend\.OpenReferenceDocument\(kind\)/);

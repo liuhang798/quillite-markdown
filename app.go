@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.7.1"
+	appVersion      = "2.7.2"
 	maxRecent       = 10
 )
 
@@ -360,7 +360,7 @@ func (a *App) writePreferencesUnlocked(prefs Preferences) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileAtomically(path, data)
 }
 
 func (a *App) updatePreferences(update func(*Preferences)) (Preferences, error) {
@@ -1207,7 +1207,6 @@ func (a *App) SaveFile(filePath, content string) (*Document, error) {
 		}
 		resolvedPath = filePath
 	}
-	a.SetDirty(false)
 	return a.readDocument(resolvedPath, true)
 }
 
@@ -1239,7 +1238,8 @@ func (a *App) saveDocumentAs(currentPath, filePath, content string) (*Document, 
 	} else if err := a.rememberFile(saved.Path); err != nil {
 		return nil, err
 	}
-	a.SetDirty(false)
+	// The frontend owns dirty state: a completed write may belong to an older
+	// document session or snapshot. Only it can acknowledge the saved content.
 	return saved, nil
 }
 

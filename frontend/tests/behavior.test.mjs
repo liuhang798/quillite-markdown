@@ -32,7 +32,7 @@ test('documents removed outside the app become unavailable without software-erro
   assert.match(renderer, /import \{[^}]*isMissingDocumentError[^}]*\} from '\.\/library-state\.js'/);
   assert.match(renderer, /async function loadFile\(filePath\)[\s\S]*if \(isMissingDocumentError\(error\)\) \{[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.open'\)/);
   assert.match(renderer, /async function editRecentDocument\(filePath\)[\s\S]*if \(isMissingDocumentError\(error\)\) \{[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.open-recent'\)/);
-  assert.match(renderer, /missingCurrentFilePath = requestedPath;[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*if \(firstMissingNotice\) showToast\(t\('currentDocumentMissing'\), 'warning'\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.refresh'\)/);
+  assert.match(renderer, /missingCurrentFilePath = requestedPath;[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*if \(requestedSession === state.documentSession && firstMissingNotice\) showToast\(t\('currentDocumentMissing'\), 'warning'\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.refresh'\)/);
 });
 
 test('macOS recent documents recover protected-folder access through a user-authorized open panel', () => {
@@ -172,7 +172,7 @@ test('returning to the app reloads an externally changed document without overwr
   assert.match(renderer, /async function refreshCurrentFileFromDisk\(\)/);
   assert.match(renderer, /if \(!state\.currentFile\?\.path \|\| state\.dirty \|\| state\.saving \|\| externalRefreshInProgress\) return/);
   assert.match(renderer, /const refreshed = await window\.quilliteMarkdown\.readFile\(requestedPath\)/);
-  assert.match(renderer, /if \(!state\.currentFile \|\| !sameDocumentPath\(state\.currentFile\.path, requestedPath\) \|\| state\.dirty \|\| state\.saving\) return/);
+  assert.match(renderer, /if \(requestedSession !== state.documentSession \|\| !state\.currentFile \|\| !sameDocumentPath\(state\.currentFile\.path, requestedPath\) \|\| state\.dirty \|\| state\.saving\) return/);
   assert.match(renderer, /window\.addEventListener\('focus', \(\) => \{[\s\S]*scheduleMacWindowModeSync\(\);[\s\S]*refreshCurrentFileFromDisk\(\);[\s\S]*\}\)/);
 });
 
@@ -439,10 +439,10 @@ test('unwritable documents explain the cause and offer Save Copy and Edit withou
   assert.match(renderer, /if \(state\.saveAsRequired && !options\.auto\) saveAs = true;/);
   assert.match(renderer, /state\.saveAsRequired = true;/);
   assert.match(renderer, /fallbackToSaveAs = true;/);
-  assert.match(renderer, /if \(fallbackToSaveAs\) await saveDocument\(true, options\);/);
+  assert.match(renderer, /if \(fallbackToSaveAs && isCurrentSession\(\)\) return await saveDocument\(true, options\);/);
   assert.match(renderer, /saveAsRequiredHint: '原文件可能来自微信缓存/);
   assert.match(renderer, /async function refreshLibraryAfterReplacement\(saved\)[\s\S]*if \(!saved\?\.replacedPath\) return;[\s\S]*await refreshLibraryFileStatuses\(\)/);
-  assert.match(renderer, /displayDocument\(saved\);\s*await refreshLibraryAfterReplacement\(saved\)/);
+  assert.match(renderer, /displayDocument\(saved\);\s*const savedSession = state.documentSession;\s*await refreshLibraryAfterReplacement\(saved\)/);
   assert.doesNotMatch(renderer, /replacingUnwritableSource|saved\.replacedPath \|\|/);
 });
 
@@ -778,6 +778,9 @@ test('rich clipboard HTML converts to Markdown and selected source has Markdown 
 test('AI Edit supports five isolated cloud providers and can replace a selection or insert generated content at the cursor', () => {
   assert.match(html, /data-action="ai-settings"[\s\S]*data-i18n="aiAssistant"/);
   assert.match(html, /id="aiEditButton"[\s\S]*data-i18n="aiEdit"/);
+  assert.match(html, /id="aiEditButton"[^>]*data-i18n-title="aiEditTitle"[^>]*title="选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。"/);
+  assert.match(renderer, /aiEditTitle: '选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。'/);
+  assert.match(renderer, /aiEditTitle: 'Select text first, then choose AI Edit to edit only the selected content'/);
   assert.match(html, /id="aiReviewButton"[\s\S]*data-i18n="aiReview"/);
   assert.match(html, /id="aiSettingsDialog"[\s\S]*id="aiProvider"[\s\S]*value="deepseek"[\s\S]*value="zhipu"[\s\S]*value="qwen"[\s\S]*value="openai"[\s\S]*value="kimi"[\s\S]*id="setDefaultAIProvider"[\s\S]*id="refreshAIModels"[\s\S]*id="aiModel"[\s\S]*id="aiModelState"[\s\S]*id="aiKeyOnboarding"[\s\S]*id="aiMaskedAPIKey"[\s\S]*id="editAIAPIKey"[\s\S]*id="deleteAIAPIKey"[\s\S]*id="aiAPIKey"/);
   assert.doesNotMatch(html, /value="ollama"|value="openai-compatible"/);

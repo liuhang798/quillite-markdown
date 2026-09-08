@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -135,35 +134,6 @@ func (a *App) ExportDOCX(sourcePath, title, renderedHTML string) (string, error)
 		return "", err
 	}
 	return filePath, nil
-}
-
-func writeFileAtomically(filePath string, data []byte) error {
-	directory := filepath.Dir(filepath.Clean(filePath))
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(directory, ".quillite-export-*.tmp")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if _, err = temporary.Write(data); err == nil {
-		err = temporary.Sync()
-	}
-	if closeErr := temporary.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, filepath.Clean(filePath)); err == nil {
-		return nil
-	}
-	if err := os.Remove(filepath.Clean(filePath)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return classifyExportWriteError(runtime.GOOS, err)
-	}
-	return classifyExportWriteError(runtime.GOOS, os.Rename(temporaryPath, filepath.Clean(filePath)))
 }
 
 // classifyExportWriteError turns Windows sharing and lock violations into a

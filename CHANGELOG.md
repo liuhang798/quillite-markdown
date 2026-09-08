@@ -2,6 +2,40 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [Unreleased]
+
+## [2.7.2] - 2026-09-08
+
+### 简体中文
+
+- 全部 Mermaid／ECharts 代码块统一提供“编辑此图表”入口，自动选择画布、结构化表单或原始源码与实时预览。桑基图新增来源／目标／数值表格并修复中文节点渲染；图表保存保留原引擎、缩进、换行及 ECharts 已有配置，文档会话或原图变化时阻止过期覆盖。
+- 修复图表安全过滤误改原始数据和维度映射的问题，保留数据中的 link、constructor 等合法字段；改为逐项遍历大数组，避免大量数据点或筛选条件触发参数数量上限。原型污染防护与真正图表配置的安全限制保持生效。
+- 修复词云强制统一字号的问题，恢复按词频权重和 sizeRange 显示大小，同时保留用户显式设置的字号。
+- 打开文件按最新请求生效，等待期间新增的编辑再次确认后才丢弃。升级 DOMPurify、Mermaid、ECharts 及相关依赖，ECharts 保留 v5 主题布局；数据图表强制安全的 richText 提示框、过滤危险链接及原型键、转义数据视图标签，并拒绝文档提供的正则筛选以防界面卡死。
+- 修复异步保存、另存为、写权限检查和磁盘刷新跨文档返回时误更新当前文档的问题；保存期间继续输入或退出编辑仍保留未保存状态。内置范例另存后立即恢复可编辑控件和真实路径。
+- AI 编辑结果与文档会话绑定，切换文件或关闭预览时清除旧选区，避免相同文字或插入操作落入另一份文档。
+- 导出文件替换失败不再删除原目标；偏好设置改为临时文件写入后替换。抽取共用写文件函数并补充数据保护回归测试。
+- 公式字体只打包 WOFF2，保留全部字形，移除重复的 TTF／WOFF 编码；案例生成测试改用临时目录，避免污染正式文档。
+
+- 编辑模式支持左右切换：通过实时预览标题栏的切换按钮，或“更多 → 编辑布局”选择“预览在左／编辑在左”，并自动记住选择。切换保留正文、选区、撤销记录及 AI 检查结果，分栏拖动与方向键同步适配新的方向。
+
+- Windows 首次显示窗口前，按所在显示器的可用工作区与 DPI 缩放调整尺寸并居中，避免低分辨率主屏、双屏不同缩放或任务栏导致顶部菜单超出屏幕；不限制后续放大窗口，macOS 与 Linux 启动方式保持不变。
+
+### English
+
+- Added a unified Edit this diagram entry for every Mermaid/ECharts fence, routing to a canvas, structured form, or original source with live preview. Sankey diagrams gain Source/Target/Value rows and Unicode label support. In-place saving preserves the engine, indentation, line endings, and existing ECharts options, and rejects stale document sessions or changed source blocks.
+- Fixed chart sanitization altering raw data and dimension mappings, preserving legitimate fields such as link and constructor. Large arrays and filter lists are traversed incrementally to avoid argument-count limits, while prototype-pollution protection and executable-option restrictions remain active.
+- Fixed word clouds forcing one font size on every word; sizes now follow weights and sizeRange while respecting explicitly configured sizes.
+- File opening now honours the latest request and rechecks edits made while waiting. Updated DOMPurify, Mermaid, ECharts and related dependencies, retaining the ECharts v5 theme layout. Data charts enforce richText tooltips, filter unsafe links and prototype keys, escape data-view labels and reject untrusted regex filters.
+- Guarded asynchronous saves, Save As, permission checks and disk refreshes by document session. Edits made during a save remain unsaved even after leaving edit mode. Saved reference copies immediately regain editable controls and their real path.
+- Bound AI edit selections to their document session to prevent stale replacements or insertions in another document.
+- Export replacement failures now preserve the original destination. Preferences use staged writes; shared file-writing code and data-protection regression tests were added.
+- Kept every formula font face in WOFF2 while removing duplicate TTF/WOFF assets. Reference-generation tests now write to temporary directories instead of changing tracked examples.
+
+- Added a persistent editor/preview side preference, available from the live-preview swap button or More → Editor layout. Swapping preserves document content, selection, undo history and AI review results; divider dragging and arrow keys follow the selected orientation.
+
+- Windows now fits and centres its startup window within the target monitor's work area before showing it, accounting for DPI scaling, taskbars and negative multi-monitor coordinates. This prevents clipped title bars on smaller displays without limiting later resizing or changing macOS/Linux startup.
+
 ## [2.7.1] - 2026-09-04
 
 ### 简体中文

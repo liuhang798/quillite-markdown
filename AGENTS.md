@@ -6,14 +6,14 @@
 
 - 项目名称：轻阅 Markdown / Quillite Markdown
 - 仓库：`https://github.com/liuhang798/quillite-markdown`
-- 当前版本：`2.7.1`
+- 当前版本：`2.7.2`
 - 开源协议：MIT
 - 产品定位：极度轻量、美观、跨平台的 Markdown 阅读与编辑工具
 - 支持平台：Windows x64、macOS Universal、Linux x64
 - Windows 安装包：约 12 MB
 - UI 语言：简体中文、English
 
-核心产品体验是“阅读优先、编辑顺手”：普通状态显示沉浸式阅读页面；进入编辑状态后，左侧实时预览，右侧显示 Markdown 语法高亮编辑器。
+核心产品体验是“阅读优先、编辑顺手”：普通状态显示沉浸式阅读页面；进入编辑状态后，默认左侧实时预览、右侧 Markdown 语法高亮编辑器，可通过预览标题栏切换按钮或“更多 → 编辑布局”交换左右位置，偏好保存在 localStorage 的 `editorLayout` 中。
 
 ## 2. 技术栈
 
@@ -255,7 +255,15 @@ macOS 会把用户通过系统文件／文件夹窗口、Finder 或文件关联�
 4. 每 10 秒检查一次；仅在 `editing && dirty && !saving` 时保存。
 5. 保存完成后比较编辑器当前内容和发起保存时的快照，防止保存期间继续输入导致内容被旧结果覆盖。
 
+异步文件操作必须同时校验 `state.documentSession`，不能只比较路径（同一文件关闭再打开也是新会话）；打开文档还应使用 `beginDocumentOpen`／`canApplyDocumentOpen` 保证最新请求优先。Go 的 `SaveFile`／`SaveAs` 不得自行清除 dirty，由前端确认会话和内容快照后调用 `SetDirty`。数据图表必须经 `secureChartOption` 处理，禁止恢复 HTML tooltip 或危险 URL。`writeFileAtomically` 替换失败时不得删除原目标。
+
+ECharts 使用修复版 6.1+，预览和导出均显式使用 `echarts/theme/v5` 保持已有布局。词云插件的旧 peer 范围通过 package.json 的 overrides 统一到同一个 ECharts 实例；升级时必须运行全部图表和词云回归，不要重新安装易受攻击的 ECharts 5 副本。浏览器回归入口：`frontend/tests/fixtures/render-audit.html`（仅测试，不进入正式构建）。
+
+图表过滤必须区分原始数据和配置：`dataset.source`、`value`、`encode`、`dimensions` 内的合法字段不得按可执行选项删除；`__proto__` 仍在所有作用域清理，真正配置内的危险 URL、HTML tooltip 与正则筛选仍须拦截。不要把不受限数组展开为函数参数（例如 `push(...values)`），必须保留 15 万项数组和真实 ECharts 渲染回归测试。
+
 ### 撤回安全边界
+
+图表原位编辑统一通过 `diagram-editing.js` 识别 Mermaid／ECharts 围栏，必须保留原引擎与原始源码；无法完整解析的高级配置留在源码模式，不能用模板覆盖。保存前校验文档会话与原图快照，使用一次编辑器事务替换。桑基图 Unicode 兼容补丁由 `scripts/prepare-mermaid.mjs` 生成到 vendor；升级 Mermaid 后若补丁断言失败，必须审查词法规则并回归中文、引号、逗号和 emoji，不得直接绕过断言。
 
 打开不同文档时必须创建全新的 `EditorState`，不能只通过普通文本替换写入 CodeMirror。这样旧文档撤回历史不会泄漏到新文档，且 `Ctrl/Cmd + Z` 最多回到刚从磁盘载入的原始内容。
 

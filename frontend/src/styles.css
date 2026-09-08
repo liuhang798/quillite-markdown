@@ -523,6 +523,9 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .editor-preview-pane, .editor-workspace { min-width: 0; height: 100%; display: flex; flex-direction: column; }
 .editor-preview-pane { flex: 0 0 var(--editor-preview-width, 47%); background: color-mix(in srgb, var(--panel) 48%, var(--paper)); border-right: 1px solid var(--line); }
 .editor-workspace { flex: 1; background: var(--paper); }
+body[data-editor-layout="editor-left"] .editor-view { flex-direction: row-reverse; }
+body[data-editor-layout="editor-left"] .editor-preview-pane { border-right: 0; border-left: 1px solid var(--line); }
+.split-pane-header > .icon-button { margin-left: auto; flex-shrink: 0; }
 .split-pane-header, .editor-header { min-height: 72px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 19px 22px 14px; }
 .split-pane-header > div, .editor-header > div:first-child { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .split-pane-header strong { font-size: 15px; }
