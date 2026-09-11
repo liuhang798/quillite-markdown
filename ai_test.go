@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -208,13 +209,17 @@ func TestSupportedAIProvidersUseOfficialDefaultsAndIndependentKeys(t *testing.T)
 		{aiProviderQwen, defaultQwenBaseURL, "qwen-max", "api-key-qwen"},
 		{aiProviderOpenAI, defaultOpenAIBaseURL, "gpt-4.1", "api-key-openai"},
 		{aiProviderKimi, defaultKimiBaseURL, "moonshot-v1-8k", "api-key-kimi"},
+		{aiProviderBailian, defaultBailianBaseURL, "deepseek-v4-pro", "api-key-bailian"},
+		{aiProviderSilicon, defaultSiliconBaseURL, "Pro/deepseek-ai/DeepSeek-V4", "api-key-siliconflow"},
+		{aiProviderRouter, defaultRouterBaseURL, "anthropic/claude-sonnet-4.5", "api-key-openrouter"},
+		{aiProviderCustom, defaultCustomBaseURL, "qwen3:8b", "api-key-custom"},
 	}
 
 	for _, test := range cases {
 		key := test.provider + "-secret-key"
 		settings, err := app.SetAISettings(AISettingsInput{
 			Provider: test.provider,
-			BaseURL:  "https://example.invalid/ignored",
+			BaseURL:  test.baseURL,
 			Model:    test.model,
 			APIKey:   key,
 		})
@@ -286,6 +291,20 @@ func TestDefaultAIProviderRequiresItsOwnSavedKey(t *testing.T) {
 	}
 }
 
+func TestCustomAIProviderDoesNotAssumeAModel(t *testing.T) {
+	app, _ := aiTestApp(t)
+	settings, err := app.GetAIProviderSettings(aiProviderCustom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Model != "" {
+		t.Fatalf("custom provider invented a default model: %#v", settings)
+	}
+	if _, err := app.SetAISettings(AISettingsInput{Provider: aiProviderCustom, BaseURL: defaultCustomBaseURL, APIKey: "custom-key"}); err == nil {
+		t.Fatal("custom provider must require an explicitly selected model")
+	}
+}
+
 func TestFetchAIModelsUsesBearerKeyAndFiltersNonChatModels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/models" {
@@ -310,6 +329,78 @@ func TestFetchAIModelsUsesBearerKeyAndFiltersNonChatModels(t *testing.T) {
 	}
 }
 
+func TestFetchAIModelsReadsAlibabaCloudWorkspaceResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer workspace-key" {
+			t.Errorf("unexpected authorization header: %q", request.Header.Get("Authorization"))
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"success":true,"output":{"models":[{"model":"qwen3-max","capabilities":["TG"]},{"model":"deepseek-v4-flash","capabilities":["TG"]}]}}`))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	models, err := fetchAIModels(ctx, aiProviderCustom, server.URL, "workspace-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(models, ",") != "qwen3-max,deepseek-v4-flash" {
+		t.Fatalf("unexpected Alibaba Cloud workspace models: %#v", models)
+	}
+}
+
+func TestAlibabaCloudWorkspaceUsesDedicatedModelListEndpoint(t *testing.T) {
+	baseURL := "https://workspace.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+	endpoints := aiModelDiscoveryEndpoints(aiProviderCustom, baseURL)
+	if len(endpoints) != 2 {
+		t.Fatalf("expected Alibaba endpoint plus compatible fallback, got %#v", endpoints)
+	}
+	parsed, err := url.Parse(endpoints[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Scheme != "https" || parsed.Host != "workspace.cn-beijing.maas.aliyuncs.com" || parsed.Path != "/api/v1/models" {
+		t.Fatalf("unexpected Alibaba model endpoint: %s", endpoints[0])
+	}
+	if query := parsed.Query(); query.Get("capabilities") != "TG" || query.Get("page_no") != "1" || query.Get("page_size") != "100" {
+		t.Fatalf("unexpected Alibaba model query: %s", parsed.RawQuery)
+	}
+	if endpoints[1] != baseURL+"/models" {
+		t.Fatalf("unexpected compatible fallback: %s", endpoints[1])
+	}
+}
+
+func TestDiscoverAIModelsUsesDraftKeyWithoutPersistingIt(t *testing.T) {
+	app, store := aiTestApp(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v1/models" {
+			t.Errorf("unexpected request path: %s", request.URL.Path)
+		}
+		if request.Header.Get("Authorization") != "Bearer unsaved-draft-key" {
+			t.Errorf("unexpected authorization header: %q", request.Header.Get("Authorization"))
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"data":[{"id":"vendor/chat-model"}]}`))
+	}))
+	defer server.Close()
+
+	models, err := app.DiscoverAIModels(AIModelDiscoveryInput{
+		Provider: aiProviderCustom,
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "unsaved-draft-key",
+	})
+	if err != nil || strings.Join(models, ",") != "vendor/chat-model" {
+		t.Fatalf("unexpected draft model discovery: models=%#v err=%v", models, err)
+	}
+	if len(store.values) != 0 {
+		t.Fatalf("draft discovery persisted credentials: %#v", store.values)
+	}
+	if preferences, readErr := os.ReadFile(app.preferencePath()); readErr == nil && strings.Contains(string(preferences), "unsaved-draft-key") {
+		t.Fatal("draft discovery key must never be written to preferences")
+	}
+}
+
 func TestAIModelValidationKeepsProviderAndModelCompatible(t *testing.T) {
 	valid := map[string]string{
 		aiProviderDeepSeek: "deepseek-reasoner",
@@ -317,6 +408,10 @@ func TestAIModelValidationKeepsProviderAndModelCompatible(t *testing.T) {
 		aiProviderQwen:     "qwen-max",
 		aiProviderOpenAI:   "gpt-4.1",
 		aiProviderKimi:     "moonshot-v1-8k",
+		aiProviderBailian:  "deepseek-v4-pro",
+		aiProviderSilicon:  "deepseek-ai/DeepSeek-V4-Flash",
+		aiProviderRouter:   "anthropic/claude-sonnet-4.5",
+		aiProviderCustom:   "qwen3:8b",
 	}
 	for provider, model := range valid {
 		if actual, err := validateAIModel(provider, model); err != nil || actual != model {
@@ -331,6 +426,112 @@ func TestAIModelValidationKeepsProviderAndModelCompatible(t *testing.T) {
 	}
 	if _, err := validateAIModel(aiProviderOpenAI, "text-embedding-3-small"); err == nil {
 		t.Fatal("a non-chat model must be rejected")
+	}
+	for _, provider := range []string{aiProviderBailian, aiProviderSilicon, aiProviderRouter, aiProviderCustom} {
+		if _, err := validateAIModel(provider, "text-embedding-3-small"); err == nil {
+			t.Errorf("%s must reject an embedding model", provider)
+		}
+	}
+}
+
+func TestThirdPartyAIBaseURLValidation(t *testing.T) {
+	bailianURLs := []string{
+		defaultBailianBaseURL,
+		"https://workspace.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+		"https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/",
+	}
+	for _, raw := range bailianURLs {
+		if _, err := validateAIBaseURL(aiProviderBailian, raw); err != nil {
+			t.Errorf("valid Bailian URL rejected: %q: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{
+		"http://dashscope.aliyuncs.com/compatible-mode/v1",
+		"https://dashscope.aliyuncs.com.evil.example/compatible-mode/v1",
+		"https://dashscope.aliyuncs.com/v1",
+	} {
+		if _, err := validateAIBaseURL(aiProviderBailian, raw); err == nil {
+			t.Errorf("unsafe Bailian URL accepted: %q", raw)
+		}
+	}
+	for _, raw := range []string{"https://gateway.example.com/v1", "http://localhost:11434/v1", "http://127.0.0.1:11434/v1", "http://[::1]:11434/v1"} {
+		if _, err := validateAIBaseURL(aiProviderCustom, raw); err != nil {
+			t.Errorf("valid custom URL rejected: %q: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{
+		"http://gateway.example.com/v1",
+		"https://user:password@gateway.example.com/v1",
+		"https://gateway.example.com/v1?key=secret",
+		"https://gateway.example.com/v1/chat/completions",
+		"https://gateway.example.com/v1/models",
+	} {
+		if _, err := validateAIBaseURL(aiProviderCustom, raw); err == nil {
+			t.Errorf("unsafe custom URL accepted: %q", raw)
+		}
+	}
+	if fixed, err := validateAIBaseURL(aiProviderRouter, "https://attacker.example/v1"); err != nil || fixed != defaultRouterBaseURL {
+		t.Fatalf("fixed OpenRouter URL changed: url=%q err=%v", fixed, err)
+	}
+}
+
+func TestConfigurableAIEndpointsPersistIndependentlyWithoutPersistingKeys(t *testing.T) {
+	app, store := aiTestApp(t)
+	bailianURL := "https://workspace.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+	customURL := "https://gateway.example.com/openai/v1"
+	if _, err := app.SetAISettings(AISettingsInput{Provider: aiProviderBailian, BaseURL: bailianURL, Model: "deepseek-v4-pro", APIKey: "bailian-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SetAISettings(AISettingsInput{Provider: aiProviderCustom, BaseURL: customURL, Model: "vendor/chat-model", APIKey: "custom-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	if store.values["api-key-bailian"] != "bailian-secret" || store.values["api-key-custom"] != "custom-secret" {
+		t.Fatalf("third-party keys were not isolated: %#v", store.values)
+	}
+	bailianSettings, err := app.GetAIProviderSettings(aiProviderBailian)
+	if err != nil || bailianSettings.BaseURL != bailianURL || bailianSettings.Model != "deepseek-v4-pro" || !bailianSettings.HasAPIKey {
+		t.Fatalf("Bailian settings not retained: settings=%#v err=%v", bailianSettings, err)
+	}
+	customSettings, err := app.GetAIProviderSettings(aiProviderCustom)
+	if err != nil || customSettings.BaseURL != customURL || customSettings.Model != "vendor/chat-model" || !customSettings.HasAPIKey {
+		t.Fatalf("custom settings not retained: settings=%#v err=%v", customSettings, err)
+	}
+	preferences, err := os.ReadFile(app.preferencePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(preferences), "bailian-secret") || strings.Contains(string(preferences), "custom-secret") {
+		t.Fatal("third-party keys must never be written to preferences")
+	}
+}
+
+func TestCustomAIEndpointDrivesModelDiscoveryAndConnectionTest(t *testing.T) {
+	app, _ := aiTestApp(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer custom-test-key" {
+			t.Errorf("unexpected authorization header: %q", request.Header.Get("Authorization"))
+		}
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/v1/models":
+			_, _ = response.Write([]byte(`{"data":[{"id":"vendor/chat-model"},{"id":"vendor/text-embedding"}]}`))
+		case "/v1/chat/completions":
+			_, _ = response.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+		default:
+			t.Errorf("unexpected request path: %s", request.URL.Path)
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+	if _, err := app.SetAISettings(AISettingsInput{Provider: aiProviderCustom, BaseURL: server.URL + "/v1", Model: "vendor/chat-model", APIKey: "custom-test-key"}); err != nil {
+		t.Fatal(err)
+	}
+	models, err := app.ListAIModels(aiProviderCustom)
+	if err != nil || strings.Join(models, ",") != "vendor/chat-model" {
+		t.Fatalf("unexpected custom models: models=%#v err=%v", models, err)
+	}
+	if err := app.TestAIProviderConnection(aiProviderCustom, "vendor/chat-model"); err != nil {
+		t.Fatal(err)
 	}
 }
 

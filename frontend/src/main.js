@@ -17,17 +17,24 @@ const browserAIProviders = {
   zhipu: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.7-flash' },
   qwen: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
   openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-5-mini' },
-  kimi: { baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k3' }
+  kimi: { baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k3' },
+  bailian: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'deepseek-v4-flash' },
+  siliconflow: { baseUrl: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V4-Flash' },
+  openrouter: { baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/auto' },
+  custom: { baseUrl: 'http://localhost:11434/v1', model: '' }
 };
 const normalizeBrowserAIProvider = provider => Object.hasOwn(browserAIProviders, provider) ? provider : 'deepseek';
 const browserAIKeyName = provider => `aiMaskedApiKey:${normalizeBrowserAIProvider(provider)}`;
+const browserAIBaseURLName = provider => `aiBaseURL:${normalizeBrowserAIProvider(provider)}`;
+const browserAIModelName = provider => `aiModel:${normalizeBrowserAIProvider(provider)}`;
 const browserAISettings = provider => {
   provider = normalizeBrowserAIProvider(provider);
   const maskedApiKey = sessionStorage.getItem(browserAIKeyName(provider)) || '';
   const defaultProvider = normalizeBrowserAIProvider(sessionStorage.getItem('activeAIProvider') || 'deepseek');
   const defaultModel = sessionStorage.getItem('activeAIModel') || browserAIProviders[defaultProvider].model;
-  const model = provider === defaultProvider ? defaultModel : browserAIProviders[provider].model;
-  return { provider, ...browserAIProviders[provider], model, hasApiKey: Boolean(maskedApiKey), maskedApiKey, isDefault: provider === defaultProvider };
+  const model = sessionStorage.getItem(browserAIModelName(provider)) || (provider === defaultProvider ? defaultModel : browserAIProviders[provider].model);
+  const baseUrl = sessionStorage.getItem(browserAIBaseURLName(provider)) || browserAIProviders[provider].baseUrl;
+  return { provider, ...browserAIProviders[provider], baseUrl, model, hasApiKey: Boolean(maskedApiKey), maskedApiKey, isDefault: provider === defaultProvider };
 };
 
 const browserPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : 'browser';
@@ -106,6 +113,10 @@ window.quilliteMarkdown = {
     if (input?.clearApiKey) sessionStorage.removeItem(keyName);
     else if (input?.apiKey) {
       sessionStorage.setItem(keyName, maskBrowserAIKey(input.apiKey.trim()));
+    }
+    if (!input?.clearApiKey && (input?.apiKey || sessionStorage.getItem(keyName))) {
+      sessionStorage.setItem(browserAIBaseURLName(provider), input?.baseUrl || browserAIProviders[provider].baseUrl);
+      sessionStorage.setItem(browserAIModelName(provider), input?.model || browserAIProviders[provider].model);
       sessionStorage.setItem('activeAIProvider', provider);
       sessionStorage.setItem('activeAIModel', input?.model || browserAIProviders[provider].model);
     }
@@ -117,11 +128,17 @@ window.quilliteMarkdown = {
     if (!sessionStorage.getItem(browserAIKeyName(provider))) return Promise.reject(new Error('Save an API key before making this provider the default.'));
     sessionStorage.setItem('activeAIProvider', provider);
     sessionStorage.setItem('activeAIModel', model || browserAIProviders[provider].model);
+    sessionStorage.setItem(browserAIModelName(provider), model || browserAIProviders[provider].model);
     return resolved(browserAISettings(provider));
   },
   listAIModels: provider => desktopRuntime
     ? Backend.ListAIModels(provider)
     : resolved([browserAISettings(provider).model, browserAIProviders[normalizeBrowserAIProvider(provider)].model]),
+  discoverAIModels: input => desktopRuntime
+    ? Backend.DiscoverAIModels(input)
+    : resolved(input?.provider === 'custom'
+      ? ['vendor/chat-model', 'vendor/reasoning-model']
+      : [browserAISettings(input?.provider).model, browserAIProviders[normalizeBrowserAIProvider(input?.provider)].model].filter(Boolean)),
   testAIProviderConnection: (provider, model) => desktopRuntime ? Backend.TestAIProviderConnection(provider, model) : resolved(),
   testAIConnection: () => desktopRuntime ? Backend.TestAIConnection() : resolved(),
   rewriteWithAI: input => desktopRuntime ? Backend.RewriteWithAI(input) : resolved({ text: input?.text || `# AI generated content\n\n${input?.instruction || ''}`.trim() }),

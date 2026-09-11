@@ -775,14 +775,14 @@ test('rich clipboard HTML converts to Markdown and selected source has Markdown 
   assert.match(renderer, /copyAsPlainText: 'Copy as plain text'/);
 });
 
-test('AI Edit supports five isolated cloud providers and can replace a selection or insert generated content at the cursor', () => {
+test('AI Edit supports isolated official and third-party providers and can replace a selection or insert generated content at the cursor', () => {
   assert.match(html, /data-action="ai-settings"[\s\S]*data-i18n="aiAssistant"/);
   assert.match(html, /id="aiEditButton"[\s\S]*data-i18n="aiEdit"/);
   assert.match(html, /id="aiEditButton"[^>]*data-i18n-title="aiEditTitle"[^>]*title="选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。"/);
   assert.match(renderer, /aiEditTitle: '选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。'/);
   assert.match(renderer, /aiEditTitle: 'Select text first, then choose AI Edit to edit only the selected content'/);
   assert.match(html, /id="aiReviewButton"[\s\S]*data-i18n="aiReview"/);
-  assert.match(html, /id="aiSettingsDialog"[\s\S]*id="aiProvider"[\s\S]*value="deepseek"[\s\S]*value="zhipu"[\s\S]*value="qwen"[\s\S]*value="openai"[\s\S]*value="kimi"[\s\S]*id="setDefaultAIProvider"[\s\S]*id="refreshAIModels"[\s\S]*id="aiModel"[\s\S]*id="aiModelState"[\s\S]*id="aiKeyOnboarding"[\s\S]*id="aiMaskedAPIKey"[\s\S]*id="editAIAPIKey"[\s\S]*id="deleteAIAPIKey"[\s\S]*id="aiAPIKey"/);
+  assert.match(html, /id="aiSettingsDialog"[\s\S]*id="aiProvider"[\s\S]*value="deepseek"[\s\S]*value="zhipu"[\s\S]*value="qwen"[\s\S]*value="openai"[\s\S]*value="kimi"[\s\S]*id="setDefaultAIProvider"[\s\S]*id="aiKeyOnboarding"[\s\S]*id="aiMaskedAPIKey"[\s\S]*id="editAIAPIKey"[\s\S]*id="deleteAIAPIKey"[\s\S]*id="aiAPIKey"[\s\S]*id="refreshAIModels"[\s\S]*id="aiModel"[\s\S]*id="aiModelState"/);
   assert.doesNotMatch(html, /value="ollama"|value="openai-compatible"/);
   assert.match(html, /id="aiRewriteDialog"[\s\S]*value="polish"[\s\S]*value="rewrite"[\s\S]*value="translate"[\s\S]*value="custom"/);
   assert.match(html, /id="aiCloudConsent" type="checkbox" checked/);
@@ -795,6 +795,7 @@ test('AI Edit supports five isolated cloud providers and can replace a selection
   assert.match(mainSource, /getAIProviderSettings:[\s\S]*Backend\.GetAIProviderSettings/);
   assert.match(mainSource, /setDefaultAIProvider:[\s\S]*Backend\.SetDefaultAIProvider/);
   assert.match(mainSource, /listAIModels:[\s\S]*Backend\.ListAIModels/);
+  assert.match(mainSource, /discoverAIModels:[\s\S]*Backend\.DiscoverAIModels/);
   assert.match(mainSource, /testAIProviderConnection:[\s\S]*Backend\.TestAIProviderConnection/);
   assert.match(mainSource, /rewriteWithAI:[\s\S]*Backend\.RewriteWithAI/);
   assert.match(mainSource, /reviewDocumentWithAI:[\s\S]*Backend\.ReviewDocumentWithAI/);
@@ -806,7 +807,8 @@ test('AI Edit supports five isolated cloud providers and can replace a selection
   assert.match(renderer, /els\.aiCloudConsent\.checked = true;/);
   assert.match(renderer, /function renderAISettingsKeyUI\(\)[\s\S]*aiKeySavedCard[\s\S]*maskedApiKey/);
   assert.match(renderer, /async function deleteAIAPIKey\(\)[\s\S]*aiSettingsInput\(true\)/);
-  assert.match(renderer, /async function loadAIModels\(\)[\s\S]*window\.quilliteMarkdown\.listAIModels\(provider\)[\s\S]*setAIModelOptions/);
+  assert.match(renderer, /async function loadAIModels\(\)[\s\S]*window\.quilliteMarkdown\.discoverAIModels\(discoveryInput\)[\s\S]*setAIModelOptions/);
+  assert.match(renderer, /function scheduleAIModelDiscovery\(\)[\s\S]*setTimeout\([\s\S]*loadAIModels\(\)[\s\S]*700/);
   assert.match(renderer, /async function setDefaultAIProvider\(\)[\s\S]*window\.quilliteMarkdown\.setDefaultAIProvider\(currentAISettings\.provider, model\)/);
   assert.match(renderer, /async function testAIConnection\(\)[\s\S]*testAIProviderConnection\(provider, model\)/);
   assert.match(renderer, /function startAIRewriteProgress\(\)[\s\S]*setInterval\(updateAIRewriteProgress, 500\)/);
@@ -820,13 +822,13 @@ test('AI Edit supports five isolated cloud providers and can replace a selection
   assert.match(renderer, /function resetAIDocumentReviewSession\(\)[\s\S]*aiReviewSnapshot = ''[\s\S]*aiReviewSuggestions = \[\]/);
   assert.match(renderer, /state\.editing = nextEditing;[\s\S]*if \(state\.editing\) \{[\s\S]*resetAIDocumentReviewSession\(\)[\s\S]*\} else \{[\s\S]*resetAIDocumentReviewSession\(\)/);
   assert.match(renderer, /aiReviewApplied = true;[\s\S]*updateAIReviewSelectionUI\(\)[\s\S]*closeAIDocumentReview\(\)/);
-  assert.match(renderer, /els\.setDefaultAIProvider\.disabled = !hasKey \|\| isDefault/);
+  assert.match(renderer, /els\.setDefaultAIProvider\.disabled = !hasKey \|\| !selectedAIModel\(\) \|\| isDefault/);
   assert.match(renderer, /if \(!els\.aiCloudConsent\.checked\)/);
   assert.match(renderer, /codeEditor\.state\.doc\.sliceString\(from, to\) !== markdown/);
   assert.match(renderer, /const insertAt = insertMode[\s\S]*\? from : documentLength/);
   assert.match(renderer, /function replaceWithAIResult\(\)[\s\S]*codeEditor\.dispatch\(\{[\s\S]*changes: \{ from: changeFrom, to: changeTo, insert: replacement \}[\s\S]*userEvent: 'input\.ai'/);
   assert.match(renderer, /aiPrivacyNote: '只有你主动选择或确认检查的文档内容会发送给所选 AI 服务/);
-  assert.match(renderer, /const aiProviderConfigs = Object\.freeze\([\s\S]*glm-4\.7-flash[\s\S]*qwen-plus[\s\S]*gpt-5-mini[\s\S]*kimi-k3/);
+  assert.match(renderer, /const aiProviderConfigs = Object\.freeze\([\s\S]*glm-4\.7-flash[\s\S]*qwen-plus[\s\S]*gpt-5-mini[\s\S]*kimi-k3[\s\S]*aiProviderBailian[\s\S]*api\.siliconflow\.cn[\s\S]*openrouter\.ai[\s\S]*localhost:11434/);
   assert.match(renderer, /async function changeAIProvider\(\)[\s\S]*getAIProviderSettings\(provider\)/);
   assert.match(styles, /\.ai-key-saved-card \{[^}]*grid-template-columns/);
   assert.match(styles, /\.ai-rewrite-progress \{[^}]*grid-template-columns/);

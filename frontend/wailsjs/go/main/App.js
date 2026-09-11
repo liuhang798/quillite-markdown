@@ -22,6 +22,10 @@ export function Dirname(arg1) {
   return window['go']['main']['App']['Dirname'](arg1);
 }
 
+export function DiscoverAIModels(arg1) {
+  return window['go']['main']['App']['DiscoverAIModels'](arg1);
+}
+
 export function DownloadAndApplyUpdate() {
   return window['go']['main']['App']['DownloadAndApplyUpdate']();
 }

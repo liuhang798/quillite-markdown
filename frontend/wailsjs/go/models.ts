@@ -67,6 +67,22 @@ export namespace main {
 		}
 	}
 	
+	export class AIModelDiscoveryInput {
+	    provider: string;
+	    baseUrl: string;
+	    apiKey: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AIModelDiscoveryInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.baseUrl = source["baseUrl"];
+	        this.apiKey = source["apiKey"];
+	    }
+	}
 	export class AIRewriteRequest {
 	    action: string;
 	    text: string;
@@ -461,7 +477,9 @@ export namespace main {
 	    picGoServerUrl?: string;
 	    aiProvider?: string;
 	    aiBaseUrl?: string;
+	    aiBaseUrls?: Record<string, string>;
 	    aiModel?: string;
+	    aiModels?: Record<string, string>;
 	    anonymousInstallId?: string;
 	    lastActiveReport?: string;
 	    exportSettings?: ExportSettings;
@@ -489,7 +507,9 @@ export namespace main {
 	        this.picGoServerUrl = source["picGoServerUrl"];
 	        this.aiProvider = source["aiProvider"];
 	        this.aiBaseUrl = source["aiBaseUrl"];
+	        this.aiBaseUrls = source["aiBaseUrls"];
 	        this.aiModel = source["aiModel"];
+	        this.aiModels = source["aiModels"];
 	        this.anonymousInstallId = source["anonymousInstallId"];
 	        this.lastActiveReport = source["lastActiveReport"];
 	        this.exportSettings = this.convertValues(source["exportSettings"], ExportSettings);
@@ -546,4 +566,3 @@ export namespace main {
 	}
 
 }
-

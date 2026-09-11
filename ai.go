@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -20,6 +22,10 @@ const (
 	aiProviderQwen     = "qwen"
 	aiProviderOpenAI   = "openai"
 	aiProviderKimi     = "kimi"
+	aiProviderBailian  = "bailian"
+	aiProviderSilicon  = "siliconflow"
+	aiProviderRouter   = "openrouter"
+	aiProviderCustom   = "custom"
 
 	defaultDeepSeekBaseURL = "https://api.deepseek.com"
 	defaultDeepSeekModel   = "deepseek-v4-flash"
@@ -31,6 +37,14 @@ const (
 	defaultOpenAIModel     = "gpt-5-mini"
 	defaultKimiBaseURL     = "https://api.moonshot.cn/v1"
 	defaultKimiModel       = "kimi-k3"
+	defaultBailianBaseURL  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	defaultBailianModel    = "deepseek-v4-flash"
+	defaultSiliconBaseURL  = "https://api.siliconflow.cn/v1"
+	defaultSiliconModel    = "deepseek-ai/DeepSeek-V4-Flash"
+	defaultRouterBaseURL   = "https://openrouter.ai/api/v1"
+	defaultRouterModel     = "openrouter/auto"
+	defaultCustomBaseURL   = "http://localhost:11434/v1"
+	defaultCustomModel     = ""
 
 	aiCredentialService  = "Quillite Markdown AI"
 	aiCredentialAccount  = "api-key-deepseek"
@@ -86,6 +100,14 @@ type AISettingsInput struct {
 	ClearAPIKey bool   `json:"clearApiKey"`
 }
 
+// AIModelDiscoveryInput carries a draft endpoint and API key for model
+// discovery. The API key is used only for this request and is never persisted.
+type AIModelDiscoveryInput struct {
+	Provider string `json:"provider"`
+	BaseURL  string `json:"baseUrl"`
+	APIKey   string `json:"apiKey"`
+}
+
 type AIRewriteRequest struct {
 	Action         string `json:"action"`
 	Text           string `json:"text"`
@@ -119,6 +141,7 @@ type aiProviderDefinition struct {
 	BaseURL           string
 	Model             string
 	CredentialAccount string
+	ConfigurableURL   bool
 }
 
 var aiProviderDefinitions = map[string]aiProviderDefinition{
@@ -127,6 +150,10 @@ var aiProviderDefinitions = map[string]aiProviderDefinition{
 	aiProviderQwen:     {BaseURL: defaultQwenBaseURL, Model: defaultQwenModel, CredentialAccount: "api-key-qwen"},
 	aiProviderOpenAI:   {BaseURL: defaultOpenAIBaseURL, Model: defaultOpenAIModel, CredentialAccount: "api-key-openai"},
 	aiProviderKimi:     {BaseURL: defaultKimiBaseURL, Model: defaultKimiModel, CredentialAccount: "api-key-kimi"},
+	aiProviderBailian:  {BaseURL: defaultBailianBaseURL, Model: defaultBailianModel, CredentialAccount: "api-key-bailian", ConfigurableURL: true},
+	aiProviderSilicon:  {BaseURL: defaultSiliconBaseURL, Model: defaultSiliconModel, CredentialAccount: "api-key-siliconflow"},
+	aiProviderRouter:   {BaseURL: defaultRouterBaseURL, Model: defaultRouterModel, CredentialAccount: "api-key-openrouter"},
+	aiProviderCustom:   {BaseURL: defaultCustomBaseURL, Model: defaultCustomModel, CredentialAccount: "api-key-custom", ConfigurableURL: true},
 }
 
 func normaliseAIProvider(provider string) string {
@@ -139,6 +166,14 @@ func normaliseAIProvider(provider string) string {
 		return aiProviderOpenAI
 	case aiProviderKimi:
 		return aiProviderKimi
+	case aiProviderBailian:
+		return aiProviderBailian
+	case aiProviderSilicon:
+		return aiProviderSilicon
+	case aiProviderRouter:
+		return aiProviderRouter
+	case aiProviderCustom:
+		return aiProviderCustom
 	default:
 		return aiProviderDeepSeek
 	}
@@ -149,7 +184,11 @@ func aiProviderConfig(provider string) aiProviderDefinition {
 }
 
 func normaliseAIBaseURLForStorage(provider, raw string) string {
-	return aiProviderConfig(provider).BaseURL
+	baseURL, err := validateAIBaseURL(provider, raw)
+	if err != nil {
+		return aiProviderConfig(provider).BaseURL
+	}
+	return baseURL
 }
 
 func normaliseAIModelForStorage(provider, model string) string {
@@ -161,13 +200,119 @@ func normaliseAIModelForStorage(provider, model string) string {
 }
 
 func validateAIBaseURL(provider, raw string) (string, error) {
-	return aiProviderConfig(provider).BaseURL, nil
+	provider = normaliseAIProvider(provider)
+	config := aiProviderConfig(provider)
+	if !config.ConfigurableURL {
+		return config.BaseURL, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return config.BaseURL, nil
+	}
+	if len(raw) > 2048 {
+		return "", errors.New("AI service URL is too long")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.Opaque != "" {
+		return "", errors.New("enter a valid AI service base URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("AI service URL cannot contain credentials, a query, or a fragment")
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	hostname := strings.ToLower(parsed.Hostname())
+	loopback := hostname == "localhost"
+	if address := net.ParseIP(hostname); address != nil {
+		loopback = address.IsLoopback()
+	}
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && loopback) {
+		return "", errors.New("AI service URL must use HTTPS; only localhost may use HTTP")
+	}
+	if provider == aiProviderBailian {
+		if parsed.Scheme != "https" || !(hostname == "dashscope.aliyuncs.com" || strings.HasSuffix(hostname, ".maas.aliyuncs.com")) {
+			return "", errors.New("Aliyun Bailian URL must use an official aliyuncs.com endpoint")
+		}
+		if !strings.HasSuffix(strings.ToLower(strings.TrimRight(parsed.Path, "/")), "/compatible-mode/v1") {
+			return "", errors.New("Aliyun Bailian URL must end with /compatible-mode/v1")
+		}
+	}
+	lowerPath := strings.ToLower(strings.TrimRight(parsed.Path, "/"))
+	if strings.HasSuffix(lowerPath, "/chat/completions") || strings.HasSuffix(lowerPath, "/models") {
+		return "", errors.New("enter the API base URL without /chat/completions or /models")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawPath = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func aiBaseURLFromPreferences(prefs Preferences, provider string) string {
+	provider = normaliseAIProvider(provider)
+	raw := ""
+	if prefs.AIBaseURLs != nil {
+		raw = prefs.AIBaseURLs[provider]
+	}
+	if raw == "" && provider == normaliseAIProvider(prefs.AIProvider) {
+		raw = prefs.AIBaseURL
+	}
+	return normaliseAIBaseURLForStorage(provider, raw)
+}
+
+func normaliseAIBaseURLPreferences(prefs *Preferences) {
+	activeProvider := normaliseAIProvider(prefs.AIProvider)
+	stored := make(map[string]string)
+	for provider, raw := range prefs.AIBaseURLs {
+		normalisedProvider := normaliseAIProvider(provider)
+		if normalisedProvider != provider || !aiProviderConfig(provider).ConfigurableURL {
+			continue
+		}
+		stored[provider] = normaliseAIBaseURLForStorage(provider, raw)
+	}
+	if aiProviderConfig(activeProvider).ConfigurableURL {
+		if _, exists := stored[activeProvider]; !exists {
+			stored[activeProvider] = normaliseAIBaseURLForStorage(activeProvider, prefs.AIBaseURL)
+		}
+	}
+	prefs.AIBaseURLs = stored
+	prefs.AIBaseURL = aiBaseURLFromPreferences(*prefs, activeProvider)
+}
+
+func aiModelFromPreferences(prefs Preferences, provider string) string {
+	provider = normaliseAIProvider(provider)
+	model := ""
+	if prefs.AIModels != nil {
+		model = prefs.AIModels[provider]
+	}
+	if model == "" && provider == normaliseAIProvider(prefs.AIProvider) {
+		model = prefs.AIModel
+	}
+	return normaliseAIModelForStorage(provider, model)
+}
+
+func normaliseAIModelPreferences(prefs *Preferences) {
+	activeProvider := normaliseAIProvider(prefs.AIProvider)
+	stored := make(map[string]string)
+	for provider, model := range prefs.AIModels {
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if _, exists := aiProviderDefinitions[provider]; !exists {
+			continue
+		}
+		stored[provider] = normaliseAIModelForStorage(provider, model)
+	}
+	if _, exists := stored[activeProvider]; !exists {
+		stored[activeProvider] = normaliseAIModelForStorage(activeProvider, prefs.AIModel)
+	}
+	prefs.AIModels = stored
+	prefs.AIModel = stored[activeProvider]
 }
 
 func validateAIModel(provider, model string) (string, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return aiProviderConfig(provider).Model, nil
+		defaultModel := aiProviderConfig(provider).Model
+		if defaultModel == "" {
+			return "", errors.New("select or enter an AI model")
+		}
+		return defaultModel, nil
 	}
 	if len(model) > 200 {
 		return "", errors.New("AI model identifier is too long")
@@ -228,16 +373,11 @@ func maskAIAPIKey(value string) string {
 	return string(runes[:4]) + strings.Repeat("•", 8) + string(runes[len(runes)-4:])
 }
 
-func providerAISettings(provider, key, defaultProvider, defaultModel string) AISettings {
+func providerAISettings(provider, baseURL, key, model, defaultProvider string) AISettings {
 	provider = normaliseAIProvider(provider)
-	config := aiProviderConfig(provider)
-	model := config.Model
-	if provider == normaliseAIProvider(defaultProvider) {
-		model = normaliseAIModelForStorage(provider, defaultModel)
-	}
 	return AISettings{
 		Provider:     provider,
-		BaseURL:      config.BaseURL,
+		BaseURL:      normaliseAIBaseURLForStorage(provider, baseURL),
 		Model:        model,
 		HasAPIKey:    key != "",
 		MaskedAPIKey: maskAIAPIKey(key),
@@ -255,7 +395,7 @@ func (a *App) GetAISettings() (AISettings, error) {
 	if err != nil {
 		return AISettings{}, err
 	}
-	return providerAISettings(provider, key, provider, prefs.AIModel), nil
+	return providerAISettings(provider, aiBaseURLFromPreferences(prefs, provider), key, aiModelFromPreferences(prefs, provider), provider), nil
 }
 
 // GetAIProviderSettings reads one provider's key state without changing the active provider.
@@ -269,7 +409,7 @@ func (a *App) GetAIProviderSettings(provider string) (AISettings, error) {
 	if err != nil {
 		return AISettings{}, err
 	}
-	return providerAISettings(provider, key, prefs.AIProvider, prefs.AIModel), nil
+	return providerAISettings(provider, aiBaseURLFromPreferences(prefs, provider), key, aiModelFromPreferences(prefs, provider), prefs.AIProvider), nil
 }
 
 func (a *App) SetAISettings(input AISettingsInput) (AISettings, error) {
@@ -281,8 +421,27 @@ func (a *App) SetAISettings(input AISettingsInput) (AISettings, error) {
 	if strings.TrimSpace(input.Provider) == "" {
 		provider = normaliseAIProvider(prefs.AIProvider)
 	}
+	if input.ClearAPIKey {
+		if err := a.writeAIAPIKey(provider, ""); err != nil {
+			return AISettings{}, err
+		}
+		baseURL := aiBaseURLFromPreferences(prefs, provider)
+		return providerAISettings(provider, baseURL, "", aiModelFromPreferences(prefs, provider), prefs.AIProvider), nil
+	}
+	baseURL, err := validateAIBaseURL(provider, input.BaseURL)
+	if err != nil {
+		return AISettings{}, err
+	}
+	existingKey, err := a.readAIAPIKey(provider)
+	if err != nil {
+		return AISettings{}, err
+	}
+	newKey := strings.TrimSpace(input.APIKey)
+	if existingKey == "" && newKey == "" {
+		return AISettings{}, errors.New("save an API key for this AI provider before enabling it")
+	}
 	modelToPersist := ""
-	if !input.ClearAPIKey && strings.TrimSpace(input.APIKey) != "" {
+	{
 		requestedModel := input.Model
 		if strings.TrimSpace(requestedModel) == "" && provider == normaliseAIProvider(prefs.AIProvider) {
 			requestedModel = prefs.AIModel
@@ -292,33 +451,36 @@ func (a *App) SetAISettings(input AISettingsInput) (AISettings, error) {
 			return AISettings{}, err
 		}
 	}
-	if input.ClearAPIKey {
-		if err := a.writeAIAPIKey(provider, ""); err != nil {
-			return AISettings{}, err
-		}
-	} else if strings.TrimSpace(input.APIKey) != "" {
-		if err := a.writeAIAPIKey(provider, input.APIKey); err != nil {
+	if newKey != "" {
+		if err := a.writeAIAPIKey(provider, newKey); err != nil {
 			return AISettings{}, err
 		}
 	}
-	// A newly saved key is immediately enabled. Reading, testing or deleting a
-	// provider key must not silently change the user's chosen default provider.
-	if !input.ClearAPIKey && strings.TrimSpace(input.APIKey) != "" {
-		config := aiProviderConfig(provider)
-		prefs, err = a.updatePreferences(func(prefs *Preferences) {
-			prefs.AIProvider = provider
-			prefs.AIBaseURL = config.BaseURL
-			prefs.AIModel = modelToPersist
-		})
-		if err != nil {
-			return AISettings{}, err
+	// Saving a provider configuration enables it. Each provider keeps its own
+	// credential, while configurable endpoints are retained independently.
+	prefs, err = a.updatePreferences(func(prefs *Preferences) {
+		if prefs.AIBaseURLs == nil {
+			prefs.AIBaseURLs = make(map[string]string)
 		}
+		if aiProviderConfig(provider).ConfigurableURL {
+			prefs.AIBaseURLs[provider] = baseURL
+		}
+		if prefs.AIModels == nil {
+			prefs.AIModels = make(map[string]string)
+		}
+		prefs.AIModels[provider] = modelToPersist
+		prefs.AIProvider = provider
+		prefs.AIBaseURL = baseURL
+		prefs.AIModel = modelToPersist
+	})
+	if err != nil {
+		return AISettings{}, err
 	}
 	key, err := a.readAIAPIKey(provider)
 	if err != nil {
 		return AISettings{}, err
 	}
-	return providerAISettings(provider, key, prefs.AIProvider, prefs.AIModel), nil
+	return providerAISettings(provider, baseURL, key, modelToPersist, prefs.AIProvider), nil
 }
 
 // SetDefaultAIProvider changes the provider-and-model pair used by AI Edit.
@@ -333,19 +495,26 @@ func (a *App) SetDefaultAIProvider(provider, model string) (AISettings, error) {
 	if key == "" {
 		return AISettings{}, errors.New("save an API key for this AI provider before making it the default")
 	}
-	config := aiProviderConfig(provider)
 	model, err = validateAIModel(provider, model)
 	if err != nil {
 		return AISettings{}, err
 	}
 	if _, err := a.updatePreferences(func(prefs *Preferences) {
+		if prefs.AIModels == nil {
+			prefs.AIModels = make(map[string]string)
+		}
+		prefs.AIModels[provider] = model
 		prefs.AIProvider = provider
-		prefs.AIBaseURL = config.BaseURL
+		prefs.AIBaseURL = aiBaseURLFromPreferences(*prefs, provider)
 		prefs.AIModel = model
 	}); err != nil {
 		return AISettings{}, err
 	}
-	return providerAISettings(provider, key, provider, model), nil
+	prefs, err := a.readPreferences()
+	if err != nil {
+		return AISettings{}, err
+	}
+	return providerAISettings(provider, aiBaseURLFromPreferences(prefs, provider), key, aiModelFromPreferences(prefs, provider), provider), nil
 }
 
 // ListAIModels reads the models currently available to the selected provider
@@ -353,6 +522,10 @@ func (a *App) SetDefaultAIProvider(provider, model string) (AISettings, error) {
 // this direct HTTPS request.
 func (a *App) ListAIModels(provider string) ([]string, error) {
 	provider = normaliseAIProvider(provider)
+	prefs, err := a.readPreferences()
+	if err != nil {
+		return nil, err
+	}
 	key, err := a.readAIAPIKey(provider)
 	if err != nil {
 		return nil, err
@@ -360,10 +533,68 @@ func (a *App) ListAIModels(provider string) ([]string, error) {
 	if key == "" {
 		return nil, errors.New("save an API key for this AI provider before loading models")
 	}
+	return discoverAIModels(provider, aiBaseURLFromPreferences(prefs, provider), key)
+}
+
+// DiscoverAIModels loads models with the endpoint and key currently entered in
+// the settings form. A draft key is deliberately not written to the credential
+// store; if it is empty, the provider's already-saved key is used instead.
+func (a *App) DiscoverAIModels(input AIModelDiscoveryInput) ([]string, error) {
+	provider := normaliseAIProvider(input.Provider)
+	baseURL, err := validateAIBaseURL(provider, input.BaseURL)
+	if err != nil {
+		return nil, err
+	}
+	key := strings.TrimSpace(input.APIKey)
+	if key == "" {
+		key, err = a.readAIAPIKey(provider)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if key == "" {
+		return nil, errors.New("enter an API key for this AI provider before loading models")
+	}
+	return discoverAIModels(provider, baseURL, key)
+}
+
+func discoverAIModels(provider, baseURL, key string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	endpoint := strings.TrimRight(aiProviderConfig(provider).BaseURL, "/") + "/models"
-	return fetchAIModels(ctx, provider, endpoint, key)
+	var lastErr error
+	for _, endpoint := range aiModelDiscoveryEndpoints(provider, baseURL) {
+		models, err := fetchAIModels(ctx, provider, endpoint, key)
+		if err == nil {
+			return models, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("the AI service does not provide a model-list endpoint")
+	}
+	return nil, lastErr
+}
+
+func aiModelDiscoveryEndpoints(provider, baseURL string) []string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	genericEndpoint := baseURL + "/models"
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return []string{genericEndpoint}
+	}
+	hostname := strings.ToLower(parsed.Hostname())
+	path := strings.TrimRight(parsed.Path, "/")
+	if (provider == aiProviderBailian || strings.HasSuffix(hostname, ".maas.aliyuncs.com")) && path == "/compatible-mode/v1" {
+		parsed.Path = "/api/v1/models"
+		parsed.RawPath = ""
+		query := parsed.Query()
+		query.Set("capabilities", "TG")
+		query.Set("page_no", "1")
+		query.Set("page_size", "100")
+		parsed.RawQuery = query.Encode()
+		return []string{parsed.String(), genericEndpoint}
+	}
+	return []string{genericEndpoint}
 }
 
 func fetchAIModels(ctx context.Context, provider, endpoint, key string) ([]string, error) {
@@ -382,11 +613,15 @@ func fetchAIModels(ctx context.Context, provider, endpoint, key string) ([]strin
 		return nil, aiHTTPStatusError(response)
 	}
 	type modelItem struct {
-		ID string `json:"id"`
+		ID    string `json:"id"`
+		Model string `json:"model"`
 	}
 	var payload struct {
 		Data   []modelItem     `json:"data"`
 		Models json.RawMessage `json:"models"`
+		Output struct {
+			Models []modelItem `json:"models"`
+		} `json:"output"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&payload); err != nil {
 		return nil, errors.New("the AI service returned an invalid model list")
@@ -403,10 +638,17 @@ func fetchAIModels(ctx context.Context, provider, endpoint, key string) ([]strin
 			}
 		}
 	}
+	if len(items) == 0 {
+		items = payload.Output.Models
+	}
 	models := make([]string, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
-		model, validateErr := validateAIModel(provider, item.ID)
+		modelID := item.ID
+		if modelID == "" {
+			modelID = item.Model
+		}
+		model, validateErr := validateAIModel(provider, modelID)
 		if validateErr != nil || !isAIChatModel(provider, model) {
 			continue
 		}
@@ -446,6 +688,13 @@ func isAIChatModel(provider, model string) bool {
 			}
 		}
 		return true
+	case aiProviderBailian, aiProviderSilicon, aiProviderRouter, aiProviderCustom:
+		for _, unsupported := range []string{"embedding", "rerank", "moderation", "transcribe", "whisper", "tts", "speech", "image-generation", "text-to-image"} {
+			if strings.Contains(lower, unsupported) {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}
@@ -459,7 +708,11 @@ func (a *App) TestAIProviderConnection(provider, model string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	_, err = a.callOpenAICompatible(ctx, provider, aiProviderConfig(provider).BaseURL, model, "Reply with OK only.")
+	prefs, err := a.readPreferences()
+	if err != nil {
+		return err
+	}
+	_, err = a.callOpenAICompatible(ctx, provider, aiBaseURLFromPreferences(prefs, provider), model, "Reply with OK only.")
 	return err
 }
 

@@ -4,6 +4,20 @@ All notable changes to Quillite Markdown are documented here.
 
 ## [Unreleased]
 
+### 简体中文
+
+- 统一 AI 设置中服务与模型下拉框的高度、字体和箭头，修复 macOS/WebKit 原生样式不一致。DeepSeek 未配置 Key 时显示两个内置候选并明确提示尚未查询账号；保存或测试连接保存 Key 后加载实际模型，刷新失败保留上次列表，快速切换服务或关闭弹窗时忽略过期查询结果。
+- 新增第一批第三方 AI 接入：阿里云百炼、硅基流动、OpenRouter 与自定义 OpenAI 兼容接口。百炼支持官方公共地址、业务空间及 Token Plan 兼容地址，自定义接口支持模型手动填写和 `/models` 自动发现；每个平台 Key 独立保存在系统凭据库。固定平台地址不可篡改，自定义地址强制 HTTPS，仅 localhost 允许 HTTP，并拒绝地址中的凭据、查询参数和具体请求端点。
+- 调整 AI 设置顺序为先填写 API Key、再选择模型；自定义 OpenAI 兼容接口不再预填假定的默认模型，必须使用服务商实际提供的模型 ID。
+- AI 模型选择支持在地址和 API Key 输入完整后自动加载，无需先保存 Key；草稿 Key 只用于当次查询，不会落盘。阿里云百炼业务空间兼容地址会自动转换为其 `/api/v1/models` 接口并解析专用响应格式，查询完成后由用户选择模型，不自动指定默认项。
+
+### English
+
+- Standardized AI provider/model picker heights, fonts, and arrows for macOS/WebKit. DeepSeek shows two explicitly unverified built-in candidates before a key is configured. Saving a key (including through Test connection) loads account models; failed refreshes retain the previous list, and stale discovery results cannot overwrite a different provider or a closed dialog.
+- Added the first third-party AI integrations: Alibaba Cloud Model Studio, SiliconFlow, OpenRouter, and custom OpenAI-compatible endpoints. Model Studio supports its public, workspace, and Token Plan compatible URLs; custom endpoints allow manual model IDs plus `/models` discovery. Keys remain isolated in the native credential vault. Fixed provider URLs cannot be overridden, custom URLs require HTTPS except on localhost, and embedded credentials, queries, or request-specific paths are rejected.
+- Reordered AI setup so the API key comes before model selection. Custom OpenAI-compatible endpoints no longer assume a default model and require an actual model ID supplied by the service.
+- Model discovery now starts automatically once the endpoint and API key are entered, without saving the key first. Draft keys are used only for the current request and are never persisted. Alibaba Cloud workspace-compatible URLs are translated to the dedicated `/api/v1/models` endpoint and its response format is parsed; users still choose a model after discovery rather than receiving an assumed default.
+
 ## [2.7.2] - 2026-09-08
 
 ### 简体中文

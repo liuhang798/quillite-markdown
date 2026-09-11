@@ -108,7 +108,9 @@ type Preferences struct {
 	PicGoServerURL       string             `json:"picGoServerUrl,omitempty"`
 	AIProvider           string             `json:"aiProvider,omitempty"`
 	AIBaseURL            string             `json:"aiBaseUrl,omitempty"`
+	AIBaseURLs           map[string]string  `json:"aiBaseUrls,omitempty"`
 	AIModel              string             `json:"aiModel,omitempty"`
+	AIModels             map[string]string  `json:"aiModels,omitempty"`
 	AnonymousInstallID   string             `json:"anonymousInstallId,omitempty"`
 	LastActiveReport     string             `json:"lastActiveReport,omitempty"`
 	ExportSettings       ExportSettings     `json:"exportSettings,omitempty"`
@@ -254,7 +256,7 @@ func defaultPreferences() Preferences {
 	return Preferences{
 		RecentFiles: []string{}, PinnedRecentFiles: []string{}, FavoriteFiles: []string{}, DraftFiles: []string{},
 		Language: "zh-CN", FontFamily: "system", UsageAnalytics: true, ImageUploadMode: imageUploadModeLocal, PicGoServerURL: defaultPicGoServerURL,
-		AIProvider: aiProviderDeepSeek, AIBaseURL: defaultDeepSeekBaseURL, AIModel: defaultDeepSeekModel,
+		AIProvider: aiProviderDeepSeek, AIBaseURL: defaultDeepSeekBaseURL, AIBaseURLs: map[string]string{}, AIModel: defaultDeepSeekModel, AIModels: map[string]string{},
 		ExportSettings: defaultExportSettings(),
 	}
 }
@@ -298,8 +300,8 @@ func (a *App) readPreferencesUnlocked() (Preferences, error) {
 	prefs.FontFamily = normaliseFontFamily(prefs.FontFamily)
 	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
 	prefs.AIProvider = normaliseAIProvider(prefs.AIProvider)
-	prefs.AIBaseURL = normaliseAIBaseURLForStorage(prefs.AIProvider, prefs.AIBaseURL)
-	prefs.AIModel = normaliseAIModelForStorage(prefs.AIProvider, prefs.AIModel)
+	normaliseAIBaseURLPreferences(&prefs)
+	normaliseAIModelPreferences(&prefs)
 	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
 	if normalisedURL, normaliseErr := normalisePicGoServerURL(prefs.PicGoServerURL); normaliseErr == nil {
 		prefs.PicGoServerURL = normalisedURL
@@ -343,8 +345,8 @@ func (a *App) writePreferencesUnlocked(prefs Preferences) error {
 	prefs.FontFamily = normaliseFontFamily(prefs.FontFamily)
 	prefs.ImageUploadMode = normaliseImageUploadMode(prefs.ImageUploadMode)
 	prefs.AIProvider = normaliseAIProvider(prefs.AIProvider)
-	prefs.AIBaseURL = normaliseAIBaseURLForStorage(prefs.AIProvider, prefs.AIBaseURL)
-	prefs.AIModel = normaliseAIModelForStorage(prefs.AIProvider, prefs.AIModel)
+	normaliseAIBaseURLPreferences(&prefs)
+	normaliseAIModelPreferences(&prefs)
 	prefs.ExportSettings = normaliseExportSettings(prefs.ExportSettings)
 	if normalisedURL, err := normalisePicGoServerURL(prefs.PicGoServerURL); err == nil {
 		prefs.PicGoServerURL = normalisedURL

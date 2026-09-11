@@ -12,6 +12,8 @@ export function DetectPandoc():Promise<main.PandocStatus>;
 
 export function Dirname(arg1:string):Promise<string>;
 
+export function DiscoverAIModels(arg1:main.AIModelDiscoveryInput):Promise<Array<string>>;
+
 export function DownloadAndApplyUpdate():Promise<void>;
 
 export function ExportDOCX(arg1:string,arg2:string,arg3:string):Promise<string>;
