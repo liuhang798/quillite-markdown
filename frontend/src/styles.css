@@ -1009,13 +1009,6 @@ html[lang="en"] #moreMenu .settings-submenu.popover button > span:first-child { 
 .release-notes-content a { color: var(--accent-strong); text-underline-offset: 2px; }
 .update-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .update-footer .large-button { min-width: 112px; height: 40px; padding: 0 14px; }
-.unsafe-uninstaller-dialog { width: min(560px, 100%); }
-.unsafe-uninstaller-heading { display: flex; align-items: center; gap: 14px; padding-right: 38px; }
-.unsafe-uninstaller-heading h2 { margin: 4px 0 0; font-size: 22px; letter-spacing: -.35px; }
-.unsafe-uninstaller-icon { width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 48px; border-radius: 14px; color: #b86110; background: color-mix(in srgb, #e8a13c 16%, var(--panel)); }
-.unsafe-uninstaller-icon svg { width: 27px; height: 27px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.unsafe-uninstaller-description { margin: 22px 0 0; color: var(--text); font-size: 13px; line-height: 1.8; }
-.unsafe-uninstaller-note { margin-top: 14px; padding: 12px 14px; border: 1px solid color-mix(in srgb, #c98224 35%, var(--line)); border-radius: 11px; color: var(--muted); background: color-mix(in srgb, #e8a13c 9%, var(--panel)); font-size: 11px; line-height: 1.65; }
 .update-progress { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; padding: 12px 14px; border-radius: 11px; background: var(--panel); }
 .update-progress-track { height: 6px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 22%, transparent); overflow: hidden; }
 .update-progress-bar { height: 100%; width: 0; border-radius: 4px; background: var(--accent-strong); transition: width .18s ease; }

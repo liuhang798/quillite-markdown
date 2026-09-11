@@ -154,8 +154,8 @@ func validateUpdateHelperRequest(newBinary, oldExecutable, parentPID, logPath st
 	if !strings.EqualFold(filepath.Base(oldExecutable), windowsUpdateExecutableName) {
 		return errors.New("update target is not the Quillite executable")
 	}
-	if !isWindowsUninstallerFileSafe(filepath.Join(filepath.Dir(oldExecutable), "uninstall.exe")) {
-		return errors.New("update target has no safety-marked uninstaller")
+	if !isWindowsUninstallerReadyForExecutable(oldExecutable) {
+		return errors.New("update target still has an active risky uninstaller")
 	}
 	for label, path := range map[string]string{"replacement binary": newBinary, "update target": oldExecutable} {
 		info, statErr := os.Stat(path)

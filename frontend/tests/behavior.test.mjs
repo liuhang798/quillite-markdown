@@ -932,13 +932,11 @@ test('unsafe Windows uninstallers force a full installer instead of in-app updat
   assert.match(renderer, /manualInstallRequired \? state\.updateInfo\?\.manualInstallerUrl[\s\S]*installerURL \|\| 'https:\/\/qm\.ssssa\.cn\/#download'/);
 });
 
-test('unsafe Windows uninstallers show a dedicated startup warning before update checks', () => {
-  assert.match(html, /id="unsafeUninstallerDialog"[\s\S]*role="alertdialog"[\s\S]*id="unsafeUninstallerDownload"/);
-  assert.match(mainSource, /getWindowsInstallSafety: \(\) => desktopRuntime[\s\S]*Backend\.GetWindowsInstallSafety\(\)/);
-  assert.match(renderer, /unsafeUninstallerDialogTitle: '当前卸载程序存在重大缺陷'/);
-  assert.match(renderer, /async function checkWindowsInstallSafety\(\)[\s\S]*status\?\.applicable && status\.safe === false[\s\S]*return false/);
-  assert.match(renderer, /if \(await checkWindowsInstallSafety\(\)\) await checkForUpdates\(false\)/);
-  assert.match(renderer, /unsafeUninstallerDownloadURL[\s\S]*openExternal\(unsafeUninstallerDownloadURL\)/);
+test('legacy Windows uninstaller remediation runs silently before automatic update checks', () => {
+  assert.doesNotMatch(html, /id="unsafeUninstallerDialog"/);
+  assert.doesNotMatch(renderer, /function checkWindowsInstallSafety\(/);
+  assert.doesNotMatch(renderer, /openUnsafeUninstallerDialog/);
+  assert.match(renderer, /function scheduleAutomaticUpdateCheck\(\)[\s\S]*setTimeout\(async \(\) => \{[\s\S]*await checkForUpdates\(false\)/);
 });
 
 test('spell check marks English errors and offers correction, ignore, and personal dictionary actions', () => {

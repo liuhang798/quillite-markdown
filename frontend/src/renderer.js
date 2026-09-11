@@ -647,7 +647,7 @@ const els = {
   aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteTitle: $('#aiRewriteTitle'), aiRequestSettings: $('#aiRequestSettings'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiTaskSettings: $('#aiTaskSettings'), aiInstructionField: $('#aiInstructionField'), aiInstructionLabel: $('#aiInstructionLabel'), aiInstruction: $('#aiInstruction'), aiInstructionHint: $('#aiInstructionHint'), aiLengthField: $('#aiLengthField'), aiLengthLabel: $('#aiLengthLabel'), aiLength: $('#aiLength'), aiLengthHint: $('#aiLengthHint'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiDiffFilter: $('#aiDiffFilter'), loadMoreAIDiff: $('#loadMoreAIDiff'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiRewritePrivacy: $('#aiRewritePrivacy'), aiRewriteSendSummary: $('#aiRewriteSendSummary'), aiRewritePrivacySummary: $('#aiRewritePrivacySummary'), aiRewritePrivacyList: $('#aiRewritePrivacyList'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
   aiReviewDialog: $('#aiReviewDialog'), aiReviewInstruction: $('#aiReviewInstruction'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewPrivacy: $('#aiReviewPrivacy'), aiReviewSendSummary: $('#aiReviewSendSummary'), aiReviewPrivacySummary: $('#aiReviewPrivacySummary'), aiReviewPrivacyList: $('#aiReviewPrivacyList'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
   documentHistoryDialog: $('#documentHistoryDialog'), documentHistoryList: $('#documentHistoryList'), documentHistoryPreview: $('#documentHistoryPreview'), documentHistoryStatus: $('#documentHistoryStatus'), restoreDocumentHistory: $('#restoreDocumentHistory'),
-  feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), unsafeUninstallerDialog: $('#unsafeUninstallerDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
+  feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
   recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramFullscreenButton: $('#toggleDiagramFullscreen'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'), flowchartModeBar: $('#flowchartModeBar'), flowchartVisualEditor: $('#flowchartVisualEditor'), structuredDiagramEditor: $('#structuredDiagramEditor'), structuredDiagramSettings: $('#structuredDiagramSettings'), structuredDiagramHead: $('#structuredDiagramHead'), structuredDiagramRows: $('#structuredDiagramRows'), flowchartCanvasViewport: $('#flowchartCanvasViewport'), flowchartCanvas: $('#flowchartCanvas'), flowchartZoomOut: $('#flowchartZoomOut'), flowchartZoomReset: $('#flowchartZoomReset'), flowchartZoomIn: $('#flowchartZoomIn'), flowchartZoomValue: $('#flowchartZoomValue'), flowchartNodeLayer: $('#flowchartNodeLayer'), flowchartEdgeLayer: $('#flowchartEdgeLayer'), flowchartDirection: $('#flowchartDirection'), flowchartNodeProperties: $('#flowchartNodeProperties'), flowchartEdgeProperties: $('#flowchartEdgeProperties'), flowchartNodeLabel: $('#flowchartNodeLabel'), flowchartNodeShape: $('#flowchartNodeShape'), flowchartEdgeLabel: $('#flowchartEdgeLabel'), flowchartEdgeStyle: $('#flowchartEdgeStyle'), flowchartSelectionHint: $('#flowchartSelectionHint'),
   imageUploadSettingsDialog: $('#imageUploadSettingsDialog'), picGoCloudSetup: $('#picGoCloudSetup'), picGoCloudAccount: $('#picGoCloudAccount'), picGoCloudUser: $('#picGoCloudUser'), picGoCloudStatus: $('#picGoCloudStatus'), picGoSetupWizard: $('#picGoSetupWizard'), picGoSetupInstall: $('#picGoSetupInstall'), picGoSetupConnect: $('#picGoSetupConnect'), picGoSetupReady: $('#picGoSetupReady'), picGoAdvancedSettings: $('#picGoAdvancedSettings'), localAssetsSummary: $('#localAssetsSummary'), picGoSettingsFields: $('#picGoSettingsFields'), picGoServerURL: $('#picGoServerURL'), picGoSecret: $('#picGoSecret'), clearPicGoSecretRow: $('#clearPicGoSecretRow'), clearPicGoSecret: $('#clearPicGoSecret'), picGoTestStatus: $('#picGoTestStatus'),
   editorUndoButton: $('#editorUndoButton')
@@ -8578,35 +8578,6 @@ function closeUpdate() {
   $('#moreButton').focus();
 }
 
-let unsafeUninstallerDownloadURL = 'https://qm.ssssa.cn/#download';
-
-function openUnsafeUninstallerDialog(status) {
-  unsafeUninstallerDownloadURL = status?.downloadUrl || 'https://qm.ssssa.cn/#download';
-  els.unsafeUninstallerDialog.classList.remove('hidden');
-  document.body.classList.add('dialog-open');
-  requestAnimationFrame(() => $('#unsafeUninstallerDownload').focus());
-}
-
-function closeUnsafeUninstallerDialog() {
-  if (els.unsafeUninstallerDialog.classList.contains('hidden')) return;
-  els.unsafeUninstallerDialog.classList.add('hidden');
-  document.body.classList.remove('dialog-open');
-  $('#moreButton').focus();
-}
-
-async function checkWindowsInstallSafety() {
-  try {
-    const status = await window.quilliteMarkdown.getWindowsInstallSafety();
-    if (status?.applicable && status.safe === false) {
-      openUnsafeUninstallerDialog(status);
-      return false;
-    }
-  } catch (error) {
-    console.warn('Windows install safety check failed:', error);
-  }
-  return true;
-}
-
 async function checkForUpdates(manual = false) {
   if (manual) showToast(t('checkingForUpdates'));
   try {
@@ -8625,10 +8596,7 @@ function scheduleAutomaticUpdateCheck() {
   if (automaticUpdateScheduled) return;
   automaticUpdateScheduled = true;
   setTimeout(async () => {
-    // The local uninstaller warning must appear before any network update UI.
-    // If it is unsafe, the dedicated dialog is sufficient for this startup and
-    // avoids immediately presenting a second, redundant update dialog.
-    if (await checkWindowsInstallSafety()) await checkForUpdates(false);
+    await checkForUpdates(false);
   }, 1200);
 }
 
@@ -9135,15 +9103,6 @@ $('#openUpdatePage').addEventListener('click', () => {
 });
 els.updateDialog.addEventListener('click', event => {
   if (event.target === els.updateDialog) closeUpdate();
-});
-$('#closeUnsafeUninstaller').addEventListener('click', closeUnsafeUninstallerDialog);
-$('#unsafeUninstallerLater').addEventListener('click', closeUnsafeUninstallerDialog);
-$('#unsafeUninstallerDownload').addEventListener('click', () => {
-  window.quilliteMarkdown.openExternal(unsafeUninstallerDownloadURL);
-  closeUnsafeUninstallerDialog();
-});
-els.unsafeUninstallerDialog.addEventListener('click', event => {
-  if (event.target === els.unsafeUninstallerDialog) closeUnsafeUninstallerDialog();
 });
 $('#cancelEditPermission').addEventListener('click', () => closeEditPermissionDialog());
 $('#saveCopyAndEdit').addEventListener('click', savePermissionCopyAndEdit);
@@ -9986,7 +9945,6 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.editPermissionDialog.classList.contains('hidden')) closeEditPermissionDialog();
   else if (event.key === 'Escape' && !els.exportCenterDialog.classList.contains('hidden')) closeExportCenter();
   else if (event.key === 'Escape' && !els.pdfTutorialDialog.classList.contains('hidden')) closePDFTutorial();
-  else if (event.key === 'Escape' && !els.unsafeUninstallerDialog.classList.contains('hidden')) closeUnsafeUninstallerDialog();
   else if (event.key === 'Escape' && !els.updateDialog.classList.contains('hidden')) closeUpdate();
   else if (event.key === 'Escape' && !els.documentHistoryDialog.classList.contains('hidden')) closeDocumentHistory();
   else if (event.key === 'Escape' && !els.aiReviewDialog.classList.contains('hidden')) closeAIDocumentReview();

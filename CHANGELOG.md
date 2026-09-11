@@ -12,6 +12,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 取消 Windows 旧卸载器的独立重大缺陷弹框。更新检查会静默识别注册表卸载命令精确指向当前安装目录、且不含安全标识的风险 `uninstall.exe`：优先只删除该文件，失败则改名禁用，再失败则移除精确匹配的卸载登记；带安全标识的版本及无法确认归属的同名文件一律保留。风险解除后继续应用内更新，全部措施失败时仍安全回退到完整安装包。
 - 修复 2.7.3 Windows 安装启动器错误地预先创建取消标记、导致安装核心启动后立即中断的问题；取消标记现在只在用户主动取消时生成，并增加安装握手回归测试。
 - 完成文件删除安全复审：Windows 安装、升级和卸载全面禁止通配符及递归目录删除，不再自动清理注册表记录的旧安装目录；注册表安装位置必须通过程序文件和专属目录标识双重验证，卸载前也必须读取并匹配该标识，标识缺失或异常时只移除卸载登记并保留全部文件。草稿另存为只迁移应用内记录，不再物理删除原草稿；Windows 更新辅助程序仅允许从应用更新目录原子替换带安全卸载器的 `QuilliteMarkdown.exe`，并在启动失败时恢复已保留的旧版本，macOS 更新也改用随机私有暂存目录并在替换前验证当前应用签名和 Bundle Identifier。
 - macOS 源码更新脚本不再使用 `git reset --hard` 或 `git clean`；检测到未提交、已修改或未跟踪文件时立即停止，仅允许 `git merge --ff-only`，避免辅助脚本清除本地工作。
@@ -42,6 +43,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Removed the standalone critical-defect dialog for legacy Windows uninstallers. Update checks now silently identify only an unmarked `uninstall.exe` whose registered uninstall command points exactly to the current install directory, delete that exact file when possible, rename it as a fallback, or remove only the exact matching uninstall registration as a final disable step. Safety-marked and unowned same-name files are always preserved; in-app updating resumes after remediation and still falls back to the full installer if every measure fails.
 - Fixed a 2.7.3 Windows launcher regression that created the cancellation marker before starting the installer core, causing every installation to stop immediately. The marker is now created only after an explicit user cancellation, with a regression test covering the installer handshake.
 - Completed a destructive-filesystem safety review. Windows installation, upgrade, and uninstall paths now forbid wildcard and recursive directory deletion and never automatically clean a registry-recorded previous install directory. A recorded install location must pass both executable and dedicated ownership-token checks; uninstall applies the same token check, and a missing or invalid token removes only the uninstall registration while preserving every file. Save As migrates draft records without physically deleting the original draft. The Windows update helper atomically replaces only `QuilliteMarkdown.exe` from the application update directory when a safety-marked uninstaller is present and restores its preserved previous version if launch fails, while macOS updates use random private staging directories and verify the current bundle identifier and signature before replacement.
 - The macOS source-update helper no longer uses `git reset --hard` or `git clean`. It stops when modified, uncommitted, or untracked files exist and permits only a `git merge --ff-only`, preventing the helper from discarding local work.

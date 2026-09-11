@@ -61,7 +61,7 @@ var updateMutex sync.Mutex
 func (a *App) DownloadAndApplyUpdate() error {
 	updateMutex.Lock()
 	defer updateMutex.Unlock()
-	if err := validateInAppUpdateSafety(runtime.GOOS, isWindowsUninstallerSafe()); err != nil {
+	if err := validateInAppUpdateSafety(runtime.GOOS, prepareWindowsUninstallerForUpdate()); err != nil {
 		return err
 	}
 
@@ -104,7 +104,7 @@ func (a *App) DownloadAndApplyUpdate() error {
 
 func validateInAppUpdateSafety(goos string, windowsUninstallerSafe bool) error {
 	if goos == "windows" && !windowsUninstallerSafe {
-		return errors.New("the installed Windows uninstaller is not safety-marked; a full installer is required")
+		return errors.New("the risky Windows uninstaller could not be deleted or disabled; a full installer is required")
 	}
 	return nil
 }

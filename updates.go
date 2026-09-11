@@ -20,7 +20,7 @@ const (
 	officialDownloadPage     = officialWebsiteBase + "/#download"
 )
 
-var windowsUninstallerSafetyCheck = isWindowsUninstallerSafe
+var windowsUninstallerSafetyCheck = prepareWindowsUninstallerForUpdate
 
 type UpdateInfo struct {
 	Checked               bool   `json:"checked"`
@@ -48,8 +48,9 @@ type WindowsInstallSafety struct {
 	DownloadURL    string `json:"downloadUrl"`
 }
 
-// GetWindowsInstallSafety lets the frontend warn affected users immediately
-// at startup, before the normal network-based update check runs.
+// GetWindowsInstallSafety is retained for compatibility with existing frontend
+// bindings. It now reports the result after attempting silent remediation and
+// does not require a standalone startup warning.
 func (a *App) GetWindowsInstallSafety() WindowsInstallSafety {
 	applicable := runtime.GOOS == "windows"
 	safe := true
@@ -204,8 +205,9 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 	if runtime.GOOS == "windows" {
 		windowsUninstallerSafe = windowsUninstallerSafetyCheck()
 	}
-	// An unsafe legacy uninstaller is a local data-safety issue, so it must not
-	// be hidden by the ordinary 30-day update reminder preference.
+	// A legacy uninstaller is remediated before the update check. If remediation
+	// is impossible, keep the manual installer fallback visible regardless of the
+	// ordinary 30-day reminder preference.
 	if !force && windowsUninstallerSafe {
 		prefs, err := a.readPreferences()
 		if err == nil && prefs.SuppressUpdateUntil != "" {
