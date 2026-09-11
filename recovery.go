@@ -1,16 +1,23 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-const maxRecoverySnapshotSize = 24 * 1024 * 1024
+const (
+	maxRecoverySnapshotSize = 24 * 1024 * 1024
+	maxRecoveryMetadataSize = 64 * 1024
+	recoverySnapshotMagic   = "QMR1\n"
+)
 
 // RecoverySnapshot is an emergency copy of the active editor buffer. It is
 // deliberately stored outside preferences so a large document cannot bloat or
@@ -30,8 +37,77 @@ type RecoverySnapshotInput struct {
 	Content   string `json:"content"`
 }
 
+type recoverySnapshotMetadata struct {
+	Path      string `json:"path"`
+	Name      string `json:"name"`
+	Directory string `json:"directory"`
+	UpdatedAt string `json:"updatedAt"`
+	Size      int64  `json:"size"`
+}
+
 func (a *App) recoverySnapshotPath() string {
 	return filepath.Join(filepath.Dir(a.preferencePath()), "document-recovery.json")
+}
+
+func encodeRecoverySnapshot(snapshot RecoverySnapshot) ([]byte, error) {
+	metadata := recoverySnapshotMetadata{
+		Path: snapshot.Path, Name: snapshot.Name, Directory: snapshot.Directory,
+		UpdatedAt: snapshot.UpdatedAt, Size: int64(len(snapshot.Content)),
+	}
+	var output bytes.Buffer
+	output.WriteString(recoverySnapshotMagic)
+	if err := json.NewEncoder(&output).Encode(metadata); err != nil {
+		return nil, err
+	}
+	output.WriteString(snapshot.Content)
+	return output.Bytes(), nil
+}
+
+func decodeRecoverySnapshot(path string, fileSize int64) (RecoverySnapshot, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return RecoverySnapshot{}, err
+	}
+	defer file.Close()
+	reader := bufio.NewReaderSize(file, maxRecoveryMetadataSize+1)
+	prefix, peekErr := reader.Peek(len(recoverySnapshotMagic))
+	if peekErr == nil && string(prefix) == recoverySnapshotMagic {
+		_, _ = reader.Discard(len(recoverySnapshotMagic))
+		line, readErr := reader.ReadSlice('\n')
+		if readErr != nil || len(line) > maxRecoveryMetadataSize {
+			return RecoverySnapshot{}, errors.New("recovery snapshot metadata is invalid")
+		}
+		var metadata recoverySnapshotMetadata
+		if err := json.Unmarshal(line, &metadata); err != nil {
+			return RecoverySnapshot{}, err
+		}
+		if metadata.Size < 0 || metadata.Size > maxRecoverySnapshotSize {
+			return RecoverySnapshot{}, errors.New("recovery snapshot is too large")
+		}
+		content, err := io.ReadAll(io.LimitReader(reader, maxRecoverySnapshotSize+1))
+		if err != nil {
+			return RecoverySnapshot{}, err
+		}
+		if int64(len(content)) != metadata.Size {
+			return RecoverySnapshot{}, errors.New("recovery snapshot content size is invalid")
+		}
+		return RecoverySnapshot{Path: metadata.Path, Name: metadata.Name, Directory: metadata.Directory, Content: string(content), UpdatedAt: metadata.UpdatedAt}, nil
+	}
+
+	// Pre-2.7.3 development builds stored one JSON object. Account for the
+	// worst-case sixfold JSON escaping without weakening the decoded limit.
+	legacyLimit := int64(maxRecoverySnapshotSize*6 + maxRecoveryMetadataSize)
+	if fileSize > legacyLimit {
+		return RecoverySnapshot{}, errors.New("recovery snapshot is too large")
+	}
+	var snapshot RecoverySnapshot
+	if err := json.NewDecoder(io.LimitReader(reader, legacyLimit+1)).Decode(&snapshot); err != nil {
+		return RecoverySnapshot{}, err
+	}
+	if len(snapshot.Content) > maxRecoverySnapshotSize {
+		return RecoverySnapshot{}, errors.New("recovery snapshot is too large")
+	}
+	return snapshot, nil
 }
 
 func (a *App) SaveRecoverySnapshot(input RecoverySnapshotInput) error {
@@ -58,7 +134,7 @@ func (a *App) SaveRecoverySnapshot(input RecoverySnapshotInput) error {
 	if snapshot.Directory == "" {
 		snapshot.Directory = filepath.Dir(snapshot.Path)
 	}
-	data, err := json.Marshal(snapshot)
+	data, err := encodeRecoverySnapshot(snapshot)
 	if err != nil {
 		return err
 	}
@@ -77,15 +153,11 @@ func (a *App) GetRecoverySnapshot() (*RecoverySnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	if info.IsDir() || info.Size() > maxRecoverySnapshotSize+4096 {
+	if info.IsDir() {
 		return nil, errors.New("recovery snapshot is too large")
 	}
-	data, err := os.ReadFile(recoveryPath)
+	snapshot, err := decodeRecoverySnapshot(recoveryPath, info.Size())
 	if err != nil {
-		return nil, err
-	}
-	var snapshot RecoverySnapshot
-	if err := json.Unmarshal(data, &snapshot); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(snapshot.Path) == "" || strings.TrimSpace(snapshot.UpdatedAt) == "" {

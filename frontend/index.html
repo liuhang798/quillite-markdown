@@ -214,6 +214,7 @@
         <div class="document-meta">
           <div class="breadcrumb" id="breadcrumb"></div>
           <div id="documentActions" class="document-actions">
+            <button id="documentSummaryButton" class="text-button document-summary-button" type="button" data-i18n="aiSummaryGenerate" data-i18n-title="aiSummaryGenerateTitle" title="使用 AI 总结当前文档">AI总结生成</button>
             <button id="revealButton" class="text-button" data-i18n="revealFile" data-i18n-title="revealFileTitle" title="在资源管理器中显示">定位文件</button>
             <button id="closePreviewButton" class="text-button close-preview-button" data-i18n="closePreview" data-i18n-title="closePreviewTitle" title="关闭当前预览并返回首页">关闭预览</button>
             <button id="documentSaveAsButton" class="text-button document-action-collapsible" data-document-action="save-as" data-i18n="saveAs">另存为</button>
@@ -229,6 +230,25 @@
             </div>
           </div>
         </div>
+        <section id="documentSummaryPanel" class="document-summary-panel hidden" aria-live="polite" aria-labelledby="documentSummaryTitle">
+          <header>
+            <span class="document-summary-heading"><strong id="documentSummaryTitle" data-i18n="aiSummaryPanelTitle">AI 文档速览</strong><small id="documentSummaryMeta"></small></span>
+            <button id="closeDocumentSummary" class="document-summary-close" type="button" data-i18n-title="aiSummaryClose" data-i18n-aria-label="aiSummaryClose" title="关闭文档速览" aria-label="关闭文档速览"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+          </header>
+          <div id="documentSummaryPrivacy" class="document-summary-privacy hidden">
+            <section id="documentSummaryPrivacyCheck" class="ai-send-privacy"><header><strong data-i18n="aiPrivacyCheckTitle">发送前隐私检查</strong><small id="documentSummarySendSummary"></small></header><p id="documentSummaryPrivacySummary"></p><div id="documentSummaryPrivacyList" class="ai-privacy-findings"></div></section>
+            <label class="ai-cloud-consent"><input id="documentSummaryConsent" type="checkbox" checked><span data-i18n="aiSummaryConsent">我确认将当前整篇文档发送给所选 AI 服务生成速览</span></label>
+            <div class="document-summary-privacy-actions"><button id="confirmDocumentSummary" class="large-button primary" type="button" data-i18n="aiSummaryConfirm">确认并开始总结</button></div>
+          </div>
+          <div id="documentSummaryProgress" class="document-summary-progress" role="status">
+            <span class="document-summary-spinner" aria-hidden="true"></span>
+            <span><strong id="documentSummaryPhase" data-i18n="aiSummaryReading">AI 正在快速阅读文档</strong><small id="documentSummaryProgressMeta"></small></span>
+            <span class="document-summary-progress-track" aria-hidden="true"><i id="documentSummaryProgressBar"></i></span>
+            <b id="documentSummaryProgressPercent">0%</b>
+          </div>
+          <div id="documentSummaryContent" class="document-summary-content hidden"></div>
+          <p id="documentSummaryStatus" class="document-summary-status hidden" role="alert"></p>
+        </section>
         <article id="markdownContent" class="markdown-body"></article>
         <footer class="article-footer">
           <span class="footer-leaf"><svg viewBox="0 0 24 24"><path d="M19.7 4.3C13.2 4.1 7.8 6.5 5.4 11.1c-1.1 2.1-1.2 4.2-.6 5.9 3.5-4.3 7.3-6.5 11.6-7.6-4 1.8-7.4 4.5-10.2 8.4 2.1.5 4.4.1 6.5-1.3 4.4-2.9 6.4-7.4 7-12.2Z"/></svg></span>
@@ -263,17 +283,13 @@
               <strong id="editorFileName">未命名文档</strong>
             </div>
             <div class="editor-status">
-              <button id="aiEditButton" class="ai-edit-button" type="button" data-i18n-title="aiEditTitle" title="选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1L6.5 8.5l4.1-1.4L12 3Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg>
-                <span data-i18n="aiEdit">AI编辑</span>
-              </button>
-              <button id="aiReviewButton" class="ai-edit-button ai-review-button" type="button" data-i18n-title="aiReviewTitle" title="检查整篇文档并给出可选修改建议">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4Z"/><path d="M15 4v4h4M8 12l2 2 4-5M8 17h7"/></svg>
-                <span data-i18n="aiReview">AI检查</span>
-              </button>
               <span id="editorSaveState">已保存</span>
               <button id="saveAsButton" class="text-button" data-i18n="saveAs">另存为</button>
               <button id="exitEditButton" class="text-button exit-edit-button" data-i18n="exitEdit" title="退出编辑">退出编辑</button>
+              <button id="documentHistoryButton" class="ai-edit-button document-history-button" type="button" data-i18n-title="documentHistoryTitle" title="查看和恢复历史版本">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6"/><path d="M12 8v4l2.7 1.7"/></svg>
+                <span data-i18n="documentHistory">历史版本</span>
+              </button>
             </div>
           </div>
           <div id="editorFormatBar" class="editor-format-bar" role="toolbar" data-i18n-aria-label="formatToolbar">
@@ -288,6 +304,10 @@
               <option value="##### " data-i18n="heading5">标题 5</option>
               <option value="###### " data-i18n="heading6">标题 6</option>
             </select>
+            <button id="aiToolbarButton" class="ai-toolbar-button" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-title="aiToolbarTitle" title="打开 AI 工具">
+              <span>AI</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+            </button>
             <span class="format-divider" data-divider-before="inline"></span>
             <button type="button" data-format="bold" data-format-overflow="bold" data-format-label="boldTitle" data-format-group="inline" data-overflow-priority="90" data-i18n-title="boldTitle" title="加粗 (Ctrl+B)"><strong>B</strong></button>
             <button type="button" data-format="italic" data-format-overflow="italic" data-format-label="italicTitle" data-format-group="inline" data-overflow-priority="85" data-i18n-title="italicTitle" title="斜体 (Ctrl+I)"><em>I</em></button>
@@ -482,7 +502,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.2</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.3</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -501,6 +521,18 @@
       <div class="popover-label" data-i18n="toolbarOverflow">工具栏折叠</div>
       <div id="overflowFormatOptions"></div>
     </div>
+  </div>
+
+  <div id="aiToolbarMenu" class="popover ai-toolbar-menu hidden no-drag" role="menu" aria-labelledby="aiToolbarButton">
+    <div class="popover-label" data-i18n="aiToolbarMenuLabel">AI 工具</div>
+    <button class="ai-toolbar-generate" type="button" role="menuitem" data-ai-toolbar-action="generate"><span class="menu-label" data-i18n="aiToolbarGenerate">AI生成</span><small data-i18n="aiToolbarGenerateHint">提示词写文档</small></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="edit"><span class="menu-label" data-i18n="aiToolbarEdit">AI编辑</span></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="proofread"><span class="menu-label" data-i18n="aiToolbarProofread">AI校对</span></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="continue"><span class="menu-label" data-i18n="aiToolbarContinue">AI续写</span></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="translate"><span class="menu-label" data-i18n="aiToolbarTranslate">AI翻译</span></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="concise"><span class="menu-label" data-i18n="aiToolbarConcise">AI精简</span></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="expand"><span class="menu-label" data-i18n="aiToolbarExpand">AI扩写</span></button>
+    <button type="button" role="menuitem" data-ai-toolbar-action="custom"><span class="menu-label" data-i18n="aiToolbarCustom">AI自定义</span></button>
   </div>
 
   <div id="recentContextMenu" class="popover recent-context-menu hidden no-drag" role="menu" data-i18n-aria-label="recentContextMenuTitle" aria-label="最近阅读文档操作">
@@ -625,7 +657,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.7.2</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.7.3</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -703,27 +735,63 @@
       </button>
       <span class="eyebrow" data-i18n="aiAssistant">AI 助手</span>
       <h2 id="aiRewriteTitle" data-i18n="aiRewriteTitle">AI编辑</h2>
-      <div id="aiRewriteControls" class="ai-rewrite-controls">
-        <div id="aiRewriteFields" class="ai-rewrite-fields">
-          <label><span data-i18n="aiAction">处理方式</span><select id="aiRewriteAction"><option value="polish" data-i18n="aiActionPolish">润色</option><option value="rewrite" data-i18n="aiActionRewrite">改写</option><option value="concise" data-i18n="aiActionConcise">精简</option><option value="expand" data-i18n="aiActionExpand">扩写</option><option value="summarize" data-i18n="aiActionSummarize">总结</option><option value="translate" data-i18n="aiActionTranslate">翻译</option><option value="custom" data-i18n="aiActionCustom">自定义要求</option></select></label>
-          <label id="aiTargetLanguageField" class="hidden"><span data-i18n="aiTargetLanguage">目标语言</span><select id="aiTargetLanguage"><option value="简体中文">简体中文</option><option value="English">English</option><option value="日本語">日本語</option><option value="한국어">한국어</option></select></label>
+      <input id="aiRewriteAction" type="hidden" value="polish">
+      <div id="aiRequestSettings" class="ai-request-settings">
+        <div id="aiRewriteControls" class="ai-rewrite-controls">
+          <label id="aiTargetLanguageField" class="hidden"><span data-i18n="aiTargetLanguage">目标语言</span><select id="aiTargetLanguage">
+            <option value="简体中文">简体中文（简体中文）</option>
+            <option value="繁體中文">繁體中文（繁体中文）</option>
+            <option value="English">English（英语）</option>
+            <option value="Español">Español（西班牙语）</option>
+            <option value="हिन्दी">हिन्दी（印地语）</option>
+            <option value="العربية">العربية（阿拉伯语）</option>
+            <option value="Français">Français（法语）</option>
+            <option value="বাংলা">বাংলা（孟加拉语）</option>
+            <option value="Português">Português（葡萄牙语）</option>
+            <option value="Bahasa Indonesia">Bahasa Indonesia（印度尼西亚语）</option>
+            <option value="اردو">اردو（乌尔都语）</option>
+            <option value="Русский">Русский（俄语）</option>
+            <option value="Deutsch">Deutsch（德语）</option>
+            <option value="日本語">日本語（日语）</option>
+            <option value="한국어">한국어（韩语）</option>
+            <option value="Tiếng Việt">Tiếng Việt（越南语）</option>
+            <option value="Türkçe">Türkçe（土耳其语）</option>
+            <option value="Italiano">Italiano（意大利语）</option>
+            <option value="ไทย">ไทย（泰语）</option>
+            <option value="فارسی">فارسی（波斯语）</option>
+            <option value="Polski">Polski（波兰语）</option>
+            <option value="Nederlands">Nederlands（荷兰语）</option>
+            <option value="Українська">Українська（乌克兰语）</option>
+            <option value="Bahasa Melayu">Bahasa Melayu（马来语）</option>
+            <option value="Filipino">Filipino（菲律宾语）</option>
+            <option value="Kiswahili">Kiswahili（斯瓦希里语）</option>
+            <option value="தமிழ்">தமிழ்（泰米尔语）</option>
+            <option value="తెలుగు">తెలుగు（泰卢固语）</option>
+            <option value="मराठी">मराठी（马拉地语）</option>
+            <option value="ਪੰਜਾਬੀ">ਪੰਜਾਬੀ（旁遮普语）</option>
+          </select></label>
         </div>
-        <button id="generateAIRewrite" class="large-button primary ai-generate-button" type="button" data-i18n="aiGenerate">生成</button>
+        <div id="aiTaskSettings" class="ai-task-settings">
+          <label id="aiInstructionField" class="ai-instruction-field"><span id="aiInstructionLabel">具体要求</span><input id="aiInstruction" type="text" maxlength="1000" placeholder="请说明希望 AI 如何处理"><small id="aiInstructionHint"></small></label>
+          <label id="aiLengthField" class="ai-length-field hidden"><span id="aiLengthLabel">目标篇幅</span><input id="aiLength" type="text" maxlength="80" placeholder="例如：约 500 字"><small id="aiLengthHint"></small></label>
+        </div>
+        <div class="ai-generate-row"><button id="generateAIRewrite" class="large-button primary ai-generate-button" type="button" data-i18n="aiGenerate">生成</button></div>
       </div>
-      <label id="aiInstructionField" class="ai-instruction-field hidden"><span data-i18n="aiInstruction">具体要求</span><textarea id="aiInstruction" maxlength="1000" data-i18n-placeholder="aiInstructionPlaceholder" placeholder="例如：改成更专业、友好的产品说明"></textarea></label>
       <div id="aiCompareGrid" class="ai-compare-grid">
         <label id="aiOriginalTextField"><span data-i18n="aiOriginalText">原文</span><textarea id="aiOriginalText" readonly></textarea></label>
         <label><span data-i18n="aiResultText">AI 结果</span><textarea id="aiResultText" data-i18n-placeholder="aiResultPlaceholder" placeholder="生成后可在这里继续微调"></textarea></label>
       </div>
       <section id="aiDiffReview" class="ai-diff-review hidden" aria-labelledby="aiDiffTitle">
-        <header><strong id="aiDiffTitle" data-i18n="aiDiffTitle">逐项确认修改</strong><small id="aiDiffSummary"></small><span></span><button id="acceptAllAIDiff" class="text-button" type="button" data-i18n="aiAcceptAllChanges">全部接受</button><button id="rejectAllAIDiff" class="text-button" type="button" data-i18n="aiRejectAllChanges">全部保留原文</button></header>
+        <header><strong id="aiDiffTitle" data-i18n="aiDiffTitle">逐项确认修改</strong><small id="aiDiffSummary"></small><select id="aiDiffFilter" data-i18n-aria-label="aiDiffFilterLabel" aria-label="筛选修改"><option value="all" data-i18n="aiDiffFilterAll">全部</option><option value="accepted" data-i18n="aiDiffFilterAccepted">已接受</option><option value="pending" data-i18n="aiDiffFilterPending">保留原文</option></select><span></span><button id="acceptAllAIDiff" class="text-button" type="button" data-i18n="aiAcceptAllChanges">全部接受</button><button id="rejectAllAIDiff" class="text-button" type="button" data-i18n="aiRejectAllChanges">全部保留原文</button></header>
         <div id="aiDiffList" class="ai-diff-list"></div>
+        <button id="loadMoreAIDiff" class="ai-diff-load-more hidden" type="button" data-i18n="aiDiffLoadMore">显示更多修改</button>
       </section>
       <div id="aiRewriteProgress" class="ai-rewrite-progress hidden" role="status" aria-live="polite" aria-hidden="true">
         <span class="ai-rewrite-spinner" aria-hidden="true"></span>
         <span class="ai-rewrite-progress-copy"><strong id="aiRewriteProgressPhase"></strong><small id="aiRewriteProgressMeta"></small><span class="ai-rewrite-progress-track" aria-hidden="true"><i id="aiRewriteProgressBar"></i></span></span>
         <b id="aiRewriteProgressPercent">0%</b>
       </div>
+      <section id="aiRewritePrivacy" class="ai-send-privacy hidden"><header><strong data-i18n="aiPrivacyCheckTitle">发送前隐私检查</strong><small id="aiRewriteSendSummary"></small></header><p id="aiRewritePrivacySummary"></p><div id="aiRewritePrivacyList" class="ai-privacy-findings"></div></section>
       <label id="aiCloudConsentRow" class="ai-cloud-consent hidden"><input id="aiCloudConsent" type="checkbox" checked><span data-i18n="aiCloudConsent">我确认将上述内容和要求发送给当前选择的 AI 服务处理</span></label>
       <p id="aiRewriteStatus" class="feedback-status" role="status"></p>
       <div class="ai-dialog-actions"><button id="openAISettingsFromRewrite" class="large-button ghost" type="button" data-i18n="aiOpenSettings">设置</button><span></span><button id="cancelAIRewrite" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="replaceWithAIResult" class="large-button primary" type="button" disabled data-i18n="aiReplaceSelection">替换选中文字</button></div>
@@ -738,6 +806,7 @@
       <span class="eyebrow" data-i18n="aiReviewLabel">AI DOCUMENT REVIEW</span>
       <h2 id="aiReviewDialogTitle" data-i18n="aiReviewDialogTitle">AI 文档检查</h2>
       <p class="ai-dialog-intro" data-i18n="aiReviewIntro">检查整篇文档的表达、拼写、标点、一致性和 Markdown 语法，并逐条选择要应用的修改。</p>
+      <label id="aiReviewInstructionField" class="ai-review-instruction"><span data-i18n="aiReviewInstruction">校对要求</span><textarea id="aiReviewInstruction" maxlength="1000" data-i18n-placeholder="aiReviewInstructionPlaceholder" placeholder="例如：重点检查合同术语、金额和前后表述是否一致"></textarea><small data-i18n="aiReviewInstructionHint">可补充行业术语、检查重点或不应改动的内容。</small></label>
       <div id="aiReviewToolbar" class="ai-review-toolbar hidden">
         <strong id="aiReviewSummary"></strong>
         <span></span>
@@ -754,9 +823,25 @@
         </div>
       </div>
       <div id="aiReviewSuggestions" class="ai-review-suggestions hidden"></div>
+      <section id="aiReviewPrivacy" class="ai-send-privacy hidden"><header><strong data-i18n="aiPrivacyCheckTitle">发送前隐私检查</strong><small id="aiReviewSendSummary"></small></header><p id="aiReviewPrivacySummary"></p><div id="aiReviewPrivacyList" class="ai-privacy-findings"></div></section>
       <label id="aiReviewConsentRow" class="ai-cloud-consent"><input id="aiReviewConsent" type="checkbox" checked><span data-i18n="aiReviewConsent">我确认将当前整篇文档发送给默认 AI 服务进行检查</span></label>
       <p id="aiReviewStatus" class="feedback-status" role="status"></p>
       <div class="ai-dialog-actions ai-review-actions"><button id="openAISettingsFromReview" class="large-button ghost" type="button" data-i18n="aiOpenSettings">设置</button><span></span><button id="rerunAIReview" class="large-button secondary hidden" type="button" data-i18n="aiReviewAgain">重新检查</button><button id="cancelAIReview" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="runAIReview" class="large-button primary" type="button" data-i18n="aiStartReview">开始检查</button><button id="applyAIReview" class="large-button primary hidden" type="button" disabled data-i18n="aiApplySelected">一键修改所选项</button></div>
+    </section>
+  </div>
+
+  <div id="documentHistoryDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="documentHistoryDialogTitle">
+    <section class="document-history-dialog">
+      <button id="closeDocumentHistory" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      <span class="eyebrow" data-i18n="documentHistoryLabel">LOCAL VERSION HISTORY</span>
+      <h2 id="documentHistoryDialogTitle" data-i18n="documentHistoryTitle">文档历史版本</h2>
+      <p class="ai-dialog-intro" data-i18n="documentHistoryIntro">保存前的文档版本会安全保留在本机，可查看差异并恢复为可编辑内容。</p>
+      <div class="document-history-layout">
+        <aside><strong data-i18n="documentHistoryVersions">历史记录</strong><div id="documentHistoryList" class="document-history-list"></div></aside>
+        <div id="documentHistoryPreview" class="document-history-preview"><div class="document-history-empty"><strong data-i18n="documentHistorySelectTitle">选择一个历史版本</strong><p data-i18n="documentHistorySelectHint">右侧将显示历史内容与当前文档的差异。</p></div></div>
+      </div>
+      <p id="documentHistoryStatus" class="feedback-status" role="status"></p>
+      <div class="ai-dialog-actions"><span></span><button id="cancelDocumentHistory" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="restoreDocumentHistory" class="large-button primary" type="button" disabled data-i18n="documentHistoryRestore">恢复此版本</button></div>
     </section>
   </div>
 
@@ -784,7 +869,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.3</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -806,9 +891,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.2</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.3</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.2</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.3</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

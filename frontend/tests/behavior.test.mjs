@@ -6,6 +6,7 @@ const renderer = await readFile(new URL('../src/renderer.js', import.meta.url), 
 const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const aiChunkingSource = await readFile(new URL('../../ai_chunking.go', import.meta.url), 'utf8');
 
 test('opening an existing recent document updates it in place', () => {
   assert.match(renderer, /applyRecentPartition\(upsertRecentFile\([\s\S]*state\.recentFiles,[\s\S]*state\.pinnedRecentFiles,[\s\S]*recentEntry\(doc\)/);
@@ -404,6 +405,7 @@ test('Word, HTML, and PDF export are available through the unified Export docume
 });
 
 test('reader header exposes one responsive Export document action', () => {
+  assert.match(html, /id="documentActions"[\s\S]*id="documentSummaryButton"[^>]*data-i18n="aiSummaryGenerate"[\s\S]*id="revealButton"/);
   assert.match(html, /id="closePreviewButton" class="text-button close-preview-button"/);
   assert.match(html, /id="documentSaveAsButton"[^>]*data-document-action="save-as"[^>]*data-i18n="saveAs"/);
   assert.match(html, /id="documentExportButton"[^>]*data-document-action="export-center"[^>]*data-i18n="exportDocument"/);
@@ -418,6 +420,19 @@ test('reader header exposes one responsive Export document action', () => {
   assert.match(styles, /@container \(max-width: 720px\) \{[\s\S]*\.document-actions > \.document-action-collapsible \{ display: none; \}[\s\S]*\.document-actions-more \{ display: block; \}/);
   assert.match(renderer, /function runDocumentHeaderAction\(action\)[\s\S]*action === 'save-as'[\s\S]*saveLibraryDocumentAs\(state\.currentFile\.path\)[\s\S]*action === 'export-center'\) openExportCenter\(\)[\s\S]*action === 'print'/);
   assert.match(renderer, /els\.documentActions\.addEventListener\('click', event =>[\s\S]*documentActionsMenu\.classList\.toggle\('hidden', !opening\)[\s\S]*runDocumentHeaderAction\(actionButton\.dataset\.documentAction\)/);
+  assert.match(html, /id="documentSummaryPanel"[^>]*aria-live="polite"[\s\S]*id="closeDocumentSummary"[\s\S]*id="documentSummaryProgress"[\s\S]*id="documentSummaryProgressBar"[\s\S]*id="documentSummaryContent"/);
+	assert.match(html, /id="documentSummaryPrivacy"[\s\S]*id="documentSummaryPrivacyCheck"[\s\S]*id="documentSummaryPrivacyList"[\s\S]*id="documentSummaryConsent"[\s\S]*id="confirmDocumentSummary"/);
+  const summaryFunction = renderer.slice(renderer.indexOf('async function openAIDocumentSummary()'), renderer.indexOf('function aiRewriteRequestText()'));
+  assert.match(summaryFunction, /state\.currentFile\?\.content[\s\S]*getAISettings\(\)[\s\S]*requestID = `summary-[\s\S]*onAIRewriteChunk[\s\S]*action: 'summarize'[\s\S]*5–10 seconds[\s\S]*requestedSession !== state\.documentSession[\s\S]*renderDocumentSummary\(summary\)/);
+	assert.match(summaryFunction, /documentSummaryPrivacyFindings = detectAISensitiveContent\(markdown\)[\s\S]*renderAISendPrivacy\('summary', markdown\)[\s\S]*documentSummaryConsent\.checked[\s\S]*prepareAIContent\(markdown, documentSummaryPrivacyFindings\)[\s\S]*text: prepared\.text[\s\S]*restoreAISensitiveContent/);
+  assert.doesNotMatch(summaryFunction, /openAIRewrite\(/);
+  assert.match(renderer, /function resetDocumentSummary\(hide = true\)[\s\S]*cancelAIRewrite[\s\S]*documentSummaryPanel\.classList\.add\('hidden'\)/);
+  assert.match(renderer, /event\.kind === 'summary'[\s\S]*activeDocumentSummaryRequestID[\s\S]*updateDocumentSummaryProgress\(\)/);
+  assert.match(renderer, /function displayDocument[\s\S]*resetDocumentSummary\(true\)[\s\S]*state\.documentSession \+= 1/);
+  assert.match(aiChunkingSource, /strings\.EqualFold\(strings\.TrimSpace\(input\.Action\), "summarize"\)[\s\S]*summarizeAIChunks[\s\S]*Kind: "summary"[\s\S]*5–10 seconds/);
+  assert.match(styles, /\.text-button\.document-summary-button \{[^}]*border:[^}]*color: var\(--accent-contrast\);[^}]*background: var\(--accent-strong\);[^}]*font-weight: 750/);
+  assert.match(styles, /\.document-summary-panel \{[^}]*border:[^}]*border-radius: 12px/);
+  assert.match(styles, /\.document-summary-content \{[^}]*max-height: 270px;[^}]*overflow-y: auto/);
   assert.match(renderer, /function closeDocumentActionsMenu\(\)[\s\S]*aria-expanded', 'false'/);
 });
 
@@ -448,6 +463,7 @@ test('unwritable documents explain the cause and offer Save Copy and Edit withou
 
 test('the editor header offers an exit editing button', () => {
   assert.match(html, /id="exitEditButton" class="text-button exit-edit-button"/);
+  assert.match(html, /id="editorSaveState"[\s\S]*id="saveAsButton"[\s\S]*id="exitEditButton"[\s\S]*id="documentHistoryButton"/);
   assert.match(html, /data-i18n="exitEdit"/);
   assert.match(renderer, /els\.exitEditButton\.addEventListener\('click', \(\) => \{\s*if \(state\.editing\) toggleEditor\(false\);/);
 });
@@ -777,19 +793,25 @@ test('rich clipboard HTML converts to Markdown and selected source has Markdown 
 
 test('AI Edit supports isolated official and third-party providers and can replace a selection or insert generated content at the cursor', () => {
   assert.match(html, /data-action="ai-settings"[\s\S]*data-i18n="aiAssistant"/);
-  assert.match(html, /id="aiEditButton"[\s\S]*data-i18n="aiEdit"/);
-  assert.match(html, /id="aiEditButton"[^>]*data-i18n-title="aiEditTitle"[^>]*title="选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。"/);
-  assert.match(renderer, /aiEditTitle: '选中内容后点击“AI 编辑”，即可仅针对所选内容进行编辑。'/);
-  assert.match(renderer, /aiEditTitle: 'Select text first, then choose AI Edit to edit only the selected content'/);
-  assert.match(html, /id="aiReviewButton"[\s\S]*data-i18n="aiReview"/);
+  assert.doesNotMatch(html, /id="aiEditButton"|id="aiReviewButton"/);
+  assert.match(html, /id="headingSelect"[\s\S]*id="aiToolbarButton"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[\s\S]*id="aiToolbarMenu"/);
+  assert.match(html, /data-ai-toolbar-action="generate"[\s\S]*data-ai-toolbar-action="edit"[\s\S]*data-ai-toolbar-action="proofread"[\s\S]*data-ai-toolbar-action="continue"[\s\S]*data-ai-toolbar-action="translate"[\s\S]*data-ai-toolbar-action="concise"[\s\S]*data-ai-toolbar-action="expand"[\s\S]*data-ai-toolbar-action="custom"/);
+  assert.match(renderer, /async function runAIToolbarAction\(action\)[\s\S]*action === 'proofread'[\s\S]*openAIDocumentReview\(\)[\s\S]*action === 'generate'[\s\S]*dialogTitleKey: 'aiGenerateDialogTitle'[\s\S]*tool: 'generate'[\s\S]*mode: 'insert'[\s\S]*action === 'continue'[\s\S]*promptText[\s\S]*dialogTitleKey: 'aiContinueDialogTitle'[\s\S]*tool: 'continue'[\s\S]*const rewriteTools = \{[\s\S]*edit: \{ action: 'polish'[\s\S]*translate: \{ action: 'translate'[\s\S]*concise: \{ action: 'concise'[\s\S]*expand: \{ action: 'expand'[\s\S]*custom: \{ action: 'custom'/);
+  assert.match(renderer, /function openAIToolbarMenu\(\)[\s\S]*getBoundingClientRect\(\)[\s\S]*setAttribute\('aria-expanded', 'true'\)/);
   assert.match(html, /id="aiSettingsDialog"[\s\S]*id="aiProvider"[\s\S]*value="deepseek"[\s\S]*value="zhipu"[\s\S]*value="qwen"[\s\S]*value="openai"[\s\S]*value="kimi"[\s\S]*id="setDefaultAIProvider"[\s\S]*id="aiKeyOnboarding"[\s\S]*id="aiMaskedAPIKey"[\s\S]*id="editAIAPIKey"[\s\S]*id="deleteAIAPIKey"[\s\S]*id="aiAPIKey"[\s\S]*id="refreshAIModels"[\s\S]*id="aiModel"[\s\S]*id="aiModelState"/);
   assert.doesNotMatch(html, /value="ollama"|value="openai-compatible"/);
-  assert.match(html, /id="aiRewriteDialog"[\s\S]*value="polish"[\s\S]*value="rewrite"[\s\S]*value="translate"[\s\S]*value="custom"/);
+  assert.match(html, /id="aiRewriteDialog"[\s\S]*id="aiRewriteAction" type="hidden" value="polish"/);
+  assert.doesNotMatch(html, /<select id="aiRewriteAction"|data-i18n="aiAction"/);
+  const targetLanguageSelect = html.match(/<select id="aiTargetLanguage">[\s\S]*?<\/select>/)?.[0] || '';
+  assert.equal((targetLanguageSelect.match(/<option value=/g) || []).length, 30);
+  assert.match(targetLanguageSelect, /简体中文（简体中文）[\s\S]*繁體中文（繁体中文）[\s\S]*English（英语）[\s\S]*Español（西班牙语）[\s\S]*हिन्दी（印地语）[\s\S]*العربية（阿拉伯语）[\s\S]*Français（法语）[\s\S]*বাংলা（孟加拉语）[\s\S]*Português（葡萄牙语）[\s\S]*Bahasa Indonesia（印度尼西亚语）[\s\S]*اردو（乌尔都语）[\s\S]*Русский（俄语）[\s\S]*Deutsch（德语）[\s\S]*日本語（日语）[\s\S]*한국어（韩语）[\s\S]*Tiếng Việt（越南语）[\s\S]*Türkçe（土耳其语）[\s\S]*Italiano（意大利语）[\s\S]*ไทย（泰语）[\s\S]*فارسی（波斯语）[\s\S]*Polski（波兰语）[\s\S]*Nederlands（荷兰语）[\s\S]*Українська（乌克兰语）[\s\S]*Bahasa Melayu（马来语）[\s\S]*Filipino（菲律宾语）[\s\S]*Kiswahili（斯瓦希里语）[\s\S]*தமிழ்（泰米尔语）[\s\S]*తెలుగు（泰卢固语）[\s\S]*मराठी（马拉地语）[\s\S]*ਪੰਜਾਬੀ（旁遮普语）/);
   assert.match(html, /id="aiCloudConsent" type="checkbox" checked/);
-  assert.match(html, /id="aiRewriteControls"[\s\S]*id="generateAIRewrite" class="large-button primary ai-generate-button"[\s\S]*id="aiCompareGrid"/);
+  assert.match(html, /id="aiTaskSettings"[\s\S]*id="aiInstructionField"[\s\S]*id="aiInstructionLabel"[\s\S]*id="aiInstructionHint"[\s\S]*id="aiLengthField"[\s\S]*id="aiLength"[\s\S]*class="ai-generate-row"[\s\S]*id="generateAIRewrite" class="large-button primary ai-generate-button"[\s\S]*id="aiCompareGrid"/);
+  assert.match(html, /<input id="aiInstruction" type="text" maxlength="1000"/);
+  assert.doesNotMatch(html, /<textarea id="aiInstruction"/);
   assert.match(html, /id="aiRewriteProgress"[\s\S]*id="aiRewriteProgressPhase"[\s\S]*id="aiRewriteProgressMeta"[\s\S]*id="aiRewriteProgressBar"[\s\S]*id="aiRewriteProgressPercent"/);
   assert.match(html, /id="generateAIRewrite"[\s\S]*id="replaceWithAIResult" class="large-button primary"/);
-  assert.match(html, /id="aiReviewDialog"[\s\S]*id="aiReviewSuggestions"[\s\S]*id="aiReviewConsent"[\s\S]*id="runAIReview"[\s\S]*id="applyAIReview"/);
+  assert.match(html, /id="aiReviewDialog"[\s\S]*id="aiReviewInstruction"[\s\S]*id="aiReviewSuggestions"[\s\S]*id="aiReviewConsent"[\s\S]*id="runAIReview"[\s\S]*id="applyAIReview"/);
   assert.match(html, /data-editor-ai[\s\S]*data-i18n="aiSelectionAction"/);
   assert.match(mainSource, /getAISettings:[\s\S]*Backend\.GetAISettings/);
   assert.match(mainSource, /getAIProviderSettings:[\s\S]*Backend\.GetAIProviderSettings/);
@@ -804,10 +826,18 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(mainSource, /rewriteWithAI:[\s\S]*Backend\.RewriteWithAI/);
   assert.match(mainSource, /reviewDocumentWithAI:[\s\S]*Backend\.ReviewDocumentWithAI/);
   assert.match(renderer, /function currentAIEditContext\(\)[\s\S]*selection\.empty[\s\S]*mode: 'insert'/);
-  assert.match(renderer, /async function openAIEditor\(\)[\s\S]*currentAIEditContext\(\)[\s\S]*context\.markdown \? 'polish' : 'custom'/);
-  assert.match(renderer, /async function openAIRewrite\(selection = editorClipboardSelection, preferredAction = ''\)[\s\S]*!currentAISettings\?\.hasApiKey[\s\S]*openAISettings\(\{ required: true \}\)[\s\S]*aiRewriteSelection = editContext/);
+  assert.match(renderer, /async function openAIRewrite\(selection = editorClipboardSelection, preferredAction = '', presetInstruction = ''\)[\s\S]*!currentAISettings\?\.hasApiKey[\s\S]*openAISettings\(\{ required: true \}\)[\s\S]*aiRewriteSelection = editContext/);
   assert.match(renderer, /aiOriginalTextField\.classList\.toggle\('hidden', insertMode\)/);
   assert.match(renderer, /aiCompareGrid\.classList\.toggle\('is-insert-mode', insertMode\)/);
+  assert.match(renderer, /const aiRewritePromptProfiles = \{[\s\S]*generate:[\s\S]*edit:[\s\S]*continue:[\s\S]*translate:[\s\S]*concise:[\s\S]*expand:[\s\S]*custom:/);
+  assert.match(html, /id="aiRequestSettings" class="ai-request-settings"[\s\S]*id="aiRewriteControls"[\s\S]*id="aiTaskSettings"[\s\S]*id="generateAIRewrite"/);
+  assert.match(renderer, /function updateAIRewriteControls\(\)[\s\S]*aiRequestSettings\.classList\.toggle\('has-language', action === 'translate'\)[\s\S]*aiInstructionField\.classList\.remove\('hidden'\)[\s\S]*aiInstructionLabel\.textContent[\s\S]*aiLengthField\.classList\.toggle\('hidden', !showLength\)/);
+  assert.match(renderer, /async function generateAIRewrite\(\)[\s\S]*if \(!instruction\)[\s\S]*const length = els\.aiLengthField\.classList\.contains\('hidden'\) \? '' : els\.aiLength\.value\.trim\(\)[\s\S]*instruction: length \? `\$\{instruction\}\\n\$\{t\('aiLengthInstruction', \{ length \}\)\}` : instruction/);
+  assert.doesNotMatch(renderer, /if \(!els\.aiLengthField\.classList\.contains\('hidden'\) && !length\)/);
+  assert.match(renderer, /aiLengthHint: '可填写字数、段落数或比例；留空表示不限制。'/);
+  for (const [key, label] of Object.entries({ aiGenerateDialogTitle: 'AI生成', aiContinueDialogTitle: 'AI续写', aiTranslateDialogTitle: 'AI翻译', aiConciseDialogTitle: 'AI精简', aiExpandDialogTitle: 'AI扩写', aiCustomDialogTitle: 'AI自定义' })) {
+    assert.match(renderer, new RegExp(`${key}: '${label}'`));
+  }
   assert.match(renderer, /els\.aiCloudConsent\.checked = true;/);
   assert.match(renderer, /function renderAISettingsKeyUI\(\)[\s\S]*aiKeySavedCard[\s\S]*maskedApiKey/);
   assert.match(renderer, /async function deleteAIAPIKey\(\)[\s\S]*aiSettingsInput\(true\)/);
@@ -823,8 +853,10 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(renderer, /async function generateAIRewrite\(\)[\s\S]*const requestNumber = \+\+aiRewriteRequest[\s\S]*onAIRewriteChunk[\s\S]*startAIRewriteProgress\(\)[\s\S]*requestNumber !== aiRewriteRequest/);
   assert.match(html, /id="aiDiffReview"[\s\S]*id="acceptAllAIDiff"[\s\S]*id="rejectAllAIDiff"[\s\S]*id="aiDiffList"/);
   assert.match(renderer, /function rebuildAIRewriteDiff\(\)[\s\S]*buildAITextDiff[\s\S]*renderAIRewriteDiff/);
+  assert.match(renderer, /function clearAIRewriteDiff\(\)[\s\S]*classList\.remove\('has-ai-diff-review'\)[\s\S]*replaceWithAIResult'[\s\S]*disabled = !els\.aiResultText\.value\.trim\(\)/);
+  assert.match(renderer, /function renderAIRewriteDiff\(\)[\s\S]*const showDiff = !insertMode && changes\.length > 0[\s\S]*classList\.toggle\('has-ai-diff-review', showDiff\)/);
   assert.match(renderer, /function replaceWithAIResult\(\)[\s\S]*applyAITextDiff\(aiRewriteDiffSegments\)/);
-  assert.match(renderer, /async function runAIDocumentReview\(\)[\s\S]*reviewDocumentWithAI\(\{ text: source \}\)[\s\S]*locateAIReviewSuggestions/);
+  assert.match(renderer, /async function runAIDocumentReview\(\)[\s\S]*const instruction = els\.aiReviewInstruction\.value\.trim\(\)[\s\S]*reviewDocumentWithAI\(\{ text: prepared\.text, instruction, requestId: activeAIReviewRequestID \}\)[\s\S]*locateAIReviewSuggestions/);
   assert.match(renderer, /function applySelectedAIReviewSuggestions\(\)[\s\S]*editorContent\(\) !== aiReviewSnapshot[\s\S]*hasOverlappingReviewSuggestions[\s\S]*changes: selected\.map/);
   assert.match(html, /id="rerunAIReview"[\s\S]*data-i18n="aiReviewAgain"/);
   const closeReview = renderer.slice(renderer.indexOf('function closeAIDocumentReview()'), renderer.indexOf('async function runAIDocumentReview()'));
@@ -843,6 +875,7 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(renderer, /async function changeAIProvider\(\)[\s\S]*getAIProviderSettings\(provider\)/);
   assert.match(styles, /\.ai-key-saved-card \{[^}]*grid-template-columns/);
   assert.match(styles, /\.ai-rewrite-progress \{[^}]*grid-template-columns/);
+  assert.match(styles, /\.ai-diff-list \{[^}]*flex: 1 1 auto;[^}]*grid-auto-rows: max-content;[^}]*overflow: auto/);
   assert.match(styles, /\.ai-default-provider-button\.active \{[^}]*background: var\(--accent-strong\)/);
   assert.match(styles, /\.ai-model-label \{[^}]*justify-content: space-between/);
   assert.match(styles, /\.ai-review-dialog \{[^}]*display: flex;[^}]*flex-direction: column/);
@@ -851,11 +884,35 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(styles, /\.ai-review-suggestions \{[^}]*flex: 0 0 auto;[^}]*overflow: visible/);
   assert.match(styles, /\.ai-review-comparison pre \{[^}]*height: auto;[^}]*max-height: 300px;[^}]*overflow-y: auto/);
   assert.match(styles, /\.ai-edit-button \{[^}]*color: var\(--accent-strong\)/);
-  assert.match(styles, /\.ai-rewrite-controls \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
-  assert.match(styles, /\.ai-generate-button \{[^}]*grid-column: 2/);
+  assert.match(styles, /\.editor-format-bar #aiToolbarButton \{[^}]*width: 57px;[^}]*color: var\(--accent-strong\)/);
+  assert.match(styles, /\.ai-toolbar-menu \{[^}]*width: 190px;[^}]*z-index: 90/);
+  assert.match(styles, /\.ai-toolbar-menu \.ai-toolbar-generate \{[^}]*background: var\(--accent-strong\);[^}]*font-weight: 750/);
+  assert.match(styles, /\.ai-request-settings \{[^}]*grid-template-columns: minmax\(220px, \.32fr\) minmax\(0, 1fr\) auto;[^}]*align-items: start/);
+  assert.match(styles, /\.ai-rewrite-controls \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(styles, /\.ai-task-settings \{[^}]*grid-template-columns: minmax\(0, 1fr\) 220px/);
+  assert.match(styles, /\.ai-instruction-field input,\s*\.ai-length-field input \{ height: 38px; \}/);
+  assert.match(styles, /\.ai-review-instruction textarea \{[^}]*min-height: 68px/);
+  assert.match(styles, /\.ai-generate-row \{[^}]*justify-content: flex-end;[^}]*align-self: start;[^}]*margin-top: 23px/);
   assert.match(styles, /\.ai-rewrite-dialog \{[^}]*width: 80vw;[^}]*height: 80vh/);
   assert.match(styles, /\.ai-compare-grid \{[^}]*grid-template-columns: 1fr 1fr/);
   assert.match(styles, /\.ai-compare-grid\.is-insert-mode \{ grid-template-columns: 1fr; \}/);
+  assert.match(styles, /\.dialog-backdrop\.has-ai-diff-review \.ai-compare-grid \{[^}]*flex: 0 0 104px/);
+  assert.match(styles, /\.dialog-backdrop\.has-ai-diff-review \.ai-diff-review \{[^}]*flex: 1 1 0;[^}]*max-height: none/);
+});
+
+test('AI privacy, chunk progress, paragraph review, and local version history are fully wired', () => {
+  assert.match(html, /id="documentHistoryButton"[\s\S]*id="documentHistoryDialog"[\s\S]*id="documentHistoryList"[\s\S]*id="restoreDocumentHistory"/);
+  assert.match(mainSource, /listDocumentVersions:[\s\S]*Backend\.ListDocumentVersions/);
+  assert.match(mainSource, /getDocumentVersion:[\s\S]*Backend\.GetDocumentVersion/);
+  assert.match(mainSource, /onAIProgress:[\s\S]*EventsOn\('ai:progress'/);
+  assert.match(html, /id="aiDiffFilter"[\s\S]*id="loadMoreAIDiff"/);
+  assert.match(renderer, /function renderAIRewriteDiff\(\)[\s\S]*aiDiffRenderLimit[\s\S]*data-ai-diff-locate/);
+  assert.match(renderer, /detectAISensitiveContent[\s\S]*prepareAIContent[\s\S]*restoreAISensitiveContent/);
+  assert.match(renderer, /window\.quilliteMarkdown\.onAIProgress\(handleAIProgress\)/);
+  assert.match(renderer, /function openDocumentHistory\(\)[\s\S]*listDocumentVersions[\s\S]*selectDocumentVersion/);
+  assert.match(renderer, /function restoreSelectedDocumentVersion\(\)[\s\S]*userEvent: 'input\.history-restore'/);
+  assert.match(styles, /\.document-history-layout \{[^}]*grid-template-columns/);
+  assert.match(styles, /\.ai-send-privacy \{[^}]*display: grid/);
 });
 
 test('spell check marks English errors and offers correction, ignore, and personal dictionary actions', () => {

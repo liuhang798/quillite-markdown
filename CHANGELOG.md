@@ -4,8 +4,19 @@ All notable changes to Quillite Markdown are documented here.
 
 ## [Unreleased]
 
+## [2.7.3] - 2026-09-11
+
 ### 简体中文
 
+- AI 生成、编辑、校对、续写、翻译、精简、扩写和自定义入口均提供与任务匹配的提示词输入；续写与扩写可选择填写目标字数，精简可选择填写保留比例或目标篇幅，留空时不限制。翻译要求改为紧凑的单行输入框，与目标语言和生成按钮同高对齐。修复目标语言列表展示 30 种、后端却只接受 4 种的问题，现已逐项支持全部可见语言。
+- 编辑器 AI 下拉菜单首位新增突出显示的“AI生成”，可输入自定义提示词生成 Markdown 文档内容，预览结果后确认插入当前光标位置，不会覆盖已有文字。
+- 修复“AI生成”弹窗误显示为“AI编辑”以及生成后“插入到光标位置”按钮无法点击的问题，并将“生成”按钮移至具体要求文本框下方。
+- AI 弹窗移除重复的“处理方式”选择，由工具栏中的 AI 功能直接确定生成、编辑、校对、续写、翻译、精简、扩写或自定义流程；各流程使用独立标题、输入范围和必要字段。
+- 阅读页首位新增醒目的“AI总结生成”入口，并采用文档内联速览：发送前复用敏感内容识别、可选脱敏和整篇文档发送确认，操作栏下方原位显示实时进度，完成后展示约 5–10 秒可读完的一句话概览与 3–5 个关键点，并可随时关闭；长文档先分段提炼再二次汇总，避免把多段摘要简单拼接。
+- AI 翻译的目标语言由 4 种扩展到 30 种世界常用语言，增加繁体中文、西班牙语、印地语、阿拉伯语、法语、孟加拉语、葡萄牙语、印尼语、乌尔都语等常用选项；每项均以“本地语言名（中文名称）”显示，便于识别不同文字。
+- 将编辑器标题栏的“历史版本”按钮调整到操作区最右侧，使保存状态、另存为和退出编辑保持连续排列。
+- 编辑器 AI 入口统一移到“正文／标题”选择框后的 AI 下拉菜单，集中提供 AI 编辑、校对、续写、翻译、精简、扩写和自定义功能；移除编辑器标题栏中重复的 AI 编辑与 AI 检查按钮。AI 续写会读取光标前的上下文并把新内容插入光标位置。
+- 修复 AI 编辑返回大量逐项修改时卡片被压缩成横线的问题；每条修改保持完整内容高度，超过 300 像素后在列表内部滚动。
 - 新增文档异常恢复：未保存的编辑内容会防抖写入独立的原子恢复快照，正常保存或明确放弃后自动清理；异常退出后启动时可选择恢复并继续编辑。大文档按规模延迟实时预览，暂停高成本全文拼写扫描，并避免每次按键复制整篇编辑缓冲区；预览跟随光标改用二分定位，降低长文档输入与导航卡顿。
 - 统一 AI 设置中服务与模型下拉框的高度、字体和箭头，修复 macOS/WebKit 原生样式不一致。DeepSeek 未配置 Key 时显示两个内置候选并明确提示尚未查询账号；保存或测试连接保存 Key 后加载实际模型，刷新失败保留上次列表，快速切换服务或关闭弹窗时忽略过期查询结果。
 - 新增第一批第三方 AI 接入：阿里云百炼、硅基流动、OpenRouter 与自定义 OpenAI 兼容接口。百炼支持官方公共地址、业务空间及 Token Plan 兼容地址，自定义接口支持模型手动填写和 `/models` 自动发现；每个平台 Key 独立保存在系统凭据库。固定平台地址不可篡改，自定义地址强制 HTTPS，仅 localhost 允许 HTTP，并拒绝地址中的凭据、查询参数和具体请求端点。
@@ -14,9 +25,22 @@ All notable changes to Quillite Markdown are documented here.
 - “测试连接”升级为分步骤连接诊断，分别展示服务地址、API Key、模型列表和所选模型实际调用结果，并针对鉴权失败与地址错误提供可理解的提示。诊断可直接使用尚未保存的 Key，且不会额外持久化凭据。
 - 模型列表成功查询后会按服务与地址缓存七天，接口临时不可用时显示带时间标记的缓存候选；关闭正在生成的 AI 编辑或 AI 检查会立即取消底层网络请求，不再只关闭界面后继续占用连接。
 - AI 编辑改为兼容 OpenAI SSE 的实时流式输出，生成内容会逐段显示，服务完成或用户取消时立即结束连接；AI 结果新增逐项差异审阅，可分别接受修改或保留原文，再一次性安全写回当前选区。
+- 新增纯本地文档版本历史：保存前自动压缩保留旧版本，可在编辑器中比较并恢复；单文档最多 30 版、全局最多 100 MB，历史记录不会发送到网络。
+- AI 编辑与文档检查支持最长 200 万字符的 Markdown 分段处理，按标题和段落切分、跳过围栏代码块并显示真实分段进度，单段异常会自动重试一次。
+- AI 修改审阅升级为段落级修改卡片，支持全部／已接受／保留原文筛选、分批加载和一键定位原文，长结果不再一次渲染全部节点。
+- 新增 AI 发送前隐私检查，可识别 API Key、邮箱、手机号、身份证号和银行卡号；用户可逐项决定是否用可还原占位符脱敏，AI 返回后仅在本机恢复原值。
 
 ### English
 
+- Added task-specific prompts to AI Generate, Edit, Proofread, Continue, Translate, Condense, Expand, and Custom. Continue and Expand optionally accept a target length, while Condense optionally accepts a retention ratio or target size; leaving it blank applies no limit. Translation instructions now use a compact single-line field aligned in height with the target-language selector and Generate button. Fixed the backend to support all 30 visible translation targets instead of accepting only four.
+- Added a prominent AI Generate action at the top of the editor AI menu. It writes Markdown from a custom prompt and inserts the reviewed result at the current cursor without replacing existing text.
+- Fixed the AI Generate dialog title and its disabled insert-at-cursor action, and moved Generate below the instruction field.
+- Removed the redundant action selector from the AI dialog. Each toolbar command now opens its dedicated generate, edit, proofread, continue, translate, condense, expand, or custom workflow with the correct title, scope, and required fields.
+- Added a prominent AI Summary action at the start of the reader toolbar and made it an inline brief. Before sending, it reuses sensitive-content detection, optional redaction, and explicit whole-document consent. Progress appears below the document actions, then the same panel shows a closable 5–10 second overview with one lead sentence and 3–5 key points. Long documents are summarized by section and consolidated instead of concatenating partial summaries.
+- Expanded AI translation targets from four to 30 widely used languages, including Traditional Chinese, Spanish, Hindi, Arabic, French, Bengali, Portuguese, Indonesian, Urdu, and more. Every option now pairs its native label with a Chinese-language annotation for easier identification.
+- Moved the Version History button to the far right of the editor header actions, keeping save status, Save As, and Exit Editing together.
+- Consolidated editor AI actions into an AI dropdown beside the paragraph/heading picker, covering edit, proofread, continue, translate, condense, expand, and custom actions; removed the duplicate AI Edit and AI Check header buttons. AI Continue reads context before the cursor and inserts only new content at the cursor.
+- Fixed AI edit review cards collapsing into horizontal lines when many changes are returned; each change now keeps its full content height and long lists scroll internally after 300 pixels.
 - Added crash recovery for documents: unsaved edits are debounced into a separate atomic snapshot, cleared after a successful save or an explicit discard, and offered for restoration after an abnormal exit. Large documents defer live-preview work by size, pause expensive full-document spell scans, avoid copying the entire editor buffer on every keystroke, and use binary lookup for cursor-following preview navigation.
 - Standardized AI provider/model picker heights, fonts, and arrows for macOS/WebKit. DeepSeek shows two explicitly unverified built-in candidates before a key is configured. Saving a key (including through Test connection) loads account models; failed refreshes retain the previous list, and stale discovery results cannot overwrite a different provider or a closed dialog.
 - Added the first third-party AI integrations: Alibaba Cloud Model Studio, SiliconFlow, OpenRouter, and custom OpenAI-compatible endpoints. Model Studio supports its public, workspace, and Token Plan compatible URLs; custom endpoints allow manual model IDs plus `/models` discovery. Keys remain isolated in the native credential vault. Fixed provider URLs cannot be overridden, custom URLs require HTTPS except on localhost, and embedded credentials, queries, or request-specific paths are rejected.
@@ -25,6 +49,10 @@ All notable changes to Quillite Markdown are documented here.
 - Test Connection is now a staged connection diagnostic covering the service endpoint, API key, model list, and a real request to the selected model, with clearer authentication and endpoint guidance. Diagnostics can use an unsaved draft key without persisting it.
 - Successful model lists are cached for seven days per provider and endpoint, with a visible cache timestamp when live discovery is unavailable. Closing an active AI Edit or AI Check now cancels the underlying network request instead of merely hiding the dialog.
 - AI Edit now streams OpenAI-compatible SSE output into the result pane as it arrives and ends promptly on provider completion or cancellation. A per-change diff review lets users accept individual revisions or retain the original fragments before applying once to the current selection.
+- Added fully local document version history. Each save can retain a compressed pre-save revision for comparison and restoration, capped at 30 versions per document and 100 MB globally; history never leaves the device.
+- AI Edit and AI Check now process Markdown documents up to two million characters in heading/paragraph chunks, preserve fenced code locally, report real chunk progress, and automatically retry a failed chunk once.
+- AI change review now groups nearby edits by paragraph, filters accepted or retained changes, renders results in batches, and locates the original text in one click.
+- Added a pre-send AI privacy check for API keys, email addresses, phone numbers, ID numbers, and bank cards. Users choose each value to redact with a reversible placeholder, and originals are restored locally after the response.
 
 ## [2.7.2] - 2026-09-08
 
@@ -894,3 +922,5 @@ All notable changes to Quillite Markdown are documented here.
 [2.6.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.6.2
 [2.7.0]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.0
 [2.7.1]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.1
+[2.7.2]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.2
+[2.7.3]: https://github.com/liuhang798/quillite-markdown/releases/tag/v2.7.3

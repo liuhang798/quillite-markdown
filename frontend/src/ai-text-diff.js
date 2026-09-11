@@ -10,6 +10,30 @@ function fallbackDiff(original, revised) {
   return [{ type: 'change', original, replacement: revised, accepted: true }];
 }
 
+function groupNearbyChanges(segments) {
+  const grouped = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = segments[index];
+    const separator = segments[index + 1];
+    const next = segments[index + 2];
+    const sameParagraphSeparator = separator?.type === 'equal'
+      && separator.original.length <= 2000
+      && !/(?:^|\n)[\t ]*\n/.test(separator.original);
+    if (current.type === 'change' && sameParagraphSeparator && next?.type === 'change') {
+      grouped.push({
+        type: 'change',
+        original: current.original + separator.original + next.original,
+        replacement: current.replacement + separator.replacement + next.replacement,
+        accepted: current.accepted !== false && next.accepted !== false
+      });
+      index += 2;
+    } else {
+      grouped.push(current);
+    }
+  }
+  return grouped.length === segments.length ? grouped : groupNearbyChanges(grouped);
+}
+
 export function buildAITextDiff(original = '', revised = '') {
   if (original === revised) return fallbackDiff(original, revised);
   const before = splitLines(original);
@@ -69,7 +93,7 @@ export function buildAITextDiff(original = '', revised = '') {
   }
   flushChange();
   flushUnchanged();
-  return segments;
+  return groupNearbyChanges(segments);
 }
 
 export function applyAITextDiff(segments = []) {

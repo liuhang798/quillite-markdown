@@ -127,6 +127,100 @@ test('AI replacement rejects matching text from another document session', () =>
   assert.equal(context.els.aiRewriteStatus.textContent, 'aiSelectionChanged');
 });
 
+test('AI generation inserts its result at the captured cursor position', () => {
+  let transaction;
+  let closed = false;
+  let toast;
+  const context = vm.createContext({
+    state: { documentSession: 3, editing: true },
+    aiRewriteSelection: { documentSession: 3, from: 5, to: 5, markdown: '', mode: 'insert' },
+    aiRewriteDiffSegments: [],
+    codeEditor: { state: { doc: { sliceString: () => '', length: 10 } }, dispatch: value => { transaction = value; } },
+    els: { aiRewriteStatus: {}, aiResultText: { value: 'generated text' } },
+    changedAITextSegments: () => [], applyAITextDiff: () => '',
+    closeAIRewrite: () => { closed = true; },
+    showToast: (...args) => { toast = args; },
+    t: key => key,
+  });
+  vm.runInContext(source.slice(source.indexOf('function replaceWithAIResult('), source.indexOf('function aiReviewCategoryLabel(')), context);
+  context.replaceWithAIResult();
+  assert.deepEqual(JSON.parse(JSON.stringify(transaction.changes)), { from: 5, to: 5, insert: 'generated text' });
+  assert.deepEqual(JSON.parse(JSON.stringify(transaction.selection)), { anchor: 19 });
+  assert.equal(transaction.userEvent, 'input.ai');
+  assert.equal(closed, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(toast)), ['aiContentInserted', 'success', 3600]);
+});
+
+test('each AI toolbar command selects one dedicated workflow without an action picker', async () => {
+  const calls = [];
+  const context = vm.createContext({
+    state: { documentSession: 7, editing: true },
+    codeEditor: {
+      state: {
+        selection: { main: { head: 8 } },
+        doc: { sliceString: () => 'context' }
+      }
+    },
+    closeAIToolbarMenu: () => calls.push(['close']),
+    openAIDocumentReview: async () => calls.push(['proofread']),
+    openAIRewrite: async (...args) => calls.push(['rewrite', ...args]),
+    currentAIEditContext: () => ({ documentSession: 7, from: 1, to: 5, markdown: 'text', mode: 'replace' }),
+    showToast: (...args) => calls.push(['toast', ...args]),
+    focusCodeEditor: () => calls.push(['focus']),
+    t: key => key,
+  });
+  vm.runInContext(source.slice(source.indexOf('async function runAIToolbarAction('), source.indexOf('async function openAIDocumentSummary(')), context);
+
+  await context.runAIToolbarAction('proofread');
+  assert.deepEqual(calls.splice(0).map(item => JSON.parse(JSON.stringify(item))), [['close'], ['proofread']]);
+
+  await context.runAIToolbarAction('generate');
+  let call = calls.splice(0).map(item => JSON.parse(JSON.stringify(item)));
+  assert.equal(call[1][0], 'rewrite');
+  assert.deepEqual(call[1][1], { documentSession: 7, from: 8, to: 8, markdown: '', dialogTitleKey: 'aiGenerateDialogTitle', tool: 'generate', mode: 'insert' });
+  assert.equal(call[1][2], 'custom');
+
+  await context.runAIToolbarAction('continue');
+  call = calls.splice(0).map(item => JSON.parse(JSON.stringify(item)));
+  assert.deepEqual(call[1][1], { documentSession: 7, from: 8, to: 8, markdown: '', promptText: 'context', dialogTitleKey: 'aiContinueDialogTitle', tool: 'continue', mode: 'insert' });
+  assert.equal(call[1][2], 'custom');
+  assert.equal(call[1][3], 'aiContinueInstruction');
+
+  const expected = {
+    edit: ['polish', 'aiRewriteTitle'],
+    translate: ['translate', 'aiTranslateDialogTitle'],
+    concise: ['concise', 'aiConciseDialogTitle'],
+    expand: ['expand', 'aiExpandDialogTitle'],
+    custom: ['custom', 'aiCustomDialogTitle'],
+  };
+  for (const [tool, [action, titleKey]] of Object.entries(expected)) {
+    await context.runAIToolbarAction(tool);
+    call = calls.splice(0).map(item => JSON.parse(JSON.stringify(item)));
+    assert.equal(call[1][0], 'rewrite');
+    assert.equal(call[1][1].tool, tool);
+    assert.equal(call[1][1].dialogTitleKey, titleKey);
+    assert.equal(call[1][1].mode, 'replace');
+    assert.equal(call[1][2], action);
+  }
+});
+
+test('selection-based AI tools do not silently become document generators', async () => {
+  const calls = [];
+  const context = vm.createContext({
+    state: { documentSession: 2, editing: true },
+    codeEditor: { state: { selection: { main: { head: 0 } }, doc: { sliceString: () => '' } } },
+    closeAIToolbarMenu() {}, openAIDocumentReview: async () => {}, openAIRewrite: async () => calls.push('rewrite'),
+    currentAIEditContext: () => ({ documentSession: 2, from: 0, to: 0, markdown: '', mode: 'insert' }),
+    showToast: key => calls.push(key), focusCodeEditor: () => calls.push('focus'), t: key => key,
+  });
+  vm.runInContext(source.slice(source.indexOf('async function runAIToolbarAction('), source.indexOf('async function openAIDocumentSummary(')), context);
+  for (const tool of ['edit', 'translate', 'concise', 'expand', 'custom']) {
+    calls.length = 0;
+    await context.runAIToolbarAction(tool);
+    assert.deepEqual(calls, ['aiNeedSelection', 'focus']);
+  }
+});
+
 test('saving a reference copy restores editable controls and its visible path', async () => {
   const { context, state, write } = harness();
   state.editing = false;

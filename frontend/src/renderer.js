@@ -24,9 +24,11 @@ import { createTableModel, findMarkdownTableAt, findMarkdownTables, removeTableC
 import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from './rich-clipboard.js';
 import { hasOverlappingReviewSuggestions, locateAIReviewSuggestions } from './ai-review.js';
 import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-text-diff.js';
+import { detectAISensitiveContent, redactAISensitiveContent, restoreAISensitiveContent, restoreAISuggestions } from './ai-privacy.js';
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
 import { documentHasDiagrams, documentPerformanceProfile } from './document-performance.js';
+import { documentVersionLineDifference, historyPreviewText } from './version-history.js';
 
 const $ = selector => document.querySelector(selector);
 const DOC_WIDTH_LEVELS = ['narrow', 'medium', 'wide', 'full'];
@@ -89,12 +91,28 @@ let editorClipboardSelection = null;
 let aiRewriteSelection = null;
 let pendingAIRewriteSelection = null;
 let pendingAIRewriteAction = '';
+let pendingAIRewriteInstruction = '';
 let aiRewriteRequest = 0;
 let aiRewriteProgressTimer = 0;
 let aiRewriteStartedAt = 0;
 let aiRewriteStreamCleanup = null;
 let aiRewriteDiffSegments = [];
 let aiRewriteStreaming = false;
+let aiRewritePrivacyFindings = [];
+let aiReviewPrivacyFindings = [];
+let documentSummaryPrivacyFindings = [];
+let aiDiffRenderLimit = 20;
+let activeAIRewriteRequestID = '';
+let activeAIReviewRequestID = '';
+let aiRewriteServerProgress = null;
+let aiReviewServerProgress = null;
+let documentSummaryRequest = 0;
+let documentSummaryStartedAt = 0;
+let documentSummaryProgressTimer = 0;
+let documentSummaryStreamCleanup = null;
+let documentSummaryServerProgress = null;
+let activeDocumentSummaryRequestID = '';
+let pendingAIDocumentSummary = false;
 let pendingAIDocumentReview = false;
 let resumeAIDocumentReviewAfterSettings = false;
 let aiReviewSnapshot = '';
@@ -104,6 +122,9 @@ let aiReviewApplied = false;
 let aiReviewRequest = 0;
 let aiReviewProgressTimer = 0;
 let aiReviewStartedAt = 0;
+let documentVersions = [];
+let selectedDocumentVersion = null;
+let documentHistorySession = 0;
 let currentAISettings = null;
 let aiSettingsEditingKey = false;
 let aiModelLoadRequest = 0;
@@ -297,7 +318,7 @@ const translations = {
     library: '文档库', libraryViews: '文档库视图', recentReading: '最近阅读', favoriteDocuments: '收藏文档', resourceExplorer: '资源浏览器', recentTab: '最近', favoritesTab: '收藏', explorerTab: '资源', explorerTabTitle: '打开资源浏览器；再次点击可更改文件夹', refreshExplorer: '刷新资源浏览器', collapseSidebar: '收起侧栏', expandSidebar: '展开侧栏', referenceDocuments: '参考文档', chartExamples: '图表范例', formulaExamples: '公式范例', formatExamples: '格式范例', chartExamplesTitle: '查看全部图表格式范例', formulaExamplesTitle: '查看全部学科公式范例', formatExamplesTitle: '查看全部 Markdown 文本格式范例', chartExamplesDescription: '覆盖 Mermaid 与数据图表', formulaExamplesDescription: '覆盖全部学科公式', formatExamplesDescription: '覆盖所有文本与排版格式', referenceOpenFailed: '无法打开参考文档', referenceReadOnly: '内置参考文档为只读；如需修改，请先另存为副本', referenceReadOnlyTitle: '内置参考文档（只读）', openDocumentFolder: '打开文档文件夹',
     browseMarkdown: '集中浏览你的 Markdown', welcomeTitle: '阅读与编辑，都更简单',
     welcomeDescription: '一个专注、舒适的 Markdown 阅读与编辑空间。<br>打开文档，沉浸在文字本身。', openMarkdown: '打开 Markdown 文档',
-    openFolder: '打开文件夹', quickOpenHint: '快速打开，也可以将文件拖到这里', revealFile: '定位文件', revealFileTitle: '在资源管理器中显示', closePreview: '关闭预览', closePreviewTitle: '关闭当前预览并返回首页',
+    openFolder: '打开文件夹', quickOpenHint: '快速打开，也可以将文件拖到这里', revealFile: '定位文件', revealFileTitle: '在资源管理器中显示', aiSummaryGenerate: 'AI总结生成', aiSummaryGenerateTitle: '使用 AI 总结当前文档', aiSummaryDialogTitle: 'AI文档总结', aiSummaryPanelTitle: 'AI 文档速览', aiSummaryClose: '关闭文档速览', aiSummaryReading: 'AI 正在快速阅读文档', aiSummaryAnalysing: '正在提炼关键信息', aiSummaryFinishing: '正在生成快速摘要', aiSummaryProgressMeta: '{provider} · {model} · 已用时 {seconds} 秒', aiSummaryReady: '约 5–10 秒可读完', aiSummaryGenerating: '总结中…', aiSummaryFailed: 'AI 总结失败', aiSummaryConsent: '我确认将当前整篇文档发送给所选 AI 服务生成速览', aiSummaryConfirm: '确认并开始总结', aiSummaryNeedConsent: '请先确认同意发送当前文档', closePreview: '关闭预览', closePreviewTitle: '关闭当前预览并返回首页',
     homeQuickStart: '快速上手', homeExamplesTitle: '从完整案例开始', homeExamplesDescription: '打开内置案例，直接查看所有图表、学科公式和 Markdown 排版格式。', homeShortcutEyebrow: '效率指南', homeShortcutsTitle: '功能快捷键', homeShortcutsDescription: '下列快捷键在对应页面生效。', homeShortcutsDescriptionWindows: '当前为 Windows / Linux 快捷键，使用 Ctrl 组合键。', homeShortcutsDescriptionMac: '当前为 macOS 快捷键，使用 Cmd 组合键。',
     shortcutFiles: '文档与文件', shortcutReading: '阅读与编辑', shortcutFormatting: '文字格式', shortcutNew: '新建文档', shortcutOpen: '打开文档', shortcutOpenFolder: '打开文件夹', shortcutSave: '保存文档', shortcutSaveAs: '另存为', shortcutPrint: '打印文档', shortcutEditPreview: '切换编辑/预览', shortcutSearch: '查找内容', shortcutZoomIn: '放大文字', shortcutZoomOut: '缩小文字', shortcutZoomReset: '恢复字号', shortcutUndo: '撤回', shortcutRedo: '重做', shortcutBold: '加粗', shortcutItalic: '斜体', shortcutLink: '插入链接', shortcutStrike: '删除线', shortcutHighlight: '高亮',
     print: '打印', printTitle: '打印文档', moreDocumentActions: '更多', readingEnd: '阅读结束', livePreview: '实时预览', readingEffect: '阅读效果', previewLocateHint: '右键定位到编辑器 · 第 {line} 行', markdownEditorLabel: 'MARKDOWN 编辑器',
@@ -321,7 +342,7 @@ const translations = {
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.7.2', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.7.3', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -346,7 +367,7 @@ const translations = {
     library: 'LIBRARY', libraryViews: 'Library views', recentReading: 'Recent', favoriteDocuments: 'Favorites', resourceExplorer: 'Explorer', recentTab: 'Recent', favoritesTab: 'Favorites', explorerTab: 'Explorer', explorerTabTitle: 'Open the explorer; click again to choose another folder', refreshExplorer: 'Refresh explorer', collapseSidebar: 'Collapse sidebar', expandSidebar: 'Expand sidebar', referenceDocuments: 'EXAMPLE DOCUMENTS', chartExamples: 'Charts', formulaExamples: 'Formulas', formatExamples: 'Formatting', chartExamplesTitle: 'Open examples for every supported diagram and chart', formulaExamplesTitle: 'Open examples for every subject formula', formatExamplesTitle: 'Open examples for all supported Markdown formatting', chartExamplesDescription: 'Mermaid and data charts', formulaExamplesDescription: 'Every subject formula', formatExamplesDescription: 'All text and layout formats', referenceOpenFailed: 'Unable to open the example document', referenceReadOnly: 'Built-in examples are read-only. Save a copy before editing.', referenceReadOnlyTitle: 'Built-in example (read-only)', openDocumentFolder: 'Open Document Folder',
     browseMarkdown: 'Browse your Markdown collection', welcomeTitle: 'Reading and editing, made simpler',
     welcomeDescription: 'A calm, focused space for reading and editing Markdown.<br>Open a document and stay with the words.', openMarkdown: 'Open Markdown Document',
-    openFolder: 'Open Folder', quickOpenHint: 'Quick open, or drop a file here', revealFile: 'Show File', revealFileTitle: 'Show in File Explorer', closePreview: 'Close Preview', closePreviewTitle: 'Close this preview and return home',
+    openFolder: 'Open Folder', quickOpenHint: 'Quick open, or drop a file here', revealFile: 'Show File', revealFileTitle: 'Show in File Explorer', aiSummaryGenerate: 'AI Summary', aiSummaryGenerateTitle: 'Summarize the current document with AI', aiSummaryDialogTitle: 'AI Document Summary', aiSummaryPanelTitle: 'AI Document Brief', aiSummaryClose: 'Close document brief', aiSummaryReading: 'AI is quickly reading the document', aiSummaryAnalysing: 'Extracting the key information', aiSummaryFinishing: 'Preparing a quick brief', aiSummaryProgressMeta: '{provider} · {model} · {seconds}s elapsed', aiSummaryReady: 'About a 5–10 second read', aiSummaryGenerating: 'Summarizing…', aiSummaryFailed: 'AI summary failed', aiSummaryConsent: 'I agree to send the current document to the selected AI provider to create a brief', aiSummaryConfirm: 'Confirm & Summarize', aiSummaryNeedConsent: 'Confirm before sending the current document', closePreview: 'Close Preview', closePreviewTitle: 'Close this preview and return home',
     homeQuickStart: 'QUICK START', homeExamplesTitle: 'Start with complete examples', homeExamplesDescription: 'Open the built-in examples to explore every chart, subject formula, and Markdown formatting style.', homeShortcutEyebrow: 'PRODUCTIVITY GUIDE', homeShortcutsTitle: 'Keyboard shortcuts', homeShortcutsDescription: 'The following shortcuts apply on their corresponding screens.', homeShortcutsDescriptionWindows: 'Windows / Linux shortcuts are shown. Use the Ctrl modifier.', homeShortcutsDescriptionMac: 'macOS shortcuts are shown. Use the Cmd modifier.',
     shortcutFiles: 'Documents & files', shortcutReading: 'Reading & editing', shortcutFormatting: 'Text formatting', shortcutNew: 'New document', shortcutOpen: 'Open document', shortcutOpenFolder: 'Open folder', shortcutSave: 'Save document', shortcutSaveAs: 'Save As', shortcutPrint: 'Print document', shortcutEditPreview: 'Toggle edit/preview', shortcutSearch: 'Find content', shortcutZoomIn: 'Increase text size', shortcutZoomOut: 'Decrease text size', shortcutZoomReset: 'Reset text size', shortcutUndo: 'Undo', shortcutRedo: 'Redo', shortcutBold: 'Bold', shortcutItalic: 'Italic', shortcutLink: 'Insert link', shortcutStrike: 'Strikethrough', shortcutHighlight: 'Highlight',
     print: 'Print', printTitle: 'Print document', moreDocumentActions: 'More', readingEnd: 'End of document', livePreview: 'LIVE PREVIEW', readingEffect: 'Rendered document', previewLocateHint: 'Right-click to locate in the editor · Line {line}', markdownEditorLabel: 'MARKDOWN EDITOR',
@@ -370,7 +391,7 @@ const translations = {
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.7.2', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.7.3', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -391,6 +412,7 @@ const translations = {
 };
 
 Object.assign(translations['zh-CN'], {
+  aiToolbarTitle: '打开 AI 工具', aiToolbarMenuLabel: 'AI 工具', aiToolbarGenerate: 'AI生成', aiToolbarGenerateHint: '提示词写文档', aiToolbarEdit: 'AI编辑', aiToolbarProofread: 'AI校对', aiToolbarContinue: 'AI续写', aiToolbarTranslate: 'AI翻译', aiToolbarConcise: 'AI精简', aiToolbarExpand: 'AI扩写', aiToolbarCustom: 'AI自定义', aiContinueInstruction: '根据光标前的上下文自然续写。只返回需要插入的新 Markdown 内容，不要重复已有上下文。', aiContinueNeedContext: '请先在光标前输入一些内容，再使用 AI 续写', aiContinueDialogTitle: 'AI续写', aiTranslateDialogTitle: 'AI翻译', aiConciseDialogTitle: 'AI精简', aiExpandDialogTitle: 'AI扩写', aiCustomDialogTitle: 'AI自定义',
   flowchartSelectAll: '全选',
   flowchartSelectAllHint: '选择全部节点并整体移动',
   flowchartMultiSelected: '已选择 {count} 个节点，拖动任一节点可整体移动。',
@@ -420,6 +442,7 @@ Object.assign(translations['zh-CN'], {
   exportDescriptionPdf: '直接生成 PDF，并根据 H1–H6 标题写入可点击的书签目录。'
 });
 Object.assign(translations.en, {
+  aiToolbarTitle: 'Open AI tools', aiToolbarMenuLabel: 'AI TOOLS', aiToolbarGenerate: 'AI Generate', aiToolbarGenerateHint: 'Write from a prompt', aiToolbarEdit: 'AI Edit', aiToolbarProofread: 'AI Proofread', aiToolbarContinue: 'AI Continue', aiToolbarTranslate: 'AI Translate', aiToolbarConcise: 'AI Condense', aiToolbarExpand: 'AI Expand', aiToolbarCustom: 'AI Custom', aiContinueInstruction: 'Continue naturally from the context before the cursor. Return only the new Markdown to insert and do not repeat the existing context.', aiContinueNeedContext: 'Enter some content before the cursor before using AI Continue', aiContinueDialogTitle: 'AI Continue', aiTranslateDialogTitle: 'AI Translate', aiConciseDialogTitle: 'AI Condense', aiExpandDialogTitle: 'AI Expand', aiCustomDialogTitle: 'AI Custom',
   flowchartSelectAll: 'Select all',
   flowchartSelectAllHint: 'Select every node and move them together',
   flowchartMultiSelected: '{count} nodes selected. Drag any selected node to move them together.',
@@ -457,12 +480,20 @@ Object.assign(translations['zh-CN'], {
   aiKeyGuideTitle: '填写所选服务的 API Key', aiKeyGuideHint: '前往所选 AI 服务的开放平台创建 Key，然后粘贴到下方。Key 仅保存在系统凭据库。', aiKeyRequiredGuide: '首次使用 AI 编辑，请先设置所选服务的 API Key。', aiReplacingKeyHint: '输入新的 Key，保存后将替换当前服务的 Key。', aiKeyRequired: '请输入所选服务的 API Key', aiSaveAndEnable: '保存并启用', aiSaveNewKey: '保存新 Key', aiEditKey: '修改', aiDeleteKey: '删除', aiDeleteKeyConfirm: '确定删除所选服务已保存的 API Key 吗？', aiKeyDeleted: 'API Key 已删除', aiKeyDeleteFailed: 'API Key 删除失败', aiDefaultModel: '默认模型', aiSetDefaultModel: '设为默认模型', aiDefaultModelChanged: '已将 {provider} 设为默认模型', aiDefaultModelChangeFailed: '无法设置默认模型',
   aiPrivacyNote: '只有你主动选择或确认检查的文档内容会发送给所选 AI 服务；不同服务的 API Key 独立保存在系统凭据库，不会写入偏好设置、日志或文档。', aiTestConnection: '诊断连接', aiTestingConnection: '正在逐项诊断连接…', aiConnectionSuccess: '全部关键检查已通过', aiConnectionFailed: '连接诊断未通过', aiDiagnosticsTitle: '连接诊断', aiDiagnosticsPassed: '配置可用', aiDiagnosticsFailed: '发现需要处理的问题', aiDiagnosticEndpoint: '服务地址', aiDiagnosticCredential: 'API Key', aiDiagnosticModels: '模型列表', aiDiagnosticChat: '模型调用', aiDiagnosticEndpointOK: '地址格式与安全要求检查通过', aiDiagnosticCredentialOK: '已使用当前服务的 Key 进行本次检查', aiDiagnosticModelsOK: '已获取 {count} 个兼容文本模型', aiDiagnosticChatOK: '所选模型已成功完成一次实际请求', aiDiagnosticAuthError: 'API Key 无效或当前账号没有访问权限。', aiDiagnosticNotFoundError: '接口地址不存在，请确认 Base URL 不包含具体的请求路径。', aiModelCacheUsed: '实时查询失败，正在显示 {count} 个缓存模型（缓存于 {time}）',
   aiSettingsSaved: 'AI 服务与 API Key 已保存', aiSettingsSaveFailed: 'AI 设置保存失败',
-  aiRewriteTitle: 'AI编辑', aiAction: '处理方式', aiActionPolish: '润色', aiActionRewrite: '改写', aiActionConcise: '精简', aiActionExpand: '扩写', aiActionSummarize: '总结', aiActionTranslate: '翻译', aiActionCustom: '自定义要求',
+  aiRewriteTitle: 'AI编辑', aiGenerateDialogTitle: 'AI生成', aiAction: '处理方式', aiActionPolish: '润色', aiActionRewrite: '改写', aiActionConcise: '精简', aiActionExpand: '扩写', aiActionSummarize: '总结', aiActionTranslate: '翻译', aiActionCustom: '自定义要求',
   aiTargetLanguage: '目标语言', aiInstruction: '具体要求', aiInstructionPlaceholder: '例如：改成更专业、友好的产品说明', aiOriginalText: '原文', aiResultText: 'AI 结果', aiResultPlaceholder: '生成后可在这里继续微调',
+  aiPromptGenerateLabel: '写作提示词', aiPromptGeneratePlaceholder: '例如：写一份产品上线公告，包含背景、主要功能和使用方法', aiPromptGenerateHint: '说明主题、用途、结构、语气及必须包含的信息。',
+  aiPromptEditLabel: '编辑要求', aiPromptEditPlaceholder: '例如：改成更专业、清晰的产品说明，保留数据和 Markdown 格式', aiPromptEditHint: '说明要优化的表达、结构、语气或重点。', aiPromptEditDefault: '优化选中文字的表达和结构，修正语法，使内容更清晰自然，但不改变原意。',
+  aiPromptContinueLabel: '续写方向', aiPromptContinuePlaceholder: '例如：继续说明实施步骤与风险控制，保持当前专业语气', aiPromptContinueHint: '说明接下来写什么、使用什么语气以及需要覆盖的要点。', aiPromptContinueDefault: '沿当前内容的逻辑自然续写，不重复已有内容。',
+  aiPromptTranslateLabel: '翻译要求', aiPromptTranslatePlaceholder: '例如：使用正式商务语气，产品名和 API 字段保持原文', aiPromptTranslateHint: '可指定语气、术语翻译规则和必须保留的内容。', aiPromptTranslateDefault: '准确、自然地翻译，保持术语一致，并保留 Markdown、代码、链接和技术标识。',
+  aiPromptConciseLabel: '精简要求', aiPromptConcisePlaceholder: '例如：删除重复说明，保留全部数字、决定和风险提示', aiPromptConciseHint: '说明哪些内容必须保留，以及允许删除或合并的部分。', aiPromptConciseDefault: '删除重复和次要表述，保留关键事实、数据、决定和结论。',
+  aiPromptExpandLabel: '扩写要求', aiPromptExpandPlaceholder: '例如：补充背景、执行步骤和示例，但不要虚构数据', aiPromptExpandHint: '说明需要补充的方向、深度、结构和限制。', aiPromptExpandDefault: '补充背景、逻辑过渡和有助理解的细节，不虚构事实。',
+  aiPromptCustomLabel: '自定义提示词', aiPromptCustomPlaceholder: '请明确说明希望 AI 对所选内容执行什么操作', aiPromptCustomHint: '写清目标、格式、语气和限制条件。',
+  aiLengthTargetLabel: '目标篇幅', aiLengthConciseLabel: '精简程度', aiLengthTargetPlaceholder: '例如：约 500 字（可留空）', aiLengthConcisePlaceholder: '例如：保留原文约 50%（可留空）', aiLengthHint: '可填写字数、段落数或比例；留空表示不限制。', aiLengthInstruction: '目标篇幅或处理程度：{length}。',
   aiDiffTitle: '逐项确认修改', aiDiffSummary: '共 {count} 处修改，已接受 {selected} 处', aiAcceptAllChanges: '全部接受', aiRejectAllChanges: '全部保留原文', aiAcceptChange: '接受这处修改', aiOriginalFragment: '原文片段', aiRevisedFragment: 'AI 修改', aiNoContent: '（空）',
   aiCloudConsent: '我确认将上述内容和要求发送给当前选择的 AI 服务处理', aiOpenSettings: '设置', aiGenerate: '生成', aiGenerating: '生成中…', aiRewriteConnecting: '正在连接 AI 服务', aiRewriteGenerating: 'AI 正在生成内容', aiRewriteRefining: '正在整理并检查生成结果', aiRewriteProgressMeta: '{provider} · {model} · 已用时 {seconds} 秒', aiReplaceSelection: '替换选中文字', aiInsertAtCursor: '插入到光标位置', aiSelectionReplaced: '已替换，可使用撤销恢复原文', aiContentInserted: '内容已插入，可使用撤销恢复',
   aiNeedSelection: '请先选择要处理的文字', aiNeedInstruction: '请填写具体要求', aiNeedCloudConsent: '请先确认同意发送选中文字', aiEmptyResult: 'AI 没有返回可用内容', aiSelectionChanged: '原文已发生变化，请重新选择后再试', aiRequestFailed: 'AI 处理失败',
-  aiReview: 'AI检查', aiReviewTitle: '检查整篇文档并给出可选修改建议', aiReviewLabel: 'AI 文档检查', aiReviewDialogTitle: 'AI 文档检查', aiReviewIntro: '检查整篇文档的表达、拼写、标点、一致性和 Markdown 语法，并逐条选择要应用的修改。',
+  aiReview: 'AI检查', aiReviewTitle: '检查整篇文档并给出可选修改建议', aiReviewLabel: 'AI 文档检查', aiReviewDialogTitle: 'AI 文档检查', aiReviewIntro: '检查整篇文档的表达、拼写、标点、一致性和 Markdown 语法，并逐条选择要应用的修改。', aiReviewInstruction: '校对要求', aiReviewInstructionPlaceholder: '例如：重点检查合同术语、金额和前后表述是否一致', aiReviewInstructionHint: '可补充行业术语、检查重点或不应改动的内容。', aiReviewInstructionDefault: '全面检查语法、拼写、标点、表达、一致性和 Markdown 语法；只提出确定需要修改的问题。',
   aiReviewReadyTitle: '准备检查当前文档', aiReviewReadyHint: 'AI 只会返回可定位的修改建议，不会直接改动文档。', aiReviewConsent: '我确认将当前整篇文档发送给默认 AI 服务进行检查', aiStartReview: '开始检查', aiReviewChecking: '检查中…', aiReviewConnecting: '正在连接 AI 服务', aiReviewReading: 'AI 正在通读文档', aiReviewAnalysing: '正在分析错误与表达问题', aiReviewFormatting: '正在整理可选择的修改建议', aiReviewProgressMeta: '{provider} · {model} · 已用时 {seconds} 秒', aiReviewFailedTitle: '本次检查未完成', aiReviewFailedHint: '没有修改文档。你可以直接重新检查，或在“设置”中更换模型。', aiReviewNoIssuesTitle: '没有发现明确错误', aiReviewNoIssuesHint: '当前模型未返回需要修改的内容。你可以关闭窗口或再次检查。',
   aiReviewSummary: '共 {count} 条建议，已选择 {selected} 条', aiSelectAllSuggestions: '全选', aiClearAllSuggestions: '取消全选', aiApplySelected: '一键修改所选项', aiReviewAgain: '重新检查', aiReviewApplied: '已应用 {count} 条修改，检查结果将保留到退出编辑', aiReviewNothingSelected: '请至少选择一条建议', aiReviewDocumentChanged: '文档在检查后发生了变化，请重新检查，避免修改错位', aiReviewOverlap: '所选建议存在重叠，请只保留其中一条后再应用', aiReviewRequestFailed: 'AI 文档检查失败', aiReviewEmptyDocument: '当前文档没有可检查的内容', aiReviewTooLong: '当前文档超过 8 万字符，请分段使用 AI 编辑检查', aiReviewDeleteContent: '删除此内容',
   aiReviewOriginal: '原文', aiReviewReplacement: '建议修改', aiReviewCategoryGrammar: '语法', aiReviewCategorySpelling: '拼写', aiReviewCategoryPunctuation: '标点', aiReviewCategoryClarity: '表达', aiReviewCategoryConsistency: '一致性', aiReviewCategoryMarkdown: 'Markdown', aiReviewSeverityHigh: '重要', aiReviewSeverityMedium: '建议', aiReviewSeverityLow: '轻微'
@@ -475,15 +506,39 @@ Object.assign(translations.en, {
   aiKeyGuideTitle: 'Enter the selected provider API key', aiKeyGuideHint: 'Create a key on the selected AI provider platform, then paste it below. It is stored only in the system credential vault.', aiKeyRequiredGuide: 'Set an API key for the selected provider before using AI Edit.', aiReplacingKeyHint: 'Enter a new key. Saving replaces this provider’s current key.', aiKeyRequired: 'Enter the selected provider API key', aiSaveAndEnable: 'Save and enable', aiSaveNewKey: 'Save new key', aiEditKey: 'Change', aiDeleteKey: 'Delete', aiDeleteKeyConfirm: 'Delete the saved API key for the selected provider?', aiKeyDeleted: 'API key deleted', aiKeyDeleteFailed: 'Unable to delete API key', aiDefaultModel: 'Default model', aiSetDefaultModel: 'Set as default', aiDefaultModelChanged: '{provider} is now the default model', aiDefaultModelChangeFailed: 'Unable to set the default model',
   aiPrivacyNote: 'Only document content you select or explicitly confirm for checking is sent to the selected AI provider. Provider keys are stored separately in the system credential vault and never written to preferences, logs, or documents.', aiTestConnection: 'Diagnose connection', aiTestingConnection: 'Checking each connection stage…', aiConnectionSuccess: 'All critical checks passed', aiConnectionFailed: 'Connection diagnostics found a problem', aiDiagnosticsTitle: 'Connection diagnostics', aiDiagnosticsPassed: 'Configuration is ready', aiDiagnosticsFailed: 'Action is required', aiDiagnosticEndpoint: 'Service endpoint', aiDiagnosticCredential: 'API key', aiDiagnosticModels: 'Model list', aiDiagnosticChat: 'Model request', aiDiagnosticEndpointOK: 'The endpoint format and security requirements passed', aiDiagnosticCredentialOK: 'The current provider key was used for this check', aiDiagnosticModelsOK: '{count} compatible text models were loaded', aiDiagnosticChatOK: 'The selected model completed a real request', aiDiagnosticAuthError: 'The API key is invalid or this account does not have access.', aiDiagnosticNotFoundError: 'The endpoint was not found. Check that the base URL does not include a request-specific path.', aiModelCacheUsed: 'Live discovery failed; showing {count} cached models (saved {time})',
   aiSettingsSaved: 'AI provider and API key saved', aiSettingsSaveFailed: 'Unable to save AI settings',
-  aiRewriteTitle: 'AI Edit', aiAction: 'Action', aiActionPolish: 'Polish', aiActionRewrite: 'Rewrite', aiActionConcise: 'Make concise', aiActionExpand: 'Expand', aiActionSummarize: 'Summarize', aiActionTranslate: 'Translate', aiActionCustom: 'Custom instruction',
+  aiRewriteTitle: 'AI Edit', aiGenerateDialogTitle: 'AI Generate', aiAction: 'Action', aiActionPolish: 'Polish', aiActionRewrite: 'Rewrite', aiActionConcise: 'Make concise', aiActionExpand: 'Expand', aiActionSummarize: 'Summarize', aiActionTranslate: 'Translate', aiActionCustom: 'Custom instruction',
   aiTargetLanguage: 'Target language', aiInstruction: 'Instruction', aiInstructionPlaceholder: 'For example: make this more professional and friendly', aiOriginalText: 'Original', aiResultText: 'AI result', aiResultPlaceholder: 'You can refine the generated result here',
+  aiPromptGenerateLabel: 'Writing prompt', aiPromptGeneratePlaceholder: 'For example: write a product launch announcement with context, key features, and usage', aiPromptGenerateHint: 'Describe the topic, purpose, structure, tone, and required information.',
+  aiPromptEditLabel: 'Editing instructions', aiPromptEditPlaceholder: 'For example: make this a clearer professional product description while preserving data and Markdown', aiPromptEditHint: 'Describe the expression, structure, tone, or emphasis to improve.', aiPromptEditDefault: 'Improve the selected text for clarity, structure, and grammar without changing its meaning.',
+  aiPromptContinueLabel: 'Continuation direction', aiPromptContinuePlaceholder: 'For example: continue with implementation steps and risks in the same professional tone', aiPromptContinueHint: 'Describe what comes next, the tone, and the points to cover.', aiPromptContinueDefault: 'Continue naturally from the current logic without repeating existing content.',
+  aiPromptTranslateLabel: 'Translation instructions', aiPromptTranslatePlaceholder: 'For example: use a formal business tone and keep product names and API fields unchanged', aiPromptTranslateHint: 'Specify tone, terminology rules, and content that must remain unchanged.', aiPromptTranslateDefault: 'Translate accurately and naturally, keep terminology consistent, and preserve Markdown, code, links, and technical identifiers.',
+  aiPromptConciseLabel: 'Condensing instructions', aiPromptConcisePlaceholder: 'For example: remove repetition while retaining every number, decision, and warning', aiPromptConciseHint: 'State what must remain and what may be removed or merged.', aiPromptConciseDefault: 'Remove repetition and secondary wording while preserving key facts, data, decisions, and conclusions.',
+  aiPromptExpandLabel: 'Expansion instructions', aiPromptExpandPlaceholder: 'For example: add context, implementation steps, and examples without inventing data', aiPromptExpandHint: 'Describe the desired direction, depth, structure, and constraints.', aiPromptExpandDefault: 'Add context, logical transitions, and useful detail without inventing facts.',
+  aiPromptCustomLabel: 'Custom prompt', aiPromptCustomPlaceholder: 'Describe exactly what the AI should do with the selected content', aiPromptCustomHint: 'State the goal, format, tone, and constraints.',
+  aiLengthTargetLabel: 'Target length', aiLengthConciseLabel: 'Condensing level', aiLengthTargetPlaceholder: 'For example: about 500 words (optional)', aiLengthConcisePlaceholder: 'For example: retain about 50% (optional)', aiLengthHint: 'Enter a word count, paragraph count, or percentage; leave blank for no limit.', aiLengthInstruction: 'Target length or processing level: {length}.',
   aiDiffTitle: 'Review each change', aiDiffSummary: '{count} changes, {selected} accepted', aiAcceptAllChanges: 'Accept all', aiRejectAllChanges: 'Keep all originals', aiAcceptChange: 'Accept this change', aiOriginalFragment: 'Original fragment', aiRevisedFragment: 'AI revision', aiNoContent: '(empty)',
   aiCloudConsent: 'I agree to send the content and instruction above to the currently selected AI provider', aiOpenSettings: 'Settings', aiGenerate: 'Generate', aiGenerating: 'Generating…', aiRewriteConnecting: 'Connecting to the AI service', aiRewriteGenerating: 'AI is generating content', aiRewriteRefining: 'Preparing and checking the result', aiRewriteProgressMeta: '{provider} · {model} · {seconds}s elapsed', aiReplaceSelection: 'Replace selection', aiInsertAtCursor: 'Insert at cursor', aiSelectionReplaced: 'Selection replaced. Undo restores the original text.', aiContentInserted: 'Content inserted. Undo removes it.',
   aiNeedSelection: 'Select some text first', aiNeedInstruction: 'Enter an instruction', aiNeedCloudConsent: 'Confirm before sending selected text', aiEmptyResult: 'The AI returned no usable content', aiSelectionChanged: 'The source text changed. Select it again and retry.', aiRequestFailed: 'AI request failed',
-  aiReview: 'AI Check', aiReviewTitle: 'Review the whole document and propose selectable fixes', aiReviewLabel: 'AI DOCUMENT REVIEW', aiReviewDialogTitle: 'AI document check', aiReviewIntro: 'Check the whole document for writing, spelling, punctuation, consistency, and Markdown issues, then choose which fixes to apply.',
+  aiReview: 'AI Check', aiReviewTitle: 'Review the whole document and propose selectable fixes', aiReviewLabel: 'AI DOCUMENT REVIEW', aiReviewDialogTitle: 'AI document check', aiReviewIntro: 'Check the whole document for writing, spelling, punctuation, consistency, and Markdown issues, then choose which fixes to apply.', aiReviewInstruction: 'Proofreading instructions', aiReviewInstructionPlaceholder: 'For example: focus on contract terminology, amounts, and internal consistency', aiReviewInstructionHint: 'Add domain terminology, priorities, or content that must not be changed.', aiReviewInstructionDefault: 'Check grammar, spelling, punctuation, clarity, consistency, and Markdown syntax; suggest only definite improvements.',
   aiReviewReadyTitle: 'Ready to check this document', aiReviewReadyHint: 'AI returns only locatable suggestions and never changes the document automatically.', aiReviewConsent: 'I agree to send the current full document to the default AI provider for review', aiStartReview: 'Start check', aiReviewChecking: 'Checking…', aiReviewConnecting: 'Connecting to the AI service', aiReviewReading: 'AI is reading the document', aiReviewAnalysing: 'Analysing errors and unclear writing', aiReviewFormatting: 'Preparing selectable suggestions', aiReviewProgressMeta: '{provider} · {model} · {seconds}s elapsed', aiReviewFailedTitle: 'This check did not finish', aiReviewFailedHint: 'The document was not changed. Retry now, or choose another model in Settings.', aiReviewNoIssuesTitle: 'No clear errors found', aiReviewNoIssuesHint: 'The current model returned no changes that need to be applied. You can close this window or check again.',
   aiReviewSummary: '{count} suggestions, {selected} selected', aiSelectAllSuggestions: 'Select all', aiClearAllSuggestions: 'Clear selection', aiApplySelected: 'Apply selected fixes', aiReviewAgain: 'Check again', aiReviewApplied: '{count} fixes applied. Results remain available until you exit editing.', aiReviewNothingSelected: 'Select at least one suggestion', aiReviewDocumentChanged: 'The document changed after the check. Run it again to avoid applying a fix at the wrong position.', aiReviewOverlap: 'Selected suggestions overlap. Keep only one of them before applying.', aiReviewRequestFailed: 'AI document check failed', aiReviewEmptyDocument: 'The current document has no content to check', aiReviewTooLong: 'This document exceeds 80,000 characters. Review it in smaller selections with AI Edit.', aiReviewDeleteContent: 'Delete this content',
   aiReviewOriginal: 'Original', aiReviewReplacement: 'Suggested change', aiReviewCategoryGrammar: 'Grammar', aiReviewCategorySpelling: 'Spelling', aiReviewCategoryPunctuation: 'Punctuation', aiReviewCategoryClarity: 'Clarity', aiReviewCategoryConsistency: 'Consistency', aiReviewCategoryMarkdown: 'Markdown', aiReviewSeverityHigh: 'Important', aiReviewSeverityMedium: 'Suggestion', aiReviewSeverityLow: 'Minor'
+});
+
+Object.assign(translations['zh-CN'], {
+  aiDiffFilterLabel: '筛选修改', aiDiffFilterAll: '全部', aiDiffFilterAccepted: '已接受', aiDiffFilterPending: '保留原文', aiDiffLoadMore: '显示更多修改', aiLocateOriginal: '定位原文', aiAcceptParagraph: '接受本段修改',
+  aiChunkProcessing: '正在处理第 {chunk}/{total} 段', aiChunkRetrying: '第 {chunk}/{total} 段失败，正在自动重试',
+  aiPrivacyCheckTitle: '发送前隐私检查', aiPrivacySendSummary: '{provider} · {model} · {count} 个字符', aiPrivacyNone: '未发现常见敏感信息。发送前仍建议确认文档内容。', aiPrivacyFound: '发现 {count} 项可能的敏感信息，已选择脱敏 {selected} 项。取消选择后将发送原值。', aiPrivacyRedact: '发送时脱敏', aiPrivacyTypeApiKey: '密钥', aiPrivacyTypeEmail: '邮箱', aiPrivacyTypeIdNumber: '身份证号', aiPrivacyTypePhone: '手机号', aiPrivacyTypeBankCard: '银行卡号',
+  documentHistory: '历史版本', documentHistoryLabel: '本地版本历史', documentHistoryTitle: '文档历史版本', documentHistoryIntro: '保存前的文档版本会安全保留在本机，可查看差异并恢复为可编辑内容。', documentHistoryVersions: '历史记录', documentHistorySelectTitle: '选择一个历史版本', documentHistorySelectHint: '右侧将显示历史内容与当前文档的差异。', documentHistoryEmpty: '暂时没有历史版本', documentHistoryRestore: '恢复此版本', documentHistoryRestored: '历史版本已恢复到编辑器，保存后才会写入原文件', documentHistoryLoadFailed: '无法读取文档历史版本', documentHistoryChanged: '当前文档已经切换，无法恢复此版本', documentHistoryCurrent: '当前文档', documentHistoryOlder: '历史版本', documentHistoryDifference: '与当前文档相比：增加 {added} 行，删除 {removed} 行', documentHistorySize: '{size} KB',
+  aiReviewTooLong: '当前文档超过 200 万字符，请缩小文档后再检查'
+});
+
+Object.assign(translations.en, {
+  aiDiffFilterLabel: 'Filter changes', aiDiffFilterAll: 'All', aiDiffFilterAccepted: 'Accepted', aiDiffFilterPending: 'Keep original', aiDiffLoadMore: 'Show more changes', aiLocateOriginal: 'Locate original', aiAcceptParagraph: 'Accept this paragraph',
+  aiChunkProcessing: 'Processing section {chunk} of {total}', aiChunkRetrying: 'Section {chunk} of {total} failed; retrying automatically',
+  aiPrivacyCheckTitle: 'Privacy check before sending', aiPrivacySendSummary: '{provider} · {model} · {count} characters', aiPrivacyNone: 'No common sensitive data was detected. Review the content before sending.', aiPrivacyFound: '{count} potentially sensitive items found; {selected} will be redacted. Clear an item to send its original value.', aiPrivacyRedact: 'Redact when sending', aiPrivacyTypeApiKey: 'API key', aiPrivacyTypeEmail: 'Email', aiPrivacyTypeIdNumber: 'ID number', aiPrivacyTypePhone: 'Phone', aiPrivacyTypeBankCard: 'Bank card',
+  documentHistory: 'Version history', documentHistoryLabel: 'LOCAL VERSION HISTORY', documentHistoryTitle: 'Document version history', documentHistoryIntro: 'Versions from before each save are kept locally so you can compare and restore them as editable content.', documentHistoryVersions: 'Versions', documentHistorySelectTitle: 'Select a version', documentHistorySelectHint: 'Its content and difference from the current document will appear here.', documentHistoryEmpty: 'No earlier versions yet', documentHistoryRestore: 'Restore this version', documentHistoryRestored: 'The version was restored in the editor. Save to write it to the document.', documentHistoryLoadFailed: 'Unable to load document history', documentHistoryChanged: 'The active document changed, so this version cannot be restored', documentHistoryCurrent: 'Current document', documentHistoryOlder: 'Earlier version', documentHistoryDifference: 'Compared with the current document: {added} lines added, {removed} removed', documentHistorySize: '{size} KB',
+  aiReviewTooLong: 'This document exceeds 2,000,000 characters. Reduce its size before checking it.'
 });
 
 const codeMirrorTranslations = {
@@ -579,18 +634,19 @@ function setLanguage(language, silent = false, persist = true) {
 const els = {
   welcome: $('#welcome'), documentView: $('#documentView'), content: $('#markdownContent'),
   fileList: $('#fileList'), libraryName: $('#libraryName'), tocPanel: $('#tocPanel'), toc: $('#toc'), tocSearchInput: $('#tocSearchInput'), clearTocSearch: $('#clearTocSearch'), tocEmpty: $('#tocEmpty'), compactTocButton: $('#compactTocButton'), compactTocBackdrop: $('#compactTocBackdrop'), closeCompactToc: $('#closeCompactToc'),
-  breadcrumb: $('#breadcrumb'), documentActions: $('#documentActions'), documentActionsMenu: $('#documentActionsMenu'), documentActionsMoreButton: $('#documentActionsMoreButton'), readingTime: $('#readingTime'), progressBar: $('#progressBar'),
+  breadcrumb: $('#breadcrumb'), documentActions: $('#documentActions'), documentSummaryButton: $('#documentSummaryButton'), documentSummaryPanel: $('#documentSummaryPanel'), documentSummaryMeta: $('#documentSummaryMeta'), documentSummaryPrivacy: $('#documentSummaryPrivacy'), documentSummaryPrivacyCheck: $('#documentSummaryPrivacyCheck'), documentSummarySendSummary: $('#documentSummarySendSummary'), documentSummaryPrivacySummary: $('#documentSummaryPrivacySummary'), documentSummaryPrivacyList: $('#documentSummaryPrivacyList'), documentSummaryConsent: $('#documentSummaryConsent'), confirmDocumentSummary: $('#confirmDocumentSummary'), documentSummaryProgress: $('#documentSummaryProgress'), documentSummaryPhase: $('#documentSummaryPhase'), documentSummaryProgressMeta: $('#documentSummaryProgressMeta'), documentSummaryProgressBar: $('#documentSummaryProgressBar'), documentSummaryProgressPercent: $('#documentSummaryProgressPercent'), documentSummaryContent: $('#documentSummaryContent'), documentSummaryStatus: $('#documentSummaryStatus'), documentActionsMenu: $('#documentActionsMenu'), documentActionsMoreButton: $('#documentActionsMoreButton'), readingTime: $('#readingTime'), progressBar: $('#progressBar'),
   appShell: $('.app-shell'), sidebar: $('#sidebar'), expandSidebar: $('#expandSidebar'), sidebarResizer: $('#sidebarResizer'), tocResizer: $('#tocResizer'), searchBar: $('#searchBar'),
   editorResizer: $('#editorResizer'),
   searchInput: $('#searchInput'), searchCount: $('#searchCount'), dropOverlay: $('#dropOverlay'),
   moreMenu: $('#moreMenu'), accentMenu: $('#accentMenu'), recentContextMenu: $('#recentContextMenu'), editorClipboardMenu: $('#editorClipboardMenu'), spellcheckContextMenu: $('#spellcheckContextMenu'), spellingContextWord: $('#spellingContextWord'), spellingSuggestions: $('#spellingSuggestions'), spellingNoSuggestions: $('#spellingNoSuggestions'), personalDictionaryCount: $('#personalDictionaryCount'), toast: $('#toast'), imageUploadProgress: $('#imageUploadProgress'), imageUploadProgressTitle: $('#imageUploadProgressTitle'), imageUploadProgressDetail: $('#imageUploadProgressDetail'), imageUploadProgressPercent: $('#imageUploadProgressPercent'), imageUploadProgressBar: $('#imageUploadProgressBar'), editorView: $('#editorView'), fontScaleSlider: $('#fontScaleSlider'), fontScaleValue: $('#fontScaleValue'),
-  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiEditButton: $('#aiEditButton'), aiReviewButton: $('#aiReviewButton'),
+  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiToolbarButton: $('#aiToolbarButton'), aiToolbarMenu: $('#aiToolbarMenu'), documentHistoryButton: $('#documentHistoryButton'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), recoveryDialog: $('#recoveryDialog'), recoveryFileName: $('#recoveryFileName'), recoveryUpdatedAt: $('#recoveryUpdatedAt'), aboutDialog: $('#aboutDialog'),
   aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderDescription: $('#aiProviderDescription'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURLField: $('#aiBaseURLField'), aiBaseURL: $('#aiBaseURL'), aiBaseURLHint: $('#aiBaseURLHint'), aiModelSelectField: $('#aiModelSelectField'), aiModel: $('#aiModel'), aiCustomModelField: $('#aiCustomModelField'), aiCustomModel: $('#aiCustomModel'), aiCustomModelOptions: $('#aiCustomModelOptions'), aiModelState: $('#aiModelState'), aiCustomModelState: $('#aiCustomModelState'), refreshAIModels: $('#refreshAIModels'), refreshAICustomModels: $('#refreshAICustomModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'), aiDiagnostics: $('#aiDiagnostics'), aiDiagnosticsSummary: $('#aiDiagnosticsSummary'), aiDiagnosticChecks: $('#aiDiagnosticChecks'),
-  aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteFields: $('#aiRewriteFields'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiInstructionField: $('#aiInstructionField'), aiInstruction: $('#aiInstruction'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
-  aiReviewDialog: $('#aiReviewDialog'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
+  aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteTitle: $('#aiRewriteTitle'), aiRequestSettings: $('#aiRequestSettings'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiTaskSettings: $('#aiTaskSettings'), aiInstructionField: $('#aiInstructionField'), aiInstructionLabel: $('#aiInstructionLabel'), aiInstruction: $('#aiInstruction'), aiInstructionHint: $('#aiInstructionHint'), aiLengthField: $('#aiLengthField'), aiLengthLabel: $('#aiLengthLabel'), aiLength: $('#aiLength'), aiLengthHint: $('#aiLengthHint'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiDiffFilter: $('#aiDiffFilter'), loadMoreAIDiff: $('#loadMoreAIDiff'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiRewritePrivacy: $('#aiRewritePrivacy'), aiRewriteSendSummary: $('#aiRewriteSendSummary'), aiRewritePrivacySummary: $('#aiRewritePrivacySummary'), aiRewritePrivacyList: $('#aiRewritePrivacyList'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
+  aiReviewDialog: $('#aiReviewDialog'), aiReviewInstruction: $('#aiReviewInstruction'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewPrivacy: $('#aiReviewPrivacy'), aiReviewSendSummary: $('#aiReviewSendSummary'), aiReviewPrivacySummary: $('#aiReviewPrivacySummary'), aiReviewPrivacyList: $('#aiReviewPrivacyList'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
+  documentHistoryDialog: $('#documentHistoryDialog'), documentHistoryList: $('#documentHistoryList'), documentHistoryPreview: $('#documentHistoryPreview'), documentHistoryStatus: $('#documentHistoryStatus'), restoreDocumentHistory: $('#restoreDocumentHistory'),
   feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
   recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramFullscreenButton: $('#toggleDiagramFullscreen'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'), flowchartModeBar: $('#flowchartModeBar'), flowchartVisualEditor: $('#flowchartVisualEditor'), structuredDiagramEditor: $('#structuredDiagramEditor'), structuredDiagramSettings: $('#structuredDiagramSettings'), structuredDiagramHead: $('#structuredDiagramHead'), structuredDiagramRows: $('#structuredDiagramRows'), flowchartCanvasViewport: $('#flowchartCanvasViewport'), flowchartCanvas: $('#flowchartCanvas'), flowchartZoomOut: $('#flowchartZoomOut'), flowchartZoomReset: $('#flowchartZoomReset'), flowchartZoomIn: $('#flowchartZoomIn'), flowchartZoomValue: $('#flowchartZoomValue'), flowchartNodeLayer: $('#flowchartNodeLayer'), flowchartEdgeLayer: $('#flowchartEdgeLayer'), flowchartDirection: $('#flowchartDirection'), flowchartNodeProperties: $('#flowchartNodeProperties'), flowchartEdgeProperties: $('#flowchartEdgeProperties'), flowchartNodeLabel: $('#flowchartNodeLabel'), flowchartNodeShape: $('#flowchartNodeShape'), flowchartEdgeLabel: $('#flowchartEdgeLabel'), flowchartEdgeStyle: $('#flowchartEdgeStyle'), flowchartSelectionHint: $('#flowchartSelectionHint'),
   imageUploadSettingsDialog: $('#imageUploadSettingsDialog'), picGoCloudSetup: $('#picGoCloudSetup'), picGoCloudAccount: $('#picGoCloudAccount'), picGoCloudUser: $('#picGoCloudUser'), picGoCloudStatus: $('#picGoCloudStatus'), picGoSetupWizard: $('#picGoSetupWizard'), picGoSetupInstall: $('#picGoSetupInstall'), picGoSetupConnect: $('#picGoSetupConnect'), picGoSetupReady: $('#picGoSetupReady'), picGoAdvancedSettings: $('#picGoAdvancedSettings'), localAssetsSummary: $('#localAssetsSummary'), picGoSettingsFields: $('#picGoSettingsFields'), picGoServerURL: $('#picGoServerURL'), picGoSecret: $('#picGoSecret'), clearPicGoSecretRow: $('#clearPicGoSecretRow'), clearPicGoSecret: $('#clearPicGoSecret'), picGoTestStatus: $('#picGoTestStatus'),
@@ -1260,6 +1316,7 @@ function openTextColorMenu() {
   if (!wasHidden) return;
   els.moreMenu.classList.add('hidden');
   els.codeLangMenu.classList.add('hidden');
+  closeAIToolbarMenu();
   closeMoreFormatMenu();
   closeAccentMenu();
   closeRecentContextMenu();
@@ -1313,6 +1370,7 @@ function openCodeLangMenu() {
   menu.classList.add('hidden');
   if (!wasHidden) return;
   els.moreMenu.classList.add('hidden');
+  closeAIToolbarMenu();
   closeMoreFormatMenu();
   closeAccentMenu();
   closeRecentContextMenu();
@@ -1402,6 +1460,7 @@ function openMoreFormatMenu() {
   if (!wasHidden) return;
   els.moreMenu.classList.add('hidden');
   els.codeLangMenu.classList.add('hidden');
+  closeAIToolbarMenu();
   closeTextColorMenu();
   closeAccentMenu();
   closeRecentContextMenu();
@@ -1412,6 +1471,45 @@ function openMoreFormatMenu() {
   menu.style.top = `${rect.bottom + 6}px`;
   menu.style.maxHeight = `${Math.max(140, window.innerHeight - rect.bottom - margin - 6)}px`;
   menu.classList.remove('hidden');
+  button.setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(() => menu.querySelector('[role="menuitem"]')?.focus());
+}
+
+function closeAIToolbarMenu(restoreFocus = false) {
+  if (!els.aiToolbarMenu || els.aiToolbarMenu.classList.contains('hidden')) return;
+  els.aiToolbarMenu.classList.add('hidden');
+  els.aiToolbarButton.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) els.aiToolbarButton.focus();
+}
+
+function openAIToolbarMenu() {
+  const menu = els.aiToolbarMenu;
+  const button = els.aiToolbarButton;
+  if (!menu || !button) return;
+  const wasHidden = menu.classList.contains('hidden');
+  closeAIToolbarMenu();
+  if (!wasHidden) return;
+  els.moreMenu.classList.add('hidden');
+  els.codeLangMenu.classList.add('hidden');
+  closeMoreFormatMenu();
+  closeTextColorMenu();
+  closeAccentMenu();
+  closeRecentContextMenu();
+  const rect = button.getBoundingClientRect();
+  const margin = 8;
+  menu.classList.remove('hidden');
+  menu.style.left = 'auto';
+  menu.style.top = 'auto';
+  menu.style.right = 'auto';
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
+  const below = rect.bottom + 6;
+  const top = below + height <= window.innerHeight - margin
+    ? below
+    : Math.max(margin, rect.top - height - 6);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
   button.setAttribute('aria-expanded', 'true');
   requestAnimationFrame(() => menu.querySelector('[role="menuitem"]')?.focus());
 }
@@ -5144,9 +5242,14 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
   if (state.currentFile && state.dirty) void clearRecoverySnapshot();
   cancelScheduledEditorPreview();
   cancelScheduledRecoverySnapshot();
+  resetDocumentSummary(true);
+  pendingAIDocumentSummary = false;
   state.documentSession += 1;
   closeAIRewrite();
+  closeDocumentHistory(false);
   pendingAIRewriteSelection = null;
+  pendingAIRewriteAction = '';
+  pendingAIRewriteInstruction = '';
   resetAIDocumentReviewSession();
   if (!sameDocumentPath(state.currentFile?.path, doc.path)) state.spellcheckIgnoredWords = new Set();
   state.currentFile = doc;
@@ -5183,9 +5286,14 @@ function closePreview() {
   if (state.dirty) void clearRecoverySnapshot();
   cancelScheduledEditorPreview();
   cancelScheduledRecoverySnapshot();
+  resetDocumentSummary(true);
+  pendingAIDocumentSummary = false;
   state.documentSession += 1;
   closeAIRewrite();
+  closeDocumentHistory(false);
   pendingAIRewriteSelection = null;
+  pendingAIRewriteAction = '';
+  pendingAIRewriteInstruction = '';
   resetAIDocumentReviewSession();
   closeSearch();
   closeDocumentActionsMenu();
@@ -7034,6 +7142,8 @@ function closeAISettings() {
   els.aiSettingsDialog.classList.add('hidden');
   pendingAIRewriteSelection = null;
   pendingAIRewriteAction = '';
+  pendingAIRewriteInstruction = '';
+  pendingAIDocumentSummary = false;
   pendingAIDocumentReview = false;
   if (resumeAIDocumentReviewAfterSettings) {
     resumeAIDocumentReviewAfterSettings = false;
@@ -7138,6 +7248,13 @@ async function saveAISettings(event) {
     await loadAIModels();
     els.aiSettingsStatus.textContent = t('aiSettingsSaved');
     showToast(t('aiSettingsSaved'), 'success');
+    if (pendingAIDocumentSummary && currentAISettings?.hasApiKey) {
+      pendingAIDocumentSummary = false;
+      els.aiSettingsDialog.classList.add('hidden');
+      document.body.classList.remove('dialog-open');
+      await openAIDocumentSummary();
+      return;
+    }
     if (resumeAIDocumentReviewAfterSettings) {
       resumeAIDocumentReviewAfterSettings = false;
       els.aiSettingsDialog.classList.add('hidden');
@@ -7153,10 +7270,12 @@ async function saveAISettings(event) {
     if (pendingAIRewriteSelection && currentAISettings?.hasApiKey) {
       const selection = { ...pendingAIRewriteSelection };
       const action = pendingAIRewriteAction || (selection.markdown ? 'polish' : 'custom');
+      const instruction = pendingAIRewriteInstruction;
       pendingAIRewriteSelection = null;
       pendingAIRewriteAction = '';
+      pendingAIRewriteInstruction = '';
       els.aiSettingsDialog.classList.add('hidden');
-      await openAIRewrite(selection, action);
+      await openAIRewrite(selection, action, instruction);
     }
   } catch (error) {
     els.aiSettingsStatus.textContent = `${t('aiSettingsSaveFailed')}: ${aiErrorMessage(error)}`;
@@ -7227,14 +7346,118 @@ async function deleteAIAPIKey() {
   }
 }
 
-function updateAIRewriteControls() {
-  const insertMode = aiRewriteSelection?.mode === 'insert';
-  if (insertMode) els.aiRewriteAction.value = 'custom';
+function aiPrivacyTypeLabel(type) {
+  const key = `aiPrivacyType${String(type || '').charAt(0).toUpperCase()}${String(type || '').slice(1)}`;
+  return t(key);
+}
+
+function aiProviderSendSummary(characterCount) {
+  const provider = normalizeAIProvider(currentAISettings?.provider);
+  const providerName = t(aiProviderConfigs[provider].nameKey);
+  const model = currentAISettings?.model || aiProviderConfigs[provider].model;
+  return t('aiPrivacySendSummary', { provider: providerName, model, count: characterCount });
+}
+
+function aiPrivacyElements(kind) {
+  if (kind === 'summary') {
+    return {
+      panel: els.documentSummaryPrivacyCheck,
+      sendSummary: els.documentSummarySendSummary,
+      summary: els.documentSummaryPrivacySummary,
+      list: els.documentSummaryPrivacyList
+    };
+  }
+  const rewrite = kind === 'rewrite';
+  return {
+    panel: rewrite ? els.aiRewritePrivacy : els.aiReviewPrivacy,
+    sendSummary: rewrite ? els.aiRewriteSendSummary : els.aiReviewSendSummary,
+    summary: rewrite ? els.aiRewritePrivacySummary : els.aiReviewPrivacySummary,
+    list: rewrite ? els.aiRewritePrivacyList : els.aiReviewPrivacyList
+  };
+}
+
+function aiPrivacyFindings(kind) {
+  if (kind === 'summary') return documentSummaryPrivacyFindings;
+  return kind === 'rewrite' ? aiRewritePrivacyFindings : aiReviewPrivacyFindings;
+}
+
+function renderAISendPrivacy(kind, content) {
+	const { panel, sendSummary, summary, list } = aiPrivacyElements(kind);
+	const findings = aiPrivacyFindings(kind);
+  panel.classList.remove('hidden');
+  sendSummary.textContent = aiProviderSendSummary([...String(content || '')].length);
+  const selected = findings.filter(item => item.selected).length;
+  summary.textContent = findings.length
+    ? t('aiPrivacyFound', { count: findings.length, selected })
+    : t('aiPrivacyNone');
+  list.replaceChildren();
+  findings.forEach((finding, index) => {
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = finding.selected;
+    checkbox.dataset.aiPrivacyKind = kind;
+    checkbox.dataset.aiPrivacyIndex = String(index);
+    const copy = document.createElement('span');
+    const title = document.createElement('strong');
+    const masked = document.createElement('code');
+    title.textContent = `${aiPrivacyTypeLabel(finding.type)} · ${t('aiPrivacyRedact')}`;
+    masked.textContent = finding.masked;
+    copy.append(title, masked);
+    label.append(checkbox, copy);
+    list.append(label);
+  });
+}
+
+function refreshAISendPrivacy(kind) {
+	if (kind === 'rewrite') renderAISendPrivacy(kind, aiRewriteRequestText());
+	else if (kind === 'summary') renderAISendPrivacy(kind, state.currentFile?.content || '');
+	else renderAISendPrivacy(kind, editorContent());
+}
+
+function setAISendPrivacyDisabled(kind, disabled) {
+	const { panel } = aiPrivacyElements(kind);
+	panel.querySelectorAll('input[type="checkbox"]').forEach(input => { input.disabled = disabled; });
+}
+
+function prepareAIContent(text, findings) {
+  return redactAISensitiveContent(text, findings);
+}
+
+const aiRewritePromptProfiles = {
+  generate: { labelKey: 'aiPromptGenerateLabel', placeholderKey: 'aiPromptGeneratePlaceholder', hintKey: 'aiPromptGenerateHint', lengthLabelKey: 'aiLengthTargetLabel', lengthPlaceholderKey: 'aiLengthTargetPlaceholder' },
+  edit: { labelKey: 'aiPromptEditLabel', placeholderKey: 'aiPromptEditPlaceholder', hintKey: 'aiPromptEditHint', defaultKey: 'aiPromptEditDefault' },
+  continue: { labelKey: 'aiPromptContinueLabel', placeholderKey: 'aiPromptContinuePlaceholder', hintKey: 'aiPromptContinueHint', defaultKey: 'aiPromptContinueDefault', lengthLabelKey: 'aiLengthTargetLabel', lengthPlaceholderKey: 'aiLengthTargetPlaceholder' },
+  translate: { labelKey: 'aiPromptTranslateLabel', placeholderKey: 'aiPromptTranslatePlaceholder', hintKey: 'aiPromptTranslateHint', defaultKey: 'aiPromptTranslateDefault' },
+  concise: { labelKey: 'aiPromptConciseLabel', placeholderKey: 'aiPromptConcisePlaceholder', hintKey: 'aiPromptConciseHint', defaultKey: 'aiPromptConciseDefault', lengthLabelKey: 'aiLengthConciseLabel', lengthPlaceholderKey: 'aiLengthConcisePlaceholder' },
+  expand: { labelKey: 'aiPromptExpandLabel', placeholderKey: 'aiPromptExpandPlaceholder', hintKey: 'aiPromptExpandHint', defaultKey: 'aiPromptExpandDefault', lengthLabelKey: 'aiLengthTargetLabel', lengthPlaceholderKey: 'aiLengthTargetPlaceholder' },
+  custom: { labelKey: 'aiPromptCustomLabel', placeholderKey: 'aiPromptCustomPlaceholder', hintKey: 'aiPromptCustomHint' }
+};
+
+function currentAIRewritePromptProfile() {
   const action = els.aiRewriteAction.value;
-  els.aiRewriteFields.classList.toggle('hidden', insertMode);
-  els.aiRewriteControls.classList.toggle('is-insert-mode', insertMode);
+  const tool = aiRewriteSelection?.tool || ({ polish: 'edit', rewrite: 'edit', translate: 'translate', concise: 'concise', expand: 'expand' }[action] || 'custom');
+  return aiRewritePromptProfiles[tool] || aiRewritePromptProfiles.custom;
+}
+
+function updateAIRewriteControls() {
+  const action = els.aiRewriteAction.value;
+  const profile = currentAIRewritePromptProfile();
+  const showLength = Boolean(profile.lengthLabelKey);
+  els.aiRequestSettings.classList.toggle('has-language', action === 'translate');
+  els.aiRewriteControls.classList.toggle('hidden', action !== 'translate');
   els.aiTargetLanguageField.classList.toggle('hidden', action !== 'translate');
-  els.aiInstructionField.classList.toggle('hidden', action !== 'custom');
+  els.aiInstructionField.classList.remove('hidden');
+  els.aiInstructionLabel.textContent = t(profile.labelKey);
+  els.aiInstruction.placeholder = t(profile.placeholderKey);
+  els.aiInstructionHint.textContent = t(profile.hintKey);
+  els.aiLengthField.classList.toggle('hidden', !showLength);
+  els.aiTaskSettings.classList.toggle('has-length', showLength);
+  if (showLength) {
+    els.aiLengthLabel.textContent = t(profile.lengthLabelKey);
+    els.aiLength.placeholder = t(profile.lengthPlaceholderKey);
+    els.aiLengthHint.textContent = t('aiLengthHint');
+  }
 }
 
 function currentAIEditContext() {
@@ -7252,6 +7475,240 @@ function currentAIEditContext() {
   };
 }
 
+async function runAIToolbarAction(action) {
+  closeAIToolbarMenu();
+  if (action === 'proofread') {
+    await openAIDocumentReview();
+    return;
+  }
+  if (!codeEditor || !state.editing) return;
+  if (action === 'generate') {
+    const cursor = codeEditor.state.selection.main.head;
+    await openAIRewrite({
+      documentSession: state.documentSession,
+      from: cursor,
+      to: cursor,
+      markdown: '',
+      dialogTitleKey: 'aiGenerateDialogTitle',
+      tool: 'generate',
+      mode: 'insert'
+    }, 'custom');
+    return;
+  }
+  if (action === 'continue') {
+    const cursor = codeEditor.state.selection.main.head;
+    const contextStart = Math.max(0, cursor - 12000);
+    const promptText = codeEditor.state.doc.sliceString(contextStart, cursor);
+    if (!promptText.trim()) {
+      showToast(t('aiContinueNeedContext'), 'warning');
+      focusCodeEditor();
+      return;
+    }
+    await openAIRewrite({
+      documentSession: state.documentSession,
+      from: cursor,
+      to: cursor,
+      markdown: '',
+      promptText,
+      dialogTitleKey: 'aiContinueDialogTitle',
+      tool: 'continue',
+      mode: 'insert'
+    }, 'custom', t('aiContinueInstruction'));
+    return;
+  }
+  const context = currentAIEditContext();
+  if (!context.markdown) {
+    showToast(t('aiNeedSelection'), 'warning');
+    focusCodeEditor();
+    return;
+  }
+  const rewriteTools = {
+    edit: { action: 'polish', titleKey: 'aiRewriteTitle' },
+    translate: { action: 'translate', titleKey: 'aiTranslateDialogTitle' },
+    concise: { action: 'concise', titleKey: 'aiConciseDialogTitle' },
+    expand: { action: 'expand', titleKey: 'aiExpandDialogTitle' },
+    custom: { action: 'custom', titleKey: 'aiCustomDialogTitle' }
+  };
+  const tool = rewriteTools[action] || rewriteTools.custom;
+  await openAIRewrite({ ...context, dialogTitleKey: tool.titleKey, tool: action }, tool.action);
+}
+
+function stopDocumentSummaryStream() {
+  if (typeof documentSummaryStreamCleanup === 'function') documentSummaryStreamCleanup();
+  documentSummaryStreamCleanup = null;
+}
+
+function stopDocumentSummaryProgress() {
+  if (documentSummaryProgressTimer) window.clearInterval(documentSummaryProgressTimer);
+  documentSummaryProgressTimer = 0;
+  documentSummaryStartedAt = 0;
+  documentSummaryServerProgress = null;
+  els.documentSummaryProgress.classList.add('hidden');
+}
+
+function resetDocumentSummary(hide = true) {
+  const wasRunning = Boolean(activeDocumentSummaryRequestID);
+  documentSummaryRequest += 1;
+  activeDocumentSummaryRequestID = '';
+  stopDocumentSummaryStream();
+  stopDocumentSummaryProgress();
+  if (wasRunning) void window.quilliteMarkdown.cancelAIRewrite?.();
+  els.documentSummaryButton.disabled = false;
+  els.documentSummaryButton.dataset.i18n = 'aiSummaryGenerate';
+  els.documentSummaryButton.textContent = t('aiSummaryGenerate');
+  els.documentSummaryContent.replaceChildren();
+  els.documentSummaryContent.classList.add('hidden');
+	els.documentSummaryPrivacy.classList.add('hidden');
+	documentSummaryPrivacyFindings = [];
+	els.documentSummaryConsent.checked = true;
+	els.confirmDocumentSummary.disabled = false;
+  els.documentSummaryStatus.textContent = '';
+  els.documentSummaryStatus.classList.add('hidden');
+  els.documentSummaryMeta.textContent = '';
+  if (hide) els.documentSummaryPanel.classList.add('hidden');
+}
+
+function closeDocumentSummary() {
+  resetDocumentSummary(true);
+  pendingAIDocumentSummary = false;
+  els.documentSummaryButton.focus();
+}
+
+function updateDocumentSummaryProgress() {
+  if (!documentSummaryStartedAt) return;
+  const elapsed = Math.max(0, (Date.now() - documentSummaryStartedAt) / 1000);
+  let percent;
+  if (documentSummaryServerProgress?.total > 1) {
+    const progress = documentSummaryServerProgress;
+    percent = progress.percentage;
+    els.documentSummaryPhase.textContent = t(progress.phase === 'retrying' ? 'aiChunkRetrying' : 'aiChunkProcessing', progress);
+  } else {
+    percent = Math.min(92, Math.round(8 + 84 * (1 - Math.exp(-elapsed / 20))));
+    const phaseKey = elapsed >= 18 ? 'aiSummaryFinishing' : elapsed >= 4 ? 'aiSummaryAnalysing' : 'aiSummaryReading';
+    els.documentSummaryPhase.textContent = t(phaseKey);
+  }
+  const provider = normalizeAIProvider(currentAISettings?.provider);
+  const providerName = t(aiProviderConfigs[provider].nameKey);
+  const model = currentAISettings?.model || aiProviderConfigs[provider].model;
+  els.documentSummaryProgressMeta.textContent = t('aiSummaryProgressMeta', { provider: providerName, model, seconds: Math.floor(elapsed) });
+  els.documentSummaryProgressBar.style.width = `${percent}%`;
+  els.documentSummaryProgressPercent.textContent = `${percent}%`;
+}
+
+function startDocumentSummaryProgress() {
+  stopDocumentSummaryProgress();
+  documentSummaryStartedAt = Date.now();
+  els.documentSummaryProgress.classList.remove('hidden');
+  updateDocumentSummaryProgress();
+  documentSummaryProgressTimer = window.setInterval(updateDocumentSummaryProgress, 500);
+}
+
+function renderDocumentSummary(markdown) {
+  const html = DOMPurify.sanitize(marked.parse(markdown), { ADD_ATTR: ['target', 'rel'] });
+  els.documentSummaryContent.innerHTML = html;
+  bindDocumentActions(els.documentSummaryContent);
+  els.documentSummaryContent.classList.remove('hidden');
+  els.documentSummaryMeta.textContent = t('aiSummaryReady');
+}
+
+async function openAIDocumentSummary() {
+	const markdown = state.currentFile?.content || '';
+  if (!markdown.trim()) {
+    showToast(t('exportNoDocument'), 'warning');
+    return;
+  }
+  try {
+    currentAISettings = await window.quilliteMarkdown.getAISettings();
+  } catch {
+    currentAISettings = { provider: 'deepseek', hasApiKey: false };
+  }
+	if (!currentAISettings?.hasApiKey) {
+    pendingAIDocumentSummary = true;
+    await openAISettings({ required: true });
+		return;
+	}
+	resetDocumentSummary(false);
+	documentSummaryPrivacyFindings = detectAISensitiveContent(markdown);
+	renderAISendPrivacy('summary', markdown);
+	els.documentSummaryPrivacy.classList.remove('hidden');
+	els.documentSummaryPanel.classList.remove('hidden');
+	requestAnimationFrame(() => els.confirmDocumentSummary.focus());
+}
+
+async function generateAIDocumentSummary() {
+	const markdown = state.currentFile?.content || '';
+	if (!markdown.trim()) {
+		showToast(t('exportNoDocument'), 'warning');
+		closeDocumentSummary();
+		return;
+	}
+	if (!els.documentSummaryConsent.checked) {
+		els.documentSummaryStatus.textContent = t('aiSummaryNeedConsent');
+		els.documentSummaryStatus.classList.remove('hidden');
+		els.documentSummaryConsent.focus();
+		return;
+	}
+	documentSummaryPrivacyFindings = detectAISensitiveContent(markdown).map((finding, index) => ({
+		...finding,
+		selected: documentSummaryPrivacyFindings[index]?.value === finding.value ? documentSummaryPrivacyFindings[index].selected : true
+	}));
+	renderAISendPrivacy('summary', markdown);
+	const prepared = prepareAIContent(markdown, documentSummaryPrivacyFindings);
+	setAISendPrivacyDisabled('summary', true);
+	els.documentSummaryPrivacy.classList.add('hidden');
+	els.documentSummaryStatus.textContent = '';
+	els.documentSummaryStatus.classList.add('hidden');
+	const requestNumber = ++documentSummaryRequest;
+  const requestedSession = state.documentSession;
+  const requestID = `summary-${Date.now()}-${requestNumber}`;
+  activeDocumentSummaryRequestID = requestID;
+  let streamedText = '';
+  documentSummaryStreamCleanup = window.quilliteMarkdown.onAIRewriteChunk?.(chunk => {
+    if (requestNumber !== documentSummaryRequest || chunk?.requestId !== requestID) return;
+    streamedText = chunk.replace ? (chunk.text || '') : streamedText + (chunk.text || '');
+  });
+	els.documentSummaryPanel.classList.remove('hidden');
+  els.documentSummaryStatus.classList.add('hidden');
+  els.documentSummaryButton.disabled = true;
+  els.documentSummaryButton.dataset.i18n = 'aiSummaryGenerating';
+	els.documentSummaryButton.textContent = t('aiSummaryGenerating');
+	els.confirmDocumentSummary.disabled = true;
+	startDocumentSummaryProgress();
+	try {
+		const result = await window.quilliteMarkdown.rewriteWithAI({
+			action: 'summarize',
+			text: prepared.text,
+      instruction: 'Create a faithful Markdown brief that takes only 5–10 seconds to read. Use the document main language, start with one concise overview sentence, then give 3–5 short key points. Keep Chinese output within about 260 Chinese characters and other languages within about 140 words. Preserve important names, numbers, decisions, and warnings. Do not invent information.',
+      requestId: requestID
+    });
+    if (requestNumber !== documentSummaryRequest || requestedSession !== state.documentSession || !state.currentFile) return;
+		const summary = restoreAISensitiveContent(String(result?.text || streamedText || ''), prepared.replacements).trim();
+    if (!summary) throw new Error(t('aiEmptyResult'));
+    stopDocumentSummaryProgress();
+    renderDocumentSummary(summary);
+  } catch (error) {
+    if (requestNumber !== documentSummaryRequest) return;
+    stopDocumentSummaryProgress();
+    els.documentSummaryStatus.textContent = `${t('aiSummaryFailed')}: ${aiErrorMessage(error)}`;
+    els.documentSummaryStatus.classList.remove('hidden');
+    void window.quilliteMarkdown.reportErrorLog?.('ai.summary', aiErrorMessage(error), '');
+  } finally {
+    if (requestNumber === documentSummaryRequest) {
+      activeDocumentSummaryRequestID = '';
+      stopDocumentSummaryStream();
+      els.documentSummaryButton.disabled = false;
+			els.documentSummaryButton.dataset.i18n = 'aiSummaryGenerate';
+			els.documentSummaryButton.textContent = t('aiSummaryGenerate');
+			els.confirmDocumentSummary.disabled = false;
+			setAISendPrivacyDisabled('summary', false);
+		}
+	}
+}
+
+function aiRewriteRequestText() {
+  return aiRewriteSelection?.promptText ?? aiRewriteSelection?.markdown ?? '';
+}
+
 function stopAIRewriteProgress() {
   if (aiRewriteProgressTimer) window.clearInterval(aiRewriteProgressTimer);
   aiRewriteProgressTimer = 0;
@@ -7263,6 +7720,15 @@ function stopAIRewriteProgress() {
 function updateAIRewriteProgress() {
   if (!aiRewriteStartedAt) return;
   const elapsed = Math.max(0, (Date.now() - aiRewriteStartedAt) / 1000);
+  if (aiRewriteServerProgress?.total > 1) {
+    const progress = aiRewriteServerProgress;
+    els.aiRewriteProgressPhase.textContent = t(progress.phase === 'retrying' ? 'aiChunkRetrying' : 'aiChunkProcessing', progress);
+    const provider = normalizeAIProvider(currentAISettings?.provider);
+    els.aiRewriteProgressMeta.textContent = t('aiRewriteProgressMeta', { provider: t(aiProviderConfigs[provider].nameKey), model: currentAISettings?.model || aiProviderConfigs[provider].model, seconds: Math.floor(elapsed) });
+    els.aiRewriteProgressBar.style.width = `${progress.percentage}%`;
+    els.aiRewriteProgressPercent.textContent = `${progress.percentage}%`;
+    return;
+  }
   let phaseKey = 'aiRewriteConnecting';
   if (elapsed >= 3) phaseKey = 'aiRewriteGenerating';
   if (elapsed >= 18) phaseKey = 'aiRewriteRefining';
@@ -7278,11 +7744,26 @@ function updateAIRewriteProgress() {
 
 function startAIRewriteProgress() {
   stopAIRewriteProgress();
+  aiRewriteServerProgress = null;
   aiRewriteStartedAt = Date.now();
   els.aiRewriteProgress.classList.remove('hidden');
   els.aiRewriteProgress.setAttribute('aria-hidden', 'false');
   updateAIRewriteProgress();
   aiRewriteProgressTimer = window.setInterval(updateAIRewriteProgress, 500);
+}
+
+function handleAIProgress(event) {
+  if (!event?.kind) return;
+  if (event.kind === 'rewrite' && event.requestId === activeAIRewriteRequestID) {
+    aiRewriteServerProgress = event;
+    updateAIRewriteProgress();
+  } else if (event.kind === 'review' && event.requestId === activeAIReviewRequestID) {
+    aiReviewServerProgress = event;
+    updateAIReviewProgress();
+  } else if (event.kind === 'summary' && event.requestId === activeDocumentSummaryRequestID) {
+    documentSummaryServerProgress = event;
+    updateDocumentSummaryProgress();
+  }
 }
 
 function stopAIRewriteStream() {
@@ -7293,8 +7774,12 @@ function stopAIRewriteStream() {
 
 function clearAIRewriteDiff() {
   aiRewriteDiffSegments = [];
+  aiDiffRenderLimit = 20;
+  if (els.aiDiffFilter) els.aiDiffFilter.value = 'all';
   els.aiDiffList.replaceChildren();
   els.aiDiffReview.classList.add('hidden');
+  els.aiRewriteDialog.classList.remove('has-ai-diff-review');
+  $('#replaceWithAIResult').disabled = !els.aiResultText.value.trim();
 }
 
 function updateAIRewriteDiffSelection() {
@@ -7307,15 +7792,25 @@ function updateAIRewriteDiffSelection() {
 function renderAIRewriteDiff() {
   const changes = changedAITextSegments(aiRewriteDiffSegments);
   const insertMode = aiRewriteSelection?.mode === 'insert';
-  els.aiDiffReview.classList.toggle('hidden', insertMode || changes.length === 0);
-  els.aiDiffList.innerHTML = changes.map((change, index) => {
+  const showDiff = !insertMode && changes.length > 0;
+  els.aiDiffReview.classList.toggle('hidden', !showDiff);
+  els.aiRewriteDialog.classList.toggle('has-ai-diff-review', showDiff);
+  const filter = els.aiDiffFilter?.value || 'all';
+  const filtered = changes.map((change, index) => ({ change, index })).filter(({ change }) => {
+    if (filter === 'accepted') return change.accepted;
+    if (filter === 'pending') return !change.accepted;
+    return true;
+  });
+  const visible = filtered.slice(0, aiDiffRenderLimit);
+  els.aiDiffList.innerHTML = visible.map(({ change, index }) => {
     const original = change.original || t('aiNoContent');
     const replacement = change.replacement || t('aiNoContent');
     return `<article class="ai-diff-item${change.accepted ? ' accepted' : ''}">
-      <label><input type="checkbox" data-ai-diff-index="${index}"${change.accepted ? ' checked' : ''}><span>${escapeHtml(t('aiAcceptChange'))}</span></label>
+      <header><label><input type="checkbox" data-ai-diff-index="${index}"${change.accepted ? ' checked' : ''}><span>${escapeHtml(t('aiAcceptParagraph'))}</span></label><button type="button" class="text-button" data-ai-diff-locate="${index}">${escapeHtml(t('aiLocateOriginal'))}</button></header>
       <div><section><small>${escapeHtml(t('aiOriginalFragment'))}</small><pre>${escapeHtml(original)}</pre></section><section><small>${escapeHtml(t('aiRevisedFragment'))}</small><pre>${escapeHtml(replacement)}</pre></section></div>
     </article>`;
   }).join('');
+  els.loadMoreAIDiff.classList.toggle('hidden', visible.length >= filtered.length);
   updateAIRewriteDiffSelection();
 }
 
@@ -7333,22 +7828,39 @@ function setAllAIRewriteChanges(accepted) {
   renderAIRewriteDiff();
 }
 
-async function openAIEditor() {
-  const context = currentAIEditContext();
-  await openAIRewrite(context, context.markdown ? 'polish' : 'custom');
+function locateAIRewriteChange(changeIndex) {
+  if (!codeEditor || !aiRewriteSelection || aiRewriteSelection.mode !== 'replace') return;
+  let sourceOffset = 0;
+  let currentChange = 0;
+  for (const segment of aiRewriteDiffSegments) {
+    if (segment.type === 'change') {
+      if (currentChange === changeIndex) {
+        const from = aiRewriteSelection.from + sourceOffset;
+        const to = from + segment.original.length;
+        codeEditor.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: 'center' }) });
+        return;
+      }
+      currentChange += 1;
+    }
+    sourceOffset += segment.original.length;
+  }
 }
 
-async function openAIRewrite(selection = editorClipboardSelection, preferredAction = '') {
+async function openAIRewrite(selection = editorClipboardSelection, preferredAction = '', presetInstruction = '') {
   if (!selection) {
     showToast(t('aiNeedSelection'), 'warning');
     return;
   }
+  const requestedMode = ['insert', 'replace', 'preview'].includes(selection.mode) ? selection.mode : '';
   const editContext = {
     documentSession: selection.documentSession ?? state.documentSession,
     from: Number.isInteger(selection.from) ? selection.from : null,
     to: Number.isInteger(selection.to) ? selection.to : null,
     markdown: selection.markdown || '',
-    mode: selection.markdown ? 'replace' : 'insert'
+    promptText: typeof selection.promptText === 'string' ? selection.promptText : undefined,
+    dialogTitleKey: typeof selection.dialogTitleKey === 'string' ? selection.dialogTitleKey : '',
+    tool: typeof selection.tool === 'string' ? selection.tool : '',
+    mode: requestedMode || (selection.markdown ? 'replace' : 'insert')
   };
   closeEditorClipboardMenu();
   try {
@@ -7356,10 +7868,11 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
   } catch {
     currentAISettings = { provider: 'deepseek', hasApiKey: false };
   }
-  if (editContext.documentSession !== state.documentSession || !state.editing) return;
+  if (editContext.documentSession !== state.documentSession || (!state.editing && editContext.mode !== 'preview')) return;
   if (!currentAISettings?.hasApiKey) {
     pendingAIRewriteSelection = { ...editContext };
     pendingAIRewriteAction = preferredAction || (editContext.markdown ? 'polish' : 'custom');
+    pendingAIRewriteInstruction = presetInstruction;
     await openAISettings({ required: true });
     return;
   }
@@ -7368,8 +7881,13 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
   stopAIRewriteStream();
   stopAIRewriteProgress();
   const insertMode = editContext.mode === 'insert';
+  const previewMode = editContext.mode === 'preview';
   els.aiRewriteAction.value = insertMode ? 'custom' : (preferredAction || 'polish');
-  els.aiInstruction.value = '';
+  els.aiRewriteTitle.dataset.i18n = previewMode ? 'aiSummaryDialogTitle' : (editContext.dialogTitleKey || 'aiRewriteTitle');
+  els.aiRewriteTitle.textContent = t(els.aiRewriteTitle.dataset.i18n);
+  const promptProfile = currentAIRewritePromptProfile();
+  els.aiInstruction.value = presetInstruction || (promptProfile.defaultKey ? t(promptProfile.defaultKey) : '');
+  els.aiLength.value = '';
   els.aiOriginalText.value = aiRewriteSelection.markdown;
   els.aiOriginalTextField.classList.toggle('hidden', insertMode);
   els.aiCompareGrid.classList.toggle('is-insert-mode', insertMode);
@@ -7378,19 +7896,27 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
   clearAIRewriteDiff();
   els.aiRewriteStatus.textContent = '';
   els.aiCloudConsent.checked = true;
+  const requestText = aiRewriteRequestText();
+  aiRewritePrivacyFindings = detectAISensitiveContent(requestText);
+  renderAISendPrivacy('rewrite', requestText);
   $('#replaceWithAIResult').disabled = true;
   $('#generateAIRewrite').disabled = false;
   $('#generateAIRewrite').dataset.i18n = 'aiGenerate';
   $('#generateAIRewrite').textContent = t('aiGenerate');
   const applyButton = $('#replaceWithAIResult');
   const applyLabel = insertMode ? 'aiInsertAtCursor' : 'aiReplaceSelection';
+  applyButton.classList.toggle('hidden', previewMode);
   applyButton.dataset.i18n = applyLabel;
   applyButton.textContent = t(applyLabel);
   updateAIRewriteControls();
   els.aiCloudConsentRow.classList.remove('hidden');
   els.aiRewriteDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
-  requestAnimationFrame(() => (insertMode ? els.aiInstruction : els.aiRewriteAction).focus());
+  requestAnimationFrame(() => {
+    if (els.aiRewriteAction.value === 'translate') els.aiTargetLanguage.focus();
+    else if (!els.aiInstructionField.classList.contains('hidden')) els.aiInstruction.focus();
+    else $('#generateAIRewrite').focus();
+  });
 }
 
 function closeAIRewrite() {
@@ -7399,24 +7925,30 @@ function closeAIRewrite() {
   aiRewriteRequest += 1;
   stopAIRewriteStream();
   stopAIRewriteProgress();
+  activeAIRewriteRequestID = '';
+  aiRewriteServerProgress = null;
   $('#generateAIRewrite').disabled = false;
   $('#generateAIRewrite').dataset.i18n = 'aiGenerate';
   $('#generateAIRewrite').textContent = t('aiGenerate');
+  const previewMode = aiRewriteSelection?.mode === 'preview';
   els.aiRewriteDialog.classList.add('hidden');
+  els.aiRewritePrivacy.classList.add('hidden');
   aiRewriteSelection = null;
   if (els.aiSettingsDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
-  focusCodeEditor();
+  if (previewMode) els.documentSummaryButton?.focus();
+  else focusCodeEditor();
 }
 
 async function generateAIRewrite() {
   if (!aiRewriteSelection) return;
   const action = els.aiRewriteAction.value;
   const instruction = els.aiInstruction.value.trim();
-  if (action === 'custom' && !instruction) {
+  if (!instruction) {
     els.aiRewriteStatus.textContent = t('aiNeedInstruction');
     els.aiInstruction.focus();
     return;
   }
+  const length = els.aiLengthField.classList.contains('hidden') ? '' : els.aiLength.value.trim();
   if (!els.aiCloudConsent.checked) {
     els.aiRewriteStatus.textContent = t('aiNeedCloudConsent');
     els.aiCloudConsent.focus();
@@ -7425,6 +7957,15 @@ async function generateAIRewrite() {
   const button = $('#generateAIRewrite');
   const requestNumber = ++aiRewriteRequest;
   const requestID = `rewrite-${Date.now()}-${requestNumber}`;
+  activeAIRewriteRequestID = requestID;
+  const requestText = aiRewriteRequestText();
+  aiRewritePrivacyFindings = detectAISensitiveContent(requestText).map((finding, index) => ({
+    ...finding,
+    selected: aiRewritePrivacyFindings[index]?.value === finding.value ? aiRewritePrivacyFindings[index].selected : true
+  }));
+  renderAISendPrivacy('rewrite', requestText);
+  const prepared = prepareAIContent(requestText, aiRewritePrivacyFindings);
+  setAISendPrivacyDisabled('rewrite', true);
   stopAIRewriteStream();
   clearAIRewriteDiff();
   aiRewriteStreaming = true;
@@ -7434,7 +7975,7 @@ async function generateAIRewrite() {
   aiRewriteStreamCleanup = window.quilliteMarkdown.onAIRewriteChunk?.(chunk => {
     if (requestNumber !== aiRewriteRequest || chunk?.requestId !== requestID) return;
     streamedText = chunk.replace ? (chunk.text || '') : streamedText + (chunk.text || '');
-    els.aiResultText.value = streamedText;
+    els.aiResultText.value = restoreAISensitiveContent(streamedText, prepared.replacements);
     els.aiResultText.scrollTop = els.aiResultText.scrollHeight;
     if (chunk.done) aiRewriteStreaming = false;
   });
@@ -7447,17 +7988,18 @@ async function generateAIRewrite() {
   try {
     const result = await window.quilliteMarkdown.rewriteWithAI({
       action,
-      text: aiRewriteSelection.markdown,
-      instruction,
+      text: prepared.text,
+      instruction: length ? `${instruction}\n${t('aiLengthInstruction', { length })}` : instruction,
       targetLanguage: els.aiTargetLanguage.value,
       requestId: requestID
     });
     if (requestNumber !== aiRewriteRequest) return;
     stopAIRewriteProgress();
-    els.aiResultText.value = result?.text || '';
+    els.aiResultText.value = restoreAISensitiveContent(result?.text || '', prepared.replacements);
     if (!els.aiResultText.value.trim()) throw new Error(t('aiEmptyResult'));
     aiRewriteStreaming = false;
     rebuildAIRewriteDiff();
+    els.aiRewritePrivacy.classList.add('hidden');
     els.aiRewriteStatus.textContent = '';
   } catch (error) {
     if (requestNumber !== aiRewriteRequest) return;
@@ -7466,17 +8008,20 @@ async function generateAIRewrite() {
     void window.quilliteMarkdown.reportErrorLog?.('ai.edit', aiErrorMessage(error), '');
   } finally {
     if (requestNumber === aiRewriteRequest) {
+      activeAIRewriteRequestID = '';
       stopAIRewriteStream();
       els.aiResultText.readOnly = false;
       button.disabled = false;
       button.dataset.i18n = 'aiGenerate';
       button.textContent = t('aiGenerate');
+      setAISendPrivacyDisabled('rewrite', false);
     }
   }
 }
 
 function replaceWithAIResult() {
   if (!codeEditor || !aiRewriteSelection) return;
+  if (aiRewriteSelection.mode === 'preview') return;
   if (aiRewriteSelection.documentSession !== state.documentSession || !state.editing) {
     els.aiRewriteStatus.textContent = t('aiSelectionChanged');
     return;
@@ -7612,6 +8157,8 @@ function resetAIDocumentReviewSession() {
   els.aiReviewEmpty.classList.remove('hidden');
   els.aiReviewConsentRow.classList.remove('hidden');
   els.aiReviewConsent.checked = true;
+  els.aiReviewInstruction.value = t('aiReviewInstructionDefault');
+  els.aiReviewInstruction.disabled = false;
   els.aiReviewStatus.textContent = '';
   els.runAIReview.disabled = false;
   els.runAIReview.dataset.i18n = 'aiStartReview';
@@ -7628,6 +8175,15 @@ function resetAIDocumentReviewSession() {
 function updateAIReviewProgress() {
   if (!aiReviewStartedAt) return;
   const elapsed = Math.max(0, (Date.now() - aiReviewStartedAt) / 1000);
+  if (aiReviewServerProgress?.total > 1) {
+    const progress = aiReviewServerProgress;
+    els.aiReviewEmpty.querySelector('strong').textContent = t(progress.phase === 'retrying' ? 'aiChunkRetrying' : 'aiChunkProcessing', progress);
+    const provider = normalizeAIProvider(currentAISettings?.provider);
+    els.aiReviewEmpty.querySelector('p').textContent = t('aiReviewProgressMeta', { provider: t(aiProviderConfigs[provider].nameKey), model: currentAISettings?.model || aiProviderConfigs[provider].model, seconds: Math.floor(elapsed) });
+    els.aiReviewProgressBar.style.width = `${progress.percentage}%`;
+    els.aiReviewProgressMeta.textContent = `${progress.percentage}%`;
+    return;
+  }
   let phaseKey = 'aiReviewConnecting';
   if (elapsed >= 3) phaseKey = 'aiReviewReading';
   if (elapsed >= 11) phaseKey = 'aiReviewAnalysing';
@@ -7644,6 +8200,7 @@ function updateAIReviewProgress() {
 
 function startAIReviewProgress() {
   stopAIReviewProgress();
+  aiReviewServerProgress = null;
   aiReviewStartedAt = Date.now();
   els.aiReviewEmpty.classList.add('is-checking');
   els.aiReviewEmpty.setAttribute('aria-busy', 'true');
@@ -7687,18 +8244,28 @@ async function openAIDocumentReview() {
     resetAIDocumentReviewSession();
     aiReviewSessionActive = true;
   }
+  const reviewContent = editorContent();
+  if (els.runAIReview.classList.contains('hidden')) {
+    els.aiReviewPrivacy.classList.add('hidden');
+  } else {
+    aiReviewPrivacyFindings = detectAISensitiveContent(reviewContent);
+    renderAISendPrivacy('review', reviewContent);
+  }
   els.aiReviewDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
   requestAnimationFrame(() => {
-    const action = !els.rerunAIReview.classList.contains('hidden') ? els.rerunAIReview : els.runAIReview;
-    action.focus();
+    if (!els.rerunAIReview.classList.contains('hidden')) els.rerunAIReview.focus();
+    else els.aiReviewInstruction.focus();
   });
 }
 
 function cancelActiveAIDocumentReview() {
   aiReviewRequest += 1;
   stopAIReviewProgress();
+  activeAIReviewRequestID = '';
+  aiReviewServerProgress = null;
   els.runAIReview.disabled = false;
+  els.aiReviewInstruction.disabled = false;
   els.runAIReview.dataset.i18n = 'aiStartReview';
   els.runAIReview.textContent = t('aiStartReview');
   void window.quilliteMarkdown.cancelAIDocumentReview?.();
@@ -7714,6 +8281,12 @@ function closeAIDocumentReview() {
 
 async function runAIDocumentReview() {
   if (!codeEditor) return;
+  const instruction = els.aiReviewInstruction.value.trim();
+  if (!instruction) {
+    els.aiReviewStatus.textContent = t('aiNeedInstruction');
+    els.aiReviewInstruction.focus();
+    return;
+  }
   if (!els.aiReviewConsent.checked) {
     els.aiReviewStatus.textContent = t('aiNeedCloudConsent');
     els.aiReviewConsent.focus();
@@ -7724,16 +8297,22 @@ async function runAIDocumentReview() {
     els.aiReviewStatus.textContent = t('aiReviewEmptyDocument');
     return;
   }
-  if ([...source].length > 80000) {
+  if ([...source].length > 2000000) {
     els.aiReviewStatus.textContent = t('aiReviewTooLong');
     return;
   }
   const requestID = ++aiReviewRequest;
+  activeAIReviewRequestID = `review-${Date.now()}-${requestID}`;
+  aiReviewPrivacyFindings = detectAISensitiveContent(source).map((finding, index) => ({ ...finding, selected: aiReviewPrivacyFindings[index]?.value === finding.value ? aiReviewPrivacyFindings[index].selected : true }));
+  renderAISendPrivacy('review', source);
+  const prepared = prepareAIContent(source, aiReviewPrivacyFindings);
+  setAISendPrivacyDisabled('review', true);
   aiReviewSessionActive = true;
   aiReviewApplied = false;
   aiReviewSnapshot = source;
   aiReviewSuggestions = [];
   els.runAIReview.disabled = true;
+  els.aiReviewInstruction.disabled = true;
   els.applyAIReview.disabled = true;
   els.aiReviewSuggestions.classList.add('hidden');
   els.aiReviewToolbar.classList.add('hidden');
@@ -7747,10 +8326,11 @@ async function runAIDocumentReview() {
   els.aiReviewConsentRow.classList.remove('hidden');
   startAIReviewProgress();
   try {
-    const result = await window.quilliteMarkdown.reviewDocumentWithAI({ text: source });
+    const result = await window.quilliteMarkdown.reviewDocumentWithAI({ text: prepared.text, instruction, requestId: activeAIReviewRequestID });
     if (requestID !== aiReviewRequest) return;
     stopAIReviewProgress();
-    aiReviewSuggestions = locateAIReviewSuggestions(result?.suggestions, source);
+    aiReviewSuggestions = locateAIReviewSuggestions(restoreAISuggestions(result?.suggestions, prepared.replacements), source);
+    els.aiReviewPrivacy.classList.add('hidden');
     els.aiReviewStatus.textContent = '';
     els.runAIReview.classList.add('hidden');
     els.rerunAIReview.classList.remove('hidden');
@@ -7774,7 +8354,12 @@ async function runAIDocumentReview() {
     els.rerunAIReview.classList.remove('hidden');
     void window.quilliteMarkdown.reportErrorLog?.('ai.review', aiErrorMessage(error), '');
   } finally {
-    if (requestID === aiReviewRequest) els.runAIReview.disabled = false;
+    if (requestID === aiReviewRequest) {
+      activeAIReviewRequestID = '';
+      els.runAIReview.disabled = false;
+      els.aiReviewInstruction.disabled = false;
+      setAISendPrivacyDisabled('review', false);
+    }
   }
 }
 
@@ -7847,9 +8432,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.7.2', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.7.3', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.2';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.3';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -7905,7 +8490,7 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
-  $('#currentVersion').textContent = info.currentVersion || '2.7.2';
+  $('#currentVersion').textContent = info.currentVersion || '2.7.3';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -8066,6 +8651,129 @@ async function restoreRecoverySnapshot() {
   } finally {
     buttons.forEach(button => { button.disabled = false; });
   }
+}
+
+function closeDocumentHistory(restoreFocus = true) {
+  if (els.documentHistoryDialog.classList.contains('hidden')) return;
+  els.documentHistoryDialog.classList.add('hidden');
+  documentVersions = [];
+  selectedDocumentVersion = null;
+  els.restoreDocumentHistory.disabled = true;
+  if (els.aiSettingsDialog.classList.contains('hidden') && els.aiRewriteDialog.classList.contains('hidden') && els.aiReviewDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
+  if (restoreFocus) focusCodeEditor();
+}
+
+function documentHistoryEmpty(titleKey = 'documentHistorySelectTitle', hintKey = 'documentHistorySelectHint') {
+  els.documentHistoryPreview.replaceChildren();
+  const empty = document.createElement('div');
+  empty.className = 'document-history-empty';
+  const title = document.createElement('strong');
+  const hint = document.createElement('p');
+  title.textContent = t(titleKey);
+  hint.textContent = t(hintKey);
+  empty.append(title, hint);
+  els.documentHistoryPreview.append(empty);
+}
+
+function renderDocumentVersionList() {
+  els.documentHistoryList.replaceChildren();
+  if (!documentVersions.length) {
+    const empty = document.createElement('p');
+    empty.className = 'document-history-list-empty';
+    empty.textContent = t('documentHistoryEmpty');
+    els.documentHistoryList.append(empty);
+    return;
+  }
+  documentVersions.forEach(version => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.documentVersionId = version.id;
+    button.className = selectedDocumentVersion?.id === version.id ? 'active' : '';
+    const time = document.createElement('strong');
+    const size = document.createElement('small');
+    time.textContent = recoveryTimestamp(version.createdAt);
+    size.textContent = t('documentHistorySize', { size: Math.max(0.1, Number(version.size || 0) / 1024).toFixed(1) });
+    button.append(time, size);
+    els.documentHistoryList.append(button);
+  });
+}
+
+function renderDocumentVersionPreview(version) {
+  const current = editorContent();
+  const difference = documentVersionLineDifference(version.content, current);
+  const olderPreview = historyPreviewText(version.content);
+  const currentPreview = historyPreviewText(current);
+  els.documentHistoryPreview.replaceChildren();
+  const summary = document.createElement('strong');
+  summary.className = 'document-history-difference';
+  summary.textContent = t('documentHistoryDifference', difference);
+  const comparison = document.createElement('div');
+  comparison.className = 'document-history-comparison';
+  for (const [labelKey, preview] of [['documentHistoryOlder', olderPreview], ['documentHistoryCurrent', currentPreview]]) {
+    const section = document.createElement('section');
+    const label = document.createElement('small');
+    const content = document.createElement('pre');
+    label.textContent = t(labelKey);
+    content.textContent = preview.text + (preview.truncated ? '\n\n…' : '');
+    section.append(label, content);
+    comparison.append(section);
+  }
+  els.documentHistoryPreview.append(summary, comparison);
+}
+
+async function selectDocumentVersion(id) {
+  const requestedSession = documentHistorySession;
+  const requestedPath = state.currentFile?.path;
+  els.documentHistoryStatus.textContent = '';
+  try {
+    const version = await window.quilliteMarkdown.getDocumentVersion(requestedPath, id);
+    if (requestedSession !== state.documentSession || !sameDocumentPath(requestedPath, state.currentFile?.path)) return;
+    selectedDocumentVersion = version;
+    renderDocumentVersionList();
+    renderDocumentVersionPreview(version);
+    els.restoreDocumentHistory.disabled = false;
+  } catch (error) {
+    els.documentHistoryStatus.textContent = `${t('documentHistoryLoadFailed')}: ${aiErrorMessage(error)}`;
+  }
+}
+
+async function openDocumentHistory() {
+  if (!codeEditor || !state.editing || !state.currentFile?.path) return;
+  documentHistorySession = state.documentSession;
+  selectedDocumentVersion = null;
+  els.restoreDocumentHistory.disabled = true;
+  els.documentHistoryStatus.textContent = '';
+  documentHistoryEmpty();
+  els.documentHistoryDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  try {
+    documentVersions = await window.quilliteMarkdown.listDocumentVersions(state.currentFile.path) || [];
+    if (documentHistorySession !== state.documentSession) return closeDocumentHistory();
+    renderDocumentVersionList();
+    if (documentVersions.length) await selectDocumentVersion(documentVersions[0].id);
+    else documentHistoryEmpty('documentHistoryEmpty', 'documentHistorySelectHint');
+  } catch (error) {
+    els.documentHistoryStatus.textContent = `${t('documentHistoryLoadFailed')}: ${aiErrorMessage(error)}`;
+    documentVersions = [];
+    renderDocumentVersionList();
+  }
+}
+
+function restoreSelectedDocumentVersion() {
+  if (!codeEditor || !selectedDocumentVersion) return;
+  if (documentHistorySession !== state.documentSession || !sameDocumentPath(selectedDocumentVersion.path, state.currentFile?.path)) {
+    els.documentHistoryStatus.textContent = t('documentHistoryChanged');
+    return;
+  }
+  const content = selectedDocumentVersion.content;
+  codeEditor.dispatch({
+    changes: { from: 0, to: codeEditor.state.doc.length, insert: content },
+    selection: { anchor: 0 },
+    scrollIntoView: true,
+    userEvent: 'input.history-restore'
+  });
+  closeDocumentHistory();
+  showToast(t('documentHistoryRestored'), 'success', 4600);
 }
 
 async function snoozeUpdates() {
@@ -8236,6 +8944,9 @@ document.querySelectorAll('[data-toc-mode]').forEach(button => button.addEventLi
   localStorage.setItem('tocMode', state.tocMode);
   renderToc();
 }));
+els.documentSummaryButton.addEventListener('click', openAIDocumentSummary);
+els.confirmDocumentSummary.addEventListener('click', generateAIDocumentSummary);
+$('#closeDocumentSummary').addEventListener('click', closeDocumentSummary);
 $('#revealButton').addEventListener('click', () => state.currentFile && revealFileInFolder(state.currentFile.path));
 $('#closePreviewButton').addEventListener('click', closePreview);
 els.documentActions.addEventListener('click', event => {
@@ -8318,6 +9029,7 @@ window.quilliteMarkdown.onUpdateProgress(progress => {
   if (applyingUpdate) setUpdateProgress(Number(progress?.done) || 0, Number(progress?.total) || 0);
 });
 window.quilliteMarkdown.onImageUploadProgress(updateImageUploadProgress);
+window.quilliteMarkdown.onAIProgress(handleAIProgress);
 $('#openUpdatePage').addEventListener('click', () => {
 	window.quilliteMarkdown.openExternal('https://qm.ssssa.cn/#download');
 	closeUpdate();
@@ -8791,6 +9503,31 @@ $('#headingSelect').addEventListener('change', event => {
   formatSelectedLines('heading', event.target.value);
   event.target.value = '';
 });
+els.aiToolbarButton.addEventListener('click', event => {
+  event.stopPropagation();
+  openAIToolbarMenu();
+});
+els.aiToolbarMenu.addEventListener('click', event => {
+  event.stopPropagation();
+  const button = event.target.closest('[data-ai-toolbar-action]');
+  if (button) void runAIToolbarAction(button.dataset.aiToolbarAction);
+});
+els.aiToolbarMenu.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeAIToolbarMenu(true);
+    return;
+  }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  const items = [...els.aiToolbarMenu.querySelectorAll('[role="menuitem"]')];
+  if (!items.length) return;
+  event.preventDefault();
+  const current = Math.max(0, items.indexOf(document.activeElement));
+  const next = event.key === 'Home' ? 0
+    : event.key === 'End' ? items.length - 1
+      : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+  items[next].focus();
+});
 els.moreFormatButton.addEventListener('click', event => {
   event.stopPropagation();
   openMoreFormatMenu();
@@ -8974,12 +9711,10 @@ els.setDefaultAIProvider.addEventListener('click', setDefaultAIProvider);
 els.editAIAPIKey.addEventListener('click', editAIAPIKey);
 els.deleteAIAPIKey.addEventListener('click', deleteAIAPIKey);
 $('#testAIConnection').addEventListener('click', testAIConnection);
-els.aiEditButton.addEventListener('click', openAIEditor);
-els.aiReviewButton.addEventListener('click', openAIDocumentReview);
+els.documentHistoryButton.addEventListener('click', openDocumentHistory);
 
 $('#closeAIRewrite').addEventListener('click', closeAIRewrite);
 $('#cancelAIRewrite').addEventListener('click', closeAIRewrite);
-els.aiRewriteAction.addEventListener('change', updateAIRewriteControls);
 els.aiResultText.addEventListener('input', () => {
   if (!aiRewriteStreaming) rebuildAIRewriteDiff();
 });
@@ -8987,6 +9722,14 @@ $('#generateAIRewrite').addEventListener('click', generateAIRewrite);
 $('#replaceWithAIResult').addEventListener('click', replaceWithAIResult);
 $('#acceptAllAIDiff').addEventListener('click', () => setAllAIRewriteChanges(true));
 $('#rejectAllAIDiff').addEventListener('click', () => setAllAIRewriteChanges(false));
+els.aiDiffFilter.addEventListener('change', () => {
+  aiDiffRenderLimit = 20;
+  renderAIRewriteDiff();
+});
+els.loadMoreAIDiff.addEventListener('click', () => {
+  aiDiffRenderLimit += 20;
+  renderAIRewriteDiff();
+});
 els.aiDiffList.addEventListener('change', event => {
   const checkbox = event.target.closest('[data-ai-diff-index]');
   if (!checkbox) return;
@@ -8994,8 +9737,25 @@ els.aiDiffList.addEventListener('change', event => {
   if (!change) return;
   change.accepted = checkbox.checked;
   checkbox.closest('.ai-diff-item')?.classList.toggle('accepted', change.accepted);
-  updateAIRewriteDiffSelection();
+  if (els.aiDiffFilter.value === 'all') updateAIRewriteDiffSelection();
+  else renderAIRewriteDiff();
 });
+els.aiDiffList.addEventListener('click', event => {
+  const button = event.target.closest('[data-ai-diff-locate]');
+  if (!button) return;
+  locateAIRewriteChange(Number(button.dataset.aiDiffLocate));
+});
+for (const list of [els.aiRewritePrivacyList, els.aiReviewPrivacyList, els.documentSummaryPrivacyList]) {
+	list.addEventListener('change', event => {
+		const checkbox = event.target.closest('[data-ai-privacy-kind]');
+		if (!checkbox) return;
+		const findings = aiPrivacyFindings(checkbox.dataset.aiPrivacyKind);
+    const finding = findings[Number(checkbox.dataset.aiPrivacyIndex)];
+    if (!finding) return;
+    finding.selected = checkbox.checked;
+    refreshAISendPrivacy(checkbox.dataset.aiPrivacyKind);
+  });
+}
 $('#openAISettingsFromRewrite').addEventListener('click', () => {
   els.aiRewriteDialog.classList.add('hidden');
   void openAISettings();
@@ -9020,6 +9780,16 @@ $('#openAISettingsFromReview').addEventListener('click', () => {
   els.aiReviewDialog.classList.add('hidden');
   void openAISettings();
 });
+$('#closeDocumentHistory').addEventListener('click', closeDocumentHistory);
+$('#cancelDocumentHistory').addEventListener('click', closeDocumentHistory);
+els.restoreDocumentHistory.addEventListener('click', restoreSelectedDocumentVersion);
+els.documentHistoryList.addEventListener('click', event => {
+  const button = event.target.closest('[data-document-version-id]');
+  if (button) void selectDocumentVersion(button.dataset.documentVersionId);
+});
+els.documentHistoryDialog.addEventListener('click', event => {
+  if (event.target === els.documentHistoryDialog) closeDocumentHistory();
+});
 els.spellcheckContextMenu.addEventListener('click', event => {
   event.stopPropagation();
   const suggestion = event.target.closest('[data-spelling-suggestion]');
@@ -9034,6 +9804,7 @@ els.spellcheckContextMenu.addEventListener('click', event => {
 document.addEventListener('click', () => {
   closeMoreMenu();
   els.codeLangMenu.classList.add('hidden');
+  closeAIToolbarMenu();
   closeMoreFormatMenu();
   closeDocumentActionsMenu();
   closeTextColorMenu();
@@ -9046,6 +9817,7 @@ els.fileList.addEventListener('scroll', closeRecentContextMenu, { passive: true 
 window.addEventListener('resize', closeRecentContextMenu);
 window.addEventListener('resize', closeEditorClipboardMenu);
 window.addEventListener('resize', closeSpellcheckContextMenu);
+window.addEventListener('resize', closeAIToolbarMenu);
 window.addEventListener('resize', scheduleAutomaticFontScaleRefresh);
 window.addEventListener('resize', positionMoreMenu);
 window.addEventListener('resize', closeSettingsSubmenus);
@@ -9089,6 +9861,7 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.spellcheckContextMenu.classList.contains('hidden')) { closeSpellcheckContextMenu(); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.editorClipboardMenu.classList.contains('hidden')) { closeEditorClipboardMenu(); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.recentContextMenu.classList.contains('hidden')) closeRecentContextMenu();
+  else if (event.key === 'Escape' && !els.aiToolbarMenu.classList.contains('hidden')) closeAIToolbarMenu(true);
   else if (event.key === 'Escape' && !els.textColorMenu.classList.contains('hidden')) { closeTextColorMenu(); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.codeLangMenu.classList.contains('hidden')) { els.codeLangMenu.classList.add('hidden'); focusCodeEditor(); }
   else if (event.key === 'Escape' && !els.moreFormatMenu.classList.contains('hidden')) closeMoreFormatMenu(true);
@@ -9106,6 +9879,7 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.exportCenterDialog.classList.contains('hidden')) closeExportCenter();
   else if (event.key === 'Escape' && !els.pdfTutorialDialog.classList.contains('hidden')) closePDFTutorial();
   else if (event.key === 'Escape' && !els.updateDialog.classList.contains('hidden')) closeUpdate();
+  else if (event.key === 'Escape' && !els.documentHistoryDialog.classList.contains('hidden')) closeDocumentHistory();
   else if (event.key === 'Escape' && !els.aiReviewDialog.classList.contains('hidden')) closeAIDocumentReview();
   else if (event.key === 'Escape' && !els.aiRewriteDialog.classList.contains('hidden')) closeAIRewrite();
   else if (event.key === 'Escape' && !els.aiSettingsDialog.classList.contains('hidden')) closeAISettings();

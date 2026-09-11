@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.7.2"
+	appVersion      = "2.7.3"
 	maxRecent       = 10
 )
 
@@ -121,6 +121,7 @@ type App struct {
 	mu                  sync.RWMutex
 	preferencesMu       sync.Mutex
 	recoveryMu          sync.Mutex
+	historyMu           sync.Mutex
 	picGoCloudLoginMu   sync.Mutex
 	securityBookmarksMu sync.Mutex
 	draftsMu            sync.Mutex
@@ -1209,6 +1210,9 @@ func (a *App) SaveFile(filePath, content string) (*Document, error) {
 	if a.isReferenceDocumentPath(filePath) {
 		return nil, errors.New("built-in reference documents are read-only; save a copy to edit")
 	}
+	// Version history is best-effort and must never prevent the user's save.
+	// Capture the last on-disk state before replacing it.
+	_ = a.captureDocumentVersion(filePath, content)
 	resolvedPath, foundBookmark, bookmarkErr := a.writeDocumentWithMacBookmark(filePath, []byte(content))
 	if !foundBookmark || bookmarkErr != nil {
 		if err := os.WriteFile(filepath.Clean(filePath), []byte(content), 0o644); err != nil {
@@ -1234,6 +1238,7 @@ func (a *App) saveDocumentAs(currentPath, filePath, content string) (*Document, 
 	if claimedDraft {
 		defer a.releaseDraftReplacementClaim(claimKey)
 	}
+	_ = a.captureDocumentVersion(targetPath, content)
 	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 		return nil, err
 	}

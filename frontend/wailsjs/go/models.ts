@@ -1,5 +1,5 @@
 export namespace main {
-	
+
 	export class AIDiagnosticCheck {
 	    code: string;
 	    status: string;
@@ -54,6 +54,8 @@ export namespace main {
 	}
 	export class AIDocumentReviewRequest {
 	    text: string;
+	    instruction: string;
+	    requestId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AIDocumentReviewRequest(source);
@@ -62,6 +64,8 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.text = source["text"];
+	        this.instruction = source["instruction"];
+	        this.requestId = source["requestId"];
 	    }
 	}
 	export class AIDocumentSuggestion {
@@ -233,6 +237,44 @@ export namespace main {
 	        this.size = source["size"];
 	        this.replacedPath = source["replacedPath"];
 	        this.readOnly = source["readOnly"];
+	    }
+	}
+	export class DocumentVersion {
+	    id: string;
+	    path: string;
+	    createdAt: string;
+	    size: number;
+
+	    static createFrom(source: any = {}) {
+	        return new DocumentVersion(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.path = source["path"];
+	        this.createdAt = source["createdAt"];
+	        this.size = source["size"];
+	    }
+	}
+	export class DocumentVersionDetail {
+	    id: string;
+	    path: string;
+	    createdAt: string;
+	    size: number;
+	    content: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DocumentVersionDetail(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.path = source["path"];
+	        this.createdAt = source["createdAt"];
+	        this.size = source["size"];
+	        this.content = source["content"];
 	    }
 	}
 	export class ExportPreset {

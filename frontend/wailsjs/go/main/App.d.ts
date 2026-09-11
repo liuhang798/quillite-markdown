@@ -38,6 +38,8 @@ export function GetAIProviderSettings(arg1:string):Promise<main.AISettings>;
 
 export function GetAISettings():Promise<main.AISettings>;
 
+export function GetDocumentVersion(arg1:string,arg2:string):Promise<main.DocumentVersionDetail>;
+
 export function GetExportSettings():Promise<main.ExportSettings>;
 
 export function GetFeedbackSystemInfo():Promise<main.FeedbackSystemInfo>;
@@ -55,6 +57,8 @@ export function GetStartupMode():Promise<string>;
 export function ImportImage(arg1:string,arg2:string):Promise<string>;
 
 export function ListAIModels(arg1:string):Promise<Array<string>>;
+
+export function ListDocumentVersions(arg1:string):Promise<Array<main.DocumentVersion>>;
 
 export function ListFolder(arg1:string):Promise<main.FolderResult>;
 

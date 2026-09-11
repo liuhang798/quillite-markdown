@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,38 @@ func TestRecoverySnapshotRoundTripAndClear(t *testing.T) {
 	}
 	if snapshot, err = app.GetRecoverySnapshot(); err != nil || snapshot != nil {
 		t.Fatalf("cleared recovery snapshot = %#v, %v; want nil", snapshot, err)
+	}
+}
+
+func TestRecoverySnapshotSupportsMaximumEscapedContent(t *testing.T) {
+	app := testApp(t)
+	documentPath := filepath.Join(t.TempDir(), "escaped.md")
+	content := strings.Repeat("\n", maxRecoverySnapshotSize)
+	if err := app.SaveRecoverySnapshot(RecoverySnapshotInput{Path: documentPath, Content: content}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := app.GetRecoverySnapshot()
+	if err != nil || snapshot == nil || snapshot.Content != content {
+		t.Fatalf("escaped recovery did not round-trip: snapshot=%v err=%v", snapshot != nil, err)
+	}
+}
+
+func TestRecoverySnapshotReadsLegacyEscapedJSON(t *testing.T) {
+	app := testApp(t)
+	want := RecoverySnapshot{Path: "legacy.md", Name: "legacy.md", Directory: ".", Content: strings.Repeat("\n", 1024), UpdatedAt: "2026-09-11T00:00:00Z"}
+	data, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(app.recoverySnapshotPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(app.recoverySnapshotPath(), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := app.GetRecoverySnapshot()
+	if err != nil || got == nil || got.Content != want.Content {
+		t.Fatalf("legacy recovery = %#v, %v", got, err)
 	}
 }
 

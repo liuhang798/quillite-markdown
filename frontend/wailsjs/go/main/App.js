@@ -74,6 +74,10 @@ export function GetAISettings() {
   return window['go']['main']['App']['GetAISettings']();
 }
 
+export function GetDocumentVersion(arg1, arg2) {
+  return window['go']['main']['App']['GetDocumentVersion'](arg1, arg2);
+}
+
 export function GetExportSettings() {
   return window['go']['main']['App']['GetExportSettings']();
 }
@@ -108,6 +112,10 @@ export function ImportImage(arg1, arg2) {
 
 export function ListAIModels(arg1) {
   return window['go']['main']['App']['ListAIModels'](arg1);
+}
+
+export function ListDocumentVersions(arg1) {
+  return window['go']['main']['App']['ListDocumentVersions'](arg1);
 }
 
 export function ListFolder(arg1) {
