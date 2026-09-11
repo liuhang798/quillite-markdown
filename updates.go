@@ -20,17 +20,53 @@ const (
 	officialDownloadPage     = officialWebsiteBase + "/#download"
 )
 
+var windowsUninstallerSafetyCheck = isWindowsUninstallerSafe
+
 type UpdateInfo struct {
 	Checked               bool   `json:"checked"`
 	Suppressed            bool   `json:"suppressed"`
 	Available             bool   `json:"available"`
 	ManualInstallRequired bool   `json:"manualInstallRequired"`
+	ManualInstallReason   string `json:"manualInstallReason"`
+	ManualInstallerURL    string `json:"manualInstallerUrl"`
 	CurrentVersion        string `json:"currentVersion"`
 	LatestVersion         string `json:"latestVersion"`
 	ReleaseName           string `json:"releaseName"`
 	ReleaseNotes          string `json:"releaseNotes"`
 	ReleaseURL            string `json:"releaseUrl"`
 	PublishedAt           string `json:"publishedAt"`
+}
+
+// WindowsInstallSafety describes whether the current Windows installation can
+// safely participate in in-app updates. Legacy uninstallers could recursively
+// remove user files placed in the selected install directory, so this check is
+// deliberately local and does not depend on the update service being online.
+type WindowsInstallSafety struct {
+	Applicable     bool   `json:"applicable"`
+	Safe           bool   `json:"safe"`
+	CurrentVersion string `json:"currentVersion"`
+	DownloadURL    string `json:"downloadUrl"`
+}
+
+// GetWindowsInstallSafety lets the frontend warn affected users immediately
+// at startup, before the normal network-based update check runs.
+func (a *App) GetWindowsInstallSafety() WindowsInstallSafety {
+	applicable := runtime.GOOS == "windows"
+	safe := true
+	if applicable {
+		safe = windowsUninstallerSafetyCheck()
+	}
+	return windowsInstallSafetyForPlatform(runtime.GOOS, safe)
+}
+
+func windowsInstallSafetyForPlatform(goos string, safe bool) WindowsInstallSafety {
+	applicable := goos == "windows"
+	return WindowsInstallSafety{
+		Applicable:     applicable,
+		Safe:           !applicable || safe,
+		CurrentVersion: appVersion,
+		DownloadURL:    officialDownloadPage,
+	}
 }
 
 type updateRelease struct {
@@ -164,7 +200,13 @@ func isOfficialWebsiteURL(value string) bool {
 // this once at startup and may call it again when the user requests a check.
 func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 	result := UpdateInfo{CurrentVersion: appVersion}
-	if !force {
+	windowsUninstallerSafe := true
+	if runtime.GOOS == "windows" {
+		windowsUninstallerSafe = windowsUninstallerSafetyCheck()
+	}
+	// An unsafe legacy uninstaller is a local data-safety issue, so it must not
+	// be hidden by the ordinary 30-day update reminder preference.
+	if !force && windowsUninstallerSafe {
 		prefs, err := a.readPreferences()
 		if err == nil && prefs.SuppressUpdateUntil != "" {
 			if until, parseErr := time.Parse(time.RFC3339, prefs.SuppressUpdateUntil); parseErr == nil && time.Now().Before(until) {
@@ -179,15 +221,22 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 	}
 
 	latest := normaliseVersion(release.TagName)
+	manualInstallReason := requiredManualInstallReason(runtime.GOOS, appVersion, latest, windowsUninstallerSafe)
+	manualInstallerURL := ""
+	if manualInstallReason != "" {
+		manualInstallerURL = fullInstallerURLForPlatform(release.Assets, runtime.GOOS)
+	}
 	result = UpdateInfo{
 		Checked:               true,
 		Available:             compareVersions(latest, appVersion) > 0,
-		ManualInstallRequired: requiresManualMacUpdateMigration(runtime.GOOS, appVersion, latest),
+		ManualInstallRequired: manualInstallReason != "",
+		ManualInstallReason:   manualInstallReason,
+		ManualInstallerURL:    manualInstallerURL,
 		CurrentVersion:        appVersion,
 		LatestVersion:         latest,
 		ReleaseName:           strings.TrimSpace(release.Name),
 		ReleaseNotes:          strings.TrimSpace(release.Body),
-		ReleaseURL:             release.HTMLURL,
+		ReleaseURL:            release.HTMLURL,
 		PublishedAt:           release.PublishedAt,
 	}
 	if result.ReleaseName == "" {
@@ -203,6 +252,37 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+func fullInstallerURLForPlatform(assets []updateReleaseAsset, goos string) string {
+	suffix := ""
+	switch goos {
+	case "windows":
+		suffix = "windows-amd64.exe"
+	case "darwin":
+		suffix = "macos-universal.dmg"
+	}
+	for _, asset := range assets {
+		if suffix != "" && strings.HasSuffix(asset.Name, suffix) && isOfficialWebsiteURL(asset.BrowserDownloadURL) {
+			return asset.BrowserDownloadURL
+		}
+	}
+	return ""
+}
+
+const (
+	manualInstallReasonMacLegacyUpdater         = "mac-legacy-updater"
+	manualInstallReasonWindowsUnsafeUninstaller = "windows-unsafe-uninstaller"
+)
+
+func requiredManualInstallReason(goos, currentVersion, latestVersion string, windowsUninstallerSafe bool) string {
+	if goos == "windows" && !windowsUninstallerSafe {
+		return manualInstallReasonWindowsUnsafeUninstaller
+	}
+	if requiresManualMacUpdateMigration(goos, currentVersion, latestVersion) {
+		return manualInstallReasonMacLegacyUpdater
+	}
+	return ""
 }
 
 // Version 2.5.0 was the last macOS build that expected a raw executable

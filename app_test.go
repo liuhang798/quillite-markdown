@@ -646,6 +646,9 @@ func testApp(t *testing.T) *App {
 }
 
 func TestSnoozeUpdatesSuppressesAutomaticChecks(t *testing.T) {
+	previousSafetyCheck := windowsUninstallerSafetyCheck
+	windowsUninstallerSafetyCheck = func() bool { return true }
+	t.Cleanup(func() { windowsUninstallerSafetyCheck = previousSafetyCheck })
 	app := testApp(t)
 	if err := app.SnoozeUpdates(30); err != nil {
 		t.Fatal(err)

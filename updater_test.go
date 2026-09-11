@@ -48,6 +48,24 @@ func TestPickUpdateAsset(t *testing.T) {
 	}
 }
 
+func TestUnsafeWindowsUninstallerBlocksInAppUpdate(t *testing.T) {
+	if err := validateInAppUpdateSafety("windows", false); err == nil {
+		t.Fatal("an unsafe Windows uninstaller must block in-app updating")
+	}
+	for _, test := range []struct {
+		goos string
+		safe bool
+	}{
+		{"windows", true},
+		{"darwin", false},
+		{"linux", false},
+	} {
+		if err := validateInAppUpdateSafety(test.goos, test.safe); err != nil {
+			t.Fatalf("unexpected in-app update block for %+v: %v", test, err)
+		}
+	}
+}
+
 func TestVerifyDigest(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update.bin")

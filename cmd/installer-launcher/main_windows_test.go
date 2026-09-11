@@ -182,6 +182,7 @@ func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T)
 		}
 	}
 	for _, required := range []string{
+		`VIAddVersionKey "UninstallSafety" "QUILLITE_SAFE_UNINSTALL_V1"`,
 		`ReadEnvStr $ExternalInstallDir "QUILLITE_INSTALL_DIR"`,
 		`Call EnsurePreviousApplicationClosed`,
 		`Call CleanupPreviousInstallDir`,

@@ -373,7 +373,7 @@ test('the update dialog offers in-app download and apply with progress', () => {
   assert.match(renderer, /state\.dirty && state\.currentFile\?\.path\) \{\s*await saveDocument\(false, \{ auto: true, silent: true \}\)/);
   assert.match(renderer, /setTimeout\(\(\) => window\.quilliteMarkdown\.closeWindow\(\), 500\)/);
   assert.match(styles, /\.update-progress-bar \{ height: 100%; width: 0; border-radius: 4px; background: var\(--accent-strong\);/);
-  assert.match(renderer, /openExternal\('https:\/\/qm\.ssssa\.cn\/#download'\)/);
+  assert.match(renderer, /openExternal\(installerURL \|\| 'https:\/\/qm\.ssssa\.cn\/#download'\)/);
   assert.match(mainSource, /releaseUrl: 'https:\/\/qm\.ssssa\.cn\/#download'/);
   assert.doesNotMatch(mainSource, /github\.com\/liuhang798\/quillite-markdown\/releases/);
 });
@@ -922,6 +922,23 @@ test('AI privacy, chunk progress, paragraph review, and local version history ar
   assert.match(renderer, /function restoreSelectedDocumentVersion\(\)[\s\S]*userEvent: 'input\.history-restore'/);
   assert.match(styles, /\.document-history-layout \{[^}]*grid-template-columns/);
   assert.match(styles, /\.ai-send-privacy \{[^}]*display: grid/);
+});
+
+test('unsafe Windows uninstallers force a full installer instead of in-app update', () => {
+  assert.match(html, /id="manualUpdateTitle"[\s\S]*id="manualUpdateDescription"/);
+  assert.match(renderer, /unsafeWindowsUninstallerTitle: '检测到旧版卸载程序，必须完整安装'/);
+  assert.match(renderer, /function openUpdateDialog\(info\)[\s\S]*manualInstallReason === 'windows-unsafe-uninstaller'[\s\S]*#applyUpdate'[\s\S]*manualInstallRequired/);
+  assert.match(renderer, /if \(info\?\.available \|\| info\?\.manualInstallRequired\) openUpdateDialog\(info\)/);
+  assert.match(renderer, /manualInstallRequired \? state\.updateInfo\?\.manualInstallerUrl[\s\S]*installerURL \|\| 'https:\/\/qm\.ssssa\.cn\/#download'/);
+});
+
+test('unsafe Windows uninstallers show a dedicated startup warning before update checks', () => {
+  assert.match(html, /id="unsafeUninstallerDialog"[\s\S]*role="alertdialog"[\s\S]*id="unsafeUninstallerDownload"/);
+  assert.match(mainSource, /getWindowsInstallSafety: \(\) => desktopRuntime[\s\S]*Backend\.GetWindowsInstallSafety\(\)/);
+  assert.match(renderer, /unsafeUninstallerDialogTitle: '当前卸载程序存在重大缺陷'/);
+  assert.match(renderer, /async function checkWindowsInstallSafety\(\)[\s\S]*status\?\.applicable && status\.safe === false[\s\S]*return false/);
+  assert.match(renderer, /if \(await checkWindowsInstallSafety\(\)\) await checkForUpdates\(false\)/);
+  assert.match(renderer, /unsafeUninstallerDownloadURL[\s\S]*openExternal\(unsafeUninstallerDownloadURL\)/);
 });
 
 test('spell check marks English errors and offers correction, ignore, and personal dictionary actions', () => {

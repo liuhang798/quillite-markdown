@@ -4,6 +4,14 @@ All notable changes to Quillite Markdown are documented here.
 
 ## [Unreleased]
 
+### 简体中文
+
+- Windows 启动时会在联网检查更新前独立核验当前 `uninstall.exe` 的安全卸载标识；旧版、缺失或无法读取的卸载程序会显示“重大缺陷”安全警告，引导备份重要文件并从官网下载安装完整版本。常规更新弹框也会强制改用官网完整安装包，前后端同时禁止热更新；即使旧客户端已先替换主程序，新版本也会在当前版本相同的情况下继续提醒修复安装组件。
+
+### English
+
+- Windows now independently verifies the safe-uninstall marker in the installed `uninstall.exe` at startup before any network update check. Legacy, missing, or unreadable uninstallers trigger a critical-defect safety warning that recommends backing up important files and downloading the full installer from the website. The normal update dialog also requires the full installer, with in-app updating blocked in both the UI and backend; the repair warning remains active even when a legacy client has already replaced only the application binary and current/latest versions are equal.
+
 ## [2.7.3] - 2026-09-11
 
 ### 简体中文

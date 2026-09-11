@@ -56,6 +56,8 @@ export function GetRecoverySnapshot():Promise<main.RecoverySnapshot>;
 
 export function GetStartupMode():Promise<string>;
 
+export function GetWindowsInstallSafety():Promise<main.WindowsInstallSafety>;
+
 export function ImportImage(arg1:string,arg2:string):Promise<string>;
 
 export function ListAIModels(arg1:string):Promise<Array<string>>;

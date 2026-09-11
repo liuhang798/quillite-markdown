@@ -673,6 +673,8 @@ export namespace main {
 	    suppressed: boolean;
 	    available: boolean;
 	    manualInstallRequired: boolean;
+	    manualInstallReason: string;
+	    manualInstallerUrl: string;
 	    currentVersion: string;
 	    latestVersion: string;
 	    releaseName: string;
@@ -690,12 +692,32 @@ export namespace main {
 	        this.suppressed = source["suppressed"];
 	        this.available = source["available"];
 	        this.manualInstallRequired = source["manualInstallRequired"];
+	        this.manualInstallReason = source["manualInstallReason"];
+	        this.manualInstallerUrl = source["manualInstallerUrl"];
 	        this.currentVersion = source["currentVersion"];
 	        this.latestVersion = source["latestVersion"];
 	        this.releaseName = source["releaseName"];
 	        this.releaseNotes = source["releaseNotes"];
 	        this.releaseUrl = source["releaseUrl"];
 	        this.publishedAt = source["publishedAt"];
+	    }
+	}
+	export class WindowsInstallSafety {
+	    applicable: boolean;
+	    safe: boolean;
+	    currentVersion: string;
+	    downloadUrl: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WindowsInstallSafety(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.applicable = source["applicable"];
+	        this.safe = source["safe"];
+	        this.currentVersion = source["currentVersion"];
+	        this.downloadUrl = source["downloadUrl"];
 	    }
 	}
 

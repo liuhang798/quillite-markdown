@@ -349,7 +349,7 @@ const translations = {
     checkForUpdates: '检查更新', checkingForUpdates: '正在检查更新…', updateAvailableLabel: '软件更新', updateAvailable: '发现新版本',
     currentVersion: '当前版本', latestVersion: '最新版本', releaseNotes: '更新说明', noReleaseNotes: '此版本暂无更新说明。',
     remindLater: '稍后提醒', snooze30Days: '30 天内不再提醒', updateSnoozed: '未来 30 天不再自动提醒更新', openDownloadPage: '打开下载页面', alreadyLatest: '当前已是最新版本', updateCheckFailed: '检查更新失败，请稍后重试',
-    downloadAndUpdate: '下载并更新', manualMacUpdateTitle: '此版本需要一次手动升级', manualMacUpdateDescription: 'macOS 2.5.0 使用了旧更新格式，无法安全替换完整应用。请从官网下载安装一次最新版；之后即可继续使用应用内自动更新。', manualMacUpdateButton: '打开官网下载新版', downloadingUpdate: '正在下载更新… {percent}%', preparingUpdate: '正在安装更新…', updateFailed: '更新失败，请稍后重试', updateBlockedByUnsavedChanges: '请先保存当前文档再更新',
+    downloadAndUpdate: '下载并更新', manualMacUpdateTitle: '此版本需要一次手动升级', manualMacUpdateDescription: 'macOS 2.5.0 使用了旧更新格式，无法安全替换完整应用。请从官网下载安装一次最新版；之后即可继续使用应用内自动更新。', manualMacUpdateButton: '打开官网下载新版', unsafeWindowsUninstallerTitle: '检测到旧版卸载程序，必须完整安装', unsafeWindowsUninstallerDescription: '当前 uninstall.exe 不含安全卸载标识。为避免卸载时误删安装目录或文档，本次已禁止热更新，请从官网下载安装包并覆盖安装。', unsafeWindowsUninstallerButton: '下载完整安装包', installerRepairRequired: '需要修复安装组件', unsafeUninstallerDialogLabel: '安装安全警告', unsafeUninstallerDialogTitle: '当前卸载程序存在重大缺陷', unsafeUninstallerDialogDescription: '检测到当前安装使用旧版卸载程序。该版本卸载时可能误删安装目录内由你创建的文档及其他文件。为避免数据损失，请不要卸载或继续使用热更新；请下载完整安装包并覆盖安装安全版本。安装前请先备份安装目录中的重要文件。', unsafeUninstallerDialogNote: '完成覆盖安装后，新版安全卸载程序会自动替换旧文件，之后即可恢复应用内更新。', unsafeUninstallerLater: '稍后处理', unsafeUninstallerDownload: '下载安全版本', downloadingUpdate: '正在下载更新… {percent}%', preparingUpdate: '正在安装更新…', updateFailed: '更新失败，请稍后重试', updateBlockedByUnsavedChanges: '请先保存当前文档再更新',
     formatToolbar: 'Markdown 格式工具栏', undoTitle: '撤回 (Ctrl+Z)', formatPainter: '格式刷', formatPainterTitle: '格式刷：复制选中文本的格式，再选中目标文本即可自动应用', formatCopied: '已复制格式，选中目标文本后自动应用', formatApplied: '格式已应用', formatNeedSelection: '请先选中要复制格式的文本', formatCleared: '已取消格式刷', heading: '标题', paragraph: '正文', heading1: '标题 1', heading2: '标题 2', heading3: '标题 3', heading4: '标题 4', heading5: '标题 5', heading6: '标题 6',
     boldTitle: '加粗 (Ctrl+B)', italicTitle: '斜体 (Ctrl+I)', strikethroughTitle: '删除线 (Ctrl+Shift+X)', highlightTitle: '高亮 (Ctrl+Shift+H)', textColorTitle: '文字颜色', textColorMenu: '选择文字颜色', textColorDefault: '默认颜色', textColorOption: '颜色', coloredText: '彩色文字', linkTitle: '插入链接 (Ctrl+K)', inlineCode: '行内代码', codeBlock: '代码块', quote: '引用', unorderedList: '无序列表', orderedList: '有序列表', taskList: '任务列表', horizontalRule: '分隔线', insertTable: '插入表格', insertImage: '插入图片', imageAlt: '图片说明',
     moreFormats: '更多格式', toolbarOverflow: '折叠的工具栏格式', extendedFormats: '扩展格式', boldItalic: '粗斜体', underline: '下划线', superscript: '上标', subscript: '下标', formulaBuilder: '学科公式 🔥', diagramBuilder: '图表生成器 🔥', diagramGuide: '查看图表教程 ↗', mermaidFlowchart: 'Mermaid 流程图', mermaidSequence: 'Mermaid 时序图', mermaidGantt: 'Mermaid 甘特图', mermaidDiagram: 'Mermaid 图表', mermaidRenderError: '图表语法有误', mermaidRenderHint: '请检查 Mermaid 源码，文档其他内容不受影响。', dataChart: '数据图表', dataChartRenderError: '数据图表配置有误', dataChartRenderHint: '请检查 ECharts JSON 配置，文档其他内容不受影响。', inlineMath: '行内公式', mathBlock: '块级公式', chemicalFormula: '化学公式', mathGuide: '查看公式教程 ↗', numberedMath: '编号公式', mathExpression: 'LaTeX 公式', hardBreak: '强制换行', footnote: '脚注', referenceLink: '引用式链接', collapsible: '折叠区块', keyboardKey: '键盘按键', autolink: '自动链接', escapeSyntax: '转义符号', htmlBlock: 'HTML 区块', comment: '注释', footnotes: '脚注', footnoteText: '脚注内容', referenceName: '引用名称', collapsibleTitle: '折叠标题',
@@ -398,7 +398,7 @@ const translations = {
     checkForUpdates: 'Check for updates', checkingForUpdates: 'Checking for updates…', updateAvailableLabel: 'SOFTWARE UPDATE', updateAvailable: 'A new version is available',
     currentVersion: 'Current version', latestVersion: 'Latest version', releaseNotes: 'What’s new', noReleaseNotes: 'No release notes are available for this version.',
     remindLater: 'Remind me later', snooze30Days: 'Don’t remind me for 30 days', updateSnoozed: 'Automatic update reminders paused for 30 days', openDownloadPage: 'Open download page', alreadyLatest: 'You’re using the latest version', updateCheckFailed: 'Unable to check for updates. Try again later.',
-    downloadAndUpdate: 'Download & Update', manualMacUpdateTitle: 'One manual upgrade is required', manualMacUpdateDescription: 'macOS 2.5.0 used the retired update format and cannot safely replace the complete app. Install the latest version once from the website; future in-app updates will work normally.', manualMacUpdateButton: 'Get the latest version', downloadingUpdate: 'Downloading update… {percent}%', preparingUpdate: 'Installing update…', updateFailed: 'Update failed. Please try again.', updateBlockedByUnsavedChanges: 'Save the current document before updating',
+    downloadAndUpdate: 'Download & Update', manualMacUpdateTitle: 'One manual upgrade is required', manualMacUpdateDescription: 'macOS 2.5.0 used the retired update format and cannot safely replace the complete app. Install the latest version once from the website; future in-app updates will work normally.', manualMacUpdateButton: 'Get the latest version', unsafeWindowsUninstallerTitle: 'A full install is required for the legacy uninstaller', unsafeWindowsUninstallerDescription: 'The installed uninstall.exe has no safe-uninstall marker. In-app updating is disabled to prevent an uninstall from deleting the install folder or documents. Download the full installer and install over the current copy.', unsafeWindowsUninstallerButton: 'Download full installer', installerRepairRequired: 'Installation repair required', unsafeUninstallerDialogLabel: 'INSTALLATION SAFETY WARNING', unsafeUninstallerDialogTitle: 'The current uninstaller has a critical defect', unsafeUninstallerDialogDescription: 'This installation uses a legacy uninstaller that may delete documents or other files you created inside the install folder. To prevent data loss, do not uninstall or continue with in-app updates. Download the full installer and install the safe version over this copy. Back up important files in the install folder first.', unsafeUninstallerDialogNote: 'The full installation replaces the legacy uninstaller with the safe version and restores normal in-app updates.', unsafeUninstallerLater: 'Later', unsafeUninstallerDownload: 'Download safe version', downloadingUpdate: 'Downloading update… {percent}%', preparingUpdate: 'Installing update…', updateFailed: 'Update failed. Please try again.', updateBlockedByUnsavedChanges: 'Save the current document before updating',
     formatToolbar: 'Markdown formatting toolbar', undoTitle: 'Undo (Ctrl+Z)', formatPainter: 'Format painter', formatPainterTitle: 'Format painter: copy the selected text format, then select the target text to apply automatically', formatCopied: 'Format copied. Select the target text to apply automatically.', formatApplied: 'Format applied', formatNeedSelection: 'Select the text whose format you want to copy first', formatCleared: 'Format painter cancelled', heading: 'Heading', paragraph: 'Paragraph', heading1: 'Heading 1', heading2: 'Heading 2', heading3: 'Heading 3', heading4: 'Heading 4', heading5: 'Heading 5', heading6: 'Heading 6',
     boldTitle: 'Bold (Ctrl+B)', italicTitle: 'Italic (Ctrl+I)', strikethroughTitle: 'Strikethrough (Ctrl+Shift+X)', highlightTitle: 'Highlight (Ctrl+Shift+H)', textColorTitle: 'Text color', textColorMenu: 'Choose text color', textColorDefault: 'Default', textColorOption: 'Color', coloredText: 'colored text', linkTitle: 'Insert link (Ctrl+K)', inlineCode: 'Inline code', codeBlock: 'Code block', quote: 'Quote', unorderedList: 'Bulleted list', orderedList: 'Numbered list', taskList: 'Task list', horizontalRule: 'Horizontal rule', insertTable: 'Insert table', insertImage: 'Insert image', imageAlt: 'Image description',
     moreFormats: 'More formats', toolbarOverflow: 'Collapsed toolbar formats', extendedFormats: 'Extended formats', boldItalic: 'Bold italic', underline: 'Underline', superscript: 'Superscript', subscript: 'Subscript', formulaBuilder: 'Academic formulas 🔥', diagramBuilder: 'Diagram builder 🔥', diagramGuide: 'Diagram guide ↗', mermaidFlowchart: 'Mermaid flowchart', mermaidSequence: 'Mermaid sequence diagram', mermaidGantt: 'Mermaid Gantt chart', mermaidDiagram: 'Mermaid diagram', mermaidRenderError: 'Invalid diagram syntax', mermaidRenderHint: 'Check the Mermaid source. The rest of the document is unaffected.', dataChart: 'Data chart', dataChartRenderError: 'Invalid data chart configuration', dataChartRenderHint: 'Check the ECharts JSON. The rest of the document is unaffected.', inlineMath: 'Inline formula', mathBlock: 'Display formula', chemicalFormula: 'Chemical formula', mathGuide: 'Formula guide ↗', numberedMath: 'Numbered formula', mathExpression: 'LaTeX expression', hardBreak: 'Hard line break', footnote: 'Footnote', referenceLink: 'Reference link', collapsible: 'Collapsible section', keyboardKey: 'Keyboard key', autolink: 'Autolink', escapeSyntax: 'Escape syntax', htmlBlock: 'HTML block', comment: 'Comment', footnotes: 'Footnotes', footnoteText: 'Footnote text', referenceName: 'reference', collapsibleTitle: 'Section title',
@@ -647,7 +647,7 @@ const els = {
   aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteTitle: $('#aiRewriteTitle'), aiRequestSettings: $('#aiRequestSettings'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiTaskSettings: $('#aiTaskSettings'), aiInstructionField: $('#aiInstructionField'), aiInstructionLabel: $('#aiInstructionLabel'), aiInstruction: $('#aiInstruction'), aiInstructionHint: $('#aiInstructionHint'), aiLengthField: $('#aiLengthField'), aiLengthLabel: $('#aiLengthLabel'), aiLength: $('#aiLength'), aiLengthHint: $('#aiLengthHint'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiDiffFilter: $('#aiDiffFilter'), loadMoreAIDiff: $('#loadMoreAIDiff'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiRewritePrivacy: $('#aiRewritePrivacy'), aiRewriteSendSummary: $('#aiRewriteSendSummary'), aiRewritePrivacySummary: $('#aiRewritePrivacySummary'), aiRewritePrivacyList: $('#aiRewritePrivacyList'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
   aiReviewDialog: $('#aiReviewDialog'), aiReviewInstruction: $('#aiReviewInstruction'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewPrivacy: $('#aiReviewPrivacy'), aiReviewSendSummary: $('#aiReviewSendSummary'), aiReviewPrivacySummary: $('#aiReviewPrivacySummary'), aiReviewPrivacyList: $('#aiReviewPrivacyList'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
   documentHistoryDialog: $('#documentHistoryDialog'), documentHistoryList: $('#documentHistoryList'), documentHistoryPreview: $('#documentHistoryPreview'), documentHistoryStatus: $('#documentHistoryStatus'), restoreDocumentHistory: $('#restoreDocumentHistory'),
-  feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
+  feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), unsafeUninstallerDialog: $('#unsafeUninstallerDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
   recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramFullscreenButton: $('#toggleDiagramFullscreen'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'), flowchartModeBar: $('#flowchartModeBar'), flowchartVisualEditor: $('#flowchartVisualEditor'), structuredDiagramEditor: $('#structuredDiagramEditor'), structuredDiagramSettings: $('#structuredDiagramSettings'), structuredDiagramHead: $('#structuredDiagramHead'), structuredDiagramRows: $('#structuredDiagramRows'), flowchartCanvasViewport: $('#flowchartCanvasViewport'), flowchartCanvas: $('#flowchartCanvas'), flowchartZoomOut: $('#flowchartZoomOut'), flowchartZoomReset: $('#flowchartZoomReset'), flowchartZoomIn: $('#flowchartZoomIn'), flowchartZoomValue: $('#flowchartZoomValue'), flowchartNodeLayer: $('#flowchartNodeLayer'), flowchartEdgeLayer: $('#flowchartEdgeLayer'), flowchartDirection: $('#flowchartDirection'), flowchartNodeProperties: $('#flowchartNodeProperties'), flowchartEdgeProperties: $('#flowchartEdgeProperties'), flowchartNodeLabel: $('#flowchartNodeLabel'), flowchartNodeShape: $('#flowchartNodeShape'), flowchartEdgeLabel: $('#flowchartEdgeLabel'), flowchartEdgeStyle: $('#flowchartEdgeStyle'), flowchartSelectionHint: $('#flowchartSelectionHint'),
   imageUploadSettingsDialog: $('#imageUploadSettingsDialog'), picGoCloudSetup: $('#picGoCloudSetup'), picGoCloudAccount: $('#picGoCloudAccount'), picGoCloudUser: $('#picGoCloudUser'), picGoCloudStatus: $('#picGoCloudStatus'), picGoSetupWizard: $('#picGoSetupWizard'), picGoSetupInstall: $('#picGoSetupInstall'), picGoSetupConnect: $('#picGoSetupConnect'), picGoSetupReady: $('#picGoSetupReady'), picGoAdvancedSettings: $('#picGoAdvancedSettings'), localAssetsSummary: $('#localAssetsSummary'), picGoSettingsFields: $('#picGoSettingsFields'), picGoServerURL: $('#picGoServerURL'), picGoSecret: $('#picGoSecret'), clearPicGoSecretRow: $('#clearPicGoSecretRow'), clearPicGoSecret: $('#clearPicGoSecret'), picGoTestStatus: $('#picGoTestStatus'),
   editorUndoButton: $('#editorUndoButton')
@@ -8540,6 +8540,8 @@ async function submitFeedbackForm(event) {
 
 function openUpdateDialog(info) {
   state.updateInfo = info;
+  const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
+  $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
   $('#currentVersion').textContent = info.currentVersion || '2.7.3';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
@@ -8555,12 +8557,15 @@ function openUpdateDialog(info) {
   els.updateDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
   const platform = document.documentElement.dataset.platform;
-  const manualInstallRequired = platform === 'darwin' && info.manualInstallRequired === true;
+  const manualInstallRequired = info.manualInstallRequired === true;
   $('#manualUpdateNotice').classList.toggle('hidden', !manualInstallRequired);
+  $('#manualUpdateTitle').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerTitle') : t('manualMacUpdateTitle');
+  $('#manualUpdateDescription').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerDescription') : t('manualMacUpdateDescription');
   $('#applyUpdate').classList.toggle('hidden', manualInstallRequired || (platform !== 'darwin' && platform !== 'windows'));
-  $('#openUpdatePage').textContent = manualInstallRequired ? t('manualMacUpdateButton') : t('openDownloadPage');
+  $('#openUpdatePage').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerButton') : (manualInstallRequired ? t('manualMacUpdateButton') : t('openDownloadPage'));
   $('#openUpdatePage').classList.toggle('primary', manualInstallRequired);
   $('#openUpdatePage').classList.toggle('secondary', !manualInstallRequired);
+  $('#updateSnooze').classList.toggle('hidden', unsafeWindowsUninstaller);
   $('#updateProgress').classList.add('hidden');
   $('#applyUpdate').disabled = false;
   requestAnimationFrame(() => $('#openUpdatePage').focus());
@@ -8573,11 +8578,40 @@ function closeUpdate() {
   $('#moreButton').focus();
 }
 
+let unsafeUninstallerDownloadURL = 'https://qm.ssssa.cn/#download';
+
+function openUnsafeUninstallerDialog(status) {
+  unsafeUninstallerDownloadURL = status?.downloadUrl || 'https://qm.ssssa.cn/#download';
+  els.unsafeUninstallerDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  requestAnimationFrame(() => $('#unsafeUninstallerDownload').focus());
+}
+
+function closeUnsafeUninstallerDialog() {
+  if (els.unsafeUninstallerDialog.classList.contains('hidden')) return;
+  els.unsafeUninstallerDialog.classList.add('hidden');
+  document.body.classList.remove('dialog-open');
+  $('#moreButton').focus();
+}
+
+async function checkWindowsInstallSafety() {
+  try {
+    const status = await window.quilliteMarkdown.getWindowsInstallSafety();
+    if (status?.applicable && status.safe === false) {
+      openUnsafeUninstallerDialog(status);
+      return false;
+    }
+  } catch (error) {
+    console.warn('Windows install safety check failed:', error);
+  }
+  return true;
+}
+
 async function checkForUpdates(manual = false) {
   if (manual) showToast(t('checkingForUpdates'));
   try {
     const info = await window.quilliteMarkdown.checkForUpdates(manual);
-    if (info?.available) openUpdateDialog(info);
+    if (info?.available || info?.manualInstallRequired) openUpdateDialog(info);
     else if (manual && info?.checked) showToast(t('alreadyLatest'), 'success');
   } catch (error) {
     console.warn('Update check failed:', error);
@@ -8590,7 +8624,12 @@ let automaticUpdateScheduled = false;
 function scheduleAutomaticUpdateCheck() {
   if (automaticUpdateScheduled) return;
   automaticUpdateScheduled = true;
-  setTimeout(() => checkForUpdates(false), 1200);
+  setTimeout(async () => {
+    // The local uninstaller warning must appear before any network update UI.
+    // If it is unsafe, the dedicated dialog is sufficient for this startup and
+    // avoids immediately presenting a second, redundant update dialog.
+    if (await checkWindowsInstallSafety()) await checkForUpdates(false);
+  }, 1200);
 }
 
 function openFirstRunLanguageDialog() {
@@ -9090,11 +9129,21 @@ window.quilliteMarkdown.onUpdateProgress(progress => {
 window.quilliteMarkdown.onImageUploadProgress(updateImageUploadProgress);
 window.quilliteMarkdown.onAIProgress(handleAIProgress);
 $('#openUpdatePage').addEventListener('click', () => {
-	window.quilliteMarkdown.openExternal('https://qm.ssssa.cn/#download');
+	const installerURL = state.updateInfo?.manualInstallRequired ? state.updateInfo?.manualInstallerUrl : '';
+	window.quilliteMarkdown.openExternal(installerURL || 'https://qm.ssssa.cn/#download');
 	closeUpdate();
 });
 els.updateDialog.addEventListener('click', event => {
   if (event.target === els.updateDialog) closeUpdate();
+});
+$('#closeUnsafeUninstaller').addEventListener('click', closeUnsafeUninstallerDialog);
+$('#unsafeUninstallerLater').addEventListener('click', closeUnsafeUninstallerDialog);
+$('#unsafeUninstallerDownload').addEventListener('click', () => {
+  window.quilliteMarkdown.openExternal(unsafeUninstallerDownloadURL);
+  closeUnsafeUninstallerDialog();
+});
+els.unsafeUninstallerDialog.addEventListener('click', event => {
+  if (event.target === els.unsafeUninstallerDialog) closeUnsafeUninstallerDialog();
 });
 $('#cancelEditPermission').addEventListener('click', () => closeEditPermissionDialog());
 $('#saveCopyAndEdit').addEventListener('click', savePermissionCopyAndEdit);
@@ -9937,6 +9986,7 @@ document.addEventListener('keydown', event => {
   else if (event.key === 'Escape' && !els.editPermissionDialog.classList.contains('hidden')) closeEditPermissionDialog();
   else if (event.key === 'Escape' && !els.exportCenterDialog.classList.contains('hidden')) closeExportCenter();
   else if (event.key === 'Escape' && !els.pdfTutorialDialog.classList.contains('hidden')) closePDFTutorial();
+  else if (event.key === 'Escape' && !els.unsafeUninstallerDialog.classList.contains('hidden')) closeUnsafeUninstallerDialog();
   else if (event.key === 'Escape' && !els.updateDialog.classList.contains('hidden')) closeUpdate();
   else if (event.key === 'Escape' && !els.documentHistoryDialog.classList.contains('hidden')) closeDocumentHistory();
   else if (event.key === 'Escape' && !els.aiReviewDialog.classList.contains('hidden')) closeAIDocumentReview();

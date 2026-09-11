@@ -92,3 +92,62 @@ func TestLegacyMacUpdateRequiresOneManualInstall(t *testing.T) {
 		}
 	}
 }
+
+func TestUnsafeWindowsUninstallerRequiresFullInstallation(t *testing.T) {
+	if got := requiredManualInstallReason("windows", "2.7.3", "2.7.4", false); got != manualInstallReasonWindowsUnsafeUninstaller {
+		t.Fatalf("unsafe Windows uninstaller reason = %q", got)
+	}
+	// The repair prompt must still appear after a legacy client has already
+	// replaced its application binary and current/latest versions are equal.
+	if got := requiredManualInstallReason("windows", "2.7.4", "2.7.4", false); got != manualInstallReasonWindowsUnsafeUninstaller {
+		t.Fatalf("same-version Windows repair reason = %q", got)
+	}
+	for _, test := range []struct {
+		goos, current, latest string
+		safe                  bool
+	}{
+		{"windows", "2.7.3", "2.7.4", true},
+		{"linux", "2.7.3", "2.7.4", false},
+	} {
+		if got := requiredManualInstallReason(test.goos, test.current, test.latest, test.safe); got != "" {
+			t.Fatalf("unexpected manual install reason %q for %+v", got, test)
+		}
+	}
+}
+
+func TestWindowsInstallSafetyStatusSupportsStandaloneStartupWarning(t *testing.T) {
+	unsafe := windowsInstallSafetyForPlatform("windows", false)
+	if !unsafe.Applicable || unsafe.Safe {
+		t.Fatalf("unsafe Windows status = %#v", unsafe)
+	}
+	if unsafe.CurrentVersion != appVersion || unsafe.DownloadURL != officialDownloadPage {
+		t.Fatalf("unsafe Windows guidance is incomplete: %#v", unsafe)
+	}
+
+	safe := windowsInstallSafetyForPlatform("windows", true)
+	if !safe.Applicable || !safe.Safe {
+		t.Fatalf("safe Windows status = %#v", safe)
+	}
+	nonWindows := windowsInstallSafetyForPlatform("darwin", false)
+	if nonWindows.Applicable || !nonWindows.Safe {
+		t.Fatalf("non-Windows status must not trigger the warning: %#v", nonWindows)
+	}
+}
+
+func TestManualInstallationUsesOfficialFullInstaller(t *testing.T) {
+	assets := []updateReleaseAsset{
+		{Name: "quillite-markdown-2.7.4-windows-amd64.bin", BrowserDownloadURL: officialWebsiteBase + "/api/v1/releases/2.7.4/assets/windows/update"},
+		{Name: "quillite-markdown-2.7.4-windows-amd64.exe", BrowserDownloadURL: officialWebsiteBase + "/api/v1/releases/2.7.4/assets/windows/installer"},
+		{Name: "quillite-markdown-2.7.4-macos-universal.dmg", BrowserDownloadURL: officialWebsiteBase + "/api/v1/releases/2.7.4/assets/macos/installer"},
+		{Name: "quillite-markdown-2.7.4-windows-amd64.exe", BrowserDownloadURL: "https://example.com/untrusted.exe"},
+	}
+	if got := fullInstallerURLForPlatform(assets, "windows"); got != officialWebsiteBase+"/api/v1/releases/2.7.4/assets/windows/installer" {
+		t.Fatalf("Windows full installer URL = %q", got)
+	}
+	if got := fullInstallerURLForPlatform(assets, "darwin"); got != officialWebsiteBase+"/api/v1/releases/2.7.4/assets/macos/installer" {
+		t.Fatalf("macOS full installer URL = %q", got)
+	}
+	if got := fullInstallerURLForPlatform(assets, "linux"); got != "" {
+		t.Fatalf("Linux must not receive a manual installer URL: %q", got)
+	}
+}

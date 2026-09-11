@@ -110,6 +110,10 @@ export function GetStartupMode() {
   return window['go']['main']['App']['GetStartupMode']();
 }
 
+export function GetWindowsInstallSafety() {
+  return window['go']['main']['App']['GetWindowsInstallSafety']();
+}
+
 export function ImportImage(arg1, arg2) {
   return window['go']['main']['App']['ImportImage'](arg1, arg2);
 }

@@ -180,6 +180,9 @@ window.quilliteMarkdown = {
   getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.3', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
+  getWindowsInstallSafety: () => desktopRuntime
+    ? Backend.GetWindowsInstallSafety()
+    : resolved({ applicable: false, safe: true, currentVersion: '2.7.3', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
