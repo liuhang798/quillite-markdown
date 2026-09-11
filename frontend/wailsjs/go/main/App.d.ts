@@ -12,6 +12,8 @@ export function CancelAIRewrite():Promise<void>;
 
 export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
 
+export function ClearRecoverySnapshot():Promise<void>;
+
 export function DetectPandoc():Promise<main.PandocStatus>;
 
 export function DiagnoseAIProvider(arg1:main.AISettingsInput):Promise<main.AIDiagnosticResult>;
@@ -45,6 +47,8 @@ export function GetImageUploadSettings():Promise<main.ImageUploadSettings>;
 export function GetInitialFile():Promise<main.Document>;
 
 export function GetPreferences():Promise<main.Preferences>;
+
+export function GetRecoverySnapshot():Promise<main.RecoverySnapshot>;
 
 export function GetStartupMode():Promise<string>;
 
@@ -105,6 +109,8 @@ export function SaveExportImageSlices(arg1:string,arg2:string,arg3:string,arg4:A
 export function SaveFile(arg1:string,arg2:string):Promise<main.Document>;
 
 export function SavePastedImage(arg1:string,arg2:string):Promise<string>;
+
+export function SaveRecoverySnapshot(arg1:main.RecoverySnapshotInput):Promise<void>;
 
 export function SelectFeedbackImages():Promise<Array<main.FeedbackImageSelection>>;
 

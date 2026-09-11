@@ -588,6 +588,44 @@ export namespace main {
 		}
 	}
 	
+	export class RecoverySnapshot {
+	    path: string;
+	    name: string;
+	    directory: string;
+	    content: string;
+	    updatedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RecoverySnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.directory = source["directory"];
+	        this.content = source["content"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class RecoverySnapshotInput {
+	    path: string;
+	    name: string;
+	    directory: string;
+	    content: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RecoverySnapshotInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.directory = source["directory"];
+	        this.content = source["content"];
+	    }
+	}
 	export class UpdateInfo {
 	    checked: boolean;
 	    suppressed: boolean;

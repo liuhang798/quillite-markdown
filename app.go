@@ -120,6 +120,7 @@ type App struct {
 	ctx                 context.Context
 	mu                  sync.RWMutex
 	preferencesMu       sync.Mutex
+	recoveryMu          sync.Mutex
 	picGoCloudLoginMu   sync.Mutex
 	securityBookmarksMu sync.Mutex
 	draftsMu            sync.Mutex
@@ -164,7 +165,11 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	if !dirty {
 		return false
 	}
-	return !a.confirmDiscard(ctx, true)
+	if !a.confirmDiscard(ctx, true) {
+		return true
+	}
+	_ = a.ClearRecoverySnapshot()
+	return false
 }
 
 func (a *App) onSecondInstanceLaunch(data options.SecondInstanceData) {
@@ -1617,6 +1622,7 @@ func (a *App) RequestQuit() bool {
 	if dirty && !a.confirmDiscard(a.ctx, true) {
 		return false
 	}
+	_ = a.ClearRecoverySnapshot()
 	a.SetDirty(false)
 	wailsruntime.Quit(a.ctx)
 	return true

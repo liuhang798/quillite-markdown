@@ -6,6 +6,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 新增文档异常恢复：未保存的编辑内容会防抖写入独立的原子恢复快照，正常保存或明确放弃后自动清理；异常退出后启动时可选择恢复并继续编辑。大文档按规模延迟实时预览，暂停高成本全文拼写扫描，并避免每次按键复制整篇编辑缓冲区；预览跟随光标改用二分定位，降低长文档输入与导航卡顿。
 - 统一 AI 设置中服务与模型下拉框的高度、字体和箭头，修复 macOS/WebKit 原生样式不一致。DeepSeek 未配置 Key 时显示两个内置候选并明确提示尚未查询账号；保存或测试连接保存 Key 后加载实际模型，刷新失败保留上次列表，快速切换服务或关闭弹窗时忽略过期查询结果。
 - 新增第一批第三方 AI 接入：阿里云百炼、硅基流动、OpenRouter 与自定义 OpenAI 兼容接口。百炼支持官方公共地址、业务空间及 Token Plan 兼容地址，自定义接口支持模型手动填写和 `/models` 自动发现；每个平台 Key 独立保存在系统凭据库。固定平台地址不可篡改，自定义地址强制 HTTPS，仅 localhost 允许 HTTP，并拒绝地址中的凭据、查询参数和具体请求端点。
 - 调整 AI 设置顺序为先填写 API Key、再选择模型；自定义 OpenAI 兼容接口不再预填假定的默认模型，必须使用服务商实际提供的模型 ID。
@@ -16,6 +17,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Added crash recovery for documents: unsaved edits are debounced into a separate atomic snapshot, cleared after a successful save or an explicit discard, and offered for restoration after an abnormal exit. Large documents defer live-preview work by size, pause expensive full-document spell scans, avoid copying the entire editor buffer on every keystroke, and use binary lookup for cursor-following preview navigation.
 - Standardized AI provider/model picker heights, fonts, and arrows for macOS/WebKit. DeepSeek shows two explicitly unverified built-in candidates before a key is configured. Saving a key (including through Test connection) loads account models; failed refreshes retain the previous list, and stale discovery results cannot overwrite a different provider or a closed dialog.
 - Added the first third-party AI integrations: Alibaba Cloud Model Studio, SiliconFlow, OpenRouter, and custom OpenAI-compatible endpoints. Model Studio supports its public, workspace, and Token Plan compatible URLs; custom endpoints allow manual model IDs plus `/models` discovery. Keys remain isolated in the native credential vault. Fixed provider URLs cannot be overridden, custom URLs require HTTPS except on localhost, and embedded credentials, queries, or request-specific paths are rejected.
 - Reordered AI setup so the API key comes before model selection. Custom OpenAI-compatible endpoints no longer assume a default model and require an actual model ID supplied by the service.

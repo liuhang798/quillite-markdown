@@ -22,6 +22,10 @@ export function CheckForUpdates(arg1) {
   return window['go']['main']['App']['CheckForUpdates'](arg1);
 }
 
+export function ClearRecoverySnapshot() {
+  return window['go']['main']['App']['ClearRecoverySnapshot']();
+}
+
 export function DetectPandoc() {
   return window['go']['main']['App']['DetectPandoc']();
 }
@@ -88,6 +92,10 @@ export function GetInitialFile() {
 
 export function GetPreferences() {
   return window['go']['main']['App']['GetPreferences']();
+}
+
+export function GetRecoverySnapshot() {
+  return window['go']['main']['App']['GetRecoverySnapshot']();
 }
 
 export function GetStartupMode() {
@@ -208,6 +216,10 @@ export function SaveFile(arg1, arg2) {
 
 export function SavePastedImage(arg1, arg2) {
   return window['go']['main']['App']['SavePastedImage'](arg1, arg2);
+}
+
+export function SaveRecoverySnapshot(arg1) {
+  return window['go']['main']['App']['SaveRecoverySnapshot'](arg1);
 }
 
 export function SelectFeedbackImages() {

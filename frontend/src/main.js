@@ -11,6 +11,7 @@ import {
 const desktopRuntime = Boolean(window.go?.main?.App && window.runtime);
 const resolved = value => Promise.resolve(value);
 const mockUpdate = new URLSearchParams(window.location.search).has('mockUpdate');
+const browserRecoveryKey = 'quilliteDocumentRecovery';
 const maskBrowserAIKey = value => value.length > 8 ? `${value.slice(0, 4)}••••••••${value.slice(-4)}` : '••••••••';
 const browserAIProviders = {
   deepseek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
@@ -58,6 +59,21 @@ window.quilliteMarkdown = {
   canEditFile: filePath => desktopRuntime ? Backend.CanEditFile(filePath) : resolved(true),
   saveFile: (filePath, content) => desktopRuntime ? Backend.SaveFile(filePath, content) : resolved(null),
   saveAs: (filePath, content) => desktopRuntime ? Backend.SaveAs(filePath, content) : resolved(null),
+  saveRecoverySnapshot: input => {
+    if (desktopRuntime) return Backend.SaveRecoverySnapshot(input);
+    sessionStorage.setItem(browserRecoveryKey, JSON.stringify({ ...input, updatedAt: new Date().toISOString() }));
+    return resolved();
+  },
+  getRecoverySnapshot: () => {
+    if (desktopRuntime) return Backend.GetRecoverySnapshot();
+    try { return resolved(JSON.parse(sessionStorage.getItem(browserRecoveryKey) || 'null')); }
+    catch { return resolved(null); }
+  },
+  clearRecoverySnapshot: () => {
+    if (desktopRuntime) return Backend.ClearRecoverySnapshot();
+    sessionStorage.removeItem(browserRecoveryKey);
+    return resolved();
+  },
   exportDOCX: (filePath, title, renderedHTML) => desktopRuntime ? Backend.ExportDOCX(filePath, title, renderedHTML) : resolved(''),
   exportHTML: (filePath, title, renderedHTML, colorMode, accentColor) => desktopRuntime ? Backend.ExportHTML(filePath, title, renderedHTML, colorMode, accentColor) : resolved(''),
   exportPDF: (filePath, title, renderedHTML, header, footer) => desktopRuntime ? Backend.ExportPDF(filePath, title, renderedHTML, header, footer) : Promise.reject(new Error('PDF_ENGINE_NOT_FOUND')),

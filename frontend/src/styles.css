@@ -788,6 +788,17 @@ html[lang="en"] #moreMenu .settings-submenu.popover button > span:first-child { 
 .first-run-language-options button:disabled { cursor: wait; opacity: .6; transform: none; }
 .first-run-language-options strong { color: var(--accent-strong); font-size: 16px; }
 .first-run-language-options small { color: var(--muted); font-size: 11px; }
+.recovery-dialog { position: relative; width: min(590px, 100%); padding: 34px; border: 1px solid color-mix(in srgb, var(--line) 74%, var(--accent)); border-radius: 22px; background: var(--paper-strong); box-shadow: 0 32px 96px rgba(18, 25, 20, .3); animation: dialog-rise .2s ease-out; }
+.recovery-dialog-icon { width: 52px; height: 52px; display: grid; place-items: center; margin-bottom: 17px; border-radius: 15px; color: var(--accent-strong); background: var(--accent-soft); }
+.recovery-dialog-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.recovery-dialog h2 { margin: 7px 0 10px; color: var(--text); font-size: 25px; letter-spacing: -.45px; }
+.recovery-dialog > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.75; }
+.recovery-dialog-details { display: grid; gap: 10px; margin: 22px 0; padding: 15px 17px; border: 1px solid var(--line); border-radius: 13px; background: color-mix(in srgb, var(--panel) 64%, transparent); }
+.recovery-dialog-details span { min-width: 0; display: grid; grid-template-columns: 86px minmax(0, 1fr); align-items: baseline; gap: 12px; }
+.recovery-dialog-details small { color: var(--faint); font-size: 11px; }
+.recovery-dialog-details strong { overflow: hidden; color: var(--text); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.recovery-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.recovery-dialog-actions .large-button { min-width: 142px; }
 .about-dialog { position: relative; width: min(540px, 100%); padding: 34px; border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent)); border-radius: 20px; background: var(--paper-strong); box-shadow: 0 30px 90px rgba(18, 25, 20, .28); animation: dialog-rise .2s ease-out; }
 .about-close { position: absolute; top: 17px; right: 17px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }
 .about-close:hover, .about-close:focus-visible { color: var(--accent-strong); background: var(--accent-soft); outline: none; }

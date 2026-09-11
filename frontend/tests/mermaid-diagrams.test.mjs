@@ -267,7 +267,7 @@ test('Mermaid diagrams use safe SVG labels, avoid stale rendering work, and expo
   assert.match(diagramModule, /FORBID_TAGS:\s*\[[^\]]*'foreignObject'/);
   assert.match(diagramModule, /renderGenerations\.get\(container\)\s*===\s*generation/);
   assert.match(diagramModule, /setTimeout\(resolve, 0\)/);
-  assert.match(renderer, /previewDelay[^\n]+mermaid\|echarts[^\n]+\?\s*220\s*:\s*90/);
+  assert.match(renderer, /state\.currentDocumentHasDiagrams = documentHasDiagrams\(doc\.content\)/);
   assert.match(diagramModule, /convertMermaidDiagramsToImages/);
   assert.match(diagramModule, /canvas\.toDataURL\('image\/png'\)/);
   assert.match(diagramModule, /data:image\/svg\+xml;base64/);

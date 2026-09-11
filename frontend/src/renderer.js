@@ -26,6 +26,7 @@ import { hasOverlappingReviewSuggestions, locateAIReviewSuggestions } from './ai
 import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-text-diff.js';
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
+import { documentHasDiagrams, documentPerformanceProfile } from './document-performance.js';
 
 const $ = selector => document.querySelector(selector);
 const DOC_WIDTH_LEVELS = ['narrow', 'medium', 'wide', 'full'];
@@ -230,6 +231,7 @@ const state = {
   editing: false,
   dirty: false,
   savedContent: '',
+  currentDocumentHasDiagrams: false,
   updateInfo: null,
   usageAnalytics: true,
   imageUploadMode: 'local',
@@ -252,6 +254,10 @@ const state = {
   exportDraft: { format: 'docx', header: '', footer: '', extraArguments: '', customWriter: 'plain', customExtension: '.txt', imageScale: 2, imageLayout: 'pages' },
   exportInProgress: false
 };
+
+let pendingRecoverySnapshot = null;
+let lastRecoveryContent = '';
+let largeDocumentNoticeSession = -1;
 
 function reportSilentError(error, source = 'frontend') {
   try {
@@ -295,7 +301,8 @@ const translations = {
     homeQuickStart: '快速上手', homeExamplesTitle: '从完整案例开始', homeExamplesDescription: '打开内置案例，直接查看所有图表、学科公式和 Markdown 排版格式。', homeShortcutEyebrow: '效率指南', homeShortcutsTitle: '功能快捷键', homeShortcutsDescription: '下列快捷键在对应页面生效。', homeShortcutsDescriptionWindows: '当前为 Windows / Linux 快捷键，使用 Ctrl 组合键。', homeShortcutsDescriptionMac: '当前为 macOS 快捷键，使用 Cmd 组合键。',
     shortcutFiles: '文档与文件', shortcutReading: '阅读与编辑', shortcutFormatting: '文字格式', shortcutNew: '新建文档', shortcutOpen: '打开文档', shortcutOpenFolder: '打开文件夹', shortcutSave: '保存文档', shortcutSaveAs: '另存为', shortcutPrint: '打印文档', shortcutEditPreview: '切换编辑/预览', shortcutSearch: '查找内容', shortcutZoomIn: '放大文字', shortcutZoomOut: '缩小文字', shortcutZoomReset: '恢复字号', shortcutUndo: '撤回', shortcutRedo: '重做', shortcutBold: '加粗', shortcutItalic: '斜体', shortcutLink: '插入链接', shortcutStrike: '删除线', shortcutHighlight: '高亮',
     print: '打印', printTitle: '打印文档', moreDocumentActions: '更多', readingEnd: '阅读结束', livePreview: '实时预览', readingEffect: '阅读效果', previewLocateHint: '右键定位到编辑器 · 第 {line} 行', markdownEditorLabel: 'MARKDOWN 编辑器',
-    untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器',
+    untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器', largeDocumentOptimized: '已启用大文档优化：预览将延迟刷新，并暂停全文拼写扫描',
+    recoveryLabel: '异常恢复', recoveryTitle: '发现未保存的编辑内容', recoveryDescription: '轻阅在上次异常结束前保存了一份恢复副本。你可以继续编辑，或放弃副本并以磁盘文件为准。', recoveryDocument: '恢复文档', recoverySavedAt: '快照时间', recoveryDiscard: '放弃恢复内容', recoveryRestore: '恢复并继续编辑', recoveryFailed: '无法读取恢复内容，磁盘文件未受影响', recoveryRestored: '已恢复上次未保存的编辑内容',
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
     toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', openCompactToc: '展开本页目录', closeCompactToc: '收起本页目录', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
@@ -343,7 +350,8 @@ const translations = {
     homeQuickStart: 'QUICK START', homeExamplesTitle: 'Start with complete examples', homeExamplesDescription: 'Open the built-in examples to explore every chart, subject formula, and Markdown formatting style.', homeShortcutEyebrow: 'PRODUCTIVITY GUIDE', homeShortcutsTitle: 'Keyboard shortcuts', homeShortcutsDescription: 'The following shortcuts apply on their corresponding screens.', homeShortcutsDescriptionWindows: 'Windows / Linux shortcuts are shown. Use the Ctrl modifier.', homeShortcutsDescriptionMac: 'macOS shortcuts are shown. Use the Cmd modifier.',
     shortcutFiles: 'Documents & files', shortcutReading: 'Reading & editing', shortcutFormatting: 'Text formatting', shortcutNew: 'New document', shortcutOpen: 'Open document', shortcutOpenFolder: 'Open folder', shortcutSave: 'Save document', shortcutSaveAs: 'Save As', shortcutPrint: 'Print document', shortcutEditPreview: 'Toggle edit/preview', shortcutSearch: 'Find content', shortcutZoomIn: 'Increase text size', shortcutZoomOut: 'Decrease text size', shortcutZoomReset: 'Reset text size', shortcutUndo: 'Undo', shortcutRedo: 'Redo', shortcutBold: 'Bold', shortcutItalic: 'Italic', shortcutLink: 'Insert link', shortcutStrike: 'Strikethrough', shortcutHighlight: 'Highlight',
     print: 'Print', printTitle: 'Print document', moreDocumentActions: 'More', readingEnd: 'End of document', livePreview: 'LIVE PREVIEW', readingEffect: 'Rendered document', previewLocateHint: 'Right-click to locate in the editor · Line {line}', markdownEditorLabel: 'MARKDOWN EDITOR',
-    untitledDocument: 'Untitled document', saved: 'Saved', unsaved: 'Unsaved', autoSaved: 'Autosaved', saveAs: 'Save As', exitEdit: 'Exit editing', markdownEditorAria: 'Markdown editor',
+    untitledDocument: 'Untitled document', saved: 'Saved', unsaved: 'Unsaved', autoSaved: 'Autosaved', saveAs: 'Save As', exitEdit: 'Exit editing', markdownEditorAria: 'Markdown editor', largeDocumentOptimized: 'Large-document mode enabled: preview updates are deferred and full-document spell scans are paused',
+    recoveryLabel: 'CRASH RECOVERY', recoveryTitle: 'Unsaved edits were found', recoveryDescription: 'Quillite saved a recovery copy before the previous session ended unexpectedly. Continue editing it, or discard it and keep the version on disk.', recoveryDocument: 'Document', recoverySavedAt: 'Snapshot', recoveryDiscard: 'Discard recovery copy', recoveryRestore: 'Restore & Continue', recoveryFailed: 'The recovery copy could not be read. The file on disk was not changed.', recoveryRestored: 'Unsaved edits from the previous session were restored',
     codeLang: 'Select a language', codeNoLang: 'No language (plain text)',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> Save　 <kbd>Ctrl</kbd> + <kbd>E</kbd> Preview', backToTop: 'Back to top', backToTopAria: 'Back to document top',
     toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', openCompactToc: 'Open table of contents', closeCompactToc: 'Close table of contents', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
@@ -579,7 +587,7 @@ const els = {
   editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiEditButton: $('#aiEditButton'), aiReviewButton: $('#aiReviewButton'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
-  saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'),
+  saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), recoveryDialog: $('#recoveryDialog'), recoveryFileName: $('#recoveryFileName'), recoveryUpdatedAt: $('#recoveryUpdatedAt'), aboutDialog: $('#aboutDialog'),
   aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderDescription: $('#aiProviderDescription'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURLField: $('#aiBaseURLField'), aiBaseURL: $('#aiBaseURL'), aiBaseURLHint: $('#aiBaseURLHint'), aiModelSelectField: $('#aiModelSelectField'), aiModel: $('#aiModel'), aiCustomModelField: $('#aiCustomModelField'), aiCustomModel: $('#aiCustomModel'), aiCustomModelOptions: $('#aiCustomModelOptions'), aiModelState: $('#aiModelState'), aiCustomModelState: $('#aiCustomModelState'), refreshAIModels: $('#refreshAIModels'), refreshAICustomModels: $('#refreshAICustomModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'), aiDiagnostics: $('#aiDiagnostics'), aiDiagnosticsSummary: $('#aiDiagnosticsSummary'), aiDiagnosticChecks: $('#aiDiagnosticChecks'),
   aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteFields: $('#aiRewriteFields'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiInstructionField: $('#aiInstructionField'), aiInstruction: $('#aiInstruction'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
   aiReviewDialog: $('#aiReviewDialog'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
@@ -746,7 +754,8 @@ function initializeSpellcheckExtension() {
 }
 
 function spellcheckDecorations(view) {
-  if (!state.spellcheckEnabled || !activeSpellchecker || !spellcheckRuntimePromise?.resolved || view.state.doc.length > 300000) return Decoration.none;
+  const performance = documentPerformanceProfile(view.state.doc.length);
+  if (!state.spellcheckEnabled || !performance.liveSpellcheck || !activeSpellchecker || !spellcheckRuntimePromise?.resolved) return Decoration.none;
   const errors = spellcheckRuntimePromise.resolved.findSpellingErrors(view.state.doc.toString(), activeSpellchecker, {
     ignoredWords: state.spellcheckIgnoredWords,
     maxErrors: 400
@@ -888,6 +897,11 @@ function updateExistingFlowchartButton() {
     els.editFormulaButton.setAttribute('aria-label', label);
     els.editFormulaButton.querySelector('span').textContent = label;
   }
+}
+
+function scheduleExistingContentActions() {
+  clearTimeout(scheduleExistingContentActions.timer);
+  scheduleExistingContentActions.timer = setTimeout(updateExistingFlowchartButton, 220);
 }
 
 function focusCodeEditor() {
@@ -3416,15 +3430,24 @@ async function initializeCodeEditor() {
     scrollPastEnd(),
     EditorView.updateListener.of(update => {
       if (update.docChanged && !suppressEditorChanges && state.currentFile) {
-        state.currentFile.content = update.state.doc.toString();
-        setDirty(state.currentFile.content !== state.savedContent);
-        clearTimeout(renderEditorPreview.timer);
-        const previewDelay = /(^|\n)\s*```(?:mermaid|echarts)\s*(\n|$)/i.test(state.currentFile.content) ? 220 : 90;
-        renderEditorPreview.timer = setTimeout(() => renderEditorPreview(state.currentFile.content), previewDelay);
+        const performance = documentPerformanceProfile(update.state.doc.length, state.currentDocumentHasDiagrams);
+        if (performance.deferContentSync) {
+          // Converting a CodeMirror rope to one giant string on every keypress
+          // is the main source of large-document typing stalls. Synchronise it
+          // only when deferred preview, recovery, or save actually needs it.
+          setDirty(true);
+        } else {
+          state.currentFile.content = update.state.doc.toString();
+          state.currentDocumentHasDiagrams = documentHasDiagrams(state.currentFile.content);
+          setDirty(state.currentFile.content !== state.savedContent);
+        }
+        scheduleEditorPreview(performance);
+        scheduleRecoverySnapshot(performance);
       }
       if (update.docChanged || update.selectionSet) {
         updateEditorPosition();
-        updateExistingFlowchartButton();
+        if (documentPerformanceProfile(update.state.doc.length).deferContentSync) scheduleExistingContentActions();
+        else updateExistingFlowchartButton();
         scrollPreviewToCursor();
         if (update.selectionSet) scheduleFormatPainterApply();
       }
@@ -4782,6 +4805,83 @@ function setDirty(dirty) {
   updateWindowTitle();
 }
 
+function cancelScheduledEditorPreview() {
+  clearTimeout(renderEditorPreview.timer);
+  if (renderEditorPreview.idleHandle && typeof window.cancelIdleCallback === 'function') {
+    window.cancelIdleCallback(renderEditorPreview.idleHandle);
+  }
+  renderEditorPreview.idleHandle = 0;
+}
+
+function scheduleEditorPreview(performance) {
+  cancelScheduledEditorPreview();
+  const requestedSession = state.documentSession;
+  const requestedPath = state.currentFile?.path;
+  const render = () => {
+    renderEditorPreview.idleHandle = 0;
+    if (!state.editing || requestedSession !== state.documentSession || !sameDocumentPath(requestedPath, state.currentFile?.path)) return;
+    const content = editorContent();
+    state.currentFile.content = content;
+    state.currentDocumentHasDiagrams = documentHasDiagrams(content);
+    renderEditorPreview(content);
+  };
+  renderEditorPreview.timer = setTimeout(() => {
+    if (performance.idlePreview && typeof window.requestIdleCallback === 'function') {
+      renderEditorPreview.idleHandle = window.requestIdleCallback(render, { timeout: 700 });
+    } else {
+      render();
+    }
+  }, performance.previewDelay);
+}
+
+function cancelScheduledRecoverySnapshot() {
+  clearTimeout(scheduleRecoverySnapshot.timer);
+  scheduleRecoverySnapshot.timer = 0;
+}
+
+async function clearRecoverySnapshot() {
+  cancelScheduledRecoverySnapshot();
+  lastRecoveryContent = '';
+  try {
+    await window.quilliteMarkdown.clearRecoverySnapshot();
+  } catch (error) {
+    reportSilentError(error, 'document.recovery-clear');
+  }
+}
+
+function scheduleRecoverySnapshot(performance = documentPerformanceProfile(codeEditor?.state.doc.length || 0)) {
+  cancelScheduledRecoverySnapshot();
+  const requestedSession = state.documentSession;
+  const requestedPath = state.currentFile?.path;
+  scheduleRecoverySnapshot.timer = setTimeout(async () => {
+    scheduleRecoverySnapshot.timer = 0;
+    if (!state.editing || !state.dirty || requestedSession !== state.documentSession || !sameDocumentPath(requestedPath, state.currentFile?.path)) return;
+    const content = editorContent();
+    if (content === state.savedContent) {
+      state.currentFile.content = content;
+      setDirty(false);
+      await clearRecoverySnapshot();
+      return;
+    }
+    if (content === lastRecoveryContent) return;
+    const snapshot = {
+      path: state.currentFile.path,
+      name: state.currentFile.name,
+      directory: state.currentFile.directory,
+      content
+    };
+    try {
+      await window.quilliteMarkdown.saveRecoverySnapshot(snapshot);
+      if (requestedSession !== state.documentSession || !sameDocumentPath(requestedPath, state.currentFile?.path)) return;
+      lastRecoveryContent = content;
+      if (!state.dirty) await clearRecoverySnapshot();
+      else if (editorContent() !== content) scheduleRecoverySnapshot(documentPerformanceProfile(codeEditor.state.doc.length, state.currentDocumentHasDiagrams));
+    } catch (error) {
+      reportSilentError(error, 'document.recovery-save');
+    }
+  }, performance.recoveryDelay);
+}
+
 function maybeDiscardChanges() {
   if (!state.dirty) return true;
   return window.confirm(t('discardConfirm'));
@@ -5041,12 +5141,16 @@ function syncDocumentAccessControls() {
 
 function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
+  if (state.currentFile && state.dirty) void clearRecoverySnapshot();
+  cancelScheduledEditorPreview();
+  cancelScheduledRecoverySnapshot();
   state.documentSession += 1;
   closeAIRewrite();
   pendingAIRewriteSelection = null;
   resetAIDocumentReviewSession();
   if (!sameDocumentPath(state.currentFile?.path, doc.path)) state.spellcheckIgnoredWords = new Set();
   state.currentFile = doc;
+  state.currentDocumentHasDiagrams = documentHasDiagrams(doc.content);
   missingCurrentFilePath = '';
   state.savedContent = doc.content;
   state.saveAsRequired = false;
@@ -5057,7 +5161,11 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
   if (addToLibrary) addRecentDocument(doc);
   state.editing = false;
   replaceEditorContent(doc.content, true);
-  renderEditorPreview(doc.content);
+  // The hidden editor preview does not need a second full render while the
+  // reading view already renders the same large document. Build it only when
+  // the user actually enters editing mode.
+  if (documentPerformanceProfile(doc.content.length).level === 'normal') renderEditorPreview(doc.content);
+  else els.editorPreview.replaceChildren();
   els.editorFileName.textContent = doc.name;
   els.welcome.classList.add('hidden');
   els.editorView.classList.add('hidden');
@@ -5072,6 +5180,9 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  if (state.dirty) void clearRecoverySnapshot();
+  cancelScheduledEditorPreview();
+  cancelScheduledRecoverySnapshot();
   state.documentSession += 1;
   closeAIRewrite();
   pendingAIRewriteSelection = null;
@@ -5080,6 +5191,7 @@ function closePreview() {
   closeDocumentActionsMenu();
   releaseEChartsDiagrams(els.content);
   state.currentFile = null;
+  state.currentDocumentHasDiagrams = false;
   state.spellcheckIgnoredWords = new Set();
   state.editing = false;
   state.savedContent = '';
@@ -5291,10 +5403,23 @@ function scrollPreviewToCursor(force = false, behavior = 'smooth') {
   const cursorLine = codeEditor.state.doc.lineAt(codeEditor.state.selection.main.head).number;
   if (!force && cursorLine === scrollPreviewToCursor.lastLine) return;
   scrollPreviewToCursor.lastLine = cursorLine;
+  // Preview blocks are ordered by source line. Binary search avoids walking
+  // thousands of blocks on every cursor move in a large document.
+  const blocks = preview.children;
   let target = null;
-  for (const el of preview.children) {
-    const line = Number(el.dataset.line);
-    if (Number.isFinite(line) && line <= cursorLine) target = el;
+  let low = 0;
+  let high = blocks.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const line = Number(blocks[middle]?.dataset.line);
+    if (!Number.isFinite(line)) {
+      low = middle + 1;
+    } else if (line <= cursorLine) {
+      target = blocks[middle];
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
   }
   if (!target) return;
   const rect = target.getBoundingClientRect();
@@ -5431,6 +5556,11 @@ async function toggleEditor(forceEditing) {
       focusCodeEditor();
       updateEditorPosition();
       updateExistingFlowchartButton();
+      const performance = documentPerformanceProfile(codeEditor.state.doc.length, state.currentDocumentHasDiagrams);
+      if (performance.level !== 'normal' && largeDocumentNoticeSession !== state.documentSession) {
+        largeDocumentNoticeSession = state.documentSession;
+        showToast(t('largeDocumentOptimized'), 'info', 4800);
+      }
     } else {
       resetAIDocumentReviewSession();
       state.currentFile.content = editorContent();
@@ -5476,6 +5606,7 @@ async function saveDocument(saveAs = false, options = {}) {
     state.saveWarningShown = false;
     state.currentFile.content = currentContent;
     state.savedContent = editingContent;
+    if (typeof documentHasDiagrams === 'function') state.currentDocumentHasDiagrams = documentHasDiagrams(currentContent);
     syncDocumentAccessControls();
     addRecentDocument(saved);
     renderEditorPreview(state.currentFile.content);
@@ -5484,6 +5615,13 @@ async function saveDocument(saveAs = false, options = {}) {
     if (state.sidebarMode === 'recent') state.files = [...state.recentFiles];
     renderFileList();
     setDirty(!unchangedSinceSave);
+    if (unchangedSinceSave) {
+      if (typeof clearRecoverySnapshot === 'function') await clearRecoverySnapshot();
+      if (typeof lastRecoveryContent !== 'undefined') lastRecoveryContent = '';
+    } else if (typeof scheduleRecoverySnapshot === 'function') {
+      const editorLength = typeof codeEditor !== 'undefined' ? codeEditor?.state.doc.length : 0;
+      scheduleRecoverySnapshot(documentPerformanceProfile(editorLength || currentContent.length, state.currentDocumentHasDiagrams));
+    }
     await refreshLibraryAfterReplacement(saved);
     if (!isCurrentSession()) return;
     if (pathIsInsideRoot(saved.path)) await refreshExplorer();
@@ -7834,12 +7972,99 @@ async function completeFirstRunLanguage(language) {
     els.firstRunLanguageDialog.classList.add('hidden');
     document.body.classList.remove('dialog-open');
     showToast(t('languageChanged'), 'success');
+    await offerRecoverySnapshot();
     scheduleAutomaticUpdateCheck();
   } catch (error) {
     reportSilentError(error, 'language.first-run');
     console.warn('Unable to save first-run language:', error);
     buttons.forEach(button => { button.disabled = false; });
     showToast(t('languageSaveFailed'), 'error');
+  }
+}
+
+function closeRecoveryDialog() {
+  els.recoveryDialog.classList.add('hidden');
+  pendingRecoverySnapshot = null;
+  document.body.classList.remove('dialog-open');
+}
+
+function recoveryTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return new Intl.DateTimeFormat(state.language === 'en' ? 'en-US' : 'zh-CN', {
+    dateStyle: 'medium', timeStyle: 'short'
+  }).format(date);
+}
+
+async function offerRecoverySnapshot() {
+  try {
+    const snapshot = await window.quilliteMarkdown.getRecoverySnapshot();
+    if (!snapshot?.path || typeof snapshot.content !== 'string') return false;
+    pendingRecoverySnapshot = snapshot;
+    els.recoveryFileName.textContent = snapshot.name || snapshot.path;
+    els.recoveryFileName.title = snapshot.path;
+    els.recoveryUpdatedAt.textContent = recoveryTimestamp(snapshot.updatedAt);
+    els.recoveryDialog.classList.remove('hidden');
+    document.body.classList.add('dialog-open');
+    requestAnimationFrame(() => $('#restoreRecovery').focus());
+    return true;
+  } catch (error) {
+    reportSilentError(error, 'document.recovery-load');
+    showToast(t('recoveryFailed'), 'warning');
+    return false;
+  }
+}
+
+async function discardRecoverySnapshot() {
+  const button = $('#discardRecovery');
+  button.disabled = true;
+  try {
+    await clearRecoverySnapshot();
+    closeRecoveryDialog();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function restoreRecoverySnapshot() {
+  const snapshot = pendingRecoverySnapshot;
+  if (!snapshot) return;
+  const buttons = [$('#discardRecovery'), $('#restoreRecovery')];
+  buttons.forEach(button => { button.disabled = true; });
+  try {
+    let diskDocument = sameDocumentPath(state.currentFile?.path, snapshot.path) ? state.currentFile : null;
+    if (!diskDocument) {
+      try {
+        diskDocument = await window.quilliteMarkdown.readFile(snapshot.path);
+      } catch {
+        // If the original was moved after the crash, recover into a normal
+        // temporary draft so Save As remains available and no content is lost.
+        diskDocument = await window.quilliteMarkdown.newFile();
+      }
+    }
+    if (!diskDocument?.path) throw new Error('Unable to create a recovery document');
+    const savedContent = String(diskDocument.content || '');
+    const recoveredDocument = {
+      ...diskDocument,
+      content: snapshot.content,
+      name: diskDocument.name || snapshot.name,
+      directory: diskDocument.directory || snapshot.directory
+    };
+    displayDocument(recoveredDocument);
+    state.savedContent = savedContent;
+    await toggleEditor(true);
+    if (!state.editing) throw new Error('Unable to open the recovered document for editing');
+    state.currentFile.content = snapshot.content;
+    if (editorContent() !== snapshot.content) replaceEditorContent(snapshot.content, false);
+    setDirty(snapshot.content !== savedContent);
+    lastRecoveryContent = snapshot.content;
+    closeRecoveryDialog();
+    showToast(t('recoveryRestored'), 'success');
+  } catch (error) {
+    reportSilentError(error, 'document.recovery-restore');
+    showToast(t('recoveryFailed'), 'error');
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -7926,11 +8151,16 @@ async function initialize() {
   }
   restoreExplorerAfterFirstPaint(savedExplorerRoot);
   if (needsLanguageSelection) openFirstRunLanguageDialog();
-  else scheduleAutomaticUpdateCheck();
+  else {
+    await offerRecoverySnapshot();
+    scheduleAutomaticUpdateCheck();
+  }
 }
 
 $('#newFileButton').addEventListener('click', newFile);
 $('#closeToast').addEventListener('click', hideToast);
+$('#discardRecovery').addEventListener('click', discardRecoverySnapshot);
+$('#restoreRecovery').addEventListener('click', restoreRecoverySnapshot);
 els.toast.addEventListener('mouseenter', () => clearTimeout(showToast.timer));
 els.toast.addEventListener('mouseleave', () => {
   clearTimeout(showToast.timer);
