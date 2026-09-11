@@ -50,6 +50,15 @@ test('file-association opens are subscribed before startup and protect unsaved c
   assert.match(renderer, /window\.quilliteMarkdown\.onOpenFile\(doc => \{\s*if \(!doc\?\.path \|\| !maybeDiscardChanges\(\)\) return;/);
 });
 
+test('closing a dirty document offers save, discard, and cancel actions', () => {
+  assert.match(html, /id="unsavedCloseDialog"[\s\S]*id="cancelUnsavedClose"[\s\S]*id="discardUnsavedClose"[\s\S]*id="saveUnsavedClose"/);
+  assert.match(mainSource, /if \(desktopRuntime\) return EventsOn\('document:confirm-close', callback\)/);
+  assert.match(mainSource, /discardChangesAndQuit: \(\) => desktopRuntime \? Backend\.DiscardChangesAndQuit\(\)/);
+  assert.match(renderer, /window\.quilliteMarkdown\.onConfirmClose\(openUnsavedCloseDialog\);\s*initialize\(\)/);
+  assert.match(renderer, /async function saveAndQuit\(\)[\s\S]*await saveDocument\(false, \{ silent: true \}\)[\s\S]*!saved \|\| state\.dirty[\s\S]*await window\.quilliteMarkdown\.closeWindow\(\)/);
+  assert.match(renderer, /async function discardAndQuit\(\)[\s\S]*await window\.quilliteMarkdown\.discardChangesAndQuit\(\)/);
+});
+
 test('an occupied export target is explained without uploading a software error', () => {
   assert.match(renderer, /function isExportFileInUseError\(error\)[\s\S]*message\.includes\('EXPORT_FILE_IN_USE'\)/);
   assert.match(renderer, /function reportSilentError\(error, source = 'frontend'\) \{[\s\S]*if \(isExportFileInUseError\(error\)\) return;/);

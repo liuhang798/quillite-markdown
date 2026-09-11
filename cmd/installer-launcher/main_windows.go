@@ -292,6 +292,12 @@ type rasterLayer struct {
 	bleedEdge bool
 }
 
+const (
+	installProductDirectoryName = "轻阅 Markdown"
+	installExecutableName       = "QuilliteMarkdown.exe"
+	installDirectoryEnvName     = "QUILLITE_INSTALL_DIR"
+)
+
 var (
 	mainWindow  uintptr
 	arrowCursor uintptr
@@ -348,7 +354,7 @@ func installerText(english bool) installerCopy {
 			completeAction:     "Finish installation",
 			retryAction:        "Retry installation",
 			languageAction:     "中文",
-			folderTitle:        "Choose the Quillite Markdown installation folder",
+			folderTitle:        "Choose a parent folder; Quillite Markdown will create its own subfolder",
 			windowTitle:        "Quillite Markdown Installer",
 		}
 	}
@@ -366,7 +372,7 @@ func installerText(english bool) installerCopy {
 		completeAction:     "完成安装",
 		retryAction:        "重新安装",
 		languageAction:     "English",
-		folderTitle:        "选择轻阅 Markdown 的安装文件夹",
+		folderTitle:        "选择安装位置；轻阅 Markdown 将在其中新建专属子目录",
 		windowTitle:        "轻阅 Markdown 安装",
 	}
 }
@@ -423,7 +429,7 @@ func chooseInstallDirectory(owner uintptr, initial string, english bool) (string
 	if result == 0 {
 		return "", false
 	}
-	normalized, err := normalizeInstallDirectory(syscall.UTF16ToString(selected[:]))
+	normalized, err := customInstallDirectory(syscall.UTF16ToString(selected[:]))
 	if err != nil {
 		return "", false
 	}
@@ -440,6 +446,17 @@ func normalizeInstallDirectory(path string) (string, error) {
 		return "", errors.New("install directory must be absolute")
 	}
 	return path, nil
+}
+
+// customInstallDirectory treats the folder selected in the custom picker as a
+// parent. Default installs and upgrades bypass this helper and continue to use
+// their exact resolved destination.
+func customInstallDirectory(parent string) (string, error) {
+	normalized, err := normalizeInstallDirectory(parent)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(normalized, installProductDirectoryName), nil
 }
 
 func main() {
@@ -1286,6 +1303,7 @@ func runInstaller() {
 	english := view.english
 	view.RUnlock()
 	cmd := exec.Command(payload, installerCommandArguments(cancelFile, installDir, english)...)
+	cmd.Env = installerCommandEnvironment(os.Environ(), installDir)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Start(); err != nil {
 		setFailed(
@@ -1321,6 +1339,13 @@ func runInstaller() {
 		)
 		return
 	}
+	if err := verifyInstalledDirectory(installDir); err != nil {
+		setFailed(
+			"安装核心未使用所选目录，请重试自定义安装。",
+			"The installer core did not use the selected folder. Retry the custom installation.",
+		)
+		return
+	}
 	animateInstallCompletion()
 	view.Lock()
 	view.page = pageComplete
@@ -1352,6 +1377,22 @@ func installerCommandArguments(cancelFile, installDir string, english bool) []st
 		arguments = append(arguments, "/INSTALLDIR="+normalized)
 	}
 	return arguments
+}
+
+func installerCommandEnvironment(base []string, installDir string) []string {
+	prefix := installDirectoryEnvName + "="
+	environment := make([]string, 0, len(base)+1)
+	for _, entry := range base {
+		name, _, found := strings.Cut(entry, "=")
+		if found && strings.EqualFold(name, installDirectoryEnvName) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	if normalized, err := normalizeInstallDirectory(installDir); err == nil {
+		environment = append(environment, prefix+normalized)
+	}
+	return environment
 }
 
 // installerProgressTarget provides a smooth waiting indicator without
@@ -1512,6 +1553,35 @@ func setFailed(chinese, english string) {
 
 const installerUninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\Quillite Open Source轻阅 Markdown`
 
+func recordedInstallDirectory() string {
+	if key, err := registry.OpenKey(registry.CURRENT_USER, installerUninstallKey, registry.QUERY_VALUE); err == nil {
+		defer key.Close()
+		location, _, _ := key.GetStringValue("InstallLocation")
+		return location
+	}
+	return ""
+}
+
+func sameInstallDirectory(left, right string) bool {
+	left, leftErr := normalizeInstallDirectory(left)
+	right, rightErr := normalizeInstallDirectory(right)
+	return leftErr == nil && rightErr == nil && strings.EqualFold(left, right)
+}
+
+func verifyInstalledDirectory(expected string) error {
+	expected, err := normalizeInstallDirectory(expected)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Stat(filepath.Join(expected, installExecutableName)); err != nil || info.IsDir() {
+		return errors.New("installed executable missing from selected directory")
+	}
+	if recorded := recordedInstallDirectory(); !sameInstallDirectory(expected, recorded) {
+		return fmt.Errorf("recorded install directory %q does not match %q", recorded, expected)
+	}
+	return nil
+}
+
 func preferredInstallDirectory(localAppData, recordedLocation string) string {
 	recordedLocation = strings.Trim(strings.TrimSpace(recordedLocation), `"`)
 	if normalized, err := normalizeInstallDirectory(recordedLocation); err == nil {
@@ -1528,12 +1598,7 @@ func preferredInstallDirectory(localAppData, recordedLocation string) string {
 }
 
 func initialInstallDirectory() string {
-	var installLocation string
-	if key, err := registry.OpenKey(registry.CURRENT_USER, installerUninstallKey, registry.QUERY_VALUE); err == nil {
-		installLocation, _, _ = key.GetStringValue("InstallLocation")
-		_ = key.Close()
-	}
-	return preferredInstallDirectory(os.Getenv("LOCALAPPDATA"), installLocation)
+	return preferredInstallDirectory(os.Getenv("LOCALAPPDATA"), recordedInstallDirectory())
 }
 
 func extractPayload() (string, func(), error) {

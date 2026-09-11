@@ -323,7 +323,7 @@ const translations = {
     shortcutFiles: '文档与文件', shortcutReading: '阅读与编辑', shortcutFormatting: '文字格式', shortcutNew: '新建文档', shortcutOpen: '打开文档', shortcutOpenFolder: '打开文件夹', shortcutSave: '保存文档', shortcutSaveAs: '另存为', shortcutPrint: '打印文档', shortcutEditPreview: '切换编辑/预览', shortcutSearch: '查找内容', shortcutZoomIn: '放大文字', shortcutZoomOut: '缩小文字', shortcutZoomReset: '恢复字号', shortcutUndo: '撤回', shortcutRedo: '重做', shortcutBold: '加粗', shortcutItalic: '斜体', shortcutLink: '插入链接', shortcutStrike: '删除线', shortcutHighlight: '高亮',
     print: '打印', printTitle: '打印文档', moreDocumentActions: '更多', readingEnd: '阅读结束', livePreview: '实时预览', readingEffect: '阅读效果', previewLocateHint: '右键定位到编辑器 · 第 {line} 行', markdownEditorLabel: 'MARKDOWN 编辑器',
     untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器', largeDocumentOptimized: '已启用大文档优化：预览将延迟刷新，并暂停全文拼写扫描',
-    recoveryLabel: '异常恢复', recoveryTitle: '发现未保存的编辑内容', recoveryDescription: '轻阅在上次异常结束前保存了一份恢复副本。你可以继续编辑，或放弃副本并以磁盘文件为准。', recoveryDocument: '恢复文档', recoverySavedAt: '快照时间', recoveryDiscard: '放弃恢复内容', recoveryRestore: '恢复并继续编辑', recoveryFailed: '无法读取恢复内容，磁盘文件未受影响', recoveryRestored: '已恢复上次未保存的编辑内容',
+    recoveryLabel: '异常恢复', recoveryTitle: '发现未保存的编辑内容', recoveryDescription: '轻阅在上次异常结束前保存了一份恢复副本。你可以继续编辑，或放弃副本并以磁盘文件为准。', recoveryDocument: '恢复文档', recoverySavedAt: '快照时间', recoveryDiscard: '放弃恢复内容', recoveryRestore: '恢复并继续编辑', recoveryFailed: '无法读取恢复内容，磁盘文件未受影响', recoveryRestored: '已恢复上次未保存的编辑内容', unsavedCloseLabel: '文档更改', unsavedTitle: '尚未保存', unsavedCloseDescription: '文档中的更改尚未保存。是否在退出前保存？', save: '保存', dontSave: '不保存', savingDocument: '正在保存…',
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
     toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', openCompactToc: '展开本页目录', closeCompactToc: '收起本页目录', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
@@ -372,7 +372,7 @@ const translations = {
     shortcutFiles: 'Documents & files', shortcutReading: 'Reading & editing', shortcutFormatting: 'Text formatting', shortcutNew: 'New document', shortcutOpen: 'Open document', shortcutOpenFolder: 'Open folder', shortcutSave: 'Save document', shortcutSaveAs: 'Save As', shortcutPrint: 'Print document', shortcutEditPreview: 'Toggle edit/preview', shortcutSearch: 'Find content', shortcutZoomIn: 'Increase text size', shortcutZoomOut: 'Decrease text size', shortcutZoomReset: 'Reset text size', shortcutUndo: 'Undo', shortcutRedo: 'Redo', shortcutBold: 'Bold', shortcutItalic: 'Italic', shortcutLink: 'Insert link', shortcutStrike: 'Strikethrough', shortcutHighlight: 'Highlight',
     print: 'Print', printTitle: 'Print document', moreDocumentActions: 'More', readingEnd: 'End of document', livePreview: 'LIVE PREVIEW', readingEffect: 'Rendered document', previewLocateHint: 'Right-click to locate in the editor · Line {line}', markdownEditorLabel: 'MARKDOWN EDITOR',
     untitledDocument: 'Untitled document', saved: 'Saved', unsaved: 'Unsaved', autoSaved: 'Autosaved', saveAs: 'Save As', exitEdit: 'Exit editing', markdownEditorAria: 'Markdown editor', largeDocumentOptimized: 'Large-document mode enabled: preview updates are deferred and full-document spell scans are paused',
-    recoveryLabel: 'CRASH RECOVERY', recoveryTitle: 'Unsaved edits were found', recoveryDescription: 'Quillite saved a recovery copy before the previous session ended unexpectedly. Continue editing it, or discard it and keep the version on disk.', recoveryDocument: 'Document', recoverySavedAt: 'Snapshot', recoveryDiscard: 'Discard recovery copy', recoveryRestore: 'Restore & Continue', recoveryFailed: 'The recovery copy could not be read. The file on disk was not changed.', recoveryRestored: 'Unsaved edits from the previous session were restored',
+    recoveryLabel: 'CRASH RECOVERY', recoveryTitle: 'Unsaved edits were found', recoveryDescription: 'Quillite saved a recovery copy before the previous session ended unexpectedly. Continue editing it, or discard it and keep the version on disk.', recoveryDocument: 'Document', recoverySavedAt: 'Snapshot', recoveryDiscard: 'Discard recovery copy', recoveryRestore: 'Restore & Continue', recoveryFailed: 'The recovery copy could not be read. The file on disk was not changed.', recoveryRestored: 'Unsaved edits from the previous session were restored', unsavedCloseLabel: 'DOCUMENT CHANGES', unsavedTitle: 'Unsaved changes', unsavedCloseDescription: 'This document has unsaved changes. Save them before quitting?', save: 'Save', dontSave: "Don't Save", savingDocument: 'Saving…',
     codeLang: 'Select a language', codeNoLang: 'No language (plain text)',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> Save　 <kbd>Ctrl</kbd> + <kbd>E</kbd> Preview', backToTop: 'Back to top', backToTopAria: 'Back to document top',
     toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', openCompactToc: 'Open table of contents', closeCompactToc: 'Close table of contents', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
@@ -642,7 +642,7 @@ const els = {
   editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiToolbarButton: $('#aiToolbarButton'), aiToolbarMenu: $('#aiToolbarMenu'), documentHistoryButton: $('#documentHistoryButton'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
-  saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), recoveryDialog: $('#recoveryDialog'), recoveryFileName: $('#recoveryFileName'), recoveryUpdatedAt: $('#recoveryUpdatedAt'), aboutDialog: $('#aboutDialog'),
+  saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), recoveryDialog: $('#recoveryDialog'), recoveryFileName: $('#recoveryFileName'), recoveryUpdatedAt: $('#recoveryUpdatedAt'), unsavedCloseDialog: $('#unsavedCloseDialog'), aboutDialog: $('#aboutDialog'),
   aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderDescription: $('#aiProviderDescription'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURLField: $('#aiBaseURLField'), aiBaseURL: $('#aiBaseURL'), aiBaseURLHint: $('#aiBaseURLHint'), aiModelSelectField: $('#aiModelSelectField'), aiModel: $('#aiModel'), aiCustomModelField: $('#aiCustomModelField'), aiCustomModel: $('#aiCustomModel'), aiCustomModelOptions: $('#aiCustomModelOptions'), aiModelState: $('#aiModelState'), aiCustomModelState: $('#aiCustomModelState'), refreshAIModels: $('#refreshAIModels'), refreshAICustomModels: $('#refreshAICustomModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'), aiDiagnostics: $('#aiDiagnostics'), aiDiagnosticsSummary: $('#aiDiagnosticsSummary'), aiDiagnosticChecks: $('#aiDiagnosticChecks'),
   aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteTitle: $('#aiRewriteTitle'), aiRequestSettings: $('#aiRequestSettings'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiTaskSettings: $('#aiTaskSettings'), aiInstructionField: $('#aiInstructionField'), aiInstructionLabel: $('#aiInstructionLabel'), aiInstruction: $('#aiInstruction'), aiInstructionHint: $('#aiInstructionHint'), aiLengthField: $('#aiLengthField'), aiLengthLabel: $('#aiLengthLabel'), aiLength: $('#aiLength'), aiLengthHint: $('#aiLengthHint'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiDiffFilter: $('#aiDiffFilter'), loadMoreAIDiff: $('#loadMoreAIDiff'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiRewritePrivacy: $('#aiRewritePrivacy'), aiRewriteSendSummary: $('#aiRewriteSendSummary'), aiRewritePrivacySummary: $('#aiRewritePrivacySummary'), aiRewritePrivacyList: $('#aiRewritePrivacyList'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
   aiReviewDialog: $('#aiReviewDialog'), aiReviewInstruction: $('#aiReviewInstruction'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewPrivacy: $('#aiReviewPrivacy'), aiReviewSendSummary: $('#aiReviewSendSummary'), aiReviewPrivacySummary: $('#aiReviewPrivacySummary'), aiReviewPrivacyList: $('#aiReviewPrivacyList'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
@@ -4985,6 +4985,56 @@ function maybeDiscardChanges() {
   return window.confirm(t('discardConfirm'));
 }
 
+let unsavedCloseBusy = false;
+
+function setUnsavedCloseBusy(busy) {
+  unsavedCloseBusy = Boolean(busy);
+  const buttons = [$('#cancelUnsavedClose'), $('#discardUnsavedClose'), $('#saveUnsavedClose')];
+  buttons.forEach(button => { button.disabled = unsavedCloseBusy; });
+  $('#saveUnsavedClose').textContent = t(unsavedCloseBusy ? 'savingDocument' : 'save');
+}
+
+function openUnsavedCloseDialog() {
+  if (!state.dirty) return;
+  setUnsavedCloseBusy(false);
+  els.unsavedCloseDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  requestAnimationFrame(() => $('#saveUnsavedClose').focus());
+}
+
+function closeUnsavedCloseDialog() {
+  if (unsavedCloseBusy) return;
+  els.unsavedCloseDialog.classList.add('hidden');
+  if (!document.querySelector('.dialog-backdrop:not(.hidden)')) document.body.classList.remove('dialog-open');
+}
+
+async function saveAndQuit() {
+  if (unsavedCloseBusy) return;
+  setUnsavedCloseBusy(true);
+  try {
+    while (state.saving) await new Promise(resolve => setTimeout(resolve, 50));
+    const saved = state.dirty ? await saveDocument(false, { silent: true }) : state.currentFile;
+    if (!saved || state.dirty) return;
+    await window.quilliteMarkdown.setDirty(false);
+    els.unsavedCloseDialog.classList.add('hidden');
+    await window.quilliteMarkdown.closeWindow();
+  } finally {
+    if (!els.unsavedCloseDialog.classList.contains('hidden')) setUnsavedCloseBusy(false);
+  }
+}
+
+async function discardAndQuit() {
+  if (unsavedCloseBusy) return;
+  setUnsavedCloseBusy(true);
+  try {
+    els.unsavedCloseDialog.classList.add('hidden');
+    if (!document.querySelector('.dialog-backdrop:not(.hidden)')) document.body.classList.remove('dialog-open');
+    await window.quilliteMarkdown.discardChangesAndQuit();
+  } finally {
+    if (!els.unsavedCloseDialog.classList.contains('hidden')) setUnsavedCloseBusy(false);
+  }
+}
+
 function mermaidPreviewThemeKey() {
   const root = document.documentElement;
   return `${root.dataset.colorMode || 'light'}|${root.dataset.accent || 'green'}`;
@@ -8869,6 +8919,15 @@ $('#newFileButton').addEventListener('click', newFile);
 $('#closeToast').addEventListener('click', hideToast);
 $('#discardRecovery').addEventListener('click', discardRecoverySnapshot);
 $('#restoreRecovery').addEventListener('click', restoreRecoverySnapshot);
+$('#cancelUnsavedClose').addEventListener('click', closeUnsavedCloseDialog);
+$('#discardUnsavedClose').addEventListener('click', discardAndQuit);
+$('#saveUnsavedClose').addEventListener('click', saveAndQuit);
+els.unsavedCloseDialog.addEventListener('click', event => {
+  if (event.target === els.unsavedCloseDialog) closeUnsavedCloseDialog();
+});
+els.unsavedCloseDialog.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeUnsavedCloseDialog();
+});
 els.toast.addEventListener('mouseenter', () => clearTimeout(showToast.timer));
 els.toast.addEventListener('mouseleave', () => {
   clearTimeout(showToast.timer);
@@ -9931,6 +9990,7 @@ window.quilliteMarkdown.onOpenFile(doc => {
   setSidebarMode('recent');
   displayDocument(doc);
 });
+window.quilliteMarkdown.onConfirmClose(openUnsavedCloseDialog);
 initialize();
 setInterval(() => {
   if (state.editing && state.dirty && state.currentFile?.path && !state.saving) saveDocument(false, { auto: true, silent: true });

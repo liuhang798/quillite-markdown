@@ -10,6 +10,7 @@ import {
 
 const desktopRuntime = Boolean(window.go?.main?.App && window.runtime);
 const resolved = value => Promise.resolve(value);
+const browserConfirmCloseEvent = 'quillite:confirm-close';
 const mockUpdate = new URLSearchParams(window.location.search).has('mockUpdate');
 const browserRecoveryKey = 'quilliteDocumentRecovery';
 const maskBrowserAIKey = value => value.length > 8 ? `${value.slice(0, 4)}••••••••${value.slice(-4)}` : '••••••••';
@@ -200,6 +201,11 @@ window.quilliteMarkdown = {
   onImageUploadProgress: callback => desktopRuntime ? EventsOn('image-upload:progress', callback) : () => {},
   pathForFile: file => file?.path || '',
   onOpenFile: callback => desktopRuntime ? EventsOn('file:open-from-main', callback) : () => {},
+  onConfirmClose: callback => {
+    if (desktopRuntime) return EventsOn('document:confirm-close', callback);
+    window.addEventListener(browserConfirmCloseEvent, callback);
+    return () => window.removeEventListener(browserConfirmCloseEvent, callback);
+  },
   onFileDrop: callback => {
     if (window.runtime?.OnFileDrop) {
       window.runtime.OnFileDrop((_x, _y, paths) => callback(paths || []), false);
@@ -208,7 +214,8 @@ window.quilliteMarkdown = {
   isWindowFullscreen: () => desktopRuntime ? WindowIsFullscreen() : resolved(Boolean(document.fullscreenElement)),
   minimiseWindow: () => desktopRuntime && WindowMinimise(),
   toggleMaximiseWindow: () => desktopRuntime && WindowToggleMaximise(),
-  closeWindow: () => desktopRuntime && Backend.RequestQuit()
+  closeWindow: () => desktopRuntime ? Backend.RequestQuit() : window.dispatchEvent(new Event(browserConfirmCloseEvent)),
+  discardChangesAndQuit: () => desktopRuntime ? Backend.DiscardChangesAndQuit() : resolved(true)
 };
 
 await import('./renderer.js');

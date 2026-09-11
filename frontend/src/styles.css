@@ -849,6 +849,14 @@ html[lang="en"] #moreMenu .settings-submenu.popover button > span:first-child { 
 .recovery-dialog-details strong { overflow: hidden; color: var(--text); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 .recovery-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .recovery-dialog-actions .large-button { min-width: 142px; }
+#unsavedCloseDialog { z-index: 240; }
+.unsaved-close-dialog { width: min(480px, 100%); padding: 30px; border: 1px solid color-mix(in srgb, var(--line) 78%, var(--accent)); border-radius: 18px; background: var(--paper-strong); box-shadow: 0 30px 90px rgba(18, 25, 20, .3); animation: dialog-rise .2s ease-out; }
+.unsaved-close-dialog h2 { margin: 7px 0 9px; color: var(--text); font-size: 24px; letter-spacing: -.4px; }
+.unsaved-close-dialog > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.unsaved-close-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+.unsaved-close-actions .large-button { min-width: 96px; }
+.unsaved-discard-button { color: #a84f49; }
+.unsaved-discard-button:hover { border-color: color-mix(in srgb, #b64c48 42%, var(--line)); background: color-mix(in srgb, #b64c48 8%, var(--panel)); }
 .about-dialog { position: relative; width: min(540px, 100%); padding: 34px; border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent)); border-radius: 20px; background: var(--paper-strong); box-shadow: 0 30px 90px rgba(18, 25, 20, .28); animation: dialog-rise .2s ease-out; }
 .about-close { position: absolute; top: 17px; right: 17px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }
 .about-close:hover, .about-close:focus-visible { color: var(--accent-strong); background: var(--accent-soft); outline: none; }

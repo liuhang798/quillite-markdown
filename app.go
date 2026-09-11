@@ -166,11 +166,11 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	if !dirty {
 		return false
 	}
-	if !a.confirmDiscard(ctx, true) {
-		return true
-	}
-	_ = a.ClearRecoverySnapshot()
-	return false
+	// Windows' native Wails warning dialog only exposes an OK button and
+	// ignores custom button labels. Let the frontend show the product's
+	// Save / Don't Save / Cancel dialog, then explicitly resume quitting.
+	wailsruntime.EventsEmit(ctx, "document:confirm-close")
+	return true
 }
 
 func (a *App) onSecondInstanceLaunch(data options.SecondInstanceData) {
@@ -1624,28 +1624,20 @@ func (a *App) RequestQuit() bool {
 	a.mu.RLock()
 	dirty := a.dirty
 	a.mu.RUnlock()
-	if dirty && !a.confirmDiscard(a.ctx, true) {
+	if dirty {
+		wailsruntime.EventsEmit(a.ctx, "document:confirm-close")
 		return false
 	}
 	_ = a.ClearRecoverySnapshot()
-	a.SetDirty(false)
 	wailsruntime.Quit(a.ctx)
 	return true
 }
 
-func (a *App) confirmDiscard(ctx context.Context, exiting bool) bool {
-	continueLabel := a.text("continueEditing")
-	discardLabel := a.text("discardAndOpen")
-	message := a.text("openUnsavedMessage")
-	if exiting {
-		discardLabel = a.text("discardAndExit")
-		message = a.text("exitUnsavedMessage")
-	}
-	response, err := wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
-		Type: wailsruntime.WarningDialog, Title: a.text("unsavedTitle"), Message: message,
-		Buttons: []string{continueLabel, discardLabel}, DefaultButton: continueLabel, CancelButton: continueLabel,
-	})
-	return err == nil && response == discardLabel
+func (a *App) DiscardChangesAndQuit() bool {
+	_ = a.ClearRecoverySnapshot()
+	a.SetDirty(false)
+	wailsruntime.Quit(a.ctx)
+	return true
 }
 
 func findMarkdownArgument(args []string) string {

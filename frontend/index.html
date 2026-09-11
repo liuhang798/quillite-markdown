@@ -647,6 +647,19 @@
     </section>
   </div>
 
+  <div id="unsavedCloseDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="unsavedCloseTitle" aria-describedby="unsavedCloseDescription">
+    <section class="unsaved-close-dialog">
+      <span class="eyebrow" data-i18n="unsavedCloseLabel">文档更改</span>
+      <h2 id="unsavedCloseTitle" data-i18n="unsavedTitle">尚未保存</h2>
+      <p id="unsavedCloseDescription" data-i18n="unsavedCloseDescription">文档中的更改尚未保存。是否在退出前保存？</p>
+      <div class="unsaved-close-actions">
+        <button id="cancelUnsavedClose" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
+        <button id="discardUnsavedClose" class="large-button secondary unsaved-discard-button" type="button" data-i18n="dontSave">不保存</button>
+        <button id="saveUnsavedClose" class="large-button primary" type="button" data-i18n="save">保存</button>
+      </div>
+    </section>
+  </div>
+
   <div id="aboutDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
     <section class="about-dialog">
       <button id="closeAbout" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">

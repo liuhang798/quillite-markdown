@@ -20,6 +20,8 @@ export function DiagnoseAIProvider(arg1:main.AISettingsInput):Promise<main.AIDia
 
 export function Dirname(arg1:string):Promise<string>;
 
+export function DiscardChangesAndQuit():Promise<boolean>;
+
 export function DiscoverAIModels(arg1:main.AIModelDiscoveryInput):Promise<Array<string>>;
 
 export function DownloadAndApplyUpdate():Promise<void>;

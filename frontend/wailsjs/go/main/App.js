@@ -38,6 +38,10 @@ export function Dirname(arg1) {
   return window['go']['main']['App']['Dirname'](arg1);
 }
 
+export function DiscardChangesAndQuit() {
+  return window['go']['main']['App']['DiscardChangesAndQuit']();
+}
+
 export function DiscoverAIModels(arg1) {
   return window['go']['main']['App']['DiscoverAIModels'](arg1);
 }

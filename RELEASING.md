@@ -83,6 +83,7 @@ The manual tag must exactly match the version in `wails.json`.
 - Confirm all platform assets are present.
 - Confirm `https://qm.ssssa.cn/#download` displays the new version and all official platform download links.
 - Install the Windows package and check the desktop icon and Markdown file association.
+- Select a non-empty folder containing a disposable sentinel file during a Windows custom install. Confirm Quillite uses its own child directory, create a test Markdown document inside that directory, then uninstall and verify both the document and sentinel remain untouched. The NSIS script must never recursively remove `$INSTDIR` or wildcard-delete documents.
 - Mount the macOS DMG, confirm it contains exactly one `轻阅 Markdown.app` plus the hidden `.metadata_never_index` marker, copy the app into `/Applications`, launch it, and verify the installer image is ejected without leaving a second icon in Spotlight/Launchpad.
 - Verify the macOS update asset is a `.zip` containing exactly one complete `轻阅 Markdown.app`; run `codesign --verify --deep --strict` against the extracted bundle and confirm no `*-macos-universal.bin` asset is published.
 - Verify the in-app updater downloads the platform-specific asset, replaces the application, and relaunches successfully. Existing macOS clients that still expect the retired raw `.bin` format require one manual DMG installation before they can use future full-bundle updates.

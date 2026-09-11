@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,6 +104,95 @@ func TestInstallerArgumentsKeepCustomDirectoryLastAndIntact(t *testing.T) {
 		t.Fatalf("relative install directory should be ignored: %#v", relative)
 	} else if relative[2] != "/APP-LANGUAGE=zh-CN" {
 		t.Fatalf("Chinese install language argument = %q", relative[2])
+	}
+}
+
+func TestInstallerEnvironmentReplacesStaleDestination(t *testing.T) {
+	installDir := `D:\Markdown Apps\轻阅 Markdown`
+	environment := installerCommandEnvironment([]string{
+		"PATH=C:\\Windows",
+		"quillite_install_dir=C:\\Old Install",
+		"TEMP=C:\\Temp",
+	}, installDir)
+	found := 0
+	for _, entry := range environment {
+		if strings.HasPrefix(strings.ToUpper(entry), installDirectoryEnvName+"=") {
+			found++
+			if entry != installDirectoryEnvName+"="+installDir {
+				t.Fatalf("installer environment destination = %q, want %q", entry, installDirectoryEnvName+"="+installDir)
+			}
+		}
+	}
+	if found != 1 {
+		t.Fatalf("installer environment contains %d destination entries, want 1: %#v", found, environment)
+	}
+}
+
+func TestInstallDirectoryComparisonIsNormalizedAndCaseInsensitive(t *testing.T) {
+	if !sameInstallDirectory(`D:\Apps\轻阅 Markdown\.`, `d:\apps\轻阅 Markdown`) {
+		t.Fatal("equivalent Windows install directories should match")
+	}
+	if sameInstallDirectory(`D:\Apps\轻阅 Markdown`, `C:\Apps\轻阅 Markdown`) {
+		t.Fatal("different install drives must not match")
+	}
+}
+
+func TestCustomInstallDirectoryAlwaysCreatesProductChild(t *testing.T) {
+	for _, parent := range []string{t.TempDir(), filepath.Join(t.TempDir(), "empty-new-parent")} {
+		want := filepath.Join(parent, installProductDirectoryName)
+		got, err := customInstallDirectory(parent)
+		if err != nil {
+			t.Fatalf("custom install directory for %q: %v", parent, err)
+		}
+		if got != want {
+			t.Fatalf("custom install directory = %q, want dedicated child %q", got, want)
+		}
+	}
+
+	nonEmptyParent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(nonEmptyParent, "important-user-file.txt"), []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(nonEmptyParent, installProductDirectoryName)
+	if got, err := customInstallDirectory(nonEmptyParent); err != nil || got != want {
+		t.Fatalf("non-empty custom parent = %q, %v; want %q", got, err, want)
+	}
+}
+
+func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T) {
+	scriptPath := filepath.Join("..", "..", "build", "windows", "installer", "project.nsi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read installer script: %v", err)
+	}
+	text := string(script)
+	if strings.Contains(text, `RMDir /r $INSTDIR`) || strings.Contains(text, `RMDir /r "$INSTDIR"`) {
+		t.Fatal("uninstaller must never recursively delete the selected install directory")
+	}
+	for _, forbidden := range []string{
+		`Delete "$INSTDIR\*"`,
+		`Delete /REBOOTOK "$INSTDIR\*"`,
+		`Delete "$INSTDIR\*.md"`,
+		`Delete /REBOOTOK "$INSTDIR\*.md"`,
+		`Delete "$INSTDIR\*.txt"`,
+		`Delete /REBOOTOK "$INSTDIR\*.txt"`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("uninstaller must preserve documents created inside the install directory: found %q", forbidden)
+		}
+	}
+	for _, required := range []string{
+		`ReadEnvStr $ExternalInstallDir "QUILLITE_INSTALL_DIR"`,
+		`Call EnsurePreviousApplicationClosed`,
+		`Call CleanupPreviousInstallDir`,
+		`Delete /REBOOTOK "$INSTDIR\${PRODUCT_EXECUTABLE}"`,
+		`Delete /REBOOTOK "$INSTDIR\${LEGACY_EXECUTABLE}"`,
+		`Delete /REBOOTOK "$INSTDIR\${INSTALL_MARKER}"`,
+		`RMDir "$INSTDIR"`,
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("uninstaller is missing owned-file cleanup %q", required)
+		}
 	}
 }
 

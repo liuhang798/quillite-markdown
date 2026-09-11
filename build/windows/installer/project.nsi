@@ -33,6 +33,7 @@
 !define PRODUCT_EXECUTABLE  "QuilliteMarkdown.exe"
 !define LEGACY_PRODUCTNAME  "MD阅读助手"
 !define LEGACY_EXECUTABLE   "MDReaderAssistant.exe"
+!define INSTALL_MARKER      ".quillite-install"
 !define LEGACY_UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\LeafMD Open SourceMD阅读助手"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
@@ -98,6 +99,7 @@ LangString CloseRunningAppFailed ${LANG_SIMPCHINESE} "无法关闭正在运行�
 Var ExternalCancelFile
 Var ExternalInstallDir
 Var ExternalAppLanguage
+Var PreviousInstallDir
 
 !macro ExitIfExternalCancelled LABEL
     StrCmp $ExternalCancelFile "" externalCancelDone_${LABEL}
@@ -132,7 +134,13 @@ ShowInstDetails nevershow # Hide NSIS' English technical log; the localized prog
 Function .onInit
    StrCpy $LANGUAGE ${LANG_SIMPCHINESE}
    ${GetOptions} $CMDLINE "/CANCELFILE=" $ExternalCancelFile
+   # Environment transfer is Unicode-safe and avoids command-line parsing
+   # differences in paths containing spaces or Chinese characters. Keep the
+   # option as a compatibility fallback for direct core invocations.
+   ReadEnvStr $ExternalInstallDir "QUILLITE_INSTALL_DIR"
+   StrCmp $ExternalInstallDir "" 0 externalInstallDirRead
    ${GetOptions} $CMDLINE "/INSTALLDIR=" $ExternalInstallDir
+   externalInstallDirRead:
    ${GetOptions} $CMDLINE "/APP-LANGUAGE=" $ExternalAppLanguage
    !insertmacro wails.checkArchitecture
    Call ResolvePreviousInstallDir
@@ -164,9 +172,38 @@ Function ResolvePreviousInstallDir
         StrCpy $0 "$1"
 
     previousInstallFound:
+        StrCpy $PreviousInstallDir "$0"
         StrCpy $INSTDIR "$0"
 
     previousInstallDone:
+FunctionEnd
+
+# When a custom install moves the app to another drive, check and close the
+# executable in the previous registered directory as well as the new target.
+Function EnsurePreviousApplicationClosed
+    StrCmp $PreviousInstallDir "" previousApplicationClosed
+    StrCmp $PreviousInstallDir "$INSTDIR" previousApplicationClosed
+    StrCpy $9 "$INSTDIR"
+    StrCpy $INSTDIR "$PreviousInstallDir"
+    Call EnsureApplicationClosed
+    StrCpy $INSTDIR "$9"
+    previousApplicationClosed:
+FunctionEnd
+
+# Remove only known program files from an old location after a successful move.
+# Documents or any other files keep the old directory non-empty and preserved.
+Function CleanupPreviousInstallDir
+    StrCmp $PreviousInstallDir "" previousInstallCleanupDone
+    StrCmp $PreviousInstallDir "$INSTDIR" previousInstallCleanupDone
+    Delete /REBOOTOK "$PreviousInstallDir\${PRODUCT_EXECUTABLE}"
+    Delete /REBOOTOK "$PreviousInstallDir\${LEGACY_EXECUTABLE}"
+    Delete /REBOOTOK "$PreviousInstallDir\${INSTALL_MARKER}"
+    Delete /REBOOTOK "$PreviousInstallDir\mdFileIcon.ico"
+    Delete /REBOOTOK "$PreviousInstallDir\MDReaderAssistant-*.ico"
+    Delete /REBOOTOK "$PreviousInstallDir\QuilliteMarkdown-*.ico"
+    Delete /REBOOTOK "$PreviousInstallDir\uninstall.exe"
+    RMDir "$PreviousInstallDir"
+    previousInstallCleanupDone:
 FunctionEnd
 
 # Detect a locked installed executable before extraction. Interactive upgrades
@@ -257,6 +294,7 @@ Section
 
     !insertmacro ExitIfExternalCancelled 01
     Call EnsureApplicationClosed
+    Call EnsurePreviousApplicationClosed
     !insertmacro ExitIfExternalCancelled 02
 
     Call RemoveLegacyUninstallEntries
@@ -269,6 +307,14 @@ Section
 
     !insertmacro wails.files
     !insertmacro ExitIfExternalCancelled 05
+
+    # Mark this directory as owned by Quillite. Custom selection is resolved to
+    # a dedicated child directory by the launcher; normal upgrades continue to
+    # use the exact InstallLocation recorded by the previous release.
+    FileOpen $0 "$INSTDIR\${INSTALL_MARKER}" w
+    FileWrite $0 "Quillite Markdown ${INFO_PRODUCTVERSION}$\r$\n"
+    FileClose $0
+    SetFileAttributes "$INSTDIR\${INSTALL_MARKER}" HIDDEN
 
     # Preserve preferences written by MD阅读助手 during the product rename.
     # Only a genuinely fresh installation receives the language currently
@@ -340,6 +386,9 @@ Section
     # open the directory page at the same location.
     SetRegView 64
     WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+    # Only retire the previous program files after the new executable,
+    # uninstaller and registry location have all been committed.
+    Call CleanupPreviousInstallDir
     # A silent in-app upgrade (/S) should start the new version automatically.
     IfSilent 0 silentRunDone
     ExecShell "" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -350,8 +399,6 @@ Section "uninstall"
     !insertmacro wails.setShellContext
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
-
-    RMDir /r $INSTDIR
 
     SetShellVarContext current
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
@@ -368,5 +415,16 @@ Section "uninstall"
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
 
+    # The install destination may have contained user files before Quillite
+    # was installed. Delete only files owned by this product and remove the
+    # directory non-recursively, so unrelated content and documents created by
+    # Quillite inside this folder are always preserved.
+    Delete /REBOOTOK "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    Delete /REBOOTOK "$INSTDIR\${LEGACY_EXECUTABLE}"
+    Delete /REBOOTOK "$INSTDIR\${INSTALL_MARKER}"
+    Delete /REBOOTOK "$INSTDIR\mdFileIcon.ico"
+    Delete /REBOOTOK "$INSTDIR\MDReaderAssistant-*.ico"
+    Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"
     !insertmacro wails.deleteUninstaller
+    RMDir "$INSTDIR"
 SectionEnd
