@@ -13,7 +13,7 @@
   "info": {
     "companyName": "Quillite Open Source",
     "productName": "轻阅 Markdown",
-    "productVersion": "2.7.3",
+    "productVersion": "2.7.4",
     "copyright": "Copyright © 2026 柳航",
     "comments": "Quillite Markdown is a lightweight local-first Markdown reader and editor built with Go and Wails.",
     "fileAssociations": [

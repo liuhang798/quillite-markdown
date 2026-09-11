@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.7.3"
+	appVersion      = "2.7.4"
 	maxRecent       = 10
 )
 
@@ -146,6 +146,10 @@ func NewApp() *App {
 }
 
 func (a *App) startup(ctx context.Context) {
+	// This local safety guard runs on every launch, independently of network
+	// update checks or reminder preferences. It only neutralizes a legacy
+	// uninstaller after its registered command proves exact product ownership.
+	_ = prepareWindowsUninstallerForUpdate()
 	a.mu.Lock()
 	a.ctx = ctx
 	a.mu.Unlock()

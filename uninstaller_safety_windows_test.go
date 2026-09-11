@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -160,5 +161,19 @@ func TestRegisteredUninstallerExecutable(t *testing.T) {
 		if got := registeredUninstallerExecutable(command); got != want {
 			t.Errorf("registeredUninstallerExecutable(%q) = %q, want %q", command, got, want)
 		}
+	}
+}
+
+func TestApplicationStartupAlwaysRunsWindowsUninstallerSafetyGuard(t *testing.T) {
+	data, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	startupIndex := strings.Index(source, "func (a *App) startup(ctx context.Context)")
+	guardIndex := strings.Index(source, "_ = prepareWindowsUninstallerForUpdate()")
+	contextIndex := strings.Index(source, "a.ctx = ctx")
+	if startupIndex < 0 || guardIndex < startupIndex || contextIndex < guardIndex {
+		t.Fatal("Windows uninstaller safety guard must run first on every application startup")
 	}
 }

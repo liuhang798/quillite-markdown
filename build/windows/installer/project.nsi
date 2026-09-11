@@ -28,7 +28,7 @@
 !define INFO_PROJECTNAME    "quillite-markdown"
 !define INFO_COMPANYNAME    "Quillite Open Source"
 !define INFO_PRODUCTNAME    "轻阅 Markdown"
-!define INFO_PRODUCTVERSION "2.7.3"
+!define INFO_PRODUCTVERSION "2.7.4"
 !define INFO_COPYRIGHT      "Copyright © 2026 柳航"
 !define PRODUCT_EXECUTABLE  "QuilliteMarkdown.exe"
 !define LEGACY_PRODUCTNAME  "MD阅读助手"
