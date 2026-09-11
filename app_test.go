@@ -2019,6 +2019,9 @@ func TestMacBundleUsesProductDisplayNameAndCanonicalFilename(t *testing.T) {
 	if !strings.Contains(string(buildScript), `app_name="轻阅 Markdown.app"`) {
 		t.Fatal("macOS build wrapper must normalize the bundle filename to 轻阅 Markdown.app")
 	}
+	if !strings.Contains(string(buildScript), `source_app="build/bin/quillite-markdown.app"`) {
+		t.Fatal("macOS build wrapper must use the bundle directory produced by Wails")
+	}
 	if strings.Contains(string(buildScript), `rm -rf -- "${target_app}"`) ||
 		!strings.Contains(string(buildScript), `mv "${target_app}" "${previous_app}"`) {
 		t.Fatal("macOS build wrapper must preserve the previous normalized bundle instead of recursively deleting it")

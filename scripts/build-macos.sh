@@ -10,7 +10,9 @@ if [[ $# -gt 0 ]]; then
 fi
 app_name="轻阅 Markdown.app"
 target_app="build/bin/${app_name}"
-source_app="build/bin/QuilliteMarkdown.app"
+# Wails derives the bundle directory from the project name, even when -o sets
+# the executable name inside Contents/MacOS.
+source_app="build/bin/quillite-markdown.app"
 
 cd "${project_dir}"
 # Wails cleans its own default output name, but a previously normalized Chinese
