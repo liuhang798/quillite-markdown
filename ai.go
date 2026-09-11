@@ -108,6 +108,19 @@ type AIModelDiscoveryInput struct {
 	APIKey   string `json:"apiKey"`
 }
 
+type AIDiagnosticCheck struct {
+	Code       string `json:"code"`
+	Status     string `json:"status"`
+	Message    string `json:"message"`
+	DurationMS int64  `json:"durationMs,omitempty"`
+}
+
+type AIDiagnosticResult struct {
+	Success bool                `json:"success"`
+	Checks  []AIDiagnosticCheck `json:"checks"`
+	Models  []string            `json:"models,omitempty"`
+}
+
 type AIRewriteRequest struct {
 	Action         string `json:"action"`
 	Text           string `json:"text"`
@@ -700,6 +713,61 @@ func isAIChatModel(provider, model string) bool {
 	}
 }
 
+// DiagnoseAIProvider checks each setup layer independently so the settings UI
+// can explain whether a failure comes from the endpoint, credentials, model
+// discovery, or the selected chat model. Draft credentials are never saved.
+func (a *App) DiagnoseAIProvider(input AISettingsInput) (AIDiagnosticResult, error) {
+	provider := normaliseAIProvider(input.Provider)
+	result := AIDiagnosticResult{Checks: make([]AIDiagnosticCheck, 0, 4)}
+	baseURL, err := validateAIBaseURL(provider, input.BaseURL)
+	if err != nil {
+		result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "endpoint", Status: "error", Message: err.Error()})
+		return result, nil
+	}
+	result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "endpoint", Status: "success", Message: "The API base URL is valid"})
+
+	key := strings.TrimSpace(input.APIKey)
+	if key == "" {
+		key, err = a.readAIAPIKey(provider)
+		if err != nil {
+			return AIDiagnosticResult{}, err
+		}
+	}
+	if key == "" {
+		result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "credential", Status: "error", Message: "An API key is required"})
+		return result, nil
+	}
+	result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "credential", Status: "success", Message: "An API key is available for this check"})
+
+	started := time.Now()
+	models, discoveryErr := discoverAIModels(provider, baseURL, key)
+	discoveryDuration := time.Since(started).Milliseconds()
+	if discoveryErr != nil {
+		result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "models", Status: "warning", Message: discoveryErr.Error(), DurationMS: discoveryDuration})
+	} else {
+		result.Models = models
+		result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "models", Status: "success", Message: fmt.Sprintf("Loaded %d compatible text models", len(models)), DurationMS: discoveryDuration})
+	}
+
+	model, modelErr := validateAIModel(provider, input.Model)
+	if modelErr != nil {
+		result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "chat", Status: "error", Message: modelErr.Error()})
+		return result, nil
+	}
+	chatStarted := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_, chatErr := a.callOpenAICompatibleWithSystemKey(ctx, baseURL, model, key, aiSystemPrompt, "Reply with OK only.")
+	chatDuration := time.Since(chatStarted).Milliseconds()
+	if chatErr != nil {
+		result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "chat", Status: "error", Message: chatErr.Error(), DurationMS: chatDuration})
+		return result, nil
+	}
+	result.Checks = append(result.Checks, AIDiagnosticCheck{Code: "chat", Status: "success", Message: "The selected model completed a chat request", DurationMS: chatDuration})
+	result.Success = true
+	return result, nil
+}
+
 func (a *App) TestAIProviderConnection(provider, model string) error {
 	provider = normaliseAIProvider(provider)
 	model, err := validateAIModel(provider, model)
@@ -724,6 +792,66 @@ func (a *App) TestAIConnection() error {
 	return a.TestAIProviderConnection(settings.Provider, settings.Model)
 }
 
+func (a *App) beginAIRewriteRequest() (context.Context, func()) {
+	a.aiRequestMu.Lock()
+	if a.aiRewriteCancel != nil {
+		a.aiRewriteCancel()
+	}
+	a.aiRewriteGeneration++
+	generation := a.aiRewriteGeneration
+	ctx, cancel := context.WithCancel(context.Background())
+	a.aiRewriteCancel = cancel
+	a.aiRequestMu.Unlock()
+	return ctx, func() {
+		cancel()
+		a.aiRequestMu.Lock()
+		if a.aiRewriteGeneration == generation {
+			a.aiRewriteCancel = nil
+		}
+		a.aiRequestMu.Unlock()
+	}
+}
+
+func (a *App) beginAIReviewRequest() (context.Context, func()) {
+	a.aiRequestMu.Lock()
+	if a.aiReviewCancel != nil {
+		a.aiReviewCancel()
+	}
+	a.aiReviewGeneration++
+	generation := a.aiReviewGeneration
+	ctx, cancel := context.WithCancel(context.Background())
+	a.aiReviewCancel = cancel
+	a.aiRequestMu.Unlock()
+	return ctx, func() {
+		cancel()
+		a.aiRequestMu.Lock()
+		if a.aiReviewGeneration == generation {
+			a.aiReviewCancel = nil
+		}
+		a.aiRequestMu.Unlock()
+	}
+}
+
+func (a *App) CancelAIRewrite() {
+	a.aiRequestMu.Lock()
+	a.aiRewriteGeneration++
+	if a.aiRewriteCancel != nil {
+		a.aiRewriteCancel()
+		a.aiRewriteCancel = nil
+	}
+	a.aiRequestMu.Unlock()
+}
+
+func (a *App) CancelAIDocumentReview() {
+	a.aiRequestMu.Lock()
+	a.aiReviewGeneration++
+	if a.aiReviewCancel != nil {
+		a.aiReviewCancel()
+		a.aiReviewCancel = nil
+	}
+	a.aiRequestMu.Unlock()
+}
+
 func (a *App) RewriteWithAI(input AIRewriteRequest) (AIRewriteResponse, error) {
 	text := strings.TrimSpace(input.Text)
 	action := strings.ToLower(strings.TrimSpace(input.Action))
@@ -745,9 +873,13 @@ func (a *App) RewriteWithAI(input AIRewriteRequest) (AIRewriteResponse, error) {
 	if err != nil {
 		return AIRewriteResponse{}, err
 	}
-	ctx := aiLongRunningContext()
+	ctx, finish := a.beginAIRewriteRequest()
+	defer finish()
 	output, err := a.callOpenAICompatible(ctx, settings.Provider, settings.BaseURL, model, prompt)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return AIRewriteResponse{}, errors.New("AI request cancelled")
+		}
 		return AIRewriteResponse{}, err
 	}
 	output = cleanAIOutput(output)
@@ -773,9 +905,13 @@ func (a *App) ReviewDocumentWithAI(input AIDocumentReviewRequest) (AIDocumentRev
 	if err != nil {
 		return AIDocumentReviewResponse{}, err
 	}
-	ctx := aiLongRunningContext()
+	ctx, finish := a.beginAIReviewRequest()
+	defer finish()
 	output, err := a.callOpenAICompatibleWithSystem(ctx, settings.Provider, settings.BaseURL, model, aiDocumentReviewSystemPrompt, buildAIDocumentReviewPrompt(input.Text))
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return AIDocumentReviewResponse{}, errors.New("AI request cancelled")
+		}
 		return AIDocumentReviewResponse{}, err
 	}
 	review, parseErr := parseAIDocumentReview(output, input.Text)
@@ -788,13 +924,12 @@ func (a *App) ReviewDocumentWithAI(input AIDocumentReviewRequest) (AIDocumentRev
 	// normalise its own result instead of surfacing a cryptic JSON error to users.
 	repaired, repairErr := a.callOpenAICompatibleWithSystem(ctx, settings.Provider, settings.BaseURL, model, aiDocumentReviewSystemPrompt, buildAIDocumentReviewRepairPrompt(output))
 	if repairErr != nil {
+		if errors.Is(repairErr, context.Canceled) {
+			return AIDocumentReviewResponse{}, errors.New("AI request cancelled")
+		}
 		return AIDocumentReviewResponse{}, parseErr
 	}
 	return parseAIDocumentReview(repaired, input.Text)
-}
-
-func aiLongRunningContext() context.Context {
-	return context.Background()
 }
 
 const aiSystemPrompt = `You write or edit Markdown text for a local desktop editor. Return only the requested Markdown, without explanations or surrounding code fences. Preserve Markdown structure, links, images, tables, code blocks, LaTeX, Mermaid, HTML, front matter, and placeholders unless the requested action requires changing them. Never invent facts, URLs, file paths, data, or citations. Keep the original meaning unless explicitly asked to rewrite it.`
@@ -976,6 +1111,10 @@ func (a *App) callOpenAICompatibleWithSystem(ctx context.Context, provider, base
 	if key == "" {
 		return "", errors.New("API key is required for this AI provider")
 	}
+	return a.callOpenAICompatibleWithSystemKey(ctx, baseURL, model, key, systemPrompt, prompt)
+}
+
+func (a *App) callOpenAICompatibleWithSystemKey(ctx context.Context, baseURL, model, key, systemPrompt, prompt string) (string, error) {
 	payload := map[string]any{
 		"model":    model,
 		"messages": []map[string]string{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}},
@@ -1005,6 +1144,10 @@ func (a *App) callOpenAICompatibleWithSystem(ctx context.Context, provider, base
 		return "", errors.New("the AI service returned an empty message")
 	}
 	return content, nil
+}
+
+func aiLongRunningContext() context.Context {
+	return context.Background()
 }
 
 func decodeAIMessageContent(raw json.RawMessage) (string, error) {

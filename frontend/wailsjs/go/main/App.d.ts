@@ -6,9 +6,15 @@ export function AddFavorite(arg1:string):Promise<main.Preferences>;
 
 export function CanEditFile(arg1:string):Promise<boolean>;
 
+export function CancelAIDocumentReview():Promise<void>;
+
+export function CancelAIRewrite():Promise<void>;
+
 export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
 
 export function DetectPandoc():Promise<main.PandocStatus>;
+
+export function DiagnoseAIProvider(arg1:main.AISettingsInput):Promise<main.AIDiagnosticResult>;
 
 export function Dirname(arg1:string):Promise<string>;
 

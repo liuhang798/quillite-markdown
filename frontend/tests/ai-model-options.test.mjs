@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { aiModelOptions } from '../src/ai-model-options.js';
+import { deleteAIModelCache, readAIModelCache, writeAIModelCache } from '../src/ai-model-cache.js';
 
 const source = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const functions = source.slice(source.indexOf('const aiProviderConfigs ='), source.indexOf('async function setDefaultAIProvider()'));
@@ -10,9 +11,11 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a,b) 
 function harness() {
   const element = () => ({ value: '', textContent: '', disabled: false, dataset: {}, classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } }, replaceChildren(...options) { this.options = options; }, focus() {} });
   const els = new Proxy({}, { get(obj, key) { return obj[key] ||= element(); } });
+  const stored = new Map();
+  const localStorage = { getItem:key=>stored.get(key)??null, setItem:(key,value)=>stored.set(key,value) };
   const context = vm.createContext({ els, aiModelOptions, currentAISettings: { provider:'deepseek', hasApiKey:false }, aiSettingsEditingKey:false, aiModelsLoading:false, aiModelsByProvider:new Map(), aiSettingsLoadRequest:0, aiModelLoadRequest:0, aiModelAutoLoadTimer:0,
     pendingAIRewriteSelection:null,pendingAIRewriteAction:'',pendingAIDocumentReview:false,resumeAIDocumentReviewAfterSettings:false,
-    window:{quilliteMarkdown:{}}, document:{createElement:element,body:{classList:element().classList}}, $:()=>element(), t:key=>key, aiErrorMessage:error=>error.message, requestAnimationFrame() {}, setTimeout, clearTimeout });
+    window:{quilliteMarkdown:{}}, document:{createElement:element,body:{classList:element().classList}}, localStorage, readAIModelCache, writeAIModelCache, deleteAIModelCache, $:()=>element(), t:key=>key, aiErrorMessage:error=>error.message, requestAnimationFrame() {}, setTimeout, clearTimeout });
   vm.runInContext(functions, context);
   context.renderAIProvider('deepseek');
   return context;
@@ -44,7 +47,7 @@ test('refresh failures and empty lists preserve last successful models', async (
     c.window.quilliteMarkdown.discoverAIModels=fetch;
     await c.loadAIModels();
     assert.equal(c.els.aiModel.options.length,3);
-    assert.match(c.els.aiModelState.textContent,/aiModelLoadFailed/);
+    assert.match(c.els.aiModelState.textContent,/aiModelCacheUsed/);
     assert.equal(c.els.aiModel.disabled,false);
   }
 });

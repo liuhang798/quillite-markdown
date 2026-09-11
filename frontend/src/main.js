@@ -139,12 +139,22 @@ window.quilliteMarkdown = {
     : resolved(input?.provider === 'custom'
       ? ['vendor/chat-model', 'vendor/reasoning-model']
       : [browserAISettings(input?.provider).model, browserAIProviders[normalizeBrowserAIProvider(input?.provider)].model].filter(Boolean)),
+  diagnoseAIProvider: input => desktopRuntime
+    ? Backend.DiagnoseAIProvider(input)
+    : resolved({ success: true, models: [input?.model].filter(Boolean), checks: [
+      { code: 'endpoint', status: 'success', message: 'The API base URL is valid' },
+      { code: 'credential', status: 'success', message: 'An API key is available for this check' },
+      { code: 'models', status: 'success', message: 'Loaded compatible text models', durationMs: 12 },
+      { code: 'chat', status: 'success', message: 'The selected model completed a chat request', durationMs: 24 }
+    ] }),
   testAIProviderConnection: (provider, model) => desktopRuntime ? Backend.TestAIProviderConnection(provider, model) : resolved(),
   testAIConnection: () => desktopRuntime ? Backend.TestAIConnection() : resolved(),
   rewriteWithAI: input => desktopRuntime ? Backend.RewriteWithAI(input) : resolved({ text: input?.text || `# AI generated content\n\n${input?.instruction || ''}`.trim() }),
   reviewDocumentWithAI: input => desktopRuntime
     ? Backend.ReviewDocumentWithAI(input)
     : resolved({ suggestions: input?.text?.includes('重复重复') ? [{ id: 'suggestion-1', category: 'spelling', severity: 'medium', original: '重复重复', replacement: '重复', reason: '删除重复词', occurrence: 1 }] : [] }),
+  cancelAIRewrite: () => desktopRuntime ? Backend.CancelAIRewrite() : resolved(),
+  cancelAIDocumentReview: () => desktopRuntime ? Backend.CancelAIDocumentReview() : resolved(),
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
   getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.2', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),

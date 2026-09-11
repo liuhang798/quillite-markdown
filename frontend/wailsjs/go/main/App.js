@@ -10,12 +10,24 @@ export function CanEditFile(arg1) {
   return window['go']['main']['App']['CanEditFile'](arg1);
 }
 
+export function CancelAIDocumentReview() {
+  return window['go']['main']['App']['CancelAIDocumentReview']();
+}
+
+export function CancelAIRewrite() {
+  return window['go']['main']['App']['CancelAIRewrite']();
+}
+
 export function CheckForUpdates(arg1) {
   return window['go']['main']['App']['CheckForUpdates'](arg1);
 }
 
 export function DetectPandoc() {
   return window['go']['main']['App']['DetectPandoc']();
+}
+
+export function DiagnoseAIProvider(arg1) {
+  return window['go']['main']['App']['DiagnoseAIProvider'](arg1);
 }
 
 export function Dirname(arg1) {

@@ -401,6 +401,85 @@ func TestDiscoverAIModelsUsesDraftKeyWithoutPersistingIt(t *testing.T) {
 	}
 }
 
+func TestDiagnoseAIProviderReportsEachStageWithoutPersistingDraftKey(t *testing.T) {
+	app, store := aiTestApp(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer diagnostic-draft-key" {
+			t.Errorf("unexpected authorization header: %q", request.Header.Get("Authorization"))
+		}
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/v1/models":
+			_, _ = response.Write([]byte(`{"data":[{"id":"vendor/chat-model"}]}`))
+		case "/v1/chat/completions":
+			_, _ = response.Write([]byte(`{"choices":[{"message":{"content":"OK"}}]}`))
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+
+	result, err := app.DiagnoseAIProvider(AISettingsInput{
+		Provider: aiProviderCustom,
+		BaseURL:  server.URL + "/v1",
+		Model:    "vendor/chat-model",
+		APIKey:   "diagnostic-draft-key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success || len(result.Checks) != 4 || len(result.Models) != 1 {
+		t.Fatalf("unexpected diagnostic result: %#v", result)
+	}
+	for _, check := range result.Checks {
+		if check.Status != "success" {
+			t.Fatalf("diagnostic stage did not pass: %#v", check)
+		}
+	}
+	if len(store.values) != 0 {
+		t.Fatalf("diagnostics persisted the draft key: %#v", store.values)
+	}
+}
+
+func TestAIRewriteCanBeCancelled(t *testing.T) {
+	app, _ := aiTestApp(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		close(started)
+		select {
+		case <-request.Context().Done():
+		case <-release:
+		}
+	}))
+	defer func() {
+		close(release)
+		server.Close()
+	}()
+	if _, err := app.SetAISettings(AISettingsInput{Provider: aiProviderCustom, BaseURL: server.URL + "/v1", Model: "vendor/chat-model", APIKey: "cancel-test-key"}); err != nil {
+		t.Fatal(err)
+	}
+	completed := make(chan error, 1)
+	go func() {
+		_, err := app.RewriteWithAI(AIRewriteRequest{Action: "polish", Text: "Cancel this request."})
+		completed <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("AI request did not start")
+	}
+	app.CancelAIRewrite()
+	select {
+	case err := <-completed:
+		if err == nil || !strings.Contains(strings.ToLower(err.Error()), "cancel") {
+			t.Fatalf("unexpected cancellation result: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("AI request did not stop after cancellation")
+	}
+}
+
 func TestAIModelValidationKeepsProviderAndModelCompatible(t *testing.T) {
 	valid := map[string]string{
 		aiProviderDeepSeek: "deepseek-reasoner",

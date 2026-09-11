@@ -9,6 +9,7 @@ import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, layoutFlowchart, 
 import { hasStructuredVisualEditor, parseStructuredDiagram, serializeStructuredDiagram, structuredDiagramDefinition } from './structured-diagram-editor.js';
 import { findEditableDiagramFenceAt, diagramReplacementMarkdown } from './diagram-editing.js';
 import { aiModelOptions } from './ai-model-options.js';
+import { deleteAIModelCache, readAIModelCache, writeAIModelCache } from './ai-model-cache.js';
 import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearanceStorage, resolveMacColorMode, temporaryMacColorModeAfterToggle } from './appearance.js';
 import { previewWheelZoomDirection } from './font-wheel-zoom.js';
 import { clampFontScale, readFontScaleStorage, recommendedFontScale } from './font-scaling.js';
@@ -442,7 +443,7 @@ Object.assign(translations['zh-CN'], {
   aiProvider: '服务类型', aiProviderGroupOfficial: '官方服务', aiProviderGroupThirdParty: '第三方与兼容接口', aiProviderDeepSeek: 'DeepSeek', aiProviderZhipu: '智谱 GLM', aiProviderQwen: '通义千问', aiProviderOpenAI: 'OpenAI', aiProviderKimi: 'Kimi', aiProviderBailian: '阿里云百炼', aiProviderSiliconFlow: '硅基流动', aiProviderOpenRouter: 'OpenRouter', aiProviderCustom: '自定义 OpenAI 兼容接口', aiProviderDescription: '官方接口 · 自动配置服务地址', aiProviderAggregatorDescription: '第三方聚合平台 · 自动配置服务地址', aiProviderCustomDescription: '兼容接口 · 使用你填写的服务地址', aiBaseURL: 'API Base URL', aiBailianBaseURLHint: '默认使用百炼北京公共地址；业务空间或 Token Plan 用户请填写对应的兼容模式地址。填写地址和 Key 后会自动加载模型。', aiCustomBaseURLHint: '必须使用 HTTPS；仅 localhost 可使用 HTTP。请填写 API 根地址，不要包含 /chat/completions 或 /models；填写地址和 Key 后会自动加载模型。', aiModel: '模型', aiCustomModel: '模型名称', aiCustomModelPlaceholder: '输入或选择服务商提供的模型 ID', aiCustomModelHint: '填写 API Base URL 和 Key 后会自动加载模型；也可以手动输入模型 ID。', aiModelNotSelected: '未选择模型', aiModelRequired: '请先输入或选择模型', aiModelEmpty: '服务未返回可用的文本模型', aiRefreshModels: '刷新模型', aiModelLoading: '正在通过当前地址和 Key 加载可用模型…', aiModelLoaded: '已加载 {count} 个可用模型，请选择要使用的模型', aiModelLoadFailed: '模型列表刷新失败，已保留上次列表或内置候选；不代表账号实际可用', aiModelKeyRequired: '填写 API Key 后将自动加载账号可用模型。', aiAPIKey: 'API Key',
   aiAPIKeyPlaceholder: '例如：sk-xxxxxxxx', aiAPIKeySaved: '已保存在系统凭据库', aiAPIKeyNotSaved: '尚未配置 API Key', aiCurrentAPIKey: '当前 API Key', aiKeyReady: '已安全保存，可以使用 AI 编辑与检查',
   aiKeyGuideTitle: '填写所选服务的 API Key', aiKeyGuideHint: '前往所选 AI 服务的开放平台创建 Key，然后粘贴到下方。Key 仅保存在系统凭据库。', aiKeyRequiredGuide: '首次使用 AI 编辑，请先设置所选服务的 API Key。', aiReplacingKeyHint: '输入新的 Key，保存后将替换当前服务的 Key。', aiKeyRequired: '请输入所选服务的 API Key', aiSaveAndEnable: '保存并启用', aiSaveNewKey: '保存新 Key', aiEditKey: '修改', aiDeleteKey: '删除', aiDeleteKeyConfirm: '确定删除所选服务已保存的 API Key 吗？', aiKeyDeleted: 'API Key 已删除', aiKeyDeleteFailed: 'API Key 删除失败', aiDefaultModel: '默认模型', aiSetDefaultModel: '设为默认模型', aiDefaultModelChanged: '已将 {provider} 设为默认模型', aiDefaultModelChangeFailed: '无法设置默认模型',
-  aiPrivacyNote: '只有你主动选择或确认检查的文档内容会发送给所选 AI 服务；不同服务的 API Key 独立保存在系统凭据库，不会写入偏好设置、日志或文档。', aiTestConnection: '测试连接', aiTestingConnection: '正在测试连接…', aiConnectionSuccess: '连接成功', aiConnectionFailed: '连接失败',
+  aiPrivacyNote: '只有你主动选择或确认检查的文档内容会发送给所选 AI 服务；不同服务的 API Key 独立保存在系统凭据库，不会写入偏好设置、日志或文档。', aiTestConnection: '诊断连接', aiTestingConnection: '正在逐项诊断连接…', aiConnectionSuccess: '全部关键检查已通过', aiConnectionFailed: '连接诊断未通过', aiDiagnosticsTitle: '连接诊断', aiDiagnosticsPassed: '配置可用', aiDiagnosticsFailed: '发现需要处理的问题', aiDiagnosticEndpoint: '服务地址', aiDiagnosticCredential: 'API Key', aiDiagnosticModels: '模型列表', aiDiagnosticChat: '模型调用', aiDiagnosticEndpointOK: '地址格式与安全要求检查通过', aiDiagnosticCredentialOK: '已使用当前服务的 Key 进行本次检查', aiDiagnosticModelsOK: '已获取 {count} 个兼容文本模型', aiDiagnosticChatOK: '所选模型已成功完成一次实际请求', aiDiagnosticAuthError: 'API Key 无效或当前账号没有访问权限。', aiDiagnosticNotFoundError: '接口地址不存在，请确认 Base URL 不包含具体的请求路径。', aiModelCacheUsed: '实时查询失败，正在显示 {count} 个缓存模型（缓存于 {time}）',
   aiSettingsSaved: 'AI 服务与 API Key 已保存', aiSettingsSaveFailed: 'AI 设置保存失败',
   aiRewriteTitle: 'AI编辑', aiAction: '处理方式', aiActionPolish: '润色', aiActionRewrite: '改写', aiActionConcise: '精简', aiActionExpand: '扩写', aiActionSummarize: '总结', aiActionTranslate: '翻译', aiActionCustom: '自定义要求',
   aiTargetLanguage: '目标语言', aiInstruction: '具体要求', aiInstructionPlaceholder: '例如：改成更专业、友好的产品说明', aiOriginalText: '原文', aiResultText: 'AI 结果', aiResultPlaceholder: '生成后可在这里继续微调',
@@ -459,7 +460,7 @@ Object.assign(translations.en, {
   aiProvider: 'Provider', aiProviderGroupOfficial: 'Official services', aiProviderGroupThirdParty: 'Third-party and compatible APIs', aiProviderDeepSeek: 'DeepSeek', aiProviderZhipu: 'Zhipu GLM', aiProviderQwen: 'Qwen', aiProviderOpenAI: 'OpenAI', aiProviderKimi: 'Kimi', aiProviderBailian: 'Alibaba Cloud Model Studio', aiProviderSiliconFlow: 'SiliconFlow', aiProviderOpenRouter: 'OpenRouter', aiProviderCustom: 'Custom OpenAI-compatible API', aiProviderDescription: 'Official API · endpoint configured automatically', aiProviderAggregatorDescription: 'Third-party gateway · endpoint configured automatically', aiProviderCustomDescription: 'Compatible API · uses the endpoint you enter', aiBaseURL: 'API Base URL', aiBailianBaseURLHint: 'Uses the public Beijing endpoint by default. Enter the matching compatible endpoint for a workspace or Token Plan. Models load automatically after the endpoint and key are entered.', aiCustomBaseURLHint: 'HTTPS is required; only localhost may use HTTP. Enter the API base URL without /chat/completions or /models. Models load automatically after the endpoint and key are entered.', aiModel: 'Model', aiCustomModel: 'Model name', aiCustomModelPlaceholder: 'Enter or select a model ID supplied by the service', aiCustomModelHint: 'Models load automatically after you enter the API base URL and key. You can also enter a model ID manually.', aiModelNotSelected: 'No model selected', aiModelRequired: 'Enter or select a model first', aiModelEmpty: 'The service returned no available text models', aiRefreshModels: 'Refresh models', aiModelLoading: 'Loading available models with the current endpoint and key…', aiModelLoaded: '{count} available models loaded; choose the model to use', aiModelLoadFailed: 'Could not refresh models. Previous results or built-in candidates are retained; availability is not verified', aiModelKeyRequired: 'Enter an API key to load the models available to this account automatically.', aiAPIKey: 'API Key',
   aiAPIKeyPlaceholder: 'For example: sk-xxxxxxxx', aiAPIKeySaved: 'Stored in the system credential vault', aiAPIKeyNotSaved: 'No API key configured', aiCurrentAPIKey: 'Current API key', aiKeyReady: 'Stored securely and ready for AI Edit and document checks',
   aiKeyGuideTitle: 'Enter the selected provider API key', aiKeyGuideHint: 'Create a key on the selected AI provider platform, then paste it below. It is stored only in the system credential vault.', aiKeyRequiredGuide: 'Set an API key for the selected provider before using AI Edit.', aiReplacingKeyHint: 'Enter a new key. Saving replaces this provider’s current key.', aiKeyRequired: 'Enter the selected provider API key', aiSaveAndEnable: 'Save and enable', aiSaveNewKey: 'Save new key', aiEditKey: 'Change', aiDeleteKey: 'Delete', aiDeleteKeyConfirm: 'Delete the saved API key for the selected provider?', aiKeyDeleted: 'API key deleted', aiKeyDeleteFailed: 'Unable to delete API key', aiDefaultModel: 'Default model', aiSetDefaultModel: 'Set as default', aiDefaultModelChanged: '{provider} is now the default model', aiDefaultModelChangeFailed: 'Unable to set the default model',
-  aiPrivacyNote: 'Only document content you select or explicitly confirm for checking is sent to the selected AI provider. Provider keys are stored separately in the system credential vault and never written to preferences, logs, or documents.', aiTestConnection: 'Test connection', aiTestingConnection: 'Testing connection…', aiConnectionSuccess: 'Connection successful', aiConnectionFailed: 'Connection failed',
+  aiPrivacyNote: 'Only document content you select or explicitly confirm for checking is sent to the selected AI provider. Provider keys are stored separately in the system credential vault and never written to preferences, logs, or documents.', aiTestConnection: 'Diagnose connection', aiTestingConnection: 'Checking each connection stage…', aiConnectionSuccess: 'All critical checks passed', aiConnectionFailed: 'Connection diagnostics found a problem', aiDiagnosticsTitle: 'Connection diagnostics', aiDiagnosticsPassed: 'Configuration is ready', aiDiagnosticsFailed: 'Action is required', aiDiagnosticEndpoint: 'Service endpoint', aiDiagnosticCredential: 'API key', aiDiagnosticModels: 'Model list', aiDiagnosticChat: 'Model request', aiDiagnosticEndpointOK: 'The endpoint format and security requirements passed', aiDiagnosticCredentialOK: 'The current provider key was used for this check', aiDiagnosticModelsOK: '{count} compatible text models were loaded', aiDiagnosticChatOK: 'The selected model completed a real request', aiDiagnosticAuthError: 'The API key is invalid or this account does not have access.', aiDiagnosticNotFoundError: 'The endpoint was not found. Check that the base URL does not include a request-specific path.', aiModelCacheUsed: 'Live discovery failed; showing {count} cached models (saved {time})',
   aiSettingsSaved: 'AI provider and API key saved', aiSettingsSaveFailed: 'Unable to save AI settings',
   aiRewriteTitle: 'AI Edit', aiAction: 'Action', aiActionPolish: 'Polish', aiActionRewrite: 'Rewrite', aiActionConcise: 'Make concise', aiActionExpand: 'Expand', aiActionSummarize: 'Summarize', aiActionTranslate: 'Translate', aiActionCustom: 'Custom instruction',
   aiTargetLanguage: 'Target language', aiInstruction: 'Instruction', aiInstructionPlaceholder: 'For example: make this more professional and friendly', aiOriginalText: 'Original', aiResultText: 'AI result', aiResultPlaceholder: 'You can refine the generated result here',
@@ -573,7 +574,7 @@ const els = {
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'),
-  aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderDescription: $('#aiProviderDescription'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURLField: $('#aiBaseURLField'), aiBaseURL: $('#aiBaseURL'), aiBaseURLHint: $('#aiBaseURLHint'), aiModelSelectField: $('#aiModelSelectField'), aiModel: $('#aiModel'), aiCustomModelField: $('#aiCustomModelField'), aiCustomModel: $('#aiCustomModel'), aiCustomModelOptions: $('#aiCustomModelOptions'), aiModelState: $('#aiModelState'), aiCustomModelState: $('#aiCustomModelState'), refreshAIModels: $('#refreshAIModels'), refreshAICustomModels: $('#refreshAICustomModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'),
+  aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderDescription: $('#aiProviderDescription'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURLField: $('#aiBaseURLField'), aiBaseURL: $('#aiBaseURL'), aiBaseURLHint: $('#aiBaseURLHint'), aiModelSelectField: $('#aiModelSelectField'), aiModel: $('#aiModel'), aiCustomModelField: $('#aiCustomModelField'), aiCustomModel: $('#aiCustomModel'), aiCustomModelOptions: $('#aiCustomModelOptions'), aiModelState: $('#aiModelState'), aiCustomModelState: $('#aiCustomModelState'), refreshAIModels: $('#refreshAIModels'), refreshAICustomModels: $('#refreshAICustomModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'), aiDiagnostics: $('#aiDiagnostics'), aiDiagnosticsSummary: $('#aiDiagnosticsSummary'), aiDiagnosticChecks: $('#aiDiagnosticChecks'),
   aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteFields: $('#aiRewriteFields'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiInstructionField: $('#aiInstructionField'), aiInstruction: $('#aiInstruction'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
   aiReviewDialog: $('#aiReviewDialog'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
   feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
@@ -6641,6 +6642,46 @@ function activeAIModelState() {
   return aiProviderConfigs[normalizeAIProvider(els.aiProvider.value)].manualModel ? els.aiCustomModelState : els.aiModelState;
 }
 
+function clearAIDiagnostics() {
+  els.aiDiagnostics.classList.add('hidden');
+  els.aiDiagnosticsSummary.textContent = '';
+  els.aiDiagnosticChecks.replaceChildren();
+}
+
+function renderAIDiagnostics(result) {
+  const labels = { endpoint: 'aiDiagnosticEndpoint', credential: 'aiDiagnosticCredential', models: 'aiDiagnosticModels', chat: 'aiDiagnosticChat' };
+  const icons = { success: '✓', warning: '!', error: '×' };
+  const checks = Array.isArray(result?.checks) ? result.checks : [];
+  els.aiDiagnosticChecks.replaceChildren(...checks.map(check => {
+    const status = ['success', 'warning', 'error'].includes(check?.status) ? check.status : 'error';
+    const row = document.createElement('div');
+    row.className = `ai-diagnostic-check ${status}`;
+    const icon = document.createElement('i');
+    icon.textContent = icons[status];
+    icon.setAttribute('aria-hidden', 'true');
+    const copy = document.createElement('span');
+    const title = document.createElement('b');
+    title.textContent = t(labels[check?.code] || 'aiDiagnosticsTitle');
+    const detail = document.createElement('small');
+    const rawMessage = String(check?.message || '');
+    const lowerMessage = rawMessage.toLowerCase();
+    if (status === 'success' && check?.code === 'endpoint') detail.textContent = t('aiDiagnosticEndpointOK');
+    else if (status === 'success' && check?.code === 'credential') detail.textContent = t('aiDiagnosticCredentialOK');
+    else if (status === 'success' && check?.code === 'models') detail.textContent = t('aiDiagnosticModelsOK', { count: Array.isArray(result?.models) ? result.models.length : 0 });
+    else if (status === 'success' && check?.code === 'chat') detail.textContent = t('aiDiagnosticChatOK');
+    else if (lowerMessage.includes('http 401') || lowerMessage.includes('http 403') || lowerMessage.includes('api key')) detail.textContent = t('aiDiagnosticAuthError');
+    else if (lowerMessage.includes('http 404') || lowerMessage.includes('not found')) detail.textContent = t('aiDiagnosticNotFoundError');
+    else detail.textContent = aiReviewErrorMessage(rawMessage);
+    copy.append(title, detail);
+    const duration = document.createElement('time');
+    duration.textContent = Number(check?.durationMs) > 0 ? `${Math.round(check.durationMs)} ms` : '';
+    row.append(icon, copy, duration);
+    return row;
+  }));
+  els.aiDiagnosticsSummary.textContent = t(result?.success ? 'aiDiagnosticsPassed' : 'aiDiagnosticsFailed');
+  els.aiDiagnostics.classList.remove('hidden');
+}
+
 function clearAIModelAutoLoad() {
   if (!aiModelAutoLoadTimer) return;
   clearTimeout(aiModelAutoLoadTimer);
@@ -6667,6 +6708,11 @@ function canDiscoverAIModels(provider = normalizeAIProvider(els.aiProvider.value
 
 function scheduleAIModelDiscovery() {
   clearAIModelAutoLoad();
+  clearAIDiagnostics();
+  const provider = normalizeAIProvider(els.aiProvider.value);
+  const selectedModel = selectedAIModel();
+  aiModelsByProvider.delete(provider);
+  setAIModelOptions(provider, [], selectedModel);
   ++aiModelLoadRequest;
   aiModelsLoading = false;
   activeAIModelControl().disabled = false;
@@ -6786,12 +6832,18 @@ async function loadAIModels() {
     const available = [...new Set((Array.isArray(models) ? models : []).filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))];
     if (!available.length) throw new Error(t('aiModelEmpty'));
     aiModelsByProvider.set(provider, available);
+    writeAIModelCache(localStorage, provider, discoveryInput.baseUrl, available);
     setAIModelOptions(provider, available, selectedModel);
     activeAIModelState().textContent = t('aiModelLoaded', { count: available.length });
   } catch (error) {
     if (requestID !== aiModelLoadRequest || provider !== normalizeAIProvider(els.aiProvider.value)) return;
-    setAIModelOptions(provider, aiModelsByProvider.get(provider) || [], selectedModel);
-    activeAIModelState().textContent = `${t('aiModelLoadFailed')}: ${aiErrorMessage(error)}`;
+    const cached = readAIModelCache(localStorage, provider, discoveryInput.baseUrl);
+    const fallbackModels = aiModelsByProvider.get(provider) || cached?.models || [];
+    if (fallbackModels.length) aiModelsByProvider.set(provider, fallbackModels);
+    setAIModelOptions(provider, fallbackModels, selectedModel);
+    activeAIModelState().textContent = cached
+      ? `${t('aiModelCacheUsed', { count: cached.models.length, time: new Date(cached.savedAt).toLocaleString() })}: ${aiErrorMessage(error)}`
+      : `${t('aiModelLoadFailed')}: ${aiErrorMessage(error)}`;
   } finally {
     if (requestID === aiModelLoadRequest) {
       aiModelsLoading = false;
@@ -6803,6 +6855,7 @@ async function loadAIModels() {
 
 async function openAISettings(options = {}) {
   clearAIModelAutoLoad();
+  clearAIDiagnostics();
   const settingsRequest = ++aiSettingsLoadRequest;
   ++aiModelLoadRequest;
   aiModelsLoading = false;
@@ -6860,6 +6913,7 @@ function aiSettingsInput(clearApiKey = false) {
 
 async function changeAIProvider() {
   clearAIModelAutoLoad();
+  clearAIDiagnostics();
   const settingsRequest = ++aiSettingsLoadRequest;
   ++aiModelLoadRequest;
   aiModelsLoading = false;
@@ -6970,23 +7024,23 @@ async function saveAISettings(event) {
 async function testAIConnection() {
   if ((!currentAISettings?.hasApiKey || aiSettingsEditingKey) && !requireAIKeyInput()) return;
   if (!requireAIModelInput()) return;
+  clearAIDiagnostics();
   els.aiSettingsStatus.textContent = t('aiTestingConnection');
   const button = $('#testAIConnection');
   button.disabled = true;
   try {
     const provider = normalizeAIProvider(els.aiProvider.value);
     const model = selectedAIModel();
-    if (!currentAISettings?.hasApiKey || aiSettingsEditingKey || aiProviderConfigs[provider].configurableBaseURL) {
-      currentAISettings = await window.quilliteMarkdown.setAISettings(aiSettingsInput());
-      els.aiAPIKey.value = '';
-      aiSettingsEditingKey = false;
-      renderAIProvider(currentAISettings.provider, currentAISettings.model);
-      renderAISettingsKeyUI();
-      await loadAIModels();
+    const diagnosis = await window.quilliteMarkdown.diagnoseAIProvider({ ...aiSettingsInput(), provider, model });
+    const diagnosedModels = [...new Set((Array.isArray(diagnosis?.models) ? diagnosis.models : []).filter(item => typeof item === 'string' && item.trim()).map(item => item.trim()))];
+    if (diagnosedModels.length) {
+      aiModelsByProvider.set(provider, diagnosedModels);
+      writeAIModelCache(localStorage, provider, els.aiBaseURL.value.trim(), diagnosedModels);
+      setAIModelOptions(provider, diagnosedModels, model);
     }
-    await window.quilliteMarkdown.testAIProviderConnection(provider, model);
+    renderAIDiagnostics(diagnosis);
     renderAISettingsKeyUI();
-    els.aiSettingsStatus.textContent = t('aiConnectionSuccess');
+    els.aiSettingsStatus.textContent = t(diagnosis?.success ? 'aiConnectionSuccess' : 'aiConnectionFailed');
   } catch (error) {
     els.aiSettingsStatus.textContent = `${t('aiConnectionFailed')}: ${aiErrorMessage(error)}`;
   } finally {
@@ -6996,6 +7050,7 @@ async function testAIConnection() {
 
 function editAIAPIKey() {
   aiSettingsEditingKey = true;
+  clearAIDiagnostics();
   els.aiSettingsStatus.textContent = '';
   renderAISettingsKeyUI();
   requestAnimationFrame(() => els.aiAPIKey.focus());
@@ -7006,7 +7061,13 @@ async function deleteAIAPIKey() {
   els.editAIAPIKey.disabled = true;
   els.deleteAIAPIKey.disabled = true;
   try {
+    const deletedProvider = normalizeAIProvider(els.aiProvider.value);
+    const deletedBaseURL = els.aiBaseURL.value.trim();
+    const savedBaseURL = currentAISettings?.baseUrl || '';
     currentAISettings = await window.quilliteMarkdown.setAISettings(aiSettingsInput(true));
+    clearAIDiagnostics();
+    deleteAIModelCache(localStorage, deletedProvider, deletedBaseURL);
+    if (savedBaseURL && savedBaseURL !== deletedBaseURL) deleteAIModelCache(localStorage, deletedProvider, savedBaseURL);
     aiSettingsEditingKey = false;
     els.aiAPIKey.value = '';
     renderAISettingsKeyUI();
@@ -7139,6 +7200,7 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
 
 function closeAIRewrite() {
   if (els.aiRewriteDialog.classList.contains('hidden')) return;
+  if ($('#generateAIRewrite').disabled) void window.quilliteMarkdown.cancelAIRewrite?.();
   aiRewriteRequest += 1;
   stopAIRewriteProgress();
   $('#generateAIRewrite').disabled = false;
@@ -7417,8 +7479,18 @@ async function openAIDocumentReview() {
   });
 }
 
+function cancelActiveAIDocumentReview() {
+  aiReviewRequest += 1;
+  stopAIReviewProgress();
+  els.runAIReview.disabled = false;
+  els.runAIReview.dataset.i18n = 'aiStartReview';
+  els.runAIReview.textContent = t('aiStartReview');
+  void window.quilliteMarkdown.cancelAIDocumentReview?.();
+}
+
 function closeAIDocumentReview() {
   if (els.aiReviewDialog.classList.contains('hidden')) return;
+  if (els.runAIReview.disabled) cancelActiveAIDocumentReview();
   els.aiReviewDialog.classList.add('hidden');
   if (els.aiSettingsDialog.classList.contains('hidden') && els.aiRewriteDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
   focusCodeEditor();

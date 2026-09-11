@@ -796,6 +796,9 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(mainSource, /setDefaultAIProvider:[\s\S]*Backend\.SetDefaultAIProvider/);
   assert.match(mainSource, /listAIModels:[\s\S]*Backend\.ListAIModels/);
   assert.match(mainSource, /discoverAIModels:[\s\S]*Backend\.DiscoverAIModels/);
+  assert.match(mainSource, /diagnoseAIProvider:[\s\S]*Backend\.DiagnoseAIProvider/);
+  assert.match(mainSource, /cancelAIRewrite:[\s\S]*Backend\.CancelAIRewrite/);
+  assert.match(mainSource, /cancelAIDocumentReview:[\s\S]*Backend\.CancelAIDocumentReview/);
   assert.match(mainSource, /testAIProviderConnection:[\s\S]*Backend\.TestAIProviderConnection/);
   assert.match(mainSource, /rewriteWithAI:[\s\S]*Backend\.RewriteWithAI/);
   assert.match(mainSource, /reviewDocumentWithAI:[\s\S]*Backend\.ReviewDocumentWithAI/);
@@ -810,7 +813,11 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(renderer, /async function loadAIModels\(\)[\s\S]*window\.quilliteMarkdown\.discoverAIModels\(discoveryInput\)[\s\S]*setAIModelOptions/);
   assert.match(renderer, /function scheduleAIModelDiscovery\(\)[\s\S]*setTimeout\([\s\S]*loadAIModels\(\)[\s\S]*700/);
   assert.match(renderer, /async function setDefaultAIProvider\(\)[\s\S]*window\.quilliteMarkdown\.setDefaultAIProvider\(currentAISettings\.provider, model\)/);
-  assert.match(renderer, /async function testAIConnection\(\)[\s\S]*testAIProviderConnection\(provider, model\)/);
+  assert.match(renderer, /async function testAIConnection\(\)[\s\S]*diagnoseAIProvider\(\{ \.\.\.aiSettingsInput\(\), provider, model \}\)[\s\S]*renderAIDiagnostics/);
+  assert.match(html, /id="aiDiagnostics"[\s\S]*id="aiDiagnosticChecks"/);
+  assert.match(renderer, /function closeAIRewrite\(\)[\s\S]*cancelAIRewrite/);
+  assert.match(renderer, /function cancelActiveAIDocumentReview\(\)[\s\S]*cancelAIDocumentReview/);
+  assert.match(renderer, /function closeAIDocumentReview\(\)[\s\S]*cancelActiveAIDocumentReview/);
   assert.match(renderer, /function startAIRewriteProgress\(\)[\s\S]*setInterval\(updateAIRewriteProgress, 500\)/);
   assert.match(renderer, /async function generateAIRewrite\(\)[\s\S]*const requestID = \+\+aiRewriteRequest[\s\S]*startAIRewriteProgress\(\)[\s\S]*requestID !== aiRewriteRequest/);
   assert.match(renderer, /async function runAIDocumentReview\(\)[\s\S]*reviewDocumentWithAI\(\{ text: source \}\)[\s\S]*locateAIReviewSuggestions/);

@@ -123,6 +123,7 @@ type App struct {
 	picGoCloudLoginMu   sync.Mutex
 	securityBookmarksMu sync.Mutex
 	draftsMu            sync.Mutex
+	aiRequestMu         sync.Mutex
 	draftFiles          map[string]bool
 	draftReplacements   map[string]bool
 	dirty               bool
@@ -132,6 +133,10 @@ type App struct {
 	preferencesOverride string
 	referenceOverride   string
 	aiCredentials       aiCredentialStore
+	aiRewriteCancel     context.CancelFunc
+	aiRewriteGeneration uint64
+	aiReviewCancel      context.CancelFunc
+	aiReviewGeneration  uint64
 }
 
 func NewApp() *App {
