@@ -12,6 +12,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复 2.7.3 Windows 安装启动器错误地预先创建取消标记、导致安装核心启动后立即中断的问题；取消标记现在只在用户主动取消时生成，并增加安装握手回归测试。
 - 完成文件删除安全复审：Windows 安装、升级和卸载全面禁止通配符及递归目录删除，不再自动清理注册表记录的旧安装目录；注册表安装位置必须通过程序文件和专属目录标识双重验证，卸载前也必须读取并匹配该标识，标识缺失或异常时只移除卸载登记并保留全部文件。草稿另存为只迁移应用内记录，不再物理删除原草稿；Windows 更新辅助程序仅允许从应用更新目录原子替换带安全卸载器的 `QuilliteMarkdown.exe`，并在启动失败时恢复已保留的旧版本，macOS 更新也改用随机私有暂存目录并在替换前验证当前应用签名和 Bundle Identifier。
 - macOS 源码更新脚本不再使用 `git reset --hard` 或 `git clean`；检测到未提交、已修改或未跟踪文件时立即停止，仅允许 `git merge --ff-only`，避免辅助脚本清除本地工作。
 - Windows 启动时会在联网检查更新前独立核验当前 `uninstall.exe` 的安全卸载标识；旧版、缺失或无法读取的卸载程序会显示“重大缺陷”安全警告，引导备份重要文件并从官网下载安装完整版本。常规更新弹框也会强制改用官网完整安装包，前后端同时禁止热更新；即使旧客户端已先替换主程序，新版本也会在当前版本相同的情况下继续提醒修复安装组件。
@@ -41,6 +42,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Fixed a 2.7.3 Windows launcher regression that created the cancellation marker before starting the installer core, causing every installation to stop immediately. The marker is now created only after an explicit user cancellation, with a regression test covering the installer handshake.
 - Completed a destructive-filesystem safety review. Windows installation, upgrade, and uninstall paths now forbid wildcard and recursive directory deletion and never automatically clean a registry-recorded previous install directory. A recorded install location must pass both executable and dedicated ownership-token checks; uninstall applies the same token check, and a missing or invalid token removes only the uninstall registration while preserving every file. Save As migrates draft records without physically deleting the original draft. The Windows update helper atomically replaces only `QuilliteMarkdown.exe` from the application update directory when a safety-marked uninstaller is present and restores its preserved previous version if launch fails, while macOS updates use random private staging directories and verify the current bundle identifier and signature before replacement.
 - The macOS source-update helper no longer uses `git reset --hard` or `git clean`. It stops when modified, uncommitted, or untracked files exist and permits only a `git merge --ff-only`, preventing the helper from discarding local work.
 - Windows now independently verifies the safe-uninstall marker in the installed `uninstall.exe` at startup before any network update check. Legacy, missing, or unreadable uninstallers trigger a critical-defect safety warning that recommends backing up important files and downloading the full installer from the website. The normal update dialog also requires the full installer, with in-app updating blocked in both the UI and backend; the repair warning remains active even when a legacy client has already replaced only the application binary and current/latest versions are equal.

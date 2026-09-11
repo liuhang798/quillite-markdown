@@ -1302,7 +1302,7 @@ func runInstaller() {
 		setCancelled()
 		return
 	}
-	cancelHandle, err := os.CreateTemp("", "quillite-install-*.cancel")
+	cancelFile, cleanupCancelControl, err := createInstallCancelPath()
 	if err != nil {
 		setFailed(
 			"无法创建安全的安装控制文件，请重试。",
@@ -1310,9 +1310,7 @@ func runInstaller() {
 		)
 		return
 	}
-	cancelFile := cancelHandle.Name()
-	_ = cancelHandle.Close()
-	defer os.Remove(cancelFile)
+	defer cleanupCancelControl()
 	defer clearInstallControl()
 	setInstallCancelFile(cancelFile)
 	if installWasCancelled() {
@@ -1528,6 +1526,22 @@ func writeCancelMarker(path string) {
 		return
 	}
 	_ = os.WriteFile(path, []byte("cancel\n"), 0600)
+}
+
+// createInstallCancelPath reserves a private directory but deliberately leaves
+// the marker itself absent. The NSIS core treats marker existence as an active
+// cancellation request, so pre-creating the file would cancel every install.
+func createInstallCancelPath() (string, func(), error) {
+	directory, err := os.MkdirTemp("", "quillite-install-control-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	path := filepath.Join(directory, "cancel")
+	cleanup := func() {
+		_ = os.Remove(path)
+		_ = os.Remove(directory)
+	}
+	return path, cleanup, nil
 }
 
 func setCancelled() {

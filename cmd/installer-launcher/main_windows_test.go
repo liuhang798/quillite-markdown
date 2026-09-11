@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"os"
@@ -270,6 +271,29 @@ func TestCancellationMarker(t *testing.T) {
 		t.Fatalf("cancel marker was not written: %v", err)
 	}
 	clearInstallControl()
+}
+
+func TestInstallCancelPathStartsWithoutMarker(t *testing.T) {
+	path, cleanup, err := createInstallCancelPath()
+	if err != nil {
+		t.Fatalf("create install cancel path: %v", err)
+	}
+	directory := filepath.Dir(path)
+	defer cleanup()
+	if info, err := os.Stat(directory); err != nil || !info.IsDir() {
+		t.Fatalf("private control directory was not created: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cancel marker must be absent before cancellation, stat error = %v", err)
+	}
+	writeCancelMarker(path)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cancel marker was not written on request: %v", err)
+	}
+	cleanup()
+	if _, err := os.Stat(directory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("private control directory was not removed, stat error = %v", err)
+	}
 }
 
 func TestExitDuringInstallRequestsSafeCancellation(t *testing.T) {
