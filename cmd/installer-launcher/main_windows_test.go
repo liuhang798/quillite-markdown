@@ -73,14 +73,67 @@ func TestCloseActionTakesPriorityOverTheDraggableTitleArea(t *testing.T) {
 }
 
 func TestPreferredInstallDirectoryUsesRecordedUpgradeLocation(t *testing.T) {
-	local := filepath.Join(`C:\Users\tester`, "AppData", "Local")
-	recorded := `D:\Apps\轻阅 Markdown`
+	local := t.TempDir()
+	recorded := filepath.Join(t.TempDir(), installProductDirectoryName)
+	if err := os.MkdirAll(recorded, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(recorded, installMarkerName), []byte(installMarkerContent+"\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(recorded, installExecutableName), []byte("owned"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if got := preferredInstallDirectory(local, recorded); got != recorded {
 		t.Fatalf("preferred install directory = %q, want %q", got, recorded)
 	}
-	wantDefault := filepath.Join(local, "Programs", "轻阅 Markdown")
+	wantDefault := filepath.Join(local, "Programs", installProductDirectoryName)
 	if got := preferredInstallDirectory(local, ""); got != wantDefault {
 		t.Fatalf("default install directory = %q, want %q", got, wantDefault)
+	}
+}
+
+func TestPreferredInstallDirectoryRejectsUnownedRegistryPath(t *testing.T) {
+	local := t.TempDir()
+	unowned := filepath.Join(t.TempDir(), "shared-folder")
+	if err := os.MkdirAll(unowned, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unowned, installExecutableName), []byte("user file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(local, "Programs", installProductDirectoryName)
+	if got := preferredInstallDirectory(local, unowned); got != want {
+		t.Fatalf("unowned registry path selected: got %q, want safe default %q", got, want)
+	}
+}
+
+func TestInstallDestinationRejectsUnverifiedReservedFiles(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, installExecutableName), []byte("user file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateInstallDestination(directory); err == nil {
+		t.Fatal("destination with an unverified executable must be rejected")
+	}
+}
+
+func TestInstallDestinationAllowsDocumentsAndOwnedUpgrade(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "important.md"), []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateInstallDestination(directory); err != nil {
+		t.Fatalf("documents-only destination should remain usable: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, installExecutableName), []byte("owned"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, installMarkerName), []byte("Quillite Markdown 2.7.3\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateInstallDestination(directory); err != nil {
+		t.Fatalf("legacy safety-marker upgrade should be accepted: %v", err)
 	}
 }
 
@@ -166,8 +219,8 @@ func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T)
 		t.Fatalf("read installer script: %v", err)
 	}
 	text := string(script)
-	if strings.Contains(text, `RMDir /r $INSTDIR`) || strings.Contains(text, `RMDir /r "$INSTDIR"`) {
-		t.Fatal("uninstaller must never recursively delete the selected install directory")
+	if strings.Contains(strings.ToLower(text), "rmdir /r") {
+		t.Fatal("installer and uninstaller must never recursively delete any directory")
 	}
 	for _, forbidden := range []string{
 		`Delete "$INSTDIR\*"`,
@@ -176,6 +229,10 @@ func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T)
 		`Delete /REBOOTOK "$INSTDIR\*.md"`,
 		`Delete "$INSTDIR\*.txt"`,
 		`Delete /REBOOTOK "$INSTDIR\*.txt"`,
+		`Delete /REBOOTOK "$PreviousInstallDir\`,
+		`Call CleanupPreviousInstallDir`,
+		`Delete /REBOOTOK "$INSTDIR\MDReaderAssistant-*.ico"`,
+		`Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"`,
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("uninstaller must preserve documents created inside the install directory: found %q", forbidden)
@@ -185,9 +242,13 @@ func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T)
 		`VIAddVersionKey "UninstallSafety" "QUILLITE_SAFE_UNINSTALL_V1"`,
 		`ReadEnvStr $ExternalInstallDir "QUILLITE_INSTALL_DIR"`,
 		`Call EnsurePreviousApplicationClosed`,
-		`Call CleanupPreviousInstallDir`,
+		`FileWrite $0 "${INSTALL_MARKER_CONTENT}$\r$\n"`,
+		`IfFileExists "$0\${PRODUCT_EXECUTABLE}" 0 previousInstallDone`,
+		`IfFileExists "$0\${INSTALL_MARKER}" 0 previousInstallDone`,
+		`StrCmp $2 "${INSTALL_MARKER_CONTENT}$\r$\n" previousInstallOwned`,
+		`Call un.VerifyInstallOwnership`,
+		`StrCmp $InstallOwned "1" uninstallOwnershipConfirmed`,
 		`Delete /REBOOTOK "$INSTDIR\${PRODUCT_EXECUTABLE}"`,
-		`Delete /REBOOTOK "$INSTDIR\${LEGACY_EXECUTABLE}"`,
 		`Delete /REBOOTOK "$INSTDIR\${INSTALL_MARKER}"`,
 		`RMDir "$INSTDIR"`,
 	} {

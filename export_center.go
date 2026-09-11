@@ -481,17 +481,14 @@ func (a *App) SaveExportImagePages(sourcePath, title, format string, dataURLs []
 		outputPath += extension
 	}
 	paths := availableExportPagePaths(outputPath, len(pages))
-	written := make([]string, 0, len(paths))
 	for index, path := range paths {
 		if err := writeFileAtomically(path, pages[index]); err != nil {
-			for _, created := range written {
-				_ = os.Remove(created)
-			}
+			// Preserve already-written pages. Cleanup must never delete a path
+			// that another process could have replaced after it was created.
 			return nil, err
 		}
-		written = append(written, path)
 	}
-	return written, nil
+	return paths, nil
 }
 
 func (a *App) exportImageDefinition(format string) (string, string, string, string) {

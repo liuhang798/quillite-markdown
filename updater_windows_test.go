@@ -59,6 +59,17 @@ func TestProcessAlive(t *testing.T) {
 // replacement and the automatic restart of the new binary.
 func TestRunUpdateHelperEndToEnd(t *testing.T) {
 	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	t.Setenv("APPDATA", configDir)
+	updateDir := filepath.Join(configDir, appNameZH, "update", "run-test")
+	installDir := filepath.Join(dir, "installed")
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSafetyMarkedUninstaller(t, installDir)
 	helperSrc := filepath.Join(dir, "helper.go")
 	if err := os.WriteFile(helperSrc, []byte(
 		"package main\n"+
@@ -80,8 +91,13 @@ func TestRunUpdateHelperEndToEnd(t *testing.T) {
 
 	// The "old process": helper that exits after writing its proof.
 	oldProcess := buildHelper("old-进程.exe")
-	newBinary := buildHelper("new-版本.bin")
-	targetBinary := buildHelper("目标-应用.exe")
+	newBinary := filepath.Join(updateDir, "new-版本-windows-amd64.bin")
+	build := exec.Command("go", "build", "-o", newBinary, helperSrc)
+	build.Env = os.Environ()
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build new version: %v\n%s", err, output)
+	}
+	targetBinary := buildHelper(filepath.Join("installed", windowsUpdateExecutableName))
 
 	proofDir := filepath.Join(dir, "proof")
 	if err := os.MkdirAll(proofDir, 0o755); err != nil {
@@ -107,7 +123,7 @@ func TestRunUpdateHelperEndToEnd(t *testing.T) {
 	}
 	_ = os.Remove(proofPath)
 
-	logPath := filepath.Join(dir, "apply-update.log")
+	logPath := filepath.Join(updateDir, "apply-update.log")
 	if err := runUpdateHelper(newBinary, targetBinary, parentPID, logPath); err != nil {
 		t.Fatalf("runUpdateHelper: %v", err)
 	}
@@ -119,6 +135,10 @@ func TestRunUpdateHelperEndToEnd(t *testing.T) {
 	}
 	if string(data) != string(mustRead(t, newBinary)) {
 		t.Fatal("target was not replaced with the new binary content")
+	}
+	backup := filepath.Join(updateDir, "previous-version.exe")
+	if _, err := os.Stat(backup); err != nil {
+		t.Fatalf("previous executable backup was not preserved: %v", err)
 	}
 
 	// ...and the new version must have been started (it writes its proof).
@@ -148,16 +168,24 @@ func TestRunUpdateHelperEndToEnd(t *testing.T) {
 // file-locking bug where the updater was launched from the installed
 // executable and then tried to overwrite that same running executable.
 func TestApplyUpdateCanReplaceTheExecutableThatLaunchedIt(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "中文更新目录")
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	t.Setenv("APPDATA", configDir)
+	dir := filepath.Join(root, "installed")
+	updateDir := filepath.Join(configDir, appNameZH, "update", "run-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSafetyMarkedUninstaller(t, dir)
 
 	testExecutable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	installedExecutable := filepath.Join(dir, "轻阅 Markdown.exe")
+	installedExecutable := filepath.Join(dir, windowsUpdateExecutableName)
 	testExecutableData, err := os.ReadFile(testExecutable)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +202,7 @@ func TestApplyUpdateCanReplaceTheExecutableThatLaunchedIt(t *testing.T) {
 	if err := os.WriteFile(newSource, []byte(newSourceCode), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	newBinary := filepath.Join(dir, "quillite-markdown-next-windows-amd64.bin")
+	newBinary := filepath.Join(updateDir, "quillite-markdown-next-windows-amd64.bin")
 	build := exec.Command("go", "build", "-o", newBinary, newSource)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build replacement binary: %v\n%s", err, output)
@@ -193,29 +221,111 @@ func TestApplyUpdateCanReplaceTheExecutableThatLaunchedIt(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	logPath := filepath.Join(dir, "apply-update.log")
+	logPath := filepath.Join(updateDir, "apply-update.log")
 	logData, _ := os.ReadFile(logPath)
 	t.Fatalf("updated executable did not restart; updater log:\n%s", logData)
 }
 
 func TestRunUpdateHelperLogsReplacementFailure(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "apply-update.log")
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	t.Setenv("APPDATA", configDir)
+	updateDir := filepath.Join(configDir, appNameZH, "update", "run-test")
+	installDir := filepath.Join(root, "installed")
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSafetyMarkedUninstaller(t, installDir)
+	target := filepath.Join(installDir, windowsUpdateExecutableName)
+	if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(updateDir, "apply-update.log")
 	err := runUpdateHelper(
-		filepath.Join(dir, "missing-new-version.bin"),
-		filepath.Join(dir, "installed-app.exe"),
+		filepath.Join(updateDir, "missing-windows-amd64.bin"),
+		target,
 		"99999999",
 		logPath,
 	)
 	if err == nil {
 		t.Fatal("runUpdateHelper must report a missing replacement binary")
 	}
-	logData, readErr := os.ReadFile(logPath)
-	if readErr != nil {
-		t.Fatal(readErr)
+	if !strings.Contains(err.Error(), "replacement binary is unavailable") {
+		t.Fatalf("unexpected validation error: %v", err)
 	}
-	if !strings.Contains(string(logData), "ERROR: replace failed:") {
-		t.Fatalf("failure reason is missing from updater log:\n%s", logData)
+}
+
+func TestRunUpdateHelperRestoresPreviousExecutableWhenRelaunchFails(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	t.Setenv("APPDATA", configDir)
+	updateDir := filepath.Join(configDir, appNameZH, "update", "run-test")
+	installDir := filepath.Join(root, "installed")
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSafetyMarkedUninstaller(t, installDir)
+	target := filepath.Join(installDir, windowsUpdateExecutableName)
+	previous := []byte("previous executable that must survive")
+	if err := os.WriteFile(target, previous, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newBinary := filepath.Join(updateDir, "invalid-windows-amd64.bin")
+	if err := os.WriteFile(newBinary, []byte("not a Windows executable"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := runUpdateHelper(newBinary, target, "99999999", filepath.Join(updateDir, "apply-update.log"))
+	if err == nil || !strings.Contains(err.Error(), "previous version was restored") {
+		t.Fatalf("expected a restored-version launch failure, got %v", err)
+	}
+	if got, readErr := os.ReadFile(target); readErr != nil || string(got) != string(previous) {
+		t.Fatalf("failed relaunch did not restore previous executable: %q, %v", got, readErr)
+	}
+	if got, readErr := os.ReadFile(filepath.Join(updateDir, "previous-version.exe")); readErr != nil || string(got) != string(previous) {
+		t.Fatalf("recovery backup was not preserved: %q, %v", got, readErr)
+	}
+}
+
+func TestUpdateHelperRejectsArbitraryOverwriteTargets(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	t.Setenv("APPDATA", configDir)
+	updateDir := filepath.Join(configDir, appNameZH, "update", "run-test")
+	installDir := filepath.Join(root, "installed")
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newBinary := filepath.Join(updateDir, "release-windows-amd64.bin")
+	if err := os.WriteFile(newBinary, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	userFile := filepath.Join(installDir, "important-user-file.txt")
+	if err := os.WriteFile(userFile, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := validateUpdateHelperRequest(newBinary, userFile, strconv.Itoa(os.Getpid()), filepath.Join(updateDir, "apply-update.log"))
+	if err == nil {
+		t.Fatal("the update helper accepted an arbitrary overwrite target")
+	}
+	if data, readErr := os.ReadFile(userFile); readErr != nil || string(data) != "keep" {
+		t.Fatalf("rejected update changed the user file: %q, %v", data, readErr)
+	}
+}
+
+func writeSafetyMarkedUninstaller(t *testing.T, directory string) {
+	t.Helper()
+	data := append([]byte("mock PE resource\x00"), utf16LEBytes(windowsSafeUninstallerMarker)...)
+	if err := os.WriteFile(filepath.Join(directory, "uninstall.exe"), data, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

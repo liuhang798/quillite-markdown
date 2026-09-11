@@ -33,15 +33,21 @@ func applyUpdate(downloadPath string) error {
 	if !strings.EqualFold(filepath.Ext(appBundle), ".app") {
 		return fmt.Errorf("the running executable is not inside a macOS application bundle: %s", executable)
 	}
+	if err := validateMacAppBundle(appBundle); err != nil {
+		return fmt.Errorf("refuse to replace an unverified current application: %w", err)
+	}
 
 	updateDir := filepath.Dir(downloadPath)
-	extractDir := filepath.Join(updateDir, "extracted-app")
-	if err := os.RemoveAll(extractDir); err != nil {
+	extractDir, err := os.MkdirTemp(updateDir, "extracted-app-")
+	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(extractDir, 0o755); err != nil {
-		return err
-	}
+	cleanupExtract := true
+	defer func() {
+		if cleanupExtract {
+			_ = os.RemoveAll(extractDir)
+		}
+	}()
 	if output, err := exec.Command("/usr/bin/ditto", "-x", "-k", downloadPath, extractDir).CombinedOutput(); err != nil {
 		return fmt.Errorf("extract macOS update: %w: %s", err, strings.TrimSpace(string(output)))
 	}
@@ -58,17 +64,23 @@ func applyUpdate(downloadPath string) error {
 	// the current process is still alive. The detached script then needs only
 	// two same-volume renames after exit, keeping replacement fast and allowing
 	// an immediate rollback if relaunching fails.
-	appStem := strings.TrimSuffix(appBundle, filepath.Ext(appBundle))
-	stagedBundle := appStem + ".update-new.app"
-	backupBundle := appStem + ".update-backup.app"
-	if err := os.RemoveAll(stagedBundle); err != nil {
+	stageRoot, err := os.MkdirTemp(filepath.Dir(appBundle), ".quillite-update-")
+	if err != nil {
 		return err
 	}
+	cleanupStage := true
+	defer func() {
+		if cleanupStage {
+			_ = os.RemoveAll(stageRoot)
+		}
+	}()
+	stagedBundle := filepath.Join(stageRoot, "staged.app")
+	backupBundle := filepath.Join(stageRoot, "backup.app")
+	failedBundle := filepath.Join(stageRoot, "failed.app")
 	if output, err := exec.Command("/usr/bin/ditto", newBundle, stagedBundle).CombinedOutput(); err != nil {
 		return fmt.Errorf("stage macOS update beside the installed application: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	if err := validateMacAppBundle(stagedBundle); err != nil {
-		_ = os.RemoveAll(stagedBundle)
 		return fmt.Errorf("validate staged macOS application: %w", err)
 	}
 
@@ -80,45 +92,59 @@ set -u
 current=%s
 staged=%s
 backup=%s
+failed=%s
+stage_root=%s
 archive=%s
 extract_dir=%s
 script_path=%s
 
 while kill -0 %d 2>/dev/null; do sleep 0.3; done
-rm -rf "$backup"
 if ! mv "$current" "$backup"; then
   echo "Unable to move the current application to its update backup."
   exit 1
 fi
 if ! mv "$staged" "$current"; then
   echo "Unable to install the staged application; restoring the previous version."
-  mv "$backup" "$current" || true
+  if ! mv "$backup" "$current"; then
+    echo "Unable to restore the previous version; preserving the backup at $backup."
+    exit 1
+  fi
+  rm -rf -- "$stage_root" "$extract_dir"
   exit 1
 fi
 if ! /usr/bin/codesign --verify --deep --strict "$current"; then
   echo "Installed application signature verification failed; restoring the previous version."
-  rm -rf "$current"
-  mv "$backup" "$current" || true
+  mv "$current" "$failed" || exit 1
+  if ! mv "$backup" "$current"; then
+    echo "Unable to restore the previous version; preserving update recovery files."
+    exit 1
+  fi
+  rm -rf -- "$stage_root" "$extract_dir"
   exit 1
 fi
 if ! /usr/bin/open "$current"; then
   echo "Unable to relaunch the updated application; restoring the previous version."
-  rm -rf "$current"
-  mv "$backup" "$current" || true
+  mv "$current" "$failed" || exit 1
+  if ! mv "$backup" "$current"; then
+    echo "Unable to restore the previous version; preserving update recovery files."
+    exit 1
+  fi
   /usr/bin/open "$current" || true
+  rm -rf -- "$stage_root" "$extract_dir"
   exit 1
 fi
-rm -rf "$backup" "$extract_dir"
+rm -rf -- "$backup" "$extract_dir"
+rmdir "$stage_root" 2>/dev/null || true
 rm -f "$archive" "$script_path"
-`, shellQuote(logPath), shellQuote(appBundle), shellQuote(stagedBundle), shellQuote(backupBundle), shellQuote(downloadPath), shellQuote(extractDir), shellQuote(scriptPath), os.Getpid())
+`, shellQuote(logPath), shellQuote(appBundle), shellQuote(stagedBundle), shellQuote(backupBundle), shellQuote(failedBundle), shellQuote(stageRoot), shellQuote(downloadPath), shellQuote(extractDir), shellQuote(scriptPath), os.Getpid())
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		_ = os.RemoveAll(stagedBundle)
 		return err
 	}
 	if err := exec.Command("/bin/sh", scriptPath).Start(); err != nil {
-		_ = os.RemoveAll(stagedBundle)
 		return err
 	}
+	cleanupExtract = false
+	cleanupStage = false
 	return nil
 }
 

@@ -34,6 +34,7 @@
 !define LEGACY_PRODUCTNAME  "MD阅读助手"
 !define LEGACY_EXECUTABLE   "MDReaderAssistant.exe"
 !define INSTALL_MARKER      ".quillite-install"
+!define INSTALL_MARKER_CONTENT "QUILLITE_INSTALL_DIR_V1"
 !define LEGACY_UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\LeafMD Open SourceMD阅读助手"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
@@ -101,6 +102,7 @@ Var ExternalCancelFile
 Var ExternalInstallDir
 Var ExternalAppLanguage
 Var PreviousInstallDir
+Var InstallOwned
 
 !macro ExitIfExternalCancelled LABEL
     StrCmp $ExternalCancelFile "" externalCancelDone_${LABEL}
@@ -154,8 +156,21 @@ Function un.onInit
    StrCpy $LANGUAGE ${LANG_SIMPCHINESE}
 FunctionEnd
 
-# Prefer the directory recorded by 2.2.3 and later. Version 2.2.2 did not
-# write InstallLocation, so use its DisplayIcon path as an upgrade fallback.
+Function un.VerifyInstallOwnership
+    StrCpy $InstallOwned "0"
+    IfFileExists "$INSTDIR\${INSTALL_MARKER}" 0 verifyInstallOwnershipDone
+    ClearErrors
+    FileOpen $0 "$INSTDIR\${INSTALL_MARKER}" r
+    IfErrors verifyInstallOwnershipDone
+    FileRead $0 $1
+    FileClose $0
+    StrCmp $1 "${INSTALL_MARKER_CONTENT}$\r$\n" 0 verifyInstallOwnershipDone
+    StrCpy $InstallOwned "1"
+    verifyInstallOwnershipDone:
+FunctionEnd
+
+# A registry value is only a location hint, never deletion or overwrite
+# authority. Reuse it only when a strict product marker proves ownership.
 Function ResolvePreviousInstallDir
     SetRegView 64
     ReadRegStr $0 HKCU "${UNINST_KEY}" "InstallLocation"
@@ -173,6 +188,18 @@ Function ResolvePreviousInstallDir
         StrCpy $0 "$1"
 
     previousInstallFound:
+		IfFileExists "$0\${PRODUCT_EXECUTABLE}" 0 previousInstallDone
+		IfFileExists "$0\${INSTALL_MARKER}" 0 previousInstallDone
+		ClearErrors
+		FileOpen $1 "$0\${INSTALL_MARKER}" r
+		IfErrors previousInstallDone
+		FileRead $1 $2
+		FileClose $1
+		StrCmp $2 "${INSTALL_MARKER_CONTENT}$\r$\n" previousInstallOwned
+		# Repair the first 2.7.3 safety build, which used a versioned marker.
+		StrCmp $2 "Quillite Markdown ${INFO_PRODUCTVERSION}$\r$\n" previousInstallOwned previousInstallDone
+
+	previousInstallOwned:
         StrCpy $PreviousInstallDir "$0"
         StrCpy $INSTDIR "$0"
 
@@ -189,22 +216,6 @@ Function EnsurePreviousApplicationClosed
     Call EnsureApplicationClosed
     StrCpy $INSTDIR "$9"
     previousApplicationClosed:
-FunctionEnd
-
-# Remove only known program files from an old location after a successful move.
-# Documents or any other files keep the old directory non-empty and preserved.
-Function CleanupPreviousInstallDir
-    StrCmp $PreviousInstallDir "" previousInstallCleanupDone
-    StrCmp $PreviousInstallDir "$INSTDIR" previousInstallCleanupDone
-    Delete /REBOOTOK "$PreviousInstallDir\${PRODUCT_EXECUTABLE}"
-    Delete /REBOOTOK "$PreviousInstallDir\${LEGACY_EXECUTABLE}"
-    Delete /REBOOTOK "$PreviousInstallDir\${INSTALL_MARKER}"
-    Delete /REBOOTOK "$PreviousInstallDir\mdFileIcon.ico"
-    Delete /REBOOTOK "$PreviousInstallDir\MDReaderAssistant-*.ico"
-    Delete /REBOOTOK "$PreviousInstallDir\QuilliteMarkdown-*.ico"
-    Delete /REBOOTOK "$PreviousInstallDir\uninstall.exe"
-    RMDir "$PreviousInstallDir"
-    previousInstallCleanupDone:
 FunctionEnd
 
 # Detect a locked installed executable before extraction. Interactive upgrades
@@ -268,6 +279,17 @@ FunctionEnd
     !insertmacro APP_ASSOCIATE "txt" "Text Document" "文本文件" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "使用 ${INFO_PRODUCTNAME} 打开" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
 !macroend
 
+# Mirror the registry cleanup without Wails' generated icon deletion. Legacy
+# icon files may share a custom install directory with user content and are
+# therefore preserved deliberately.
+!macro UnassociateMarkdownFiles
+    !insertmacro APP_UNASSOCIATE "md" "Markdown Document"
+    !insertmacro APP_UNASSOCIATE "markdown" "Markdown Document"
+    !insertmacro APP_UNASSOCIATE "mdown" "Markdown Document"
+    !insertmacro APP_UNASSOCIATE "mkd" "Markdown Document"
+    !insertmacro APP_UNASSOCIATE "txt" "Text Document"
+!macroend
+
 # Electron releases and early Wails installers used different uninstall keys
 # or installation scopes. Remove only stale entries with this exact product
 # name so Windows shows a single installed application after an upgrade.
@@ -313,7 +335,7 @@ Section
     # a dedicated child directory by the launcher; normal upgrades continue to
     # use the exact InstallLocation recorded by the previous release.
     FileOpen $0 "$INSTDIR\${INSTALL_MARKER}" w
-    FileWrite $0 "Quillite Markdown ${INFO_PRODUCTVERSION}$\r$\n"
+    FileWrite $0 "${INSTALL_MARKER_CONTENT}$\r$\n"
     FileClose $0
     SetFileAttributes "$INSTDIR\${INSTALL_MARKER}" HIDDEN
 
@@ -368,16 +390,11 @@ Section
     publicDesktopRemains:
         SetShellVarContext current
 
-    # Older installers stored a separate shortcut icon. Explorer may keep that
-    # file locked during a same-version reinstall, so shortcuts now use the icon
-    # embedded in the executable and stale icon files are removed when possible.
-    Delete /REBOOTOK "$INSTDIR\MDReaderAssistant-*.ico"
-    Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"
-    Delete /REBOOTOK "$INSTDIR\${LEGACY_EXECUTABLE}"
-
+    # Older installers stored versioned shortcut icons. Do not use wildcard
+    # deletion here: a custom/shared install directory may contain user files
+    # with a matching name. The harmless legacy icon can remain on disk.
     !insertmacro ExitIfExternalCancelled 07
     !insertmacro AssociateMarkdownFiles
-    Delete /REBOOTOK "$INSTDIR\mdFileIcon.ico"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
     !insertmacro wails.associateCustomProtocols
 
@@ -387,9 +404,9 @@ Section
     # open the directory page at the same location.
     SetRegView 64
     WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
-    # Only retire the previous program files after the new executable,
-    # uninstaller and registry location have all been committed.
-    Call CleanupPreviousInstallDir
+    # Never delete files from a previous install location automatically. Older
+    # versions allowed shared/custom directories and their registry location is
+    # not sufficient proof that every matching file is product-owned.
     # A silent in-app upgrade (/S) should start the new version automatically.
     IfSilent 0 silentRunDone
     ExecShell "" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -399,7 +416,18 @@ SectionEnd
 Section "uninstall"
     !insertmacro wails.setShellContext
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    # Preserve the WebView2 data directory. Recursive deletion is intentionally
+    # forbidden because ownership of every descendant cannot be proven.
+
+    # A copied or damaged uninstaller must not alter files, shortcuts, or file
+    # associations without proof that it is running for an owned install.
+    Call un.VerifyInstallOwnership
+    StrCmp $InstallOwned "1" uninstallOwnershipConfirmed
+    SetRegView 64
+    DeleteRegKey HKCU "${UNINST_KEY}"
+    Goto uninstallContentDone
+
+    uninstallOwnershipConfirmed:
 
     SetShellVarContext current
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
@@ -413,19 +441,16 @@ Section "uninstall"
     Delete "$DESKTOP\${LEGACY_PRODUCTNAME}.lnk"
     SetShellVarContext current
 
-    !insertmacro wails.unassociateFiles
+    !insertmacro UnassociateMarkdownFiles
     !insertmacro wails.unassociateCustomProtocols
 
-    # The install destination may have contained user files before Quillite
-    # was installed. Delete only files owned by this product and remove the
-    # directory non-recursively, so unrelated content and documents created by
-    # Quillite inside this folder are always preserved.
+    # The install destination may have contained user files before Quillite was
+    # installed. Delete exact product filenames and remove the directory
+    # non-recursively, leaving every unrelated descendant untouched.
     Delete /REBOOTOK "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    Delete /REBOOTOK "$INSTDIR\${LEGACY_EXECUTABLE}"
-    Delete /REBOOTOK "$INSTDIR\${INSTALL_MARKER}"
-    Delete /REBOOTOK "$INSTDIR\mdFileIcon.ico"
-    Delete /REBOOTOK "$INSTDIR\MDReaderAssistant-*.ico"
-    Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"
     !insertmacro wails.deleteUninstaller
+    Delete /REBOOTOK "$INSTDIR\${INSTALL_MARKER}"
     RMDir "$INSTDIR"
+
+    uninstallContentDone:
 SectionEnd

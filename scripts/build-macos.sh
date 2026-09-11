@@ -10,18 +10,20 @@ if [[ $# -gt 0 ]]; then
 fi
 app_name="轻阅 Markdown.app"
 target_app="build/bin/${app_name}"
+source_app="build/bin/QuilliteMarkdown.app"
 
 cd "${project_dir}"
 # Wails cleans its own default output name, but a previously normalized Chinese
-# bundle name is outside that cleanup set. Remove only that generated bundle so
-# the discovery below can never select and re-sign a stale build.
+# bundle name is outside that cleanup set. Preserve an earlier generated bundle
+# under a unique backup name instead of recursively deleting it. This keeps a
+# recoverable artifact if the next build or signing step fails.
 if [[ -d "${target_app}" ]]; then
-  rm -rf -- "${target_app}"
+  previous_app="build/bin/.quillite-previous-$(date +%Y%m%d%H%M%S)-$$.app"
+  mv "${target_app}" "${previous_app}"
 fi
 wails build -clean -platform "${platform}" -o QuilliteMarkdown -trimpath -nocolour "$@"
 
-source_app="$(find build/bin -maxdepth 1 -type d -name '*.app' -print -quit)"
-if [[ -z "${source_app}" ]]; then
+if [[ ! -d "${source_app}" ]]; then
   find build/bin -maxdepth 3 -print
   echo "The macOS .app bundle was not found in build/bin" >&2
   exit 1

@@ -213,7 +213,7 @@ func TestRecoveredMacDraftReferencesMoveToTheSafeDocumentsDirectory(t *testing.T
 	}
 }
 
-func TestReplaceDraftRemovesTemporaryFileAndRecentRecord(t *testing.T) {
+func TestReplaceDraftPreservesOriginalFileAndMigratesRecentRecord(t *testing.T) {
 	app := testApp(t)
 	root := t.TempDir()
 	draftPath := filepath.Join(root, "New document-20260721-123456.md")
@@ -250,8 +250,8 @@ func TestReplaceDraftRemovesTemporaryFileAndRecentRecord(t *testing.T) {
 	if replacedPath != draftPath {
 		t.Fatalf("replaced path = %q, want %q", replacedPath, draftPath)
 	}
-	if _, err := os.Stat(draftPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary draft was not removed: %v", err)
+	if content, err := os.ReadFile(draftPath); err != nil || string(content) != "draft" {
+		t.Fatalf("original draft was not preserved: content=%q err=%v", content, err)
 	}
 	prefs, err := app.GetPreferences()
 	if err != nil {
@@ -1014,8 +1014,8 @@ func TestSaveDocumentAsAtomicallyMigratesPinnedDraftAtFullCapacity(t *testing.T)
 	if saved.ReplacedPath != draftPath || saved.Path != savedPath || saved.Content != "# Final" {
 		t.Fatalf("unexpected Save As result: %#v", saved)
 	}
-	if _, err := os.Stat(draftPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("temporary draft was not removed: %v", err)
+	if content, err := os.ReadFile(draftPath); err != nil || string(content) != "draft" {
+		t.Fatalf("original draft was not preserved: content=%q err=%v", content, err)
 	}
 	prefs, err := app.GetPreferences()
 	if err != nil {
@@ -1160,7 +1160,7 @@ func TestReplaceDraftPreferenceWriteFailurePreservesRecoverableDraft(t *testing.
 	}
 }
 
-func TestSaveDocumentAsDeleteFailureStillReturnsCommittedMigration(t *testing.T) {
+func TestSaveDocumentAsPreservesOriginalDraftDirectory(t *testing.T) {
 	app := testApp(t)
 	root := t.TempDir()
 	draftPath := filepath.Join(root, "non-empty-draft")
@@ -1289,8 +1289,8 @@ func TestConcurrentSaveDocumentAsClaimsTheDraftBeforeWritingTarget(t *testing.T)
 		len(prefs.DraftFiles) != 0 || prefs.LastFile != firstSavedPath {
 		t.Fatalf("concurrent replacement produced inconsistent preferences: %#v", prefs)
 	}
-	if _, err := os.Stat(draftPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("claimed draft was not removed: %v", err)
+	if content, err := os.ReadFile(draftPath); err != nil || string(content) != "draft" {
+		t.Fatalf("claimed draft was not preserved: content=%q err=%v", content, err)
 	}
 }
 
@@ -1845,7 +1845,6 @@ func TestWindowsInstallerUsesReinstallSafeShortcutIcons(t *testing.T) {
 	for _, required := range []string{
 		`CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0`,
 		`CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0`,
-		`Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"`,
 	} {
 		if !strings.Contains(installer, required) {
 			t.Errorf("Windows installer is missing reinstall-safe shortcut rule %q", required)
@@ -1863,15 +1862,28 @@ func TestWindowsInstallerUsesReinstallSafeFileAssociationIcons(t *testing.T) {
 	if strings.Contains(installer, `!insertmacro wails.associateFiles`) {
 		t.Fatal("Windows installer must not use Wails file associations that overwrite a standalone icon")
 	}
+	if strings.Contains(installer, `!insertmacro wails.unassociateFiles`) {
+		t.Fatal("Windows uninstaller must not use Wails file cleanup that deletes an ambiguous legacy icon")
+	}
 	for _, required := range []string{
 		`!macro AssociateMarkdownFiles`,
+		`!macro UnassociateMarkdownFiles`,
 		`!insertmacro APP_ASSOCIATE "md" "Markdown Document" "Markdown 文档" "$INSTDIR\${PRODUCT_EXECUTABLE},0"`,
 		`!insertmacro APP_ASSOCIATE "txt" "Text Document" "文本文件" "$INSTDIR\${PRODUCT_EXECUTABLE},0"`,
 		`!insertmacro AssociateMarkdownFiles`,
-		`Delete /REBOOTOK "$INSTDIR\mdFileIcon.ico"`,
+		`!insertmacro UnassociateMarkdownFiles`,
 	} {
 		if !strings.Contains(installer, required) {
 			t.Errorf("Windows installer is missing reinstall-safe file-association rule %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		`Delete /REBOOTOK "$INSTDIR\QuilliteMarkdown-*.ico"`,
+		`Delete /REBOOTOK "$INSTDIR\MDReaderAssistant-*.ico"`,
+		`Delete /REBOOTOK "$INSTDIR\mdFileIcon.ico"`,
+	} {
+		if strings.Contains(installer, forbidden) {
+			t.Errorf("Windows installer must preserve ambiguous legacy icon files: found %q", forbidden)
 		}
 	}
 }
@@ -2007,8 +2019,9 @@ func TestMacBundleUsesProductDisplayNameAndCanonicalFilename(t *testing.T) {
 	if !strings.Contains(string(buildScript), `app_name="轻阅 Markdown.app"`) {
 		t.Fatal("macOS build wrapper must normalize the bundle filename to 轻阅 Markdown.app")
 	}
-	if !strings.Contains(string(buildScript), `rm -rf -- "${target_app}"`) {
-		t.Fatal("macOS build wrapper must remove the stale normalized bundle before locating the current Wails output")
+	if strings.Contains(string(buildScript), `rm -rf -- "${target_app}"`) ||
+		!strings.Contains(string(buildScript), `mv "${target_app}" "${previous_app}"`) {
+		t.Fatal("macOS build wrapper must preserve the previous normalized bundle instead of recursively deleting it")
 	}
 	if !strings.Contains(string(buildScript), `codesign --force --deep --sign -`) ||
 		!strings.Contains(string(buildScript), `codesign --verify --deep --strict`) {
@@ -2031,6 +2044,24 @@ func TestMacBundleUsesProductDisplayNameAndCanonicalFilename(t *testing.T) {
 		!strings.Contains(workflowText, `/usr/bin/ditto -c -k --sequesterRsrc --keepParent`) ||
 		strings.Contains(workflowText, `cp "${binary}" "${release_dir}/quillite-markdown-${APP_VERSION}-macos-universal.bin"`) {
 		t.Fatal("macOS in-app updates must publish the signed complete .app archive, never a raw executable")
+	}
+}
+
+func TestRepositoryUpdateScriptsNeverDiscardLocalFiles(t *testing.T) {
+	for _, path := range []string{"pull-from-github.bat", "update-from-github.command"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := strings.ToLower(string(data))
+		for _, forbidden := range []string{"reset --hard", "git clean", "checkout --"} {
+			if strings.Contains(text, forbidden) {
+				t.Fatalf("%s contains destructive Git operation %q", path, forbidden)
+			}
+		}
+		if !strings.Contains(text, "status --porcelain") || !strings.Contains(text, "merge --ff-only") {
+			t.Fatalf("%s must stop on local changes and update by fast-forward only", path)
+		}
 	}
 }
 

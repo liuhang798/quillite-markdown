@@ -815,17 +815,14 @@ func (a *App) migrateClaimedDraft(originalPath, savedPath, key string) (string, 
 		return "", preferencesErr
 	}
 
-	// Preferences now point at the saved document. Do not roll them back if
-	// deleting the superseded draft fails: the target file has already been
-	// written and the committed migration is the authoritative state.
+	// Preferences now point at the saved document. Keep the original draft on
+	// disk: persisted draft paths can survive crashes and upgrades, so treating
+	// them as deletion authority would let stale or damaged preferences remove
+	// an unrelated user file. Orphaned drafts are preferable to data loss.
 	a.draftsMu.Lock()
 	delete(a.draftFiles, key)
 	delete(a.draftReplacements, key)
 	a.draftsMu.Unlock()
-	// The target and preferences are already authoritative. Cleanup is best
-	// effort: reporting failure here would leave the frontend on the old path
-	// even though its draft identity has been migrated to savedPath.
-	_ = os.Remove(originalPath)
 	return originalPath, nil
 }
 

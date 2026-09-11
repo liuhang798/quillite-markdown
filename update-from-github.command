@@ -16,12 +16,11 @@ fail() {
 }
 
 echo "========================================"
-echo "  MD 阅读助手 - 更新并覆盖本地代码"
+echo "  轻阅 Markdown - 安全更新本地代码"
 echo "========================================"
 echo "项目目录：$PWD"
 echo
-echo "警告：此操作将以 GitHub 代码为准，删除未提交修改和未跟踪文件。"
-echo "两个 Git 辅助脚本本身会被保留。"
+echo "此操作只执行快进更新，不会删除或覆盖本地改动。"
 echo
 
 command -v git >/dev/null 2>&1 || fail "未找到 Git。请先运行：xcode-select --install"
@@ -31,26 +30,20 @@ branch="$(git branch --show-current)"
 [[ -n "$branch" ]] || fail "当前处于 detached HEAD 状态。"
 git remote get-url origin >/dev/null 2>&1 || fail "未配置 origin 远程仓库。"
 
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "将被删除的本地内容："
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "[停止] 检测到本地改动，未下载任何内容："
   git status --short
-  echo
+  fail "请先提交、暂存或自行处理这些文件后再更新。"
 fi
 
-read -r "confirmation?确认覆盖请输入 OVERWRITE："
-[[ "$confirmation" == "OVERWRITE" ]] || fail "输入不匹配，操作已取消。"
-
 echo
-echo "[1/4] 获取远程最新代码..."
+echo "[1/3] 获取远程最新代码..."
 git fetch --prune origin "$branch" || fail "获取远程代码失败，请检查网络或 GitHub 登录状态。"
 git show-ref --verify --quiet "refs/remotes/origin/$branch" || fail "远程不存在 origin/$branch。"
 
-echo "[2/4] 覆盖已跟踪文件..."
-git reset --hard "origin/$branch" || fail "重置到远程版本失败。"
+echo "[2/3] 仅执行快进更新..."
+git merge --ff-only "origin/$branch" || fail "本地与远程历史已分叉；未覆盖文件，请手动处理提交。"
 
-echo "[3/4] 删除未跟踪文件..."
-git clean -fd -e push-to-github.command -e update-from-github.command || fail "清理未跟踪文件失败。"
-
-echo "[4/4] 更新完成。"
+echo "[3/3] 更新完成。"
 git log -1 --oneline
 finish 0

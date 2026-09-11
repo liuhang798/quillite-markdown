@@ -296,6 +296,8 @@ const (
 	installProductDirectoryName = "轻阅 Markdown"
 	installExecutableName       = "QuilliteMarkdown.exe"
 	installDirectoryEnvName     = "QUILLITE_INSTALL_DIR"
+	installMarkerName           = ".quillite-install"
+	installMarkerContent        = "QUILLITE_INSTALL_DIR_V1"
 )
 
 var (
@@ -1276,6 +1278,17 @@ func installingActionLabel(frame int, english bool) string {
 }
 
 func runInstaller() {
+	view.RLock()
+	installDir := view.installDir
+	english := view.english
+	view.RUnlock()
+	if err := validateInstallDestination(installDir); err != nil {
+		setFailed(
+			"所选目录包含无法确认归属的程序文件。为保护现有文件，请选择其他父目录，或先手动备份并移走冲突文件。",
+			"The selected folder contains program files whose ownership cannot be verified. Choose another parent folder, or back up and move the conflicting files first.",
+		)
+		return
+	}
 	payload, cleanup, err := extractPayload()
 	if err != nil {
 		setFailed(
@@ -1289,8 +1302,16 @@ func runInstaller() {
 		setCancelled()
 		return
 	}
-	cancelFile := filepath.Join(os.TempDir(), fmt.Sprintf("quillite-install-%d.cancel", os.Getpid()))
-	_ = os.Remove(cancelFile)
+	cancelHandle, err := os.CreateTemp("", "quillite-install-*.cancel")
+	if err != nil {
+		setFailed(
+			"无法创建安全的安装控制文件，请重试。",
+			"A private installer control file could not be created. Please retry.",
+		)
+		return
+	}
+	cancelFile := cancelHandle.Name()
+	_ = cancelHandle.Close()
 	defer os.Remove(cancelFile)
 	defer clearInstallControl()
 	setInstallCancelFile(cancelFile)
@@ -1298,10 +1319,6 @@ func runInstaller() {
 		writeCancelMarker(cancelFile)
 	}
 
-	view.RLock()
-	installDir := view.installDir
-	english := view.english
-	view.RUnlock()
 	cmd := exec.Command(payload, installerCommandArguments(cancelFile, installDir, english)...)
 	cmd.Env = installerCommandEnvironment(os.Environ(), installDir)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -1562,6 +1579,83 @@ func recordedInstallDirectory() string {
 	return ""
 }
 
+func validInstallMarker(path string) bool {
+	file, err := os.Open(filepath.Join(path, installMarkerName))
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 128))
+	if err != nil {
+		return false
+	}
+	value := strings.TrimSpace(string(data))
+	if value == installMarkerContent {
+		return true
+	}
+	// The first safety-aware 2.7.3 installer wrote a versioned marker. Accept
+	// that narrow legacy shape once so it can be repaired in place.
+	const legacyPrefix = "Quillite Markdown "
+	if !strings.HasPrefix(value, legacyPrefix) {
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(value, legacyPrefix), ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, character := range part {
+			if character < '0' || character > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func ownedInstallDirectory(path string) (string, bool) {
+	normalized, err := normalizeInstallDirectory(path)
+	if err != nil || !validInstallMarker(normalized) {
+		return "", false
+	}
+	info, err := os.Stat(filepath.Join(normalized, installExecutableName))
+	if err != nil || info.IsDir() {
+		return "", false
+	}
+	return normalized, true
+}
+
+func validateInstallDestination(path string) error {
+	normalized, err := normalizeInstallDirectory(path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(normalized)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errors.New("install destination is not a directory")
+	}
+	if _, owned := ownedInstallDirectory(normalized); owned {
+		return nil
+	}
+	for _, reserved := range []string{installExecutableName, "uninstall.exe", installMarkerName} {
+		if _, err := os.Lstat(filepath.Join(normalized, reserved)); err == nil {
+			return fmt.Errorf("unverified reserved installer path %q", reserved)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 func sameInstallDirectory(left, right string) bool {
 	left, leftErr := normalizeInstallDirectory(left)
 	right, rightErr := normalizeInstallDirectory(right)
@@ -1584,7 +1678,7 @@ func verifyInstalledDirectory(expected string) error {
 
 func preferredInstallDirectory(localAppData, recordedLocation string) string {
 	recordedLocation = strings.Trim(strings.TrimSpace(recordedLocation), `"`)
-	if normalized, err := normalizeInstallDirectory(recordedLocation); err == nil {
+	if normalized, owned := ownedInstallDirectory(recordedLocation); owned {
 		return normalized
 	}
 	localAppData = strings.Trim(strings.TrimSpace(localAppData), `"`)

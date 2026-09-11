@@ -82,17 +82,14 @@ func (a *App) DownloadAndApplyUpdate() error {
 	if err := os.MkdirAll(updateDir, 0o755); err != nil {
 		return err
 	}
-	// Discard stale downloads and scripts from previous update attempts so
-	// the directory never accumulates out-of-date assets.
-	entries, err := os.ReadDir(updateDir)
+	// Every update gets a new private directory. Never enumerate and delete a
+	// shared update folder: stale files are harmless, while an unexpected file
+	// must never be mistaken for disposable application data.
+	updateRunDir, err := os.MkdirTemp(updateDir, "run-")
 	if err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		_ = os.Remove(filepath.Join(updateDir, entry.Name()))
-	}
-
-	downloadPath := filepath.Join(updateDir, filepath.Base(asset.Name))
+	downloadPath := filepath.Join(updateRunDir, filepath.Base(asset.Name))
 
 	if err := a.downloadFile(asset.BrowserDownloadURL, downloadPath); err != nil {
 		_ = os.Remove(downloadPath)

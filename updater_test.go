@@ -126,3 +126,44 @@ func TestDownloadFileRejectsNonOfficialHosts(t *testing.T) {
 		t.Fatal("GitHub must not be accepted as an update download host")
 	}
 }
+
+func TestMacUpdaterNeverDeletesFixedSiblingOrCurrentBundle(t *testing.T) {
+	data, err := os.ReadFile("updater_darwin.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, forbidden := range []string{
+		`.update-new.app`,
+		`.update-backup.app`,
+		`rm -rf "$current"`,
+		`os.RemoveAll(stagedBundle)`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("macOS updater contains unsafe fixed-path deletion %q", forbidden)
+		}
+	}
+	for _, required := range []string{
+		`validateMacAppBundle(appBundle)`,
+		`os.MkdirTemp(filepath.Dir(appBundle), ".quillite-update-")`,
+		`mv "$current" "$failed"`,
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("macOS updater is missing safety boundary %q", required)
+		}
+	}
+}
+
+func TestUpdaterNeverCleansASharedUpdateDirectory(t *testing.T) {
+	data, err := os.ReadFile("updater.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, "os.ReadDir(updateDir)") {
+		t.Fatal("updater must not enumerate and delete a shared update directory")
+	}
+	if !strings.Contains(text, `os.MkdirTemp(updateDir, "run-")`) {
+		t.Fatal("each update must use a new private run directory")
+	}
+}

@@ -73,17 +73,16 @@ jobs:
 
           # 2) fall back: portable zip via curl.exe (more reliable than Invoke-WebRequest)
           if (-not $existing) {
-            $zip = Join-Path $env:TEMP 'nsis-3.12.zip'
+            $runId = [Guid]::NewGuid().ToString('N')
+            $zip = Join-Path $env:RUNNER_TEMP "nsis-3.12-$runId.zip"
             Write-Host 'Downloading NSIS 3.12 portable zip via curl...'
             curl.exe -L --retry 3 --retry-delay 5 -sS -o $zip "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip"
             if ($LASTEXITCODE -ne 0) { throw "NSIS zip download failed (curl exit $LASTEXITCODE)" }
-            $extract = Join-Path $env:TEMP 'nsis-extract'
-            if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
+            $extract = Join-Path $env:RUNNER_TEMP "nsis-extract-$runId"
             Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
             $verDir = Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1
             if (-not $verDir) { throw 'NSIS zip did not extract as expected' }
-            $nsisDir = Join-Path $env:ProgramFiles 'NSIS'
-            if (Test-Path -LiteralPath $nsisDir) { Remove-Item -LiteralPath $nsisDir -Recurse -Force }
+            $nsisDir = Join-Path $env:RUNNER_TEMP "nsis-portable-$runId"
             Move-Item -LiteralPath $verDir.FullName -Destination $nsisDir
             $existing = Join-Path $nsisDir 'makensis.exe'
           }
@@ -91,6 +90,9 @@ jobs:
           if (-not $existing -or -not (Test-Path -LiteralPath $existing)) {
             throw 'makensis.exe was not found after installing NSIS'
           }
+          $nsisBin = Split-Path -Parent $existing
+          $env:PATH = "$nsisBin;$env:PATH"
+          "PATH=$env:PATH" >> $env:GITHUB_ENV
           Write-Host "NSIS ready: $existing"
       - name: Build Windows installer
         shell: pwsh

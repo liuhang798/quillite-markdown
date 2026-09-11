@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,8 @@ import (
 	"time"
 )
 
+const windowsUpdateExecutableName = "QuilliteMarkdown.exe"
+
 // applyUpdate starts a hidden helper instance of the same executable that
 // performs the replacement after this process exits. A batch script cannot be
 // used here: cmd.exe is unable to resolve non-ASCII paths (the update folder
@@ -22,6 +25,10 @@ func applyUpdate(downloadPath string) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return err
+	}
+	logPath := filepath.Join(filepath.Dir(downloadPath), "apply-update.log")
+	if err := validateUpdateHelperRequest(downloadPath, executable, strconv.Itoa(os.Getpid()), logPath); err != nil {
+		return fmt.Errorf("refuse unsafe update request: %w", err)
 	}
 
 	// Windows keeps a running executable locked. Starting helper mode from the
@@ -45,7 +52,11 @@ func runUpdateHelperIfRequested() {
 	if len(os.Args) < 5 || os.Args[1] != "--apply-update" {
 		return
 	}
-	err := runUpdateHelper(os.Args[2], os.Args[3], os.Args[4], filepath.Join(filepath.Dir(os.Args[2]), "apply-update.log"))
+	logPath := filepath.Join(filepath.Dir(os.Args[2]), "apply-update.log")
+	if err := validateUpdateHelperRequest(os.Args[2], os.Args[3], os.Args[4], logPath); err != nil {
+		os.Exit(1)
+	}
+	err := runUpdateHelper(os.Args[2], os.Args[3], os.Args[4], logPath)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -53,6 +64,9 @@ func runUpdateHelperIfRequested() {
 }
 
 func runUpdateHelper(newBinary, oldExecutable, parentPID, logPath string) error {
+	if err := validateUpdateHelperRequest(newBinary, oldExecutable, parentPID, logPath); err != nil {
+		return fmt.Errorf("refuse unsafe update request: %w", err)
+	}
 	writeLog := func(format string, args ...any) {
 		file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
@@ -77,6 +91,12 @@ func runUpdateHelper(newBinary, oldExecutable, parentPID, logPath string) error 
 	}
 
 	writeLog("[apply-update] replacing %s", oldExecutable)
+	backupPath := filepath.Join(filepath.Dir(newBinary), "previous-version.exe")
+	if err := copyExecutable(oldExecutable, backupPath); err != nil {
+		err = fmt.Errorf("backup current version: %w", err)
+		writeLog("[apply-update] ERROR: %v", err)
+		return err
+	}
 	if err := replaceFile(newBinary, oldExecutable); err != nil {
 		err = fmt.Errorf("replace failed: %w", err)
 		writeLog("[apply-update] ERROR: %v", err)
@@ -85,11 +105,67 @@ func runUpdateHelper(newBinary, oldExecutable, parentPID, logPath string) error 
 
 	writeLog("[apply-update] starting the new version")
 	if err := exec.Command(oldExecutable).Start(); err != nil {
-		err = fmt.Errorf("start failed: %w", err)
+		startErr := err
+		if restoreErr := replaceFile(backupPath, oldExecutable); restoreErr != nil {
+			err = fmt.Errorf("start failed: %w; restore failed and backup was preserved at %s: %v", startErr, backupPath, restoreErr)
+		} else {
+			err = fmt.Errorf("start failed and the previous version was restored: %w", startErr)
+		}
 		writeLog("[apply-update] ERROR: %v", err)
 		return err
 	}
 	writeLog("[apply-update] done")
+	return nil
+}
+
+func validateUpdateHelperRequest(newBinary, oldExecutable, parentPID, logPath string) error {
+	pid, err := strconv.Atoi(strings.TrimSpace(parentPID))
+	if err != nil || pid <= 0 {
+		return errors.New("invalid parent process ID")
+	}
+	newBinary, err = filepath.Abs(filepath.Clean(newBinary))
+	if err != nil {
+		return err
+	}
+	oldExecutable, err = filepath.Abs(filepath.Clean(oldExecutable))
+	if err != nil {
+		return err
+	}
+	logPath, err = filepath.Abs(filepath.Clean(logPath))
+	if err != nil {
+		return err
+	}
+	updateDirectory := filepath.Dir(newBinary)
+	configDirectory, err := os.UserConfigDir()
+	if err != nil {
+		return fmt.Errorf("resolve application update directory: %w", err)
+	}
+	expectedUpdateRoot := filepath.Join(configDirectory, appNameZH, "update")
+	if !sameFilesystemPath(filepath.Dir(updateDirectory), expectedUpdateRoot) ||
+		!strings.HasPrefix(strings.ToLower(filepath.Base(updateDirectory)), "run-") {
+		return errors.New("replacement binary is outside the application update directory")
+	}
+	if !strings.HasSuffix(strings.ToLower(filepath.Base(newBinary)), "windows-amd64.bin") {
+		return errors.New("replacement binary has an unexpected name")
+	}
+	if !sameFilesystemPath(filepath.Dir(logPath), updateDirectory) || !strings.EqualFold(filepath.Base(logPath), "apply-update.log") {
+		return errors.New("update log is outside the application update directory")
+	}
+	if !strings.EqualFold(filepath.Base(oldExecutable), windowsUpdateExecutableName) {
+		return errors.New("update target is not the Quillite executable")
+	}
+	if !isWindowsUninstallerFileSafe(filepath.Join(filepath.Dir(oldExecutable), "uninstall.exe")) {
+		return errors.New("update target has no safety-marked uninstaller")
+	}
+	for label, path := range map[string]string{"replacement binary": newBinary, "update target": oldExecutable} {
+		info, statErr := os.Stat(path)
+		if statErr != nil || info.IsDir() {
+			if statErr != nil {
+				return fmt.Errorf("%s is unavailable: %w", label, statErr)
+			}
+			return fmt.Errorf("%s is not a regular file", label)
+		}
+	}
 	return nil
 }
 
@@ -103,7 +179,7 @@ func replaceFile(source, target string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(target, data, 0o755)
+	return writeFileAtomically(target, data)
 }
 
 func copyExecutable(source, target string) error {
@@ -111,5 +187,5 @@ func copyExecutable(source, target string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(target, data, 0o755)
+	return writeFileAtomically(target, data)
 }
