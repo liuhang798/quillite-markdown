@@ -696,6 +696,10 @@
         <label id="aiOriginalTextField"><span data-i18n="aiOriginalText">原文</span><textarea id="aiOriginalText" readonly></textarea></label>
         <label><span data-i18n="aiResultText">AI 结果</span><textarea id="aiResultText" data-i18n-placeholder="aiResultPlaceholder" placeholder="生成后可在这里继续微调"></textarea></label>
       </div>
+      <section id="aiDiffReview" class="ai-diff-review hidden" aria-labelledby="aiDiffTitle">
+        <header><strong id="aiDiffTitle" data-i18n="aiDiffTitle">逐项确认修改</strong><small id="aiDiffSummary"></small><span></span><button id="acceptAllAIDiff" class="text-button" type="button" data-i18n="aiAcceptAllChanges">全部接受</button><button id="rejectAllAIDiff" class="text-button" type="button" data-i18n="aiRejectAllChanges">全部保留原文</button></header>
+        <div id="aiDiffList" class="ai-diff-list"></div>
+      </section>
       <div id="aiRewriteProgress" class="ai-rewrite-progress hidden" role="status" aria-live="polite" aria-hidden="true">
         <span class="ai-rewrite-spinner" aria-hidden="true"></span>
         <span class="ai-rewrite-progress-copy"><strong id="aiRewriteProgressPhase"></strong><small id="aiRewriteProgressMeta"></small><span class="ai-rewrite-progress-track" aria-hidden="true"><i id="aiRewriteProgressBar"></i></span></span>

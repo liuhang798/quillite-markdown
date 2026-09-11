@@ -799,6 +799,7 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(mainSource, /diagnoseAIProvider:[\s\S]*Backend\.DiagnoseAIProvider/);
   assert.match(mainSource, /cancelAIRewrite:[\s\S]*Backend\.CancelAIRewrite/);
   assert.match(mainSource, /cancelAIDocumentReview:[\s\S]*Backend\.CancelAIDocumentReview/);
+  assert.match(mainSource, /onAIRewriteChunk:[\s\S]*EventsOn\('ai:rewrite-chunk'/);
   assert.match(mainSource, /testAIProviderConnection:[\s\S]*Backend\.TestAIProviderConnection/);
   assert.match(mainSource, /rewriteWithAI:[\s\S]*Backend\.RewriteWithAI/);
   assert.match(mainSource, /reviewDocumentWithAI:[\s\S]*Backend\.ReviewDocumentWithAI/);
@@ -819,7 +820,10 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(renderer, /function cancelActiveAIDocumentReview\(\)[\s\S]*cancelAIDocumentReview/);
   assert.match(renderer, /function closeAIDocumentReview\(\)[\s\S]*cancelActiveAIDocumentReview/);
   assert.match(renderer, /function startAIRewriteProgress\(\)[\s\S]*setInterval\(updateAIRewriteProgress, 500\)/);
-  assert.match(renderer, /async function generateAIRewrite\(\)[\s\S]*const requestID = \+\+aiRewriteRequest[\s\S]*startAIRewriteProgress\(\)[\s\S]*requestID !== aiRewriteRequest/);
+  assert.match(renderer, /async function generateAIRewrite\(\)[\s\S]*const requestNumber = \+\+aiRewriteRequest[\s\S]*onAIRewriteChunk[\s\S]*startAIRewriteProgress\(\)[\s\S]*requestNumber !== aiRewriteRequest/);
+  assert.match(html, /id="aiDiffReview"[\s\S]*id="acceptAllAIDiff"[\s\S]*id="rejectAllAIDiff"[\s\S]*id="aiDiffList"/);
+  assert.match(renderer, /function rebuildAIRewriteDiff\(\)[\s\S]*buildAITextDiff[\s\S]*renderAIRewriteDiff/);
+  assert.match(renderer, /function replaceWithAIResult\(\)[\s\S]*applyAITextDiff\(aiRewriteDiffSegments\)/);
   assert.match(renderer, /async function runAIDocumentReview\(\)[\s\S]*reviewDocumentWithAI\(\{ text: source \}\)[\s\S]*locateAIReviewSuggestions/);
   assert.match(renderer, /function applySelectedAIReviewSuggestions\(\)[\s\S]*editorContent\(\) !== aiReviewSnapshot[\s\S]*hasOverlappingReviewSuggestions[\s\S]*changes: selected\.map/);
   assert.match(html, /id="rerunAIReview"[\s\S]*data-i18n="aiReviewAgain"/);

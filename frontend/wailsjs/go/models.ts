@@ -140,6 +140,7 @@ export namespace main {
 	    text: string;
 	    instruction: string;
 	    targetLanguage: string;
+	    requestId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AIRewriteRequest(source);
@@ -151,6 +152,7 @@ export namespace main {
 	        this.text = source["text"];
 	        this.instruction = source["instruction"];
 	        this.targetLanguage = source["targetLanguage"];
+	        this.requestId = source["requestId"];
 	    }
 	}
 	export class AIRewriteResponse {

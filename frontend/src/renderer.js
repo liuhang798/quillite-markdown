@@ -23,6 +23,7 @@ import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-co
 import { createTableModel, findMarkdownTableAt, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
 import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from './rich-clipboard.js';
 import { hasOverlappingReviewSuggestions, locateAIReviewSuggestions } from './ai-review.js';
+import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-text-diff.js';
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
 
@@ -90,6 +91,9 @@ let pendingAIRewriteAction = '';
 let aiRewriteRequest = 0;
 let aiRewriteProgressTimer = 0;
 let aiRewriteStartedAt = 0;
+let aiRewriteStreamCleanup = null;
+let aiRewriteDiffSegments = [];
+let aiRewriteStreaming = false;
 let pendingAIDocumentReview = false;
 let resumeAIDocumentReviewAfterSettings = false;
 let aiReviewSnapshot = '';
@@ -447,6 +451,7 @@ Object.assign(translations['zh-CN'], {
   aiSettingsSaved: 'AI 服务与 API Key 已保存', aiSettingsSaveFailed: 'AI 设置保存失败',
   aiRewriteTitle: 'AI编辑', aiAction: '处理方式', aiActionPolish: '润色', aiActionRewrite: '改写', aiActionConcise: '精简', aiActionExpand: '扩写', aiActionSummarize: '总结', aiActionTranslate: '翻译', aiActionCustom: '自定义要求',
   aiTargetLanguage: '目标语言', aiInstruction: '具体要求', aiInstructionPlaceholder: '例如：改成更专业、友好的产品说明', aiOriginalText: '原文', aiResultText: 'AI 结果', aiResultPlaceholder: '生成后可在这里继续微调',
+  aiDiffTitle: '逐项确认修改', aiDiffSummary: '共 {count} 处修改，已接受 {selected} 处', aiAcceptAllChanges: '全部接受', aiRejectAllChanges: '全部保留原文', aiAcceptChange: '接受这处修改', aiOriginalFragment: '原文片段', aiRevisedFragment: 'AI 修改', aiNoContent: '（空）',
   aiCloudConsent: '我确认将上述内容和要求发送给当前选择的 AI 服务处理', aiOpenSettings: '设置', aiGenerate: '生成', aiGenerating: '生成中…', aiRewriteConnecting: '正在连接 AI 服务', aiRewriteGenerating: 'AI 正在生成内容', aiRewriteRefining: '正在整理并检查生成结果', aiRewriteProgressMeta: '{provider} · {model} · 已用时 {seconds} 秒', aiReplaceSelection: '替换选中文字', aiInsertAtCursor: '插入到光标位置', aiSelectionReplaced: '已替换，可使用撤销恢复原文', aiContentInserted: '内容已插入，可使用撤销恢复',
   aiNeedSelection: '请先选择要处理的文字', aiNeedInstruction: '请填写具体要求', aiNeedCloudConsent: '请先确认同意发送选中文字', aiEmptyResult: 'AI 没有返回可用内容', aiSelectionChanged: '原文已发生变化，请重新选择后再试', aiRequestFailed: 'AI 处理失败',
   aiReview: 'AI检查', aiReviewTitle: '检查整篇文档并给出可选修改建议', aiReviewLabel: 'AI 文档检查', aiReviewDialogTitle: 'AI 文档检查', aiReviewIntro: '检查整篇文档的表达、拼写、标点、一致性和 Markdown 语法，并逐条选择要应用的修改。',
@@ -464,6 +469,7 @@ Object.assign(translations.en, {
   aiSettingsSaved: 'AI provider and API key saved', aiSettingsSaveFailed: 'Unable to save AI settings',
   aiRewriteTitle: 'AI Edit', aiAction: 'Action', aiActionPolish: 'Polish', aiActionRewrite: 'Rewrite', aiActionConcise: 'Make concise', aiActionExpand: 'Expand', aiActionSummarize: 'Summarize', aiActionTranslate: 'Translate', aiActionCustom: 'Custom instruction',
   aiTargetLanguage: 'Target language', aiInstruction: 'Instruction', aiInstructionPlaceholder: 'For example: make this more professional and friendly', aiOriginalText: 'Original', aiResultText: 'AI result', aiResultPlaceholder: 'You can refine the generated result here',
+  aiDiffTitle: 'Review each change', aiDiffSummary: '{count} changes, {selected} accepted', aiAcceptAllChanges: 'Accept all', aiRejectAllChanges: 'Keep all originals', aiAcceptChange: 'Accept this change', aiOriginalFragment: 'Original fragment', aiRevisedFragment: 'AI revision', aiNoContent: '(empty)',
   aiCloudConsent: 'I agree to send the content and instruction above to the currently selected AI provider', aiOpenSettings: 'Settings', aiGenerate: 'Generate', aiGenerating: 'Generating…', aiRewriteConnecting: 'Connecting to the AI service', aiRewriteGenerating: 'AI is generating content', aiRewriteRefining: 'Preparing and checking the result', aiRewriteProgressMeta: '{provider} · {model} · {seconds}s elapsed', aiReplaceSelection: 'Replace selection', aiInsertAtCursor: 'Insert at cursor', aiSelectionReplaced: 'Selection replaced. Undo restores the original text.', aiContentInserted: 'Content inserted. Undo removes it.',
   aiNeedSelection: 'Select some text first', aiNeedInstruction: 'Enter an instruction', aiNeedCloudConsent: 'Confirm before sending selected text', aiEmptyResult: 'The AI returned no usable content', aiSelectionChanged: 'The source text changed. Select it again and retry.', aiRequestFailed: 'AI request failed',
   aiReview: 'AI Check', aiReviewTitle: 'Review the whole document and propose selectable fixes', aiReviewLabel: 'AI DOCUMENT REVIEW', aiReviewDialogTitle: 'AI document check', aiReviewIntro: 'Check the whole document for writing, spelling, punctuation, consistency, and Markdown issues, then choose which fixes to apply.',
@@ -575,7 +581,7 @@ const els = {
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), aboutDialog: $('#aboutDialog'),
   aiSettingsDialog: $('#aiSettingsDialog'), aiSettingsForm: $('#aiSettingsForm'), aiProvider: $('#aiProvider'), aiProviderName: $('#aiProviderName'), aiProviderDescription: $('#aiProviderDescription'), aiProviderModel: $('#aiProviderModel'), setDefaultAIProvider: $('#setDefaultAIProvider'), aiBaseURLField: $('#aiBaseURLField'), aiBaseURL: $('#aiBaseURL'), aiBaseURLHint: $('#aiBaseURLHint'), aiModelSelectField: $('#aiModelSelectField'), aiModel: $('#aiModel'), aiCustomModelField: $('#aiCustomModelField'), aiCustomModel: $('#aiCustomModel'), aiCustomModelOptions: $('#aiCustomModelOptions'), aiModelState: $('#aiModelState'), aiCustomModelState: $('#aiCustomModelState'), refreshAIModels: $('#refreshAIModels'), refreshAICustomModels: $('#refreshAICustomModels'), aiAPIKey: $('#aiAPIKey'), aiAPIKeyField: $('#aiAPIKeyField'), aiAPIKeyState: $('#aiAPIKeyState'), aiKeyOnboarding: $('#aiKeyOnboarding'), aiKeySavedCard: $('#aiKeySavedCard'), aiMaskedAPIKey: $('#aiMaskedAPIKey'), editAIAPIKey: $('#editAIAPIKey'), deleteAIAPIKey: $('#deleteAIAPIKey'), aiSettingsStatus: $('#aiSettingsStatus'), aiDiagnostics: $('#aiDiagnostics'), aiDiagnosticsSummary: $('#aiDiagnosticsSummary'), aiDiagnosticChecks: $('#aiDiagnosticChecks'),
-  aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteFields: $('#aiRewriteFields'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiInstructionField: $('#aiInstructionField'), aiInstruction: $('#aiInstruction'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
+  aiRewriteDialog: $('#aiRewriteDialog'), aiRewriteControls: $('#aiRewriteControls'), aiRewriteFields: $('#aiRewriteFields'), aiRewriteAction: $('#aiRewriteAction'), aiTargetLanguageField: $('#aiTargetLanguageField'), aiTargetLanguage: $('#aiTargetLanguage'), aiInstructionField: $('#aiInstructionField'), aiInstruction: $('#aiInstruction'), aiCompareGrid: $('#aiCompareGrid'), aiOriginalTextField: $('#aiOriginalTextField'), aiOriginalText: $('#aiOriginalText'), aiResultText: $('#aiResultText'), aiDiffReview: $('#aiDiffReview'), aiDiffSummary: $('#aiDiffSummary'), aiDiffList: $('#aiDiffList'), aiRewriteProgress: $('#aiRewriteProgress'), aiRewriteProgressPhase: $('#aiRewriteProgressPhase'), aiRewriteProgressMeta: $('#aiRewriteProgressMeta'), aiRewriteProgressBar: $('#aiRewriteProgressBar'), aiRewriteProgressPercent: $('#aiRewriteProgressPercent'), aiCloudConsentRow: $('#aiCloudConsentRow'), aiCloudConsent: $('#aiCloudConsent'), aiRewriteStatus: $('#aiRewriteStatus'),
   aiReviewDialog: $('#aiReviewDialog'), aiReviewToolbar: $('#aiReviewToolbar'), aiReviewSummary: $('#aiReviewSummary'), aiReviewEmpty: $('#aiReviewEmpty'), aiReviewProgress: $('#aiReviewProgress'), aiReviewProgressBar: $('#aiReviewProgressBar'), aiReviewProgressMeta: $('#aiReviewProgressMeta'), aiReviewSuggestions: $('#aiReviewSuggestions'), aiReviewConsentRow: $('#aiReviewConsentRow'), aiReviewConsent: $('#aiReviewConsent'), aiReviewStatus: $('#aiReviewStatus'), runAIReview: $('#runAIReview'), rerunAIReview: $('#rerunAIReview'), applyAIReview: $('#applyAIReview'), selectAllAIReview: $('#selectAllAIReview'), clearAllAIReview: $('#clearAllAIReview'),
   feedbackDialog: $('#feedbackDialog'), feedbackForm: $('#feedbackForm'), feedbackImageList: $('#feedbackImageList'), updateDialog: $('#updateDialog'), editPermissionDialog: $('#editPermissionDialog'), editPermissionFileName: $('#editPermissionFileName'), pdfTutorialDialog: $('#pdfTutorialDialog'), exportCenterDialog: $('#exportCenterDialog'), exportPresetSelect: $('#exportPresetSelect'), exportPresetName: $('#exportPresetName'), exportFormatGrid: $('#exportFormatGrid'), exportFormatDescription: $('#exportFormatDescription'), exportHeader: $('#exportHeader'), exportFooter: $('#exportFooter'), exportImageOptions: $('#exportImageOptions'), exportImageLayout: $('#exportImageLayout'), exportImageScale: $('#exportImageScale'), pandocExportOptions: $('#pandocExportOptions'), pandocStatusText: $('#pandocStatusText'), pandocPath: $('#pandocPath'), customPandocFields: $('#customPandocFields'), pandocCustomWriter: $('#pandocCustomWriter'), pandocCustomExtension: $('#pandocCustomExtension'), pandocExtraArguments: $('#pandocExtraArguments'), exportCenterStatus: $('#exportCenterStatus'), confirmExportCenter: $('#confirmExportCenter'), usageAnalyticsToggle: $('#usageAnalyticsToggle'),
   recentTab: $('#recentTab'), favoritesTab: $('#favoritesTab'), explorerTab: $('#explorerTab'), refreshExplorer: $('#refreshExplorer'), tableDialog: $('#tableDialog'), tableDesignerGrid: $('#tableDesignerGrid'), tableDesignerViewport: $('#tableDesignerViewport'), imageDialog: $('#imageDialog'), imageUrl: $('#imageUrl'), imageAltInput: $('#imageAltInput'), imageWidth: $('#imageWidth'), imageWidthValue: $('#imageWidthValue'), formulaDialog: $('#formulaDialog'), formulaDisciplineTabs: $('#formulaDisciplineTabs'), formulaTemplateList: $('#formulaTemplateList'), formulaBuilderPanel: $('#formulaBuilderPanel'), formulaOutputModes: $('#formulaOutputModes'), formulaFields: $('#formulaFields'), formulaPreview: $('#formulaPreview'), formulaMarkdownSource: $('#formulaMarkdownSource'), diagramDialog: $('#diagramDialog'), diagramFullscreenButton: $('#toggleDiagramFullscreen'), diagramCategoryTabs: $('#diagramCategoryTabs'), diagramTemplateList: $('#diagramTemplateList'), diagramBuilderPanel: $('#diagramBuilderPanel'), diagramSource: $('#diagramSource'), diagramPreview: $('#diagramPreview'), flowchartModeBar: $('#flowchartModeBar'), flowchartVisualEditor: $('#flowchartVisualEditor'), structuredDiagramEditor: $('#structuredDiagramEditor'), structuredDiagramSettings: $('#structuredDiagramSettings'), structuredDiagramHead: $('#structuredDiagramHead'), structuredDiagramRows: $('#structuredDiagramRows'), flowchartCanvasViewport: $('#flowchartCanvasViewport'), flowchartCanvas: $('#flowchartCanvas'), flowchartZoomOut: $('#flowchartZoomOut'), flowchartZoomReset: $('#flowchartZoomReset'), flowchartZoomIn: $('#flowchartZoomIn'), flowchartZoomValue: $('#flowchartZoomValue'), flowchartNodeLayer: $('#flowchartNodeLayer'), flowchartEdgeLayer: $('#flowchartEdgeLayer'), flowchartDirection: $('#flowchartDirection'), flowchartNodeProperties: $('#flowchartNodeProperties'), flowchartEdgeProperties: $('#flowchartEdgeProperties'), flowchartNodeLabel: $('#flowchartNodeLabel'), flowchartNodeShape: $('#flowchartNodeShape'), flowchartEdgeLabel: $('#flowchartEdgeLabel'), flowchartEdgeStyle: $('#flowchartEdgeStyle'), flowchartSelectionHint: $('#flowchartSelectionHint'),
@@ -7141,6 +7147,54 @@ function startAIRewriteProgress() {
   aiRewriteProgressTimer = window.setInterval(updateAIRewriteProgress, 500);
 }
 
+function stopAIRewriteStream() {
+  if (typeof aiRewriteStreamCleanup === 'function') aiRewriteStreamCleanup();
+  aiRewriteStreamCleanup = null;
+  aiRewriteStreaming = false;
+}
+
+function clearAIRewriteDiff() {
+  aiRewriteDiffSegments = [];
+  els.aiDiffList.replaceChildren();
+  els.aiDiffReview.classList.add('hidden');
+}
+
+function updateAIRewriteDiffSelection() {
+  const changes = changedAITextSegments(aiRewriteDiffSegments);
+  const selected = changes.filter(change => change.accepted).length;
+  els.aiDiffSummary.textContent = t('aiDiffSummary', { count: changes.length, selected });
+  $('#replaceWithAIResult').disabled = changes.length > 0 ? selected === 0 : !els.aiResultText.value.trim();
+}
+
+function renderAIRewriteDiff() {
+  const changes = changedAITextSegments(aiRewriteDiffSegments);
+  const insertMode = aiRewriteSelection?.mode === 'insert';
+  els.aiDiffReview.classList.toggle('hidden', insertMode || changes.length === 0);
+  els.aiDiffList.innerHTML = changes.map((change, index) => {
+    const original = change.original || t('aiNoContent');
+    const replacement = change.replacement || t('aiNoContent');
+    return `<article class="ai-diff-item${change.accepted ? ' accepted' : ''}">
+      <label><input type="checkbox" data-ai-diff-index="${index}"${change.accepted ? ' checked' : ''}><span>${escapeHtml(t('aiAcceptChange'))}</span></label>
+      <div><section><small>${escapeHtml(t('aiOriginalFragment'))}</small><pre>${escapeHtml(original)}</pre></section><section><small>${escapeHtml(t('aiRevisedFragment'))}</small><pre>${escapeHtml(replacement)}</pre></section></div>
+    </article>`;
+  }).join('');
+  updateAIRewriteDiffSelection();
+}
+
+function rebuildAIRewriteDiff() {
+  if (aiRewriteSelection?.mode !== 'replace' || !els.aiResultText.value.trim()) {
+    clearAIRewriteDiff();
+    return;
+  }
+  aiRewriteDiffSegments = buildAITextDiff(aiRewriteSelection.markdown, els.aiResultText.value);
+  renderAIRewriteDiff();
+}
+
+function setAllAIRewriteChanges(accepted) {
+  for (const change of changedAITextSegments(aiRewriteDiffSegments)) change.accepted = accepted;
+  renderAIRewriteDiff();
+}
+
 async function openAIEditor() {
   const context = currentAIEditContext();
   await openAIRewrite(context, context.markdown ? 'polish' : 'custom');
@@ -7173,6 +7227,7 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
   }
   aiRewriteSelection = editContext;
   aiRewriteRequest += 1;
+  stopAIRewriteStream();
   stopAIRewriteProgress();
   const insertMode = editContext.mode === 'insert';
   els.aiRewriteAction.value = insertMode ? 'custom' : (preferredAction || 'polish');
@@ -7181,6 +7236,8 @@ async function openAIRewrite(selection = editorClipboardSelection, preferredActi
   els.aiOriginalTextField.classList.toggle('hidden', insertMode);
   els.aiCompareGrid.classList.toggle('is-insert-mode', insertMode);
   els.aiResultText.value = '';
+  els.aiResultText.readOnly = false;
+  clearAIRewriteDiff();
   els.aiRewriteStatus.textContent = '';
   els.aiCloudConsent.checked = true;
   $('#replaceWithAIResult').disabled = true;
@@ -7202,6 +7259,7 @@ function closeAIRewrite() {
   if (els.aiRewriteDialog.classList.contains('hidden')) return;
   if ($('#generateAIRewrite').disabled) void window.quilliteMarkdown.cancelAIRewrite?.();
   aiRewriteRequest += 1;
+  stopAIRewriteStream();
   stopAIRewriteProgress();
   $('#generateAIRewrite').disabled = false;
   $('#generateAIRewrite').dataset.i18n = 'aiGenerate';
@@ -7227,7 +7285,21 @@ async function generateAIRewrite() {
     return;
   }
   const button = $('#generateAIRewrite');
-  const requestID = ++aiRewriteRequest;
+  const requestNumber = ++aiRewriteRequest;
+  const requestID = `rewrite-${Date.now()}-${requestNumber}`;
+  stopAIRewriteStream();
+  clearAIRewriteDiff();
+  aiRewriteStreaming = true;
+  els.aiResultText.value = '';
+  els.aiResultText.readOnly = true;
+  let streamedText = '';
+  aiRewriteStreamCleanup = window.quilliteMarkdown.onAIRewriteChunk?.(chunk => {
+    if (requestNumber !== aiRewriteRequest || chunk?.requestId !== requestID) return;
+    streamedText = chunk.replace ? (chunk.text || '') : streamedText + (chunk.text || '');
+    els.aiResultText.value = streamedText;
+    els.aiResultText.scrollTop = els.aiResultText.scrollHeight;
+    if (chunk.done) aiRewriteStreaming = false;
+  });
   button.disabled = true;
   button.dataset.i18n = 'aiGenerating';
   button.textContent = t('aiGenerating');
@@ -7239,21 +7311,25 @@ async function generateAIRewrite() {
       action,
       text: aiRewriteSelection.markdown,
       instruction,
-      targetLanguage: els.aiTargetLanguage.value
+      targetLanguage: els.aiTargetLanguage.value,
+      requestId: requestID
     });
-    if (requestID !== aiRewriteRequest) return;
+    if (requestNumber !== aiRewriteRequest) return;
     stopAIRewriteProgress();
     els.aiResultText.value = result?.text || '';
     if (!els.aiResultText.value.trim()) throw new Error(t('aiEmptyResult'));
+    aiRewriteStreaming = false;
+    rebuildAIRewriteDiff();
     els.aiRewriteStatus.textContent = '';
-    $('#replaceWithAIResult').disabled = false;
   } catch (error) {
-    if (requestID !== aiRewriteRequest) return;
+    if (requestNumber !== aiRewriteRequest) return;
     stopAIRewriteProgress();
     els.aiRewriteStatus.textContent = `${t('aiRequestFailed')}: ${aiErrorMessage(error)}`;
     void window.quilliteMarkdown.reportErrorLog?.('ai.edit', aiErrorMessage(error), '');
   } finally {
-    if (requestID === aiRewriteRequest) {
+    if (requestNumber === aiRewriteRequest) {
+      stopAIRewriteStream();
+      els.aiResultText.readOnly = false;
       button.disabled = false;
       button.dataset.i18n = 'aiGenerate';
       button.textContent = t('aiGenerate');
@@ -7267,7 +7343,9 @@ function replaceWithAIResult() {
     els.aiRewriteStatus.textContent = t('aiSelectionChanged');
     return;
   }
-  const replacement = els.aiResultText.value;
+  const replacement = changedAITextSegments(aiRewriteDiffSegments).length
+    ? applyAITextDiff(aiRewriteDiffSegments)
+    : els.aiResultText.value;
   if (!replacement.trim()) {
     els.aiRewriteStatus.textContent = t('aiEmptyResult');
     return;
@@ -8673,10 +8751,21 @@ $('#closeAIRewrite').addEventListener('click', closeAIRewrite);
 $('#cancelAIRewrite').addEventListener('click', closeAIRewrite);
 els.aiRewriteAction.addEventListener('change', updateAIRewriteControls);
 els.aiResultText.addEventListener('input', () => {
-  $('#replaceWithAIResult').disabled = !els.aiResultText.value.trim();
+  if (!aiRewriteStreaming) rebuildAIRewriteDiff();
 });
 $('#generateAIRewrite').addEventListener('click', generateAIRewrite);
 $('#replaceWithAIResult').addEventListener('click', replaceWithAIResult);
+$('#acceptAllAIDiff').addEventListener('click', () => setAllAIRewriteChanges(true));
+$('#rejectAllAIDiff').addEventListener('click', () => setAllAIRewriteChanges(false));
+els.aiDiffList.addEventListener('change', event => {
+  const checkbox = event.target.closest('[data-ai-diff-index]');
+  if (!checkbox) return;
+  const change = changedAITextSegments(aiRewriteDiffSegments)[Number(checkbox.dataset.aiDiffIndex)];
+  if (!change) return;
+  change.accepted = checkbox.checked;
+  checkbox.closest('.ai-diff-item')?.classList.toggle('accepted', change.accepted);
+  updateAIRewriteDiffSelection();
+});
 $('#openAISettingsFromRewrite').addEventListener('click', () => {
   els.aiRewriteDialog.classList.add('hidden');
   void openAISettings();

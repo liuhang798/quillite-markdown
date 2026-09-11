@@ -1609,6 +1609,22 @@ body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; 
 .ai-compare-grid.is-insert-mode { grid-template-columns: 1fr; }
 .ai-compare-grid label { min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
 .ai-compare-grid textarea { min-height: 160px; height: 100%; resize: none; line-height: 1.65; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-weight: 400; }
+.ai-diff-review { flex: 0 0 auto; max-height: min(300px, 34vh); display: flex; flex-direction: column; min-height: 0; margin-top: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.ai-diff-review > header { display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 62%, var(--paper)); }
+.ai-diff-review > header strong { color: var(--ink); font-size: 12px; }
+.ai-diff-review > header small { color: var(--muted); font-size: 10.5px; }
+.ai-diff-review > header .text-button { min-height: 28px; padding: 4px 7px; color: var(--accent-strong); font-size: 10.5px; }
+.ai-diff-list { min-height: 0; display: grid; align-content: start; gap: 8px; overflow: auto; padding: 9px; overscroll-behavior: contain; }
+.ai-diff-item { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: var(--paper-strong); }
+.ai-diff-item.accepted { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); }
+.ai-diff-item > label { display: flex; align-items: center; gap: 8px; padding: 8px 10px; color: var(--ink); font-size: 11px; font-weight: 650; cursor: pointer; }
+.ai-diff-item > label input { width: 15px; height: 15px; accent-color: var(--accent-strong); }
+.ai-diff-item > div { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.ai-diff-item section { min-width: 0; padding: 8px 10px 10px; }
+.ai-diff-item section + section { border-left: 1px solid var(--line); }
+.ai-diff-item small { display: block; margin-bottom: 5px; color: var(--faint); font-size: 9.5px; font-weight: 700; }
+.ai-diff-item pre { max-height: 110px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); font: 400 11px/1.55 "Cascadia Code", Consolas, monospace; }
+.ai-diff-item section:last-child pre { color: var(--accent-strong); }
 .ai-rewrite-progress { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 12px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); border-radius: 11px; background: color-mix(in srgb, var(--accent-soft) 28%, var(--paper)); }
 .ai-rewrite-spinner { width: 30px; height: 30px; border: 3px solid color-mix(in srgb, var(--accent) 18%, transparent); border-top-color: var(--accent-strong); border-radius: 50%; animation: image-upload-spin .8s linear infinite; }
 .ai-rewrite-progress-copy { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 9px; row-gap: 7px; text-align: left; }
@@ -1682,6 +1698,11 @@ body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; 
   .ai-review-toolbar > span { display: none; }
   .ai-review-comparison { grid-template-columns: 1fr; }
   .ai-review-comparison section + section { border-left: 0; border-top: 1px solid var(--line); }
+  .ai-diff-review > header { grid-template-columns: 1fr auto auto; }
+  .ai-diff-review > header small { grid-column: 1 / -1; grid-row: 2; }
+  .ai-diff-review > header > span { display: none; }
+  .ai-diff-item > div { grid-template-columns: 1fr; }
+  .ai-diff-item section + section { border-left: 0; border-top: 1px solid var(--line); }
 }
 
 @media (prefers-reduced-motion: reduce) {

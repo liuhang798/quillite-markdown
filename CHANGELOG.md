@@ -12,6 +12,7 @@ All notable changes to Quillite Markdown are documented here.
 - AI 模型选择支持在地址和 API Key 输入完整后自动加载，无需先保存 Key；草稿 Key 只用于当次查询，不会落盘。阿里云百炼业务空间兼容地址会自动转换为其 `/api/v1/models` 接口并解析专用响应格式，查询完成后由用户选择模型，不自动指定默认项。
 - “测试连接”升级为分步骤连接诊断，分别展示服务地址、API Key、模型列表和所选模型实际调用结果，并针对鉴权失败与地址错误提供可理解的提示。诊断可直接使用尚未保存的 Key，且不会额外持久化凭据。
 - 模型列表成功查询后会按服务与地址缓存七天，接口临时不可用时显示带时间标记的缓存候选；关闭正在生成的 AI 编辑或 AI 检查会立即取消底层网络请求，不再只关闭界面后继续占用连接。
+- AI 编辑改为兼容 OpenAI SSE 的实时流式输出，生成内容会逐段显示，服务完成或用户取消时立即结束连接；AI 结果新增逐项差异审阅，可分别接受修改或保留原文，再一次性安全写回当前选区。
 
 ### English
 
@@ -21,6 +22,7 @@ All notable changes to Quillite Markdown are documented here.
 - Model discovery now starts automatically once the endpoint and API key are entered, without saving the key first. Draft keys are used only for the current request and are never persisted. Alibaba Cloud workspace-compatible URLs are translated to the dedicated `/api/v1/models` endpoint and its response format is parsed; users still choose a model after discovery rather than receiving an assumed default.
 - Test Connection is now a staged connection diagnostic covering the service endpoint, API key, model list, and a real request to the selected model, with clearer authentication and endpoint guidance. Diagnostics can use an unsaved draft key without persisting it.
 - Successful model lists are cached for seven days per provider and endpoint, with a visible cache timestamp when live discovery is unavailable. Closing an active AI Edit or AI Check now cancels the underlying network request instead of merely hiding the dialog.
+- AI Edit now streams OpenAI-compatible SSE output into the result pane as it arrives and ends promptly on provider completion or cancellation. A per-change diff review lets users accept individual revisions or retain the original fragments before applying once to the current selection.
 
 ## [2.7.2] - 2026-09-08
 

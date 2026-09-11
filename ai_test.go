@@ -673,3 +673,39 @@ func TestOpenAICompatibleAcceptsSingleEventAndBlockContent(t *testing.T) {
 		t.Fatalf("unexpected block content: %q", result)
 	}
 }
+
+func TestOpenAICompatibleStreamingCombinesSSEChunks(t *testing.T) {
+	app, _ := aiTestApp(t)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/chat/completions" {
+			t.Errorf("unexpected request path: %s", request.URL.Path)
+		}
+		if request.Header.Get("Accept") != "text/event-stream" || request.Header.Get("Authorization") != "Bearer stream-key" {
+			t.Errorf("unexpected streaming headers: %#v", request.Header)
+		}
+		var payload struct {
+			Stream bool `json:"stream"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if !payload.Stream {
+			t.Error("streaming request did not enable stream=true")
+		}
+		response.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		_, _ = response.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"第一段\"}}]}\n\n"))
+		_, _ = response.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":[{\"type\":\"text\",\"text\":\"第二段\"}]}}]}\n\n"))
+		_, _ = response.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := app.callOpenAICompatibleStreamWithKey(ctx, server.URL, "stream-model", "stream-key", "request-1", aiSystemPrompt, "润色")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "第一段第二段" {
+		t.Fatalf("unexpected streaming result: %q", result)
+	}
+}

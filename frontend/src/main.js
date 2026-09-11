@@ -155,6 +155,7 @@ window.quilliteMarkdown = {
     : resolved({ suggestions: input?.text?.includes('重复重复') ? [{ id: 'suggestion-1', category: 'spelling', severity: 'medium', original: '重复重复', replacement: '重复', reason: '删除重复词', occurrence: 1 }] : [] }),
   cancelAIRewrite: () => desktopRuntime ? Backend.CancelAIRewrite() : resolved(),
   cancelAIDocumentReview: () => desktopRuntime ? Backend.CancelAIDocumentReview() : resolved(),
+  onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
   getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.2', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),

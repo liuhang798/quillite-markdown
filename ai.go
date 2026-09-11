@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/zalando/go-keyring"
 )
 
@@ -126,10 +128,18 @@ type AIRewriteRequest struct {
 	Text           string `json:"text"`
 	Instruction    string `json:"instruction"`
 	TargetLanguage string `json:"targetLanguage"`
+	RequestID      string `json:"requestId,omitempty"`
 }
 
 type AIRewriteResponse struct {
 	Text string `json:"text"`
+}
+
+type AIRewriteChunk struct {
+	RequestID string `json:"requestId"`
+	Text      string `json:"text,omitempty"`
+	Replace   bool   `json:"replace,omitempty"`
+	Done      bool   `json:"done,omitempty"`
 }
 
 type AIDocumentReviewRequest struct {
@@ -875,7 +885,12 @@ func (a *App) RewriteWithAI(input AIRewriteRequest) (AIRewriteResponse, error) {
 	}
 	ctx, finish := a.beginAIRewriteRequest()
 	defer finish()
-	output, err := a.callOpenAICompatible(ctx, settings.Provider, settings.BaseURL, model, prompt)
+	var output string
+	if strings.TrimSpace(input.RequestID) != "" {
+		output, err = a.callOpenAICompatibleStream(ctx, settings.Provider, settings.BaseURL, model, input.RequestID, prompt)
+	} else {
+		output, err = a.callOpenAICompatible(ctx, settings.Provider, settings.BaseURL, model, prompt)
+	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return AIRewriteResponse{}, errors.New("AI request cancelled")
@@ -886,6 +901,7 @@ func (a *App) RewriteWithAI(input AIRewriteRequest) (AIRewriteResponse, error) {
 	if output == "" {
 		return AIRewriteResponse{}, errors.New("the AI service returned an empty result")
 	}
+	a.emitAIRewriteChunk(AIRewriteChunk{RequestID: input.RequestID, Text: output, Replace: true, Done: true})
 	return AIRewriteResponse{Text: output}, nil
 }
 
@@ -1101,6 +1117,141 @@ func supportedAITargetLanguage(value string) (string, error) {
 
 func (a *App) callOpenAICompatible(ctx context.Context, provider, baseURL, model, prompt string) (string, error) {
 	return a.callOpenAICompatibleWithSystem(ctx, provider, baseURL, model, aiSystemPrompt, prompt)
+}
+
+func (a *App) emitAIRewriteChunk(chunk AIRewriteChunk) {
+	if strings.TrimSpace(chunk.RequestID) == "" {
+		return
+	}
+	a.mu.RLock()
+	ctx := a.ctx
+	a.mu.RUnlock()
+	if ctx != nil {
+		wailsruntime.EventsEmit(ctx, "ai:rewrite-chunk", chunk)
+	}
+}
+
+func (a *App) callOpenAICompatibleStream(ctx context.Context, provider, baseURL, model, requestID, prompt string) (string, error) {
+	key, err := a.readAIAPIKey(provider)
+	if err != nil {
+		return "", err
+	}
+	if key == "" {
+		return "", errors.New("API key is required for this AI provider")
+	}
+	return a.callOpenAICompatibleStreamWithKey(ctx, baseURL, model, key, requestID, aiSystemPrompt, prompt)
+}
+
+func (a *App) callOpenAICompatibleStreamWithKey(ctx context.Context, baseURL, model, key, requestID, systemPrompt, prompt string) (string, error) {
+	payload := map[string]any{
+		"model":    model,
+		"messages": []map[string]string{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}},
+		"stream":   true,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	response, err := aiHTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("AI request failed: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", aiHTTPStatusError(response)
+	}
+
+	if !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+		return decodeAIChatResponse(response.Body)
+	}
+
+	var combined strings.Builder
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 64*1024), 8<<20)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			break
+		}
+		if data == "" {
+			continue
+		}
+		var event struct {
+			Choices []struct {
+				Delta struct {
+					Content json.RawMessage `json:"content"`
+				} `json:"delta"`
+				Message struct {
+					Content json.RawMessage `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(data), &event) != nil || len(event.Choices) == 0 {
+			continue
+		}
+		raw := event.Choices[0].Delta.Content
+		if len(raw) == 0 {
+			raw = event.Choices[0].Message.Content
+		}
+		part, decodeErr := decodeAIMessageContent(raw)
+		if decodeErr != nil || part == "" {
+			continue
+		}
+		combined.WriteString(part)
+		a.emitAIRewriteChunk(AIRewriteChunk{RequestID: requestID, Text: part})
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read AI response stream: %w", err)
+	}
+	if strings.TrimSpace(combined.String()) == "" {
+		return "", errors.New("the AI service returned an empty message")
+	}
+	return combined.String(), nil
+}
+
+func decodeAIChatResponse(reader io.Reader) (string, error) {
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content          json.RawMessage `json:"content"`
+				ReasoningContent string          `json:"reasoning_content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, 8<<20))
+	if err != nil {
+		return "", fmt.Errorf("read AI response: %w", err)
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return "", fmt.Errorf("the AI service returned an unreadable response: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", errors.New("the AI service returned no choices")
+	}
+	content, err := decodeAIMessageContent(result.Choices[0].Message.Content)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(content) == "" {
+		content = result.Choices[0].Message.ReasoningContent
+	}
+	if strings.TrimSpace(content) == "" {
+		return "", errors.New("the AI service returned an empty message")
+	}
+	return content, nil
 }
 
 func (a *App) callOpenAICompatibleWithSystem(ctx context.Context, provider, baseURL, model, systemPrompt, prompt string) (string, error) {
