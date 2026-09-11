@@ -6,16 +6,13 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
-- Windows 启动时会在联网检查更新前独立核验当前 `uninstall.exe` 的安全卸载标识；旧版、缺失或无法读取的卸载程序会显示“重大缺陷”安全警告，引导备份重要文件并从官网下载安装完整版本。常规更新弹框也会强制改用官网完整安装包，前后端同时禁止热更新；即使旧客户端已先替换主程序，新版本也会在当前版本相同的情况下继续提醒修复安装组件。
-
 ### English
-
-- Windows now independently verifies the safe-uninstall marker in the installed `uninstall.exe` at startup before any network update check. Legacy, missing, or unreadable uninstallers trigger a critical-defect safety warning that recommends backing up important files and downloading the full installer from the website. The normal update dialog also requires the full installer, with in-app updating blocked in both the UI and backend; the repair warning remains active even when a legacy client has already replaced only the application binary and current/latest versions are equal.
 
 ## [2.7.3] - 2026-09-11
 
 ### 简体中文
 
+- Windows 启动时会在联网检查更新前独立核验当前 `uninstall.exe` 的安全卸载标识；旧版、缺失或无法读取的卸载程序会显示“重大缺陷”安全警告，引导备份重要文件并从官网下载安装完整版本。常规更新弹框也会强制改用官网完整安装包，前后端同时禁止热更新；即使旧客户端已先替换主程序，新版本也会在当前版本相同的情况下继续提醒修复安装组件。
 - 修复 Windows 自定义安装路径可能被旧的 C 盘安装记录覆盖，以及程序文件与用户文件混放、卸载存在递归删除整个目录风险的问题。自定义路径现通过参数与 Unicode 安全的进程环境双通道传入，完成前核验目标盘程序及注册表位置；所选文件夹始终作为父目录，并在其中新建“轻阅 Markdown”专属子目录。跨盘迁移会清理旧位置的程序文件但保留文档，卸载也仅删除本软件拥有的程序文件。
 - 未保存文档退出确认改为应用内三操作弹框，新增“保存”主按钮，并保留“不保存”和“取消”。保存会等待自动保存结束并确认最新内容落盘后再退出；保存失败或取消另存为时继续保留窗口和编辑内容。
 - AI 生成、编辑、校对、续写、翻译、精简、扩写和自定义入口均提供与任务匹配的提示词输入；续写与扩写可选择填写目标字数，精简可选择填写保留比例或目标篇幅，留空时不限制。翻译要求改为紧凑的单行输入框，与目标语言和生成按钮同高对齐。修复目标语言列表展示 30 种、后端却只接受 4 种的问题，现已逐项支持全部可见语言。
@@ -42,6 +39,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Windows now independently verifies the safe-uninstall marker in the installed `uninstall.exe` at startup before any network update check. Legacy, missing, or unreadable uninstallers trigger a critical-defect safety warning that recommends backing up important files and downloading the full installer from the website. The normal update dialog also requires the full installer, with in-app updating blocked in both the UI and backend; the repair warning remains active even when a legacy client has already replaced only the application binary and current/latest versions are equal.
 - Fixed a previous C-drive install record overriding a Windows custom destination, as well as application files mixing with user data and recursive destination deletion during uninstall. The destination now reaches NSIS through both an argument and a Unicode-safe process environment variable, and completion verifies the executable and registry location. Every custom-selected folder becomes a parent with a dedicated Quillite Markdown child directory. Cross-drive moves clean only old program files, while documents remain preserved during migration and uninstall.
 - Replaced the limited native unsaved-changes warning with an in-app Save / Don't Save / Cancel dialog. Save waits for any autosave, verifies the latest content is written, and quits only after success; failed or cancelled saves keep the document open.
 - Added task-specific prompts to AI Generate, Edit, Proofread, Continue, Translate, Condense, Expand, and Custom. Continue and Expand optionally accept a target length, while Condense optionally accepts a retention ratio or target size; leaving it blank applies no limit. Translation instructions now use a compact single-line field aligned in height with the target-language selector and Generate button. Fixed the backend to support all 30 visible translation targets instead of accepting only four.
