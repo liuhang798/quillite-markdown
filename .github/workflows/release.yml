@@ -24,11 +24,38 @@ env:
   RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
 
 jobs:
+  verify:
+    name: Safety checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: go test ./...
+      - run: go vet ./...
   windows:
+    needs: verify
     name: Windows x64
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
@@ -71,21 +98,7 @@ jobs:
             }
           }
 
-          # 2) fall back: portable zip via curl.exe (more reliable than Invoke-WebRequest)
-          if (-not $existing) {
-            $runId = [Guid]::NewGuid().ToString('N')
-            $zip = Join-Path $env:RUNNER_TEMP "nsis-3.12-$runId.zip"
-            Write-Host 'Downloading NSIS 3.12 portable zip via curl...'
-            curl.exe -L --retry 3 --retry-delay 5 -sS -o $zip "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip"
-            if ($LASTEXITCODE -ne 0) { throw "NSIS zip download failed (curl exit $LASTEXITCODE)" }
-            $extract = Join-Path $env:RUNNER_TEMP "nsis-extract-$runId"
-            Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
-            $verDir = Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1
-            if (-not $verDir) { throw 'NSIS zip did not extract as expected' }
-            $nsisDir = Join-Path $env:RUNNER_TEMP "nsis-portable-$runId"
-            Move-Item -LiteralPath $verDir.FullName -Destination $nsisDir
-            $existing = Join-Path $nsisDir 'makensis.exe'
-          }
+          # No unverified download fallback: fail closed if the package manager fails.
 
           if (-not $existing -or -not (Test-Path -LiteralPath $existing)) {
             throw 'makensis.exe was not found after installing NSIS'
@@ -150,10 +163,13 @@ jobs:
           if-no-files-found: error
 
   macos:
+    needs: verify
     name: macOS Universal
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
@@ -234,10 +250,13 @@ jobs:
           if-no-files-found: error
 
   linux:
+    needs: verify
     name: Linux x64
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
@@ -297,6 +316,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/download-artifact@v4
         with:
           path: release-assets

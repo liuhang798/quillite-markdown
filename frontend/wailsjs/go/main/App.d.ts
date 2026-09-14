@@ -116,6 +116,8 @@ export function SaveExportImageSlices(arg1:string,arg2:string,arg3:string,arg4:A
 
 export function SaveFile(arg1:string,arg2:string):Promise<main.Document>;
 
+export function SaveFileWithRevision(arg1:string,arg2:string,arg3:string):Promise<main.Document>;
+
 export function SavePastedImage(arg1:string,arg2:string):Promise<string>;
 
 export function SaveRecoverySnapshot(arg1:main.RecoverySnapshotInput):Promise<void>;

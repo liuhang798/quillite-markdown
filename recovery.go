@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxRecoverySnapshotSize = 24 * 1024 * 1024
+	maxRecoverySnapshotSize = maxSupportedDocumentBytes
 	maxRecoveryMetadataSize = 64 * 1024
 	recoverySnapshotMagic   = "QMR1\n"
 )

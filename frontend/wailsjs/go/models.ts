@@ -222,6 +222,7 @@ export namespace main {
 	    size: number;
 	    replacedPath?: string;
 	    readOnly?: boolean;
+	    revision?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
@@ -237,6 +238,7 @@ export namespace main {
 	        this.size = source["size"];
 	        this.replacedPath = source["replacedPath"];
 	        this.readOnly = source["readOnly"];
+	        this.revision = source["revision"];
 	    }
 	}
 	export class DocumentVersion {

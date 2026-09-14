@@ -73,7 +73,7 @@ If a platform build fails after the tag and Release have already been created:
 
 1. Fix and push the workflow or source changes to `main`.
 2. Open **Actions → Build and Release → Run workflow**.
-3. Keep the branch set to `main` and enter the existing tag, such as `v2.7.3`.
+3. The workflow checks out the exact release tag, not the dispatch branch. If rebuilding changed source under the same version, explicitly update that tag to the tested commit first (preserve its previous object ID and use a lease-protected push), then keep the dispatch branch set to `main` and enter the existing tag, such as `v2.7.4`.
 4. Run the workflow. Successful assets are uploaded to the existing Release and files with the same names are replaced.
 
 The manual tag must exactly match the version in `wails.json`.

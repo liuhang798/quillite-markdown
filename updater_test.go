@@ -11,6 +11,19 @@ import (
 	"testing"
 )
 
+func TestMacUpdaterPreservesPreviousBundleForRecovery(t *testing.T) {
+	script, err := os.ReadFile("updater_darwin.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(script), `rm -rf -- "$backup"`) || strings.Contains(string(script), `rm -rf -- "$stage_root"`) {
+		t.Fatal("macOS updater must not recursively remove the previous application bundle")
+	}
+	if !strings.Contains(string(script), `Previous application preserved for recovery at $backup`) {
+		t.Fatal("macOS updater must retain and report the previous application bundle")
+	}
+}
+
 func TestPickUpdateAsset(t *testing.T) {
 	assets := []updateReleaseAsset{
 		{Name: "quillite-markdown-2.3.11-linux-amd64.deb"},

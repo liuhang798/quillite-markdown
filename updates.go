@@ -125,7 +125,7 @@ func (a *App) fetchOfficialLatestRelease() (*updateRelease, error) {
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "QuilliteMarkdown/"+appVersion)
-	response, err := (&http.Client{Timeout: 8 * time.Second}).Do(request)
+	response, err := officialHTTPClient(8 * time.Second).Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("check official release catalog: %w", err)
 	}
@@ -194,7 +194,7 @@ func isOfficialWebsiteURL(value string) bool {
 		return false
 	}
 	host := strings.ToLower(parsed.Hostname())
-	return host == "qm.ssssa.cn"
+	return host == "qm.ssssa.cn" && parsed.User == nil && (parsed.Port() == "" || parsed.Port() == "443")
 }
 
 // CheckForUpdates checks the latest stable official release. The frontend calls

@@ -158,6 +158,9 @@ FunctionEnd
 
 Function un.VerifyInstallOwnership
     StrCpy $InstallOwned "0"
+    # The marker alone is not authority to remove a same-named user file.
+    # Require the installed executable and this exact uninstall registration.
+    IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" 0 verifyInstallOwnershipDone
     IfFileExists "$INSTDIR\${INSTALL_MARKER}" 0 verifyInstallOwnershipDone
     ClearErrors
     FileOpen $0 "$INSTDIR\${INSTALL_MARKER}" r
@@ -165,8 +168,51 @@ Function un.VerifyInstallOwnership
     FileRead $0 $1
     FileClose $0
     StrCmp $1 "${INSTALL_MARKER_CONTENT}$\r$\n" 0 verifyInstallOwnershipDone
+    SetRegView 64
+    ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
+    StrCmp $1 "$INSTDIR" 0 verifyInstallOwnershipDone
+    ReadRegStr $1 HKCU "${UNINST_KEY}" "UninstallString"
+    StrCmp $1 "$\"$INSTDIR\uninstall.exe$\"" 0 verifyInstallOwnershipDone
+    StrCmp $EXEPATH "$INSTDIR\uninstall.exe" 0 verifyInstallOwnershipDone
     StrCpy $InstallOwned "1"
     verifyInstallOwnershipDone:
+FunctionEnd
+
+# The launcher validates paths, but the bundled NSIS core can also be run
+# directly. Never overwrite reserved filenames in a directory whose product
+# ownership cannot be verified from both the marker and uninstall registry.
+Function VerifyInstallDestination
+    IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" installDestinationReserved
+    IfFileExists "$INSTDIR\uninstall.exe" installDestinationReserved
+    IfFileExists "$INSTDIR\${INSTALL_MARKER}" installDestinationReserved installDestinationDone
+    installDestinationReserved:
+        IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" 0 installDestinationRejected
+        IfFileExists "$INSTDIR\${INSTALL_MARKER}" 0 installDestinationRejected
+        ClearErrors
+        FileOpen $0 "$INSTDIR\${INSTALL_MARKER}" r
+        IfErrors installDestinationRejected
+        FileRead $0 $1
+        FileClose $0
+        StrCmp $1 "${INSTALL_MARKER_CONTENT}$\r$\n" installDestinationMarkerOwned
+        # The first 2.7.3 safety build used a versioned marker. Permit only
+        # that known shape and still require the matching uninstall registry.
+        StrCmp $1 "Quillite Markdown 2.7.3$\r$\n" installDestinationMarkerOwned
+        StrCmp $1 "Quillite Markdown ${INFO_PRODUCTVERSION}$\r$\n" installDestinationMarkerOwned installDestinationRejected
+    installDestinationMarkerOwned:
+        SetRegView 64
+        ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
+        StrCmp $1 "$INSTDIR" installDestinationDone
+        ReadRegStr $1 HKCU "${LEGACY_UNINST_KEY}" "InstallLocation"
+        StrCmp $1 "$INSTDIR" installDestinationDone
+    installDestinationRejected:
+        IfSilent 0 installDestinationRejectedMessage
+        SetErrorLevel 65
+        Quit
+    installDestinationRejectedMessage:
+        MessageBox MB_ICONSTOP "安装目录中已有无法验证归属的程序文件。为保护该目录中的文件，请选择其他位置。"
+        SetErrorLevel 65
+        Quit
+    installDestinationDone:
 FunctionEnd
 
 # A registry value is only a location hint, never deletion or overwrite
@@ -197,6 +243,7 @@ Function ResolvePreviousInstallDir
 		FileClose $1
 		StrCmp $2 "${INSTALL_MARKER_CONTENT}$\r$\n" previousInstallOwned
 		# Repair the first 2.7.3 safety build, which used a versioned marker.
+		StrCmp $2 "Quillite Markdown 2.7.3$\r$\n" previousInstallOwned
 		StrCmp $2 "Quillite Markdown ${INFO_PRODUCTVERSION}$\r$\n" previousInstallOwned previousInstallDone
 
 	previousInstallOwned:
@@ -316,6 +363,7 @@ Section
     !insertmacro wails.setShellContext
 
     !insertmacro ExitIfExternalCancelled 01
+    Call VerifyInstallDestination
     Call EnsureApplicationClosed
     Call EnsurePreviousApplicationClosed
     !insertmacro ExitIfExternalCancelled 02
@@ -360,25 +408,14 @@ Section
     FileClose $0
     installerLanguageDone:
 
-    # 2.2.2 could leave a public shortcut because its CI rebuild omitted the
-    # user execution-level define. Try to remove both locations. If Windows
-    # does not permit deleting the public link, keep it and do not create a
-    # second per-user link.
+    # A shortcut's filename does not prove its target or ownership. Preserve
+    # any existing shortcut, including legacy and public links.
     !insertmacro ExitIfExternalCancelled 06
-    SetShellVarContext current
-    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
-    Delete "$SMPROGRAMS\${LEGACY_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${LEGACY_PRODUCTNAME}.lnk"
     SetShellVarContext all
-    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
-    Delete "$SMPROGRAMS\${LEGACY_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${LEGACY_PRODUCTNAME}.lnk"
-
     IfFileExists "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" publicStartMenuRemains createUserStartMenu
     createUserStartMenu:
         SetShellVarContext current
+        IfFileExists "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" publicStartMenuRemains
         CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
     publicStartMenuRemains:
 
@@ -386,6 +423,7 @@ Section
     IfFileExists "$DESKTOP\${INFO_PRODUCTNAME}.lnk" publicDesktopRemains createUserDesktop
     createUserDesktop:
         SetShellVarContext current
+        IfFileExists "$DESKTOP\${INFO_PRODUCTNAME}.lnk" publicDesktopRemains
         CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\${PRODUCT_EXECUTABLE}" 0
     publicDesktopRemains:
         SetShellVarContext current
@@ -423,23 +461,13 @@ Section "uninstall"
     # associations without proof that it is running for an owned install.
     Call un.VerifyInstallOwnership
     StrCmp $InstallOwned "1" uninstallOwnershipConfirmed
-    SetRegView 64
-    DeleteRegKey HKCU "${UNINST_KEY}"
-    Goto uninstallContentDone
+    SetErrorLevel 65
+    Quit
 
     uninstallOwnershipConfirmed:
 
-    SetShellVarContext current
-    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
-    Delete "$SMPROGRAMS\${LEGACY_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${LEGACY_PRODUCTNAME}.lnk"
-    SetShellVarContext all
-    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
-    Delete "$SMPROGRAMS\${LEGACY_PRODUCTNAME}.lnk"
-    Delete "$DESKTOP\${LEGACY_PRODUCTNAME}.lnk"
-    SetShellVarContext current
+    # Shortcut targets cannot be verified here, so uninstallation leaves them
+    # in place rather than deleting a potentially user-created link.
 
     !insertmacro UnassociateMarkdownFiles
     !insertmacro wails.unassociateCustomProtocols
@@ -452,5 +480,4 @@ Section "uninstall"
     Delete /REBOOTOK "$INSTDIR\${INSTALL_MARKER}"
     RMDir "$INSTDIR"
 
-    uninstallContentDone:
 SectionEnd

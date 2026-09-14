@@ -64,7 +64,7 @@ func (a *App) writeMacSecurityBookmarkStoreUnlocked(store macSecurityBookmarkSto
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return writeFileAtomically(path, data)
 }
 
 func macSecurityBookmarkKey(path string) string {
@@ -199,7 +199,7 @@ func (a *App) withMacSecurityScopedPath(requestedPath string, operation func(str
 
 func (a *App) writeDocumentWithMacBookmark(filePath string, content []byte) (string, bool, error) {
 	return a.withMacSecurityScopedPath(filePath, func(accessiblePath string) error {
-		return os.WriteFile(accessiblePath, content, 0o644)
+		return writeDocumentAtomically(accessiblePath, content)
 	})
 }
 
@@ -208,7 +208,7 @@ func (a *App) readDocumentWithMacBookmark(filePath string) ([]byte, os.FileInfo,
 	var info os.FileInfo
 	resolved, found, err := a.withMacSecurityScopedPath(filePath, func(accessiblePath string) error {
 		var readErr error
-		data, readErr = os.ReadFile(accessiblePath)
+		data, readErr = readDocumentBytes(accessiblePath)
 		if readErr != nil {
 			return readErr
 		}

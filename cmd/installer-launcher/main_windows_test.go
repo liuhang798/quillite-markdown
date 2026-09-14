@@ -39,24 +39,46 @@ func TestTwoThirdsWindowMapsClicksBackToDesignGrid(t *testing.T) {
 }
 
 func TestClickableInstallerControlsUseTheHandCursor(t *testing.T) {
-	if !installerClickablePoint(pageWelcome, 320, 350) {
+	if !installerClickablePoint(pageWelcome, false, 320, 350) {
 		t.Fatal("welcome primary action should be clickable")
 	}
-	if !installerClickablePoint(pageWelcome, 70, 401) {
+	if !installerClickablePoint(pageWelcome, false, 70, 401) {
 		t.Fatal("custom installation action should be clickable")
 	}
-	if !installerClickablePoint(pageComplete, 320, 350) {
+	if !installerClickablePoint(pageConfirm, false, 320, 350) || !installerClickablePoint(pageConfirm, false, 70, 401) || !installerClickablePoint(pageConfirm, false, 113, 401) {
+		t.Fatal("confirmation, change-location, and back actions should be clickable")
+	}
+	if !installerClickablePoint(pageConfirm, true, 150, 401) || installerClickablePoint(pageConfirm, false, 275, 401) {
+		t.Fatal("English back must be clickable, while the old distant back area must not be")
+	}
+	if !installerClickablePoint(pageComplete, false, 320, 350) {
 		t.Fatal("completion action should be clickable")
 	}
-	if !installerClickablePoint(pageInstalling, 608, 32) {
+	if !installerClickablePoint(pageInstalling, false, 608, 32) {
 		t.Fatal("installing close action should be clickable")
 	}
-	if installerClickablePoint(pageInstalling, 320, 350) {
+	if installerClickablePoint(pageInstalling, false, 320, 350) {
 		t.Fatal("installing status button should not claim to be clickable")
 	}
-	for _, page := range []int{pageWelcome, pageInstalling, pageComplete, pageFailed} {
-		if !installerClickablePoint(page, 560, 401) {
+	for _, page := range []int{pageWelcome, pageConfirm, pageInstalling, pageComplete, pageFailed} {
+		if !installerClickablePoint(page, false, 560, 401) {
 			t.Fatalf("language action should be clickable on page %d", page)
+		}
+	}
+}
+
+func TestBackFollowsChangeLocationWithoutOverlapping(t *testing.T) {
+	for _, english := range []bool{false, true} {
+		change, back := confirmFooterRects(english)
+		if back.left <= change.right || back.left-change.right > 8 || change.top != back.top {
+			t.Fatalf("footer actions must be adjacent, not overlapping: change=%+v back=%+v", change, back)
+		}
+		changeX, backX := (change.left+change.right)/2, (back.left+back.right)/2
+		if !inside(change, changeX, 401) || inside(back, changeX, 401) {
+			t.Fatalf("change-location click must not activate Back: english=%t", english)
+		}
+		if !inside(back, backX, 401) || inside(change, backX, 401) {
+			t.Fatalf("Back click must not activate change-location: english=%t", english)
 		}
 	}
 }
@@ -88,9 +110,23 @@ func TestPreferredInstallDirectoryUsesRecordedUpgradeLocation(t *testing.T) {
 	if got := preferredInstallDirectory(local, recorded); got != recorded {
 		t.Fatalf("preferred install directory = %q, want %q", got, recorded)
 	}
+	if got := preferredInstallDirectory(local, filepath.Join(local, "unverified"), recorded); got != recorded {
+		t.Fatalf("owned previous install must be found after an unverified registry hint: got %q, want %q", got, recorded)
+	}
 	wantDefault := filepath.Join(local, "Programs", installProductDirectoryName)
 	if got := preferredInstallDirectory(local, ""); got != wantDefault {
 		t.Fatalf("default install directory = %q, want %q", got, wantDefault)
+	}
+}
+
+func TestInstallerPathLayoutUsesCompactCardForOrdinaryDestination(t *testing.T) {
+	shortBox, _, shortFlags, _ := installerPathLayout(`D:\MD工具\轻阅 Markdown`)
+	longBox, _, longFlags, _ := installerPathLayout(`D:\` + strings.Repeat("long-install-folder\\", 12) + installProductDirectoryName)
+	if shortBox.bottom-shortBox.top >= longBox.bottom-longBox.top {
+		t.Fatal("ordinary installation path should use a shorter confirmation card")
+	}
+	if shortFlags&dtSingleLine == 0 || longFlags&dtWordBreak == 0 {
+		t.Fatal("short paths should be single-line; long paths should wrap")
 	}
 }
 
@@ -213,6 +249,90 @@ func TestCustomInstallDirectoryAlwaysCreatesProductChild(t *testing.T) {
 	}
 }
 
+func TestCustomInstallPickerStartsAtVerifiedPreviousInstall(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "Documents")
+	destination := filepath.Join(parent, installProductDirectoryName)
+	if got := customPickerInitialDirectory(destination); got != parent {
+		t.Fatalf("new install picker initial directory = %q, want parent %q", got, parent)
+	}
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destination, installMarkerName), []byte(installMarkerContent+"\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destination, installExecutableName), []byte("owned"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := customPickerInitialDirectory(destination); got != destination {
+		t.Fatalf("repeat install picker initial directory = %q, want previous install %q", got, destination)
+	}
+	if got, err := resolveCustomInstallSelection(destination); err != nil || got != destination {
+		t.Fatalf("confirming previous install directory = %q, %v; want %q", got, err, destination)
+	}
+	if got, err := resolveCustomInstallSelection(parent); err != nil || got != destination {
+		t.Fatalf("selecting its parent = %q, %v; want %q", got, err, destination)
+	}
+	if got := customPickerInitialDirectory(parent); got != parent {
+		t.Fatalf("non-product directory should stay unchanged: %q", got)
+	}
+}
+
+func TestCustomSelectionDoesNotTrustUnownedProductDirectory(t *testing.T) {
+	selected := filepath.Join(t.TempDir(), installProductDirectoryName)
+	if err := os.MkdirAll(selected, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(selected, installExecutableName), []byte("unknown"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := customPickerInitialDirectory(selected); got != filepath.Dir(selected) {
+		t.Fatalf("unowned directory must not be used as prior install: %q", got)
+	}
+	if got, err := resolveCustomInstallSelection(selected); err != nil || got != filepath.Join(selected, installProductDirectoryName) {
+		t.Fatalf("unowned folder must remain a parent, got %q, %v", got, err)
+	}
+}
+
+func TestInstallSelectionWaitsForExplicitConfirmation(t *testing.T) {
+	view.Lock()
+	previous := installView{page: view.page, progress: view.progress, errorTextZH: view.errorTextZH, errorTextEN: view.errorTextEN, installDir: view.installDir, animationFrame: view.animationFrame, english: view.english, started: view.started}
+	view.page = pageWelcome
+	view.started = false
+	view.Unlock()
+	t.Cleanup(func() {
+		view.Lock()
+		view.page, view.progress = previous.page, previous.progress
+		view.errorTextZH, view.errorTextEN = previous.errorTextZH, previous.errorTextEN
+		view.installDir, view.animationFrame = previous.installDir, previous.animationFrame
+		view.english, view.started = previous.english, previous.started
+		view.Unlock()
+	})
+
+	destination := filepath.Join(t.TempDir(), installProductDirectoryName)
+	reviewInstallDirectory(destination)
+	view.RLock()
+	page, started, installDir := view.page, view.started, view.installDir
+	view.RUnlock()
+	if page != pageConfirm || started || installDir != destination {
+		t.Fatalf("selection must stop on the destination review screen: page=%d started=%t dir=%q", page, started, installDir)
+	}
+	returnToInstallerWelcome()
+	view.RLock()
+	page, started, installDir = view.page, view.started, view.installDir
+	view.RUnlock()
+	if page != pageWelcome || installDir != destination || started {
+		t.Fatalf("back must keep the selected destination without starting installation: page=%d started=%t dir=%q", page, started, installDir)
+	}
+	beginInstall()
+	view.RLock()
+	page, started = view.page, view.started
+	view.RUnlock()
+	if page != pageWelcome || started {
+		t.Fatal("installation must not start before the confirmation screen")
+	}
+}
+
 func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T) {
 	scriptPath := filepath.Join("..", "..", "build", "windows", "installer", "project.nsi")
 	script, err := os.ReadFile(scriptPath)
@@ -255,6 +375,34 @@ func TestWindowsUninstallerNeverRecursivelyDeletesInstallDirectory(t *testing.T)
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("uninstaller is missing owned-file cleanup %q", required)
+		}
+	}
+}
+
+func TestInstallerPreservesUnverifiedShortcutsAndDestinations(t *testing.T) {
+	script, err := os.ReadFile(filepath.Join("..", "..", "build", "windows", "installer", "project.nsi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(script)
+	for _, forbidden := range []string{
+		`Delete "$SMPROGRAMS\`, `Delete "$DESKTOP\`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("installer deletes an unverified shortcut: %s", forbidden)
+		}
+	}
+	for _, required := range []string{
+		`Call VerifyInstallDestination`,
+		`IfFileExists "$INSTDIR\uninstall.exe" installDestinationReserved`,
+		`ReadRegStr $1 HKCU "${UNINST_KEY}" "UninstallString"`,
+		`StrCmp $EXEPATH "$INSTDIR\uninstall.exe" 0 verifyInstallOwnershipDone`,
+		`StrCmp $1 "Quillite Markdown 2.7.3$\r$\n" installDestinationMarkerOwned`,
+		`IfFileExists "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" publicStartMenuRemains`,
+		`IfFileExists "$DESKTOP\${INFO_PRODUCTNAME}.lnk" publicDesktopRemains`,
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("installer lacks safety guard: %s", required)
 		}
 	}
 }
@@ -409,10 +557,10 @@ func TestInstallingActionLabelCyclesItsDots(t *testing.T) {
 func TestInstallerCopySupportsChineseAndEnglish(t *testing.T) {
 	chinese := installerText(false)
 	english := installerText(true)
-	if chinese.readyTitle != "准备安装轻阅 Markdown" || chinese.startAction != "开始安装" || chinese.languageAction != "English" {
+	if chinese.readyTitle != "准备安装轻阅 Markdown" || chinese.startAction != "下一步" || chinese.confirmAction != "确认并安装" || chinese.destinationLabel != "最终安装路径" || chinese.languageAction != "English" {
 		t.Fatalf("unexpected Chinese installer copy: %#v", chinese)
 	}
-	if english.readyTitle != "Ready to install Quillite Markdown" || english.startAction != "Start installation" || english.languageAction != "中文" {
+	if english.readyTitle != "Ready to install Quillite Markdown" || english.startAction != "Continue" || english.confirmAction != "Confirm and install" || english.destinationLabel != "Final installation folder" || english.languageAction != "中文" {
 		t.Fatalf("unexpected English installer copy: %#v", english)
 	}
 	if chinese.folderTitle == english.folderTitle {

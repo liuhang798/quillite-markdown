@@ -93,6 +93,7 @@ const (
 	idcHand  = 32649
 
 	pageWelcome = iota
+	pageConfirm
 	pageInstalling
 	pageComplete
 	pageFailed
@@ -261,6 +262,12 @@ type installerCopy struct {
 	failedFallback     string
 	startAction        string
 	customAction       string
+	changeAction       string
+	backAction         string
+	confirmTitle       string
+	confirmSubtitle    string
+	confirmAction      string
+	destinationLabel   string
 	completeAction     string
 	retryAction        string
 	languageAction     string
@@ -351,8 +358,14 @@ func installerText(english bool) installerCopy {
 			completeSubtitle:   "Quillite Markdown is ready",
 			failedTitle:        "Installation wasn't completed",
 			failedFallback:     "Check disk space or close Quillite Markdown and try again.",
-			startAction:        "Start installation",
+			startAction:        "Continue",
 			customAction:       "Custom installation",
+			changeAction:       "Change location",
+			backAction:         "Back",
+			confirmTitle:       "Confirm installation location",
+			confirmSubtitle:    "Installation starts only after you confirm this path.",
+			confirmAction:      "Confirm and install",
+			destinationLabel:   "Final installation folder",
 			completeAction:     "Finish installation",
 			retryAction:        "Retry installation",
 			languageAction:     "中文",
@@ -369,8 +382,14 @@ func installerText(english bool) installerCopy {
 		completeSubtitle:   "轻阅 Markdown 已准备就绪",
 		failedTitle:        "安装没有完成",
 		failedFallback:     "请检查磁盘空间或关闭正在运行的轻阅 Markdown。",
-		startAction:        "开始安装",
+		startAction:        "下一步",
 		customAction:       "自定义安装",
+		changeAction:       "更改位置",
+		backAction:         "返回",
+		confirmTitle:       "确认安装位置",
+		confirmSubtitle:    "请核对最终路径，确认后才会开始安装。",
+		confirmAction:      "确认并安装",
+		destinationLabel:   "最终安装路径",
 		completeAction:     "完成安装",
 		retryAction:        "重新安装",
 		languageAction:     "English",
@@ -389,6 +408,13 @@ func highWord(v uintptr) int32 { return int32(int16((v >> 16) & 0xffff)) }
 
 func inside(r rect, x, y int32) bool {
 	return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
+}
+
+func confirmFooterRects(english bool) (change, back rect) {
+	if english {
+		return rect{28, 386, 125, 416}, rect{128, 386, 174, 416}
+	}
+	return rect{28, 386, 88, 416}, rect{91, 386, 135, 416}
 }
 
 func scaleToDesign(x, y, clientWidth, clientHeight int32) (int32, int32) {
@@ -431,7 +457,7 @@ func chooseInstallDirectory(owner uintptr, initial string, english bool) (string
 	if result == 0 {
 		return "", false
 	}
-	normalized, err := customInstallDirectory(syscall.UTF16ToString(selected[:]))
+	normalized, err := resolveCustomInstallSelection(syscall.UTF16ToString(selected[:]))
 	if err != nil {
 		return "", false
 	}
@@ -459,6 +485,49 @@ func customInstallDirectory(parent string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(normalized, installProductDirectoryName), nil
+}
+
+// Reusing a verified Quillite installation must not append a second product
+// directory. All other selected folders continue to be treated as parents.
+func resolveCustomInstallSelection(selected string) (string, error) {
+	normalized, err := normalizeInstallDirectory(selected)
+	if err != nil {
+		return "", err
+	}
+	if ownedPath, owned := ownedInstallDirectory(normalized); owned {
+		return ownedPath, nil
+	}
+	return customInstallDirectory(normalized)
+}
+
+func customPickerInitialDirectory(destination string) string {
+	if ownedPath, owned := ownedInstallDirectory(destination); owned {
+		return ownedPath
+	}
+	// A not-yet-installed product child may not exist. Open its parent so the
+	// picker can select a real folder instead of silently falling back to C:.
+	if strings.EqualFold(filepath.Base(destination), installProductDirectoryName) {
+		return filepath.Dir(destination)
+	}
+	return destination
+}
+
+func reviewInstallDirectory(destination string) {
+	view.Lock()
+	view.installDir = destination
+	view.page = pageConfirm
+	view.started = false
+	view.Unlock()
+	invalidateMainWindow()
+}
+
+func returnToInstallerWelcome() {
+	view.Lock()
+	if view.page == pageConfirm {
+		view.page = pageWelcome
+	}
+	view.Unlock()
+	invalidateMainWindow()
 }
 
 func main() {
@@ -534,6 +603,7 @@ func windowProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 		return 0
 	case wmLButtonDown:
 		x, y := lowWord(lParam), highWord(lParam)
+		displayX, displayY := x, y
 		var client rect
 		procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client)))
 		x, y = scaleToDesign(x, y, client.right, client.bottom)
@@ -558,23 +628,29 @@ func windowProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 			}
 			return 0
 		}
-		if (page == pageWelcome || page == pageFailed) && inside(customInstall, x, y) {
-			if selected, ok := chooseInstallDirectory(hwnd, installDir, english); ok {
-				view.Lock()
-				view.installDir = selected
-				view.Unlock()
-				beginInstall()
+		confirmChange, confirmBack := confirmFooterRects(english)
+		customClicked := (page == pageWelcome || page == pageFailed) && inside(customInstall, x, y)
+		if page == pageConfirm {
+			customClicked = inside(confirmChange, displayX, displayY)
+		}
+		if customClicked {
+			if selected, ok := chooseInstallDirectory(hwnd, customPickerInitialDirectory(installDir), english); ok {
+				reviewInstallDirectory(selected)
 			}
+			return 0
+		}
+		if page == pageConfirm && inside(confirmBack, displayX, displayY) {
+			returnToInstallerWelcome()
 			return 0
 		}
 		if inside(welcomePrimary, x, y) {
 			switch page {
-			case pageWelcome:
+			case pageWelcome, pageFailed:
+				reviewInstallDirectory(installDir)
+			case pageConfirm:
 				beginInstall()
 			case pageComplete:
 				procDestroyWindow.Call(hwnd)
-			case pageFailed:
-				beginInstall()
 			}
 			return 0
 		}
@@ -584,8 +660,9 @@ func windowProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 			procScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&cursor)))
 			view.RLock()
 			page := view.page
+			english := view.english
 			view.RUnlock()
-			if installerClickablePoint(page, cursor.x, cursor.y) {
+			if installerClickablePoint(page, english, cursor.x, cursor.y) {
 				procSetCursor.Call(handCursor)
 				return 1
 			}
@@ -604,7 +681,9 @@ func windowProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 			view.RLock()
 			page := view.page
 			view.RUnlock()
-			if page == pageInstalling {
+			if page == pageConfirm {
+				returnToInstallerWelcome()
+			} else if page == pageInstalling {
 				requestInstallCancel()
 			} else {
 				procDestroyWindow.Call(hwnd)
@@ -649,13 +728,16 @@ func installerNonClientHitTest(x, y int32) uintptr {
 	return 0
 }
 
-func installerClickablePoint(page int, x, y int32) bool {
+func installerClickablePoint(page int, english bool, x, y int32) bool {
 	if inside(displayClose, x, y) || inside(displayLanguage, x, y) {
 		return true
 	}
 	switch page {
 	case pageWelcome, pageFailed:
 		return inside(displayWelcomeAction, x, y) || inside(displayCustomInstall, x, y)
+	case pageConfirm:
+		change, back := confirmFooterRects(english)
+		return inside(displayWelcomeAction, x, y) || inside(change, x, y) || inside(back, x, y)
 	case pageComplete:
 		return inside(displayWelcomeAction, x, y)
 	default:
@@ -687,7 +769,7 @@ func renderFrame(hwnd, hdc uintptr) {
 	memDC := backDC
 
 	view.RLock()
-	page, progress, errorTextZH, errorTextEN, animationFrame, english := view.page, view.progress, view.errorTextZH, view.errorTextEN, view.animationFrame, view.english
+	page, progress, errorTextZH, errorTextEN, installDir, animationFrame, english := view.page, view.progress, view.errorTextZH, view.errorTextEN, view.installDir, view.animationFrame, view.english
 	view.RUnlock()
 	if !drawLayeredBackdrop(memDC) {
 		fill(memDC, rect{0, 0, windowWidth, windowHeight}, rgb(241, 249, 245))
@@ -707,7 +789,7 @@ func renderFrame(hwnd, hdc uintptr) {
 		windowHeight,
 		srccopy,
 	)
-	drawInstaller(layeredDC, page, progress, errorTextZH, errorTextEN, animationFrame, english)
+	drawInstaller(layeredDC, page, progress, errorTextZH, errorTextEN, installDir, animationFrame, english)
 	applyRoundedAlphaMask()
 	var windowRect rect
 	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&windowRect)))
@@ -728,7 +810,7 @@ func renderFrame(hwnd, hdc uintptr) {
 	)
 }
 
-func drawInstaller(dc uintptr, page, progress int, errorTextZH, errorTextEN string, animationFrame int, english bool) {
+func drawInstaller(dc uintptr, page, progress int, errorTextZH, errorTextEN, installDir string, animationFrame int, english bool) {
 	copy := installerText(english)
 	title := copy.installingTitle
 	subtitle := copy.installingSubtitle
@@ -736,6 +818,9 @@ func drawInstaller(dc uintptr, page, progress int, errorTextZH, errorTextEN stri
 	case pageWelcome:
 		title = copy.readyTitle
 		subtitle = copy.readySubtitle
+	case pageConfirm:
+		title = copy.confirmTitle
+		subtitle = copy.confirmSubtitle
 	case pageComplete:
 		title = copy.completeTitle
 		subtitle = copy.completeSubtitle
@@ -752,7 +837,14 @@ func drawInstaller(dc uintptr, page, progress int, errorTextZH, errorTextEN stri
 	}
 
 	drawCenteredBrand(dc, page)
-	if page == pageInstalling || page == pageComplete {
+	if page == pageConfirm {
+		drawText(dc, title, rect{60, 148, 580, 181}, 23, 500, rgb(18, 24, 23), dtCenter|dtVCenter|dtSingleLine)
+		drawText(dc, subtitle, rect{60, 188, 580, 214}, 13, 400, rgb(35, 142, 104), dtCenter|dtVCenter|dtSingleLine)
+		drawText(dc, copy.destinationLabel, rect{68, 222, 572, 241}, 12, 500, rgb(57, 87, 76), dtLeft|dtVCenter|dtSingleLine)
+		pathBox, pathText, pathFlags, pathFontSize := installerPathLayout(installDir)
+		fillPixelRoundedRect(pathBox, 8, rgb(235, 247, 241))
+		drawText(dc, installDir, pathText, pathFontSize, 500, rgb(18, 24, 23), pathFlags)
+	} else if page == pageInstalling || page == pageComplete {
 		drawText(dc, title, rect{60, 221, 580, 255}, 24, 500, rgb(18, 24, 23), dtCenter|dtVCenter|dtSingleLine)
 		drawText(dc, fmt.Sprintf("%d%%", progress), rect{60, 253, 580, 292}, 35, 600, rgb(0, 151, 95), dtCenter|dtVCenter|dtSingleLine)
 		drawText(dc, subtitle, rect{80, 288, 560, 313}, 14, 400, rgb(35, 142, 104), dtCenter|dtVCenter|dtSingleLine)
@@ -763,14 +855,20 @@ func drawInstaller(dc uintptr, page, progress int, errorTextZH, errorTextEN stri
 	switch page {
 	case pageWelcome:
 		drawButton(dc, displayWelcomeAction, copy.startAction, true)
-		drawCustomInstallAction(dc, copy.customAction, english)
+		drawCustomInstallAction(dc, copy.customAction, english, displayCustomInstall)
+		drawCloseAction(dc)
+	case pageConfirm:
+		drawButton(dc, displayWelcomeAction, copy.confirmAction, true)
+		change, back := confirmFooterRects(english)
+		drawCustomInstallAction(dc, copy.changeAction, english, change)
+		drawText(dc, copy.backAction, back, 12, 500, rgb(25, 126, 91), dtLeft|dtVCenter|dtSingleLine)
 		drawCloseAction(dc)
 	case pageComplete:
 		drawButton(dc, displayWelcomeAction, copy.completeAction, true)
 		drawCloseAction(dc)
 	case pageFailed:
 		drawButton(dc, displayWelcomeAction, copy.retryAction, true)
-		drawCustomInstallAction(dc, copy.customAction, english)
+		drawCustomInstallAction(dc, copy.customAction, english, displayCustomInstall)
 		drawCloseAction(dc)
 	case pageInstalling:
 		drawButton(dc, displayWelcomeAction, installingActionLabel(animationFrame, english), true)
@@ -779,12 +877,36 @@ func drawInstaller(dc uintptr, page, progress int, errorTextZH, errorTextEN stri
 	drawLanguageAction(dc, copy.languageAction)
 }
 
+func installerPathLayout(path string) (rect, rect, uint32, int32) {
+	// A typical destination fits one line; keep its confirmation card compact.
+	// Expand only for long paths so the final destination remains readable.
+	units := 0
+	for _, character := range path {
+		if character <= 127 {
+			units++
+		} else {
+			units += 2
+		}
+	}
+	if units <= 68 {
+		return rect{56, 251, 584, 293}, rect{68, 253, 572, 291}, dtLeft | dtVCenter | dtSingleLine, 12
+	}
+	fontSize := int32(12)
+	if units > 160 {
+		fontSize = 11
+	}
+	return rect{56, 244, 584, 318}, rect{68, 251, 572, 313}, dtLeft | dtWordBreak, fontSize
+}
+
 func drawLayeredBackdrop(dc uintptr) bool {
 	return drawAlphaLayer(dc, &backgroundBaseLayer, rect{0, 0, windowWidth, windowHeight}, 255)
 }
 
 func drawCenteredBrand(dc uintptr, page int) {
-	_ = page
+	if page == pageConfirm {
+		drawAlphaLayer(dc, &appIconLayer, rect{278, 58, 362, 142}, 255)
+		return
+	}
 	drawAlphaLayer(dc, &appIconLayer, rect{268, 95, 372, 199}, 255)
 }
 
@@ -945,12 +1067,12 @@ func cleanupRasterLayer(layer *rasterLayer) {
 	layer.width, layer.height = 0, 0
 }
 
-func drawCustomInstallAction(dc uintptr, label string, english bool) {
+func drawCustomInstallAction(dc uintptr, label string, english bool, bounds rect) {
 	fontSize := int32(12)
 	if english {
 		fontSize = 11
 	}
-	drawText(dc, label, displayCustomInstall, fontSize, 500, rgb(25, 126, 91), dtLeft|dtVCenter|dtSingleLine)
+	drawText(dc, label, bounds, fontSize, 500, rgb(25, 126, 91), dtLeft|dtVCenter|dtSingleLine)
 }
 
 func drawLanguageAction(dc uintptr, label string) {
@@ -1232,9 +1354,8 @@ func cleanupGDI() {
 }
 
 func beginInstall() {
-	resetInstallControl()
 	view.Lock()
-	if view.started && view.page == pageInstalling {
+	if view.page != pageConfirm || view.started {
 		view.Unlock()
 		return
 	}
@@ -1245,6 +1366,7 @@ func beginInstall() {
 	view.errorTextEN = ""
 	view.animationFrame = 0
 	view.Unlock()
+	resetInstallControl()
 	invalidateMainWindow()
 	go runInstallingAnimation()
 	go runInstaller()
@@ -1583,14 +1705,31 @@ func setFailed(chinese, english string) {
 }
 
 const installerUninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\Quillite Open Source轻阅 Markdown`
+const legacyInstallerUninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\LeafMD Open SourceMD阅读助手`
 
 func recordedInstallDirectory() string {
-	if key, err := registry.OpenKey(registry.CURRENT_USER, installerUninstallKey, registry.QUERY_VALUE); err == nil {
-		defer key.Close()
-		location, _, _ := key.GetStringValue("InstallLocation")
-		return location
+	return registryInstallLocation(registry.CURRENT_USER, installerUninstallKey)
+}
+
+func registryInstallLocation(root registry.Key, keyName string) string {
+	key, err := registry.OpenKey(root, keyName, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
 	}
-	return ""
+	defer key.Close()
+	location, _, _ := key.GetStringValue("InstallLocation")
+	return location
+}
+
+func previousInstallLocations() []string {
+	// Current per-user registrations take precedence over machine-wide and
+	// legacy registrations. Every hint still needs an owned directory check.
+	return []string{
+		recordedInstallDirectory(),
+		registryInstallLocation(registry.LOCAL_MACHINE, installerUninstallKey),
+		registryInstallLocation(registry.CURRENT_USER, legacyInstallerUninstallKey),
+		registryInstallLocation(registry.LOCAL_MACHINE, legacyInstallerUninstallKey),
+	}
 }
 
 func validInstallMarker(path string) bool {
@@ -1690,10 +1829,12 @@ func verifyInstalledDirectory(expected string) error {
 	return nil
 }
 
-func preferredInstallDirectory(localAppData, recordedLocation string) string {
-	recordedLocation = strings.Trim(strings.TrimSpace(recordedLocation), `"`)
-	if normalized, owned := ownedInstallDirectory(recordedLocation); owned {
-		return normalized
+func preferredInstallDirectory(localAppData string, recordedLocations ...string) string {
+	for _, recordedLocation := range recordedLocations {
+		recordedLocation = strings.Trim(strings.TrimSpace(recordedLocation), `"`)
+		if normalized, owned := ownedInstallDirectory(recordedLocation); owned {
+			return normalized
+		}
 	}
 	localAppData = strings.Trim(strings.TrimSpace(localAppData), `"`)
 	if localAppData != "" {
@@ -1706,7 +1847,7 @@ func preferredInstallDirectory(localAppData, recordedLocation string) string {
 }
 
 func initialInstallDirectory() string {
-	return preferredInstallDirectory(os.Getenv("LOCALAPPDATA"), recordedInstallDirectory())
+	return preferredInstallDirectory(os.Getenv("LOCALAPPDATA"), previousInstallLocations()...)
 }
 
 func extractPayload() (string, func(), error) {

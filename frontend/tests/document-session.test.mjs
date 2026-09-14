@@ -29,6 +29,24 @@ function harness() {
   return { write, state, context, calls };
 }
 
+test('disk conflicts retain edits and stop automatic overwrites', async () => {
+  const { context, state, write, calls } = harness();
+  state.currentFile.revision = 'baseline';
+  let received;
+  context.window.quilliteMarkdown.saveFile = (...args) => { received = args; return write.promise; };
+  const saving = context.saveDocument(false, { auto: true });
+  write.reject(new Error('DOCUMENT_CONFLICT: external change'));
+  await saving;
+  assert.deepEqual(received, ['/a.md', 'old', 'baseline']);
+  assert.equal(state.currentFile.content, 'old');
+  assert.equal(state.dirty, true);
+  assert.equal(state.saveAsRequired, true);
+  assert.equal(state.saving, false);
+  assert.ok(!calls.includes('saveAs'));
+  context.window.quilliteMarkdown.saveFile = () => { throw new Error('must not autosave again'); };
+  await context.saveDocument(false, { auto: true });
+});
+
 test('late save never replaces a new document, including reopening the same path', async () => {
   for (const path of ['/b.md', '/a.md']) {
     const { context, state, write, calls } = harness();

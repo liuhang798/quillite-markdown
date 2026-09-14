@@ -4976,6 +4976,10 @@ function scheduleRecoverySnapshot(performance = documentPerformanceProfile(codeE
       else if (editorContent() !== content) scheduleRecoverySnapshot(documentPerformanceProfile(codeEditor.state.doc.length, state.currentDocumentHasDiagrams));
     } catch (error) {
       reportSilentError(error, 'document.recovery-save');
+      if (requestedSession === state.documentSession && state.recoveryWarningSession !== requestedSession) {
+        state.recoveryWarningSession = requestedSession;
+        showToast(state.language === 'en' ? 'Recovery backup failed. Please save your document now.' : '异常恢复备份失败，请立即手动保存文档。', 'warning');
+      }
     }
   }, performance.recoveryDelay);
 }
@@ -5754,7 +5758,7 @@ async function saveDocument(saveAs = false, options = {}) {
   try {
     const saved = saveAs
       ? await window.quilliteMarkdown.saveAs(originalPath, editingContent)
-      : await window.quilliteMarkdown.saveFile(originalPath, editingContent);
+      : await window.quilliteMarkdown.saveFile(originalPath, editingContent, state.currentFile.revision);
     if (!saved) return;
     if (!isCurrentSession()) return;
     const currentContent = state.editing ? editorContent() : state.currentFile.content;
@@ -5795,6 +5799,22 @@ async function saveDocument(saveAs = false, options = {}) {
   } catch (error) {
     reportSilentError(error, 'document.save');
     if (!isCurrentSession()) return;
+    if (String(error).includes('DOCUMENT_CONFLICT')) {
+      state.saveAsRequired = true;
+      els.editorSaveState.textContent = t('saveAsRequired');
+      showToast(state.language === 'en' ? 'The file changed outside this app. Your edits are retained; save a separate copy.' : '文件已被外部修改。编辑内容已保留，请另存一份副本，避免覆盖。', 'warning');
+      return;
+    }
+    if (String(error).includes('DOCUMENT_TOO_LARGE')) {
+      showToast(state.language === 'en' ? 'This document exceeds the 64 MiB limit. Your edits are retained; split the document before saving.' : '文档超过 64 MiB 支持上限。编辑内容已保留，请拆分文档后保存。', 'warning');
+      return;
+    }
+    if (String(error).includes('DOCUMENT_SAFE_SAVE_ACCESS') || String(error).includes('DOCUMENT_METADATA_REQUIRES_COPY')) {
+      state.saveAsRequired = true;
+      els.editorSaveState.textContent = t('saveAsRequired');
+      showToast(state.language === 'en' ? 'Safe saving requires folder access or metadata support. The original is unchanged; save a copy in another authorized folder.' : '当前目录权限或文件特殊属性不支持安全保存。原文件未更改，请另存副本到已授权目录。', 'warning');
+      return;
+    }
     if (!saveAs) {
       state.saveAsRequired = true;
       els.editorSaveState.textContent = t('saveAsRequired');

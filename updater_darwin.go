@@ -109,7 +109,8 @@ if ! mv "$staged" "$current"; then
     echo "Unable to restore the previous version; preserving the backup at $backup."
     exit 1
   fi
-  rm -rf -- "$stage_root" "$extract_dir"
+  rm -rf -- "$extract_dir"
+  rmdir "$stage_root" 2>/dev/null || true
   exit 1
 fi
 if ! /usr/bin/codesign --verify --deep --strict "$current"; then
@@ -119,7 +120,8 @@ if ! /usr/bin/codesign --verify --deep --strict "$current"; then
     echo "Unable to restore the previous version; preserving update recovery files."
     exit 1
   fi
-  rm -rf -- "$stage_root" "$extract_dir"
+  rm -rf -- "$extract_dir"
+  rmdir "$stage_root" 2>/dev/null || true
   exit 1
 fi
 if ! /usr/bin/open "$current"; then
@@ -130,10 +132,12 @@ if ! /usr/bin/open "$current"; then
     exit 1
   fi
   /usr/bin/open "$current" || true
-  rm -rf -- "$stage_root" "$extract_dir"
+  rm -rf -- "$extract_dir"
+  rmdir "$stage_root" 2>/dev/null || true
   exit 1
 fi
-rm -rf -- "$backup" "$extract_dir"
+echo "Previous application preserved for recovery at $backup"
+rm -rf -- "$extract_dir"
 rmdir "$stage_root" 2>/dev/null || true
 rm -f "$archive" "$script_path"
 `, shellQuote(logPath), shellQuote(appBundle), shellQuote(stagedBundle), shellQuote(backupBundle), shellQuote(failedBundle), shellQuote(stageRoot), shellQuote(downloadPath), shellQuote(extractDir), shellQuote(scriptPath), os.Getpid())

@@ -316,26 +316,32 @@ func (a *App) ExportWithPandoc(input PandocExportInput) (string, error) {
 		outputPath += definition.Extension
 	}
 	content := exportContentWithHeaderFooter(input.Content, input.Title, input.Header, input.Footer)
-	args := []string{"--from=gfm+tex_math_dollars+footnotes"}
-	args = append(args, extraArguments...)
-	args = append(args, "--to="+definition.Writer, "--output="+outputPath)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	command := exec.CommandContext(ctx, status.Path, args...)
-	command.Stdin = strings.NewReader(content)
-	if directory := filepath.Dir(filepath.Clean(input.SourcePath)); directory != "." {
-		command.Dir = directory
-	}
-	output, err := command.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
-		return "", errors.New("pandoc export timed out")
-	}
-	if err != nil {
-		message := strings.TrimSpace(string(output))
-		if len(message) > 1200 {
-			message = message[:1200]
+	err = stageExternalExport(outputPath, func(stagedPath string) error {
+		args := []string{"--from=gfm+tex_math_dollars+footnotes"}
+		args = append(args, extraArguments...)
+		args = append(args, "--to="+definition.Writer, "--output="+stagedPath)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		command := exec.CommandContext(ctx, status.Path, args...)
+		command.Stdin = strings.NewReader(content)
+		if directory := filepath.Dir(filepath.Clean(input.SourcePath)); directory != "." {
+			command.Dir = directory
 		}
-		return "", fmt.Errorf("pandoc export failed: %s", message)
+		output, err := command.CombinedOutput()
+		if ctx.Err() == context.DeadlineExceeded {
+			return errors.New("pandoc export timed out")
+		}
+		if err != nil {
+			message := strings.TrimSpace(string(output))
+			if len(message) > 1200 {
+				message = message[:1200]
+			}
+			return fmt.Errorf("pandoc export failed: %s", message)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
 	return outputPath, nil
 }

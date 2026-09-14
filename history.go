@@ -21,7 +21,7 @@ import (
 const (
 	maxDocumentVersions       = 30
 	maxDocumentHistoryBytes   = 100 * 1024 * 1024
-	maxDocumentVersionContent = 24 * 1024 * 1024
+	maxDocumentVersionContent = maxSupportedDocumentBytes
 	maxDocumentVersionMeta    = 64 * 1024
 	documentVersionMagic      = "QMH1\n"
 )
@@ -226,6 +226,9 @@ func (a *App) captureDocumentVersion(filePath, nextContent string) error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
+	if !regularHistoryDirectory(a.documentHistoryRoot()) || !regularHistoryDirectory(directory) {
+		return errors.New("document history directory is not owned")
+	}
 	contentHash := sha256.Sum256(current)
 	id := created.Format("20060102T150405.000000000Z") + "-" + hex.EncodeToString(contentHash[:4]) + ".json.gz"
 	if err := writeFileAtomically(filepath.Join(directory, id), data); err != nil {
@@ -235,11 +238,14 @@ func (a *App) captureDocumentVersion(filePath, nextContent string) error {
 }
 
 func (a *App) pruneDocumentHistoryLocked(currentDirectory string) error {
+	if !regularHistoryDirectory(a.documentHistoryRoot()) || !regularHistoryDirectory(currentDirectory) {
+		return errors.New("document history directory is not owned")
+	}
 	entries, err := os.ReadDir(currentDirectory)
 	if err != nil {
 		return err
 	}
-	entries = documentVersionEntries(entries)
+	entries = documentVersionEntries(currentDirectory, entries)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() > entries[j].Name() })
 	for index := maxDocumentVersions; index < len(entries); index++ {
 		if !entries[index].IsDir() {
@@ -253,17 +259,32 @@ func (a *App) pruneDocumentHistoryLocked(currentDirectory string) error {
 	}
 	files := make([]historyFile, 0)
 	var total int64
-	_ = filepath.WalkDir(a.documentHistoryRoot(), func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json.gz") {
-			return nil
-		}
-		info, infoErr := entry.Info()
-		if infoErr == nil {
-			total += info.Size()
-			files = append(files, historyFile{path: path, modTime: info.ModTime(), size: info.Size()})
-		}
+	root := a.documentHistoryRoot()
+	if !regularHistoryDirectory(root) {
 		return nil
-	})
+	}
+	directories, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	for _, directoryEntry := range directories {
+		directory := filepath.Join(root, directoryEntry.Name())
+		if !validHistoryDirectoryName(directoryEntry.Name()) || !regularHistoryDirectory(directory) {
+			continue
+		}
+		versionEntries, readErr := os.ReadDir(directory)
+		if readErr != nil {
+			continue
+		}
+		for _, entry := range documentVersionEntries(directory, versionEntries) {
+			path := filepath.Join(directory, entry.Name())
+			info, infoErr := os.Lstat(path)
+			if infoErr == nil && info.Mode().IsRegular() {
+				total += info.Size()
+				files = append(files, historyFile{path: path, modTime: info.ModTime(), size: info.Size()})
+			}
+		}
+	}
 	if total <= maxDocumentHistoryBytes {
 		return nil
 	}
@@ -279,10 +300,36 @@ func (a *App) pruneDocumentHistoryLocked(currentDirectory string) error {
 	return nil
 }
 
-func documentVersionEntries(entries []os.DirEntry) []os.DirEntry {
+func validHistoryDirectoryName(name string) bool {
+	if len(name) != 64 {
+		return false
+	}
+	for _, char := range name {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func regularHistoryDirectory(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0
+}
+
+func documentVersionEntries(directory string, entries []os.DirEntry) []os.DirEntry {
 	versions := make([]os.DirEntry, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() && validDocumentVersionID(entry.Name()) {
+		if !validDocumentVersionID(entry.Name()) || entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		metadata, err := decodeDocumentVersionMetadata(path)
+		if err == nil && historyPathKey(metadata.Path) == filepath.Base(directory) {
 			versions = append(versions, entry)
 		}
 	}

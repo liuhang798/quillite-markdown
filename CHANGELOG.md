@@ -2,21 +2,33 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [Unreleased]
+## [2.7.4] - 2026-09-14
 
 ### 简体中文
 
+- 本次重新构建保留每次启动、检查更新和执行更新时的旧卸载器处理逻辑，带安全标记的版本原样保留。已知限制：旧卸载登记仍在但同名文件已被替换时，现有路径归属判断可能误认；本次未加入风险文件哈希名单。
+- 安全复审：保存前校验文档内容指纹，外部修改冲突时保留编辑并提示另存；Windows 替换保留 ACL/数据流并带失败恢复备份，macOS 使用原生元数据复制，特殊文件无法安全处理时拒绝覆盖。
+- Pandoc 改为临时输出，成功验证后再替换；导出图片请求阻止回环、内网及重定向绕过。更新请求重定向限制在官网 HTTPS 地址。
+- 文档读取、保存、历史快照和异常恢复统一 64 MiB 上限，恢复失败明确提醒；发布流水线增加 Windows/macOS 测试与静态检查，严格检出发布标签，删除未经校验的 NSIS 下载兜底。
+- 文档保存和另存为改为同目录临时文件同步后替换，失败时保留原文件；历史版本清理只处理经路径归属和内容格式验证的快照。
+- Windows 安装核心在覆盖程序文件前再次校验目录归属，卸载需同时匹配程序文件、标记与卸载登记；无法验证目标的快捷方式不再被覆盖或删除。macOS 更新保留旧版应用包作为恢复备份。
+- Windows 安装器新增最终路径确认页：默认或自定义选择后先显示实际安装目录，可返回或更改位置；只有明确点击“确认并安装”才开始安装，避免选完文件夹立即安装。
+- 缩小常见路径的确认框，长路径仍可换行显示；二次安装会在验证程序与目录归属标记后优先定位上次安装位置，兼容用户级、系统级及旧版安装登记。
+- 二次安装点击“自定义安装”时，文件夹选择器直接定位到已验证的上次安装目录；确认同一目录可原位安装，不会创建第二层“轻阅 Markdown”。
+- 将 Windows 安装路径确认页的“返回”紧邻“更改位置”排列，中英文分别匹配文字宽度，并同步调整鼠标命中区域。
+
 ### English
 
-## [2.7.4] - 2026-09-12
-
-### 简体中文
-
-- 将 Windows 卸载器安全守卫固化到每次应用启动，并在检查更新及执行更新时继续二次校验；该检查不依赖网络和更新提醒设置。旧风险卸载器仅在注册表路径精确证明归属后删除或禁用，带 `QUILLITE_SAFE_UNINSTALL_V1` 标识的安全版本始终原样保留。
-
-### English
-
-- Made the Windows uninstaller safety guard run on every application launch, with defense-in-depth checks during update discovery and application. It does not depend on network access or reminder preferences. A legacy risky uninstaller is deleted or disabled only after an exact registered-path ownership match, while a `QUILLITE_SAFE_UNINSTALL_V1` uninstaller is always preserved unchanged.
+- This rebuild retains legacy-uninstaller remediation at startup and during update checks/application; safe-marked versions remain untouched. Known limitation: a stale uninstall registration can misidentify a replaced same-name file. A risky-file hash allowlist is not included in this rebuild.
+- Safety review: saves validate content fingerprints and retain editor changes on external conflicts. Windows replacement preserves ACLs/streams with a recovery backup; macOS copies native metadata, and unsupported special files fail closed.
+- Pandoc writes temporary output before committing; remote export images cannot access loopback/private networks, including through redirects. Update redirects stay on the official HTTPS origin.
+- Reading, saving, history and recovery share a 64 MiB limit, with visible recovery-failure warnings. Release CI adds Windows/macOS tests and vet, checks out the exact release tag, and removes the unverified NSIS download fallback.
+- Document saves and Save As now sync a same-directory temporary file before replacing the target, preserving the original on failure. History pruning considers only snapshots with verified ownership and format.
+- The Windows installer core revalidates destination ownership before overwriting program files, and the uninstaller requires matching executable, marker, and registration. Unverified shortcuts are neither overwritten nor deleted. macOS updates retain the previous app bundle for recovery.
+- Added a final destination confirmation screen to the Windows installer. Default and custom selections show the actual target folder, allow going back or changing it, and do not start installation until the user explicitly confirms.
+- Made the destination card compact for ordinary paths while retaining wrapping for longer paths. Repeat installations now prefer a verified previous location from per-user, machine-wide, or legacy registration records.
+- Custom installation now opens the folder picker at the verified previous installation directory. Confirming that folder reuses it in place rather than creating a second `Quillite Markdown` level.
+- Placed Back immediately after Change location on the Windows destination-confirmation screen, with language-specific spacing and matching click targets.
 
 ## [2.7.3] - 2026-09-11
 

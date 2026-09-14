@@ -165,7 +165,7 @@ func buildDOCX(renderedHTML, title, baseDirectory string) ([]byte, error) {
 		nextDrawing:   1,
 		nextListNum:   2,
 		baseDirectory: baseDirectory,
-		httpClient:    &http.Client{Timeout: 8 * time.Second},
+		httpClient:    newRemoteImageClient(),
 	}
 	body := findHTMLBody(document)
 	if body == nil {

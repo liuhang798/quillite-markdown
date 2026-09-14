@@ -116,3 +116,41 @@ func TestDocumentHistoryRejectsForeignOrOversizedVersions(t *testing.T) {
 		t.Fatalf("oversized version should not be retained: %#v, %v", versions, err)
 	}
 }
+
+func TestHistoryPruningPreservesUnverifiedFiles(t *testing.T) {
+	app := testApp(t)
+	documentPath := filepath.Join(t.TempDir(), "owned.md")
+	directory := app.documentHistoryDirectory(documentPath)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	owned, err := encodeDocumentVersion(storedDocumentVersion{
+		Path: documentPath, CreatedAt: "2026-09-01T00:00:00Z", Content: "recover me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownedPath := filepath.Join(directory, "20260901T000000.000000000Z-00000000.json.gz")
+	if err := os.WriteFile(ownedPath, owned, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	foreignPath := filepath.Join(directory, "20260902T000000.000000000Z-00000000.json.gz")
+	foreign, err := os.Create(foreignPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := foreign.Truncate(maxDocumentHistoryBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := foreign.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.pruneDocumentHistoryLocked(directory); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{ownedPath, foreignPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("pruning removed %s: %v", path, err)
+		}
+	}
+}

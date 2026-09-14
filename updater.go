@@ -113,7 +113,7 @@ func (a *App) downloadFile(url, destination string) error {
 	if !isOfficialWebsiteURL(url) {
 		return errors.New("update download URL is not hosted by the official website")
 	}
-	return a.downloadFileFromURL(url, destination, &http.Client{Timeout: 30 * time.Minute})
+	return a.downloadFileFromURL(url, destination, officialHTTPClient(30 * time.Minute))
 }
 
 func (a *App) downloadFileFromURL(url, destination string, client *http.Client) error {

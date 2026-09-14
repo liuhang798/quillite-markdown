@@ -70,6 +70,7 @@ type Document struct {
 	Size         int64  `json:"size"`
 	ReplacedPath string `json:"replacedPath,omitempty"`
 	ReadOnly     bool   `json:"readOnly,omitempty"`
+	Revision     string `json:"revision,omitempty"`
 }
 
 type FolderFile struct {
@@ -479,7 +480,7 @@ func (a *App) readDocument(filePath string, remember bool) (*Document, error) {
 	}
 	data, info, _, foundBookmark, bookmarkErr := a.readDocumentWithMacBookmark(absPath)
 	if !foundBookmark || bookmarkErr != nil {
-		data, err = os.ReadFile(absPath)
+		data, err = readDocumentBytes(absPath)
 		if err == nil {
 			info, err = os.Stat(absPath)
 		}
@@ -495,7 +496,7 @@ func (a *App) readDocument(filePath string, remember bool) (*Document, error) {
 	}
 	return &Document{
 		Path: absPath, Name: filepath.Base(absPath), Directory: filepath.Dir(absPath),
-		Content: string(data), ModifiedAt: info.ModTime().Format(time.RFC3339Nano), Size: info.Size(),
+		Content: string(data), ModifiedAt: info.ModTime().Format(time.RFC3339Nano), Size: info.Size(), Revision: documentRevision(data),
 	}, nil
 }
 
@@ -1205,6 +1206,15 @@ func canEditFile(filePath string) bool {
 }
 
 func (a *App) SaveFile(filePath, content string) (*Document, error) {
+	return a.saveFile(filePath, content, "")
+}
+
+func (a *App) saveFile(filePath, content, revision string) (*Document, error) {
+	if len(content) > maxSupportedDocumentBytes {
+		return nil, errors.New("DOCUMENT_TOO_LARGE: maximum supported document size is 64 MiB")
+	}
+	documentSaveMu.Lock()
+	defer documentSaveMu.Unlock()
 	if strings.TrimSpace(filePath) == "" {
 		return a.SaveAs("", content)
 	}
@@ -1214,9 +1224,14 @@ func (a *App) SaveFile(filePath, content string) (*Document, error) {
 	// Version history is best-effort and must never prevent the user's save.
 	// Capture the last on-disk state before replacing it.
 	_ = a.captureDocumentVersion(filePath, content)
-	resolvedPath, foundBookmark, bookmarkErr := a.writeDocumentWithMacBookmark(filePath, []byte(content))
+	resolvedPath, foundBookmark, bookmarkErr := a.withMacSecurityScopedPath(filePath, func(path string) error {
+		return writeDocumentWithRevision(path, []byte(content), revision)
+	})
+	if errors.Is(bookmarkErr, errDocumentConflict) {
+		return nil, bookmarkErr
+	}
 	if !foundBookmark || bookmarkErr != nil {
-		if err := os.WriteFile(filepath.Clean(filePath), []byte(content), 0o644); err != nil {
+		if err := writeDocumentWithRevision(filePath, []byte(content), revision); err != nil {
 			if foundBookmark {
 				return nil, joinDocumentAccessErrors(err, bookmarkErr)
 			}
@@ -1228,6 +1243,9 @@ func (a *App) SaveFile(filePath, content string) (*Document, error) {
 }
 
 func (a *App) saveDocumentAs(currentPath, filePath, content string) (*Document, error) {
+	if len(content) > maxSupportedDocumentBytes {
+		return nil, errors.New("DOCUMENT_TOO_LARGE: maximum supported document size is 64 MiB")
+	}
 	targetPath, err := filepath.Abs(filepath.Clean(filePath))
 	if err != nil {
 		return nil, err
@@ -1240,7 +1258,7 @@ func (a *App) saveDocumentAs(currentPath, filePath, content string) (*Document, 
 		defer a.releaseDraftReplacementClaim(claimKey)
 	}
 	_ = a.captureDocumentVersion(targetPath, content)
-	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
+	if err := writeDocumentAtomically(targetPath, []byte(content)); err != nil {
 		return nil, err
 	}
 	saved, err := a.readDocument(targetPath, false)

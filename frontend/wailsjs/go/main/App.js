@@ -230,6 +230,10 @@ export function SaveFile(arg1, arg2) {
   return window['go']['main']['App']['SaveFile'](arg1, arg2);
 }
 
+export function SaveFileWithRevision(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveFileWithRevision'](arg1, arg2, arg3);
+}
+
 export function SavePastedImage(arg1, arg2) {
   return window['go']['main']['App']['SavePastedImage'](arg1, arg2);
 }
