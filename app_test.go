@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -1123,6 +1124,27 @@ func TestReplaceDraftPreferenceWriteFailurePreservesRecoverableDraft(t *testing.
 	app.markDraft(draftPath)
 
 	preferencesPath := app.preferencePath()
+	// POSIX rename permissions belong to the parent directory, not the old
+	// file. Deny temporary-file creation as well so atomic preference writes
+	// fail on macOS/Linux just as a read-only target does on Windows.
+	if runtime.GOOS != "windows" {
+		directory := filepath.Dir(preferencesPath)
+		info, err := os.Stat(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(directory, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(directory, info.Mode().Perm())
+		probe, err := os.CreateTemp(directory, ".permission-probe-")
+		if err == nil {
+			name := probe.Name()
+			_ = probe.Close()
+			_ = os.Remove(name)
+			t.Skip("filesystem permits creation in a read-only directory")
+		}
+	}
 	if err := os.Chmod(preferencesPath, 0o444); err != nil {
 		t.Fatal(err)
 	}
