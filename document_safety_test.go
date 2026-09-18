@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,8 +89,16 @@ func TestExternalExportFailurePreservesOutput(t *testing.T) {
 		t.Fatal("export not committed")
 	}
 	entries, _ := os.ReadDir(filepath.Dir(p))
-	if len(entries) != 1 {
-		t.Fatal("temporary files leaked")
+	for _, entry := range entries {
+		if entry.Name() == filepath.Base(p) {
+			continue
+		}
+		// POSIX commits deliberately retain the original inode in a recovery
+		// directory so late writes from another open descriptor are recoverable.
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), ".quillite-save-recovery-") {
+			continue
+		}
+		t.Fatalf("unexpected export artifact leaked: %s", entry.Name())
 	}
 }
 
