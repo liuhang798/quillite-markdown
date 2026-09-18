@@ -7,8 +7,8 @@ import (
 	"runtime"
 )
 
-// writeDocumentAtomically never truncates an existing document in place. A
-// failed write, sync, or replacement leaves the original document untouched.
+// writeDocumentAtomically never truncates an existing document in place. The
+// original is restored or retained as recovery material if publication fails.
 func writeDocumentAtomically(path string, content []byte) error {
 	return writeDocumentWithRevision(path, content, "")
 }
@@ -68,5 +68,5 @@ func writeDocumentWithRevision(path string, content []byte, revision string) err
 			return err
 		}
 	}
-	return classifyExportWriteError(runtime.GOOS, replaceDocumentFile(temporaryPath, target))
+	return classifyExportWriteError(runtime.GOOS, commitDocumentReplacement(temporaryPath, target, revision))
 }

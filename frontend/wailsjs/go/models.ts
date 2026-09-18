@@ -213,6 +213,51 @@ export namespace main {
 	        this.clearApiKey = source["clearApiKey"];
 	    }
 	}
+	export class DiagnosticFlags {
+	    documentOpen: boolean;
+	    unsaved: boolean;
+	    conflict: boolean;
+	    saving: boolean;
+	    static createFrom(source: any = {}) {
+	        return new DiagnosticFlags(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.documentOpen = source["documentOpen"];
+	        this.unsaved = source["unsaved"];
+	        this.conflict = source["conflict"];
+	        this.saving = source["saving"];
+	    }
+	}
+	export class DiagnosticInput {
+	    checks: DiagnosticFlags;
+	    errors: Record<string, number>;
+	    static createFrom(source: any = {}) {
+	        return new DiagnosticInput(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.checks = this.convertValues(source["checks"], DiagnosticFlags);
+	        this.errors = source["errors"];
+	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Document {
 	    path: string;
 	    name: string;
@@ -633,6 +678,8 @@ export namespace main {
 	}
 	
 	export class RecoverySnapshot {
+	    baseRevision?: string;
+	    conflict?: boolean;
 	    path: string;
 	    name: string;
 	    directory: string;
@@ -645,6 +692,8 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseRevision = source["baseRevision"];
+	        this.conflict = source["conflict"];
 	        this.path = source["path"];
 	        this.name = source["name"];
 	        this.directory = source["directory"];
@@ -653,6 +702,8 @@ export namespace main {
 	    }
 	}
 	export class RecoverySnapshotInput {
+	    baseRevision?: string;
+	    conflict?: boolean;
 	    path: string;
 	    name: string;
 	    directory: string;
@@ -664,6 +715,8 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseRevision = source["baseRevision"];
+	        this.conflict = source["conflict"];
 	        this.path = source["path"];
 	        this.name = source["name"];
 	        this.directory = source["directory"];
@@ -721,6 +774,140 @@ export namespace main {
 	        this.currentVersion = source["currentVersion"];
 	        this.downloadUrl = source["downloadUrl"];
 	    }
+	}
+	export class WorkspaceApplyResult {
+	    path: string;
+	    status: string;
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceApplyResult(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.status = source["status"];
+	    }
+	}
+	export class WorkspaceChange {
+	    path: string;
+	    relativePath: string;
+	    before: string;
+	    after: string;
+	    revision: string;
+	    count: number;
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceChange(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.relativePath = source["relativePath"];
+	        this.before = source["before"];
+	        this.after = source["after"];
+	        this.revision = source["revision"];
+	        this.count = source["count"];
+	    }
+	}
+	export class WorkspaceMatch {
+	    path: string;
+	    relativePath: string;
+	    line: number;
+	    text: string;
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceMatch(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.relativePath = source["relativePath"];
+	        this.line = source["line"];
+	        this.text = source["text"];
+	    }
+	}
+	export class WorkspacePreview {
+	    token: string;
+	    changes: WorkspaceChange[];
+	    skipped: number;
+	    limited: boolean;
+	    static createFrom(source: any = {}) {
+	        return new WorkspacePreview(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.token = source["token"];
+	        this.changes = this.convertValues(source["changes"], WorkspaceChange);
+	        this.skipped = source["skipped"];
+	        this.limited = source["limited"];
+	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WorkspaceQuery {
+	    root: string;
+	    query: string;
+	    filter: string;
+	    extension: string;
+	    replacement: string;
+	    excludePath: string;
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceQuery(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.root = source["root"];
+	        this.query = source["query"];
+	        this.filter = source["filter"];
+	        this.extension = source["extension"];
+	        this.replacement = source["replacement"];
+	        this.excludePath = source["excludePath"];
+	    }
+	}
+	export class WorkspaceSearchResult {
+	    matches: WorkspaceMatch[];
+	    scanned: number;
+	    skipped: number;
+	    limited: boolean;
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceSearchResult(source);
+	    }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.matches = this.convertValues(source["matches"], WorkspaceMatch);
+	        this.scanned = source["scanned"];
+	        this.skipped = source["skipped"];
+	        this.limited = source["limited"];
+	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

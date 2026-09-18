@@ -92,3 +92,39 @@ func TestRecoverySnapshotRejectsInvalidInput(t *testing.T) {
 		t.Fatal("oversized recovery content should fail")
 	}
 }
+
+func TestRecoveryPersistsConflictBaselineEvenWhenContentMatchesDisk(t *testing.T) {
+	app := testApp(t)
+	path := filepath.Join(t.TempDir(), "conflict.md")
+	if err := os.WriteFile(path, []byte("same"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	revision := documentRevision([]byte("baseline"))
+	if err := app.SaveRecoverySnapshot(RecoverySnapshotInput{Path: path, Content: "same", BaseRevision: revision, Conflict: true}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := app.GetRecoverySnapshot()
+	if err != nil || got == nil || !got.Conflict || got.BaseRevision != revision || got.Content != "same" {
+		t.Fatalf("conflict snapshot lost: %#v, %v", got, err)
+	}
+	if _, err := os.Stat(app.recoverySnapshotPath()); err != nil {
+		t.Fatal("unresolved conflict backup removed", err)
+	}
+}
+
+func TestRecoveryRejectsInvalidBaselineWithoutReplacingBackup(t *testing.T) {
+	app := testApp(t)
+	input := RecoverySnapshotInput{Path: "conflict.md", Content: "keep", BaseRevision: documentRevision([]byte("base")), Conflict: true}
+	if err := app.SaveRecoverySnapshot(input); err != nil {
+		t.Fatal(err)
+	}
+	input.BaseRevision = "not-a-revision"
+	input.Content = "wrong"
+	if err := app.SaveRecoverySnapshot(input); err == nil {
+		t.Fatal("invalid revision accepted")
+	}
+	got, err := app.GetRecoverySnapshot()
+	if err != nil || got == nil || got.Content != "keep" {
+		t.Fatal("backup replaced by invalid input", err)
+	}
+}

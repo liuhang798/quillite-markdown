@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.7.4"
+	appVersion      = "2.7.5"
 	maxRecent       = 10
 )
 
@@ -122,6 +122,8 @@ type App struct {
 	mu                  sync.RWMutex
 	preferencesMu       sync.Mutex
 	recoveryMu          sync.Mutex
+	workspaceMu         sync.Mutex
+	workspacePlan       *workspaceReplacePlan
 	historyMu           sync.Mutex
 	picGoCloudLoginMu   sync.Mutex
 	securityBookmarksMu sync.Mutex
@@ -1239,7 +1241,7 @@ func (a *App) saveFile(filePath, content, revision string) (*Document, error) {
 		}
 		resolvedPath = filePath
 	}
-	return a.readDocument(resolvedPath, true)
+	return a.savedDocumentReceipt(resolvedPath, content, true)
 }
 
 func (a *App) saveDocumentAs(currentPath, filePath, content string) (*Document, error) {
@@ -1261,7 +1263,7 @@ func (a *App) saveDocumentAs(currentPath, filePath, content string) (*Document, 
 	if err := writeDocumentAtomically(targetPath, []byte(content)); err != nil {
 		return nil, err
 	}
-	saved, err := a.readDocument(targetPath, false)
+	saved, err := a.savedDocumentReceipt(targetPath, content, false)
 	if err != nil {
 		return nil, err
 	}

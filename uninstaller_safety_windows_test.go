@@ -3,12 +3,35 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func confirmTestUninstaller(t *testing.T, data []byte) {
+	t.Helper()
+	original := verifiedRiskyWindowsUninstallers
+	verifiedRiskyWindowsUninstallers = map[[sha256.Size]byte]string{sha256.Sum256(data): "test fixture only"}
+	t.Cleanup(func() { verifiedRiskyWindowsUninstallers = original })
+}
+
+func testUninstallRegistration(t *testing.T, active bool) *bool {
+	t.Helper()
+	originalHas, originalDisable := windowsHasMatchingUninstallRegistration, windowsDisableUninstallRegistrations
+	windowsHasMatchingUninstallRegistration = func(string, string) bool { return active }
+	windowsDisableUninstallRegistrations = func(string, string) { active = false }
+	t.Cleanup(func() {
+		windowsHasMatchingUninstallRegistration, windowsDisableUninstallRegistrations = originalHas, originalDisable
+	})
+	return &active
+}
+
+func prepareTestUninstaller(path string) bool {
+	return prepareWindowsUninstallerForExecutable(filepath.Join(filepath.Dir(path), windowsUpdateExecutableName))
+}
 
 func TestWindowsUninstallerSafetyMarker(t *testing.T) {
 	directory := t.TempDir()
@@ -37,9 +60,9 @@ func TestNeutralizeOwnedRiskyUninstallerPreservesSafeVersion(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	neutralized, action := neutralizeOwnedRiskyUninstallerFile(path)
-	if !neutralized || action != "safe" {
-		t.Fatalf("safe uninstaller result = %v, %q", neutralized, action)
+	confirmTestUninstaller(t, data) // Safe marker wins even if a digest were listed.
+	if !prepareTestUninstaller(path) {
+		t.Fatal("safe uninstaller was not recognized")
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -51,13 +74,14 @@ func TestNeutralizeOwnedRiskyUninstallerPreservesSafeVersion(t *testing.T) {
 }
 
 func TestNeutralizeOwnedRiskyUninstallerDeletesExactFile(t *testing.T) {
+	confirmTestUninstaller(t, []byte("legacy NSIS uninstaller"))
+	testUninstallRegistration(t, true)
 	path := filepath.Join(t.TempDir(), "uninstall.exe")
 	if err := os.WriteFile(path, []byte("legacy NSIS uninstaller"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	neutralized, action := neutralizeOwnedRiskyUninstallerFile(path)
-	if !neutralized || action != "deleted" {
-		t.Fatalf("legacy uninstaller result = %v, %q", neutralized, action)
+	if !prepareTestUninstaller(path) {
+		t.Fatal("confirmed legacy uninstaller not handled")
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("legacy uninstaller still exists: %v", err)
@@ -65,23 +89,25 @@ func TestNeutralizeOwnedRiskyUninstallerDeletesExactFile(t *testing.T) {
 }
 
 func TestNeutralizeOwnedRiskyUninstallerRenamesWhenDeleteFails(t *testing.T) {
+	confirmTestUninstaller(t, []byte("legacy NSIS uninstaller"))
+	testUninstallRegistration(t, true)
 	path := filepath.Join(t.TempDir(), "uninstall.exe")
 	if err := os.WriteFile(path, []byte("legacy NSIS uninstaller"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	originalRemove := windowsRemoveUninstaller
-	windowsRemoveUninstaller = func(string) error { return errors.New("locked") }
+	windowsRemoveUninstaller = func(*os.File) error { return errors.New("delete denied") }
 	t.Cleanup(func() { windowsRemoveUninstaller = originalRemove })
 
-	neutralized, action := neutralizeOwnedRiskyUninstallerFile(path)
-	if !neutralized || action == "" || action == "safe" || action == "deleted" {
-		t.Fatalf("legacy uninstaller fallback result = %v, %q", neutralized, action)
+	if !prepareTestUninstaller(path) {
+		t.Fatal("confirmed uninstaller rename fallback failed")
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("legacy uninstaller was not disabled: %v", err)
 	}
-	if _, err := os.Stat(action); err != nil {
-		t.Fatalf("disabled uninstaller is missing: %v", err)
+	files, _ := filepath.Glob(path + ".unsafe-disabled-*")
+	if len(files) != 1 {
+		t.Fatalf("expected one disabled file, got %v", files)
 	}
 }
 
@@ -96,7 +122,7 @@ func TestPrepareWindowsUninstallerPreservesUnownedSameNameFile(t *testing.T) {
 	originalRemove := windowsRemoveUninstaller
 	removeCalled := false
 	windowsHasMatchingUninstallRegistration = func(string, string) bool { return false }
-	windowsRemoveUninstaller = func(string) error {
+	windowsRemoveUninstaller = func(*os.File) error {
 		removeCalled = true
 		return nil
 	}
@@ -117,6 +143,7 @@ func TestPrepareWindowsUninstallerPreservesUnownedSameNameFile(t *testing.T) {
 }
 
 func TestPrepareWindowsUninstallerDisablesRegistrationAfterFileOperationsFail(t *testing.T) {
+	confirmTestUninstaller(t, []byte("legacy NSIS uninstaller"))
 	directory := t.TempDir()
 	executable := filepath.Join(directory, windowsUpdateExecutableName)
 	uninstaller := filepath.Join(directory, "uninstall.exe")
@@ -130,8 +157,8 @@ func TestPrepareWindowsUninstallerDisablesRegistrationAfterFileOperationsFail(t 
 	registrationActive := true
 	windowsHasMatchingUninstallRegistration = func(string, string) bool { return registrationActive }
 	windowsDisableUninstallRegistrations = func(string, string) { registrationActive = false }
-	windowsRemoveUninstaller = func(string) error { return errors.New("locked") }
-	windowsRenameUninstaller = func(string, string) error { return errors.New("locked") }
+	windowsRemoveUninstaller = func(*os.File) error { return errors.New("locked") }
+	windowsRenameUninstaller = func(*os.File, string) error { return errors.New("locked") }
 	t.Cleanup(func() {
 		windowsHasMatchingUninstallRegistration = originalHasRegistration
 		windowsDisableUninstallRegistrations = originalDisable
@@ -144,6 +171,13 @@ func TestPrepareWindowsUninstallerDisablesRegistrationAfterFileOperationsFail(t 
 	}
 	if registrationActive {
 		t.Fatal("the exact risky uninstall registration was not disabled")
+	}
+	windowsRemoveUninstaller = func(*os.File) error { t.Fatal("unregistered file reached deletion"); return nil }
+	windowsRenameUninstaller = func(*os.File, string) error { t.Fatal("unregistered file reached rename"); return nil }
+	for attempt := 0; attempt < 3; attempt++ {
+		if !prepareWindowsUninstallerForExecutable(executable) || !isWindowsUninstallerReadyForExecutable(executable) {
+			t.Fatal("registry-only remediation must stay update-ready on subsequent checks")
+		}
 	}
 	if _, err := os.Stat(uninstaller); err != nil {
 		t.Fatalf("failed file operations must leave the file intact: %v", err)

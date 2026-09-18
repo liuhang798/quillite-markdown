@@ -1,7 +1,7 @@
 {
   "name": "quillite-markdown-wails-frontend",
   "private": true,
-  "version": "2.7.4",
+  "version": "2.7.5",
   "type": "module",
   "scripts": {
     "prepare:mermaid": "node scripts/prepare-mermaid.mjs",

@@ -263,9 +263,14 @@
               <span class="eyebrow" data-i18n="livePreview">实时预览</span>
               <strong data-i18n="readingEffect">阅读效果</strong>
             </div>
+            <div class="preview-pane-actions">
             <button id="swapEditorLayoutButton" class="icon-button" type="button" data-i18n-title="swapEditorLayout" data-i18n-aria-label="swapEditorLayout" title="切换编辑与预览位置" aria-label="切换编辑与预览位置">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>
             </button>
+            <button id="hideLivePreviewButton" class="icon-button" type="button" data-i18n-title="hideLivePreview" data-i18n-aria-label="hideLivePreview" title="关闭实时预览（仅编辑）" aria-label="关闭实时预览（仅编辑）">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+            </button>
+            </div>
           </div>
           <div class="editor-preview-scroll">
             <article id="editorPreviewContent" class="markdown-body editor-preview-content"></article>
@@ -285,6 +290,7 @@
             <div class="editor-status">
               <span id="editorSaveState">已保存</span>
               <button id="saveAsButton" class="text-button" data-i18n="saveAs">另存为</button>
+              <button id="restoreLivePreviewButton" class="text-button" type="button" data-i18n="restoreLivePreview">恢复预览</button>
               <button id="exitEditButton" class="text-button exit-edit-button" data-i18n="exitEdit" title="退出编辑">退出编辑</button>
               <button id="documentHistoryButton" class="ai-edit-button document-history-button" type="button" data-i18n-title="documentHistoryTitle" title="查看和恢复历史版本">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6"/><path d="M12 8v4l2.7 1.7"/></svg>
@@ -472,6 +478,7 @@
         <span class="settings-submenu-summary"><span id="editorLayoutCurrent">预览在左</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
       </button>
       <div class="settings-submenu popover hidden" data-settings-submenu-panel="editor-layout" role="menu" data-i18n-aria-label="editorLayout" aria-label="编辑布局">
+        <button type="button" role="menuitemradio" data-editor-layout="editor-only" aria-checked="false"><span data-i18n="editorOnly">仅编辑</span><span class="settings-option-check">✓</span></button>
         <button type="button" role="menuitemradio" data-editor-layout="preview-left" aria-checked="true"><span data-i18n="previewOnLeft">预览在左</span><span class="settings-option-check">✓</span></button>
         <button type="button" role="menuitemradio" data-editor-layout="editor-left" aria-checked="false"><span data-i18n="editorOnLeft">编辑在左</span><span class="settings-option-check">✓</span></button>
       </div>
@@ -496,13 +503,14 @@
     <hr>
     <div class="popover-label" data-i18n="exportDocument">导出文档</div>
     <button data-action="export-center"><span class="menu-label" data-i18n="exportDocument">导出文档</span> <span data-i18n="exportFormatsCount">12 种格式</span></button>
+    <button data-action="document-tools"><span class="menu-label" data-i18n="documentTools">文档工具</span></button>
     <button data-action="print"><span class="menu-label" data-i18n="printDocument">打印文档</span> <span>Ctrl P</span></button>
     <hr>
     <button data-action="image-upload-settings"><span class="menu-label" data-i18n="imageUploadSettings">图床设置</span> <span>PicGo</span></button>
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.4</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.5</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -670,7 +678,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.7.4</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.7.5</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -843,6 +851,27 @@
     </section>
   </div>
 
+  <div id="documentConflictDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="documentConflictTitle" aria-describedby="documentConflictHint">
+    <section class="document-conflict-dialog">
+      <h2 id="documentConflictTitle" data-i18n="conflictTitle">文档发生冲突</h2>
+      <p id="documentConflictHint" data-i18n="conflictHint">磁盘文件已变化，自动保存已暂停。对比后选择保留、另存或手动合并；不会自动覆盖。</p>
+      <p id="documentConflictStatus" role="status" aria-live="polite"></p>
+      <div class="document-conflict-grid">
+        <label><span data-i18n="conflictDisk">磁盘版本（只读）</span><textarea id="documentConflictDisk" readonly spellcheck="false"></textarea></label>
+        <label><span data-i18n="conflictCurrent">当前编辑（只读）</span><textarea id="documentConflictCurrent" readonly spellcheck="false"></textarea></label>
+      </div>
+      <label id="documentConflictMergeField" class="hidden"><span data-i18n="conflictMergeContent">手动合并内容（先应用到编辑器，不写入磁盘）</span><textarea id="documentConflictMerge" spellcheck="false"></textarea></label>
+      <div class="document-conflict-actions">
+        <button id="conflictKeep" class="large-button secondary" type="button" data-i18n="conflictKeep">保留当前编辑</button>
+        <button id="conflictDisk" class="large-button secondary" type="button" data-i18n="conflictUseDisk">使用磁盘版本</button>
+        <button id="conflictCopy" class="large-button secondary" type="button" data-i18n="conflictCopy">另存副本</button>
+        <button id="conflictMerge" class="large-button secondary" type="button" data-i18n="conflictMerge">手动合并</button>
+        <button id="conflictApply" class="large-button primary hidden" type="button" data-i18n="conflictApply">应用合并，不保存</button>
+        <button id="conflictSave" class="large-button primary hidden" type="button" data-i18n="conflictSave">确认保存合并</button>
+      </div>
+    </section>
+  </div>
+
   <div id="documentHistoryDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="documentHistoryDialogTitle">
     <section class="document-history-dialog">
       <button id="closeDocumentHistory" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
@@ -882,7 +911,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.4</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.5</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -904,9 +933,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.4</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.5</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.4</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.5</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

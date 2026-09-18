@@ -23,6 +23,7 @@ function harness() {
     renderEditorPreview: content => calls.push(['preview', content]), renderFileList() {},
     setDirty: value => { state.dirty = value; }, pathIsInsideRoot: () => false,
     t: key => key, showToast: key => calls.push(key), reportSilentError() {}, console: { error() {} },
+    openDocumentConflict: async () => calls.push('conflict'), resetDocumentConflict: () => { state.documentConflict = null; },
     setTimeout: callback => { context.timer = callback; }, clearTimeout() {},
   });
   vm.runInContext(saveSource, context);

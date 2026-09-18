@@ -4,11 +4,15 @@ import {main} from '../models';
 
 export function AddFavorite(arg1:string):Promise<main.Preferences>;
 
+export function ApplyWorkspaceReplace(arg1:string,arg2:Array<string>):Promise<Array<main.WorkspaceApplyResult>>;
+
 export function CanEditFile(arg1:string):Promise<boolean>;
 
 export function CancelAIDocumentReview():Promise<void>;
 
 export function CancelAIRewrite():Promise<void>;
+
+export function CheckDocumentAssets(arg1:string,arg2:Array<string>):Promise<Array<string>>;
 
 export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
 
@@ -52,6 +56,8 @@ export function GetInitialFile():Promise<main.Document>;
 
 export function GetPreferences():Promise<main.Preferences>;
 
+export function GetRecoveryBackup():Promise<main.RecoverySnapshot>;
+
 export function GetRecoverySnapshot():Promise<main.RecoverySnapshot>;
 
 export function GetStartupMode():Promise<string>;
@@ -86,7 +92,11 @@ export function OpenRecentFile(arg1:string):Promise<main.Document>;
 
 export function OpenReferenceDocument(arg1:string):Promise<main.Document>;
 
+export function PreviewWorkspaceReplace(arg1:main.WorkspaceQuery):Promise<main.WorkspacePreview>;
+
 export function Print():Promise<void>;
+
+export function ReadDocumentConflict(arg1:string):Promise<main.Document>;
 
 export function ReadFile(arg1:string):Promise<main.Document>;
 
@@ -108,6 +118,10 @@ export function RewriteWithAI(arg1:main.AIRewriteRequest):Promise<main.AIRewrite
 
 export function SaveAs(arg1:string,arg2:string):Promise<main.Document>;
 
+export function SaveConflictCopy(arg1:string,arg2:string):Promise<main.Document>;
+
+export function SaveDiagnosticReport(arg1:main.DiagnosticInput):Promise<string>;
+
 export function SaveExportImage(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SaveExportImagePages(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<Array<string>>;
@@ -121,6 +135,8 @@ export function SaveFileWithRevision(arg1:string,arg2:string,arg3:string):Promis
 export function SavePastedImage(arg1:string,arg2:string):Promise<string>;
 
 export function SaveRecoverySnapshot(arg1:main.RecoverySnapshotInput):Promise<void>;
+
+export function SearchWorkspace(arg1:main.WorkspaceQuery):Promise<main.WorkspaceSearchResult>;
 
 export function SelectFeedbackImages():Promise<Array<main.FeedbackImageSelection>>;
 
@@ -147,6 +163,8 @@ export function SetRecentPinned(arg1:string,arg2:boolean):Promise<main.Preferenc
 export function SetTheme(arg1:boolean):Promise<void>;
 
 export function SetUsageAnalytics(arg1:boolean):Promise<main.Preferences>;
+
+export function ShowDocumentBackupDirectory():Promise<void>;
 
 export function ShowInFolder(arg1:string):Promise<void>;
 

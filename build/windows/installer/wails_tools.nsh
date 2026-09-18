@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "轻阅 Markdown"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "2.7.4"
+    !define INFO_PRODUCTVERSION "2.7.5"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "Copyright © 2026 柳航"

@@ -11,7 +11,7 @@ const functions = source.slice(source.indexOf('function normalizeEditorLayout(')
 function harness(saved = null) {
   const storage = new Map(saved ? [['editorLayout', saved]] : []);
   const current = {};
-  const buttons = ['preview-left', 'editor-left'].map(editorLayout => ({
+  const buttons = ['preview-left', 'editor-left', 'editor-only'].map(editorLayout => ({
     dataset: { editorLayout }, classList: { toggle() {} },
     setAttribute(name, value) { this[name] = value; },
   }));
@@ -22,6 +22,7 @@ function harness(saved = null) {
     localStorage: { setItem: (key, value) => storage.set(key, value) },
     $: () => current, t: key => key, showToast() {},
     codeEditor: editor, scheduleFormatToolbarLayout() {},
+    updatePaneResizerVisibility() {}, suspendEditorPreview() {}, renderEditorPreview() {}, editorContent: () => editor.content,
   });
   vm.runInContext(functions, context);
   context.setEditorLayout(context.normalizeEditorLayout(storage.get('editorLayout')), true);
@@ -60,6 +61,50 @@ test('divider movement follows the physical direction in both layouts', () => {
   assert.equal(context.editorResizeDirection(), -1);
   assert.match(source, /deltaPercent = .*editorResizeDirection\(\)/);
   assert.match(source, /const change = \(event.key === 'ArrowRight' \? 2 : -2\) \* editorResizeDirection\(\)/);
+});
+
+test('editor-only persists, suspends preview and restores fresh split content without resetting edits', () => {
+  const { context, storage, buttons, editor, current } = harness();
+  context.state.editing = true; context.state.currentFile = { path: 'draft.md' };
+  const calls = [];
+  context.suspendEditorPreview = () => calls.push('pause');
+  context.renderEditorPreview = text => calls.push(text);
+  const before = JSON.stringify(editor);
+  context.setEditorLayout('editor-only');
+  assert.equal(storage.get('editorLayout'), 'editor-only');
+  assert.equal(buttons[2]['aria-checked'], 'true');
+  assert.equal(current.textContent, 'editorOnly');
+  context.setEditorLayout('editor-left');
+  assert.deepEqual(calls, ['pause', '# Draft']);
+  assert.equal(JSON.stringify(editor), before);
+  assert.equal(harness('editor-only').context.state.editorLayout, 'editor-only');
+});
+
+test('editor-only guards scheduled, direct and cursor rendering and explicitly refreshes exports', () => {
+  for (const name of ['scheduleEditorPreview', 'renderEditorPreview', 'scrollPreviewToCursor']) {
+    const start = source.indexOf(`function ${name}(`);
+    const body = source.slice(start, source.indexOf('\nfunction ', start + 1));
+    assert.match(body, /state\.editorLayout === 'editor-only'/);
+  }
+  assert.match(source, /cancelMermaidRendering\(els\.editorPreview\)/);
+  assert.match(source, /releaseEChartsDiagrams\(els\.editorPreview\)/);
+  assert.match(source, /await renderMarkdownTo\(container, state\.currentFile, editorContent\(\)\)/);
+  assert.match(html, /id="hideLivePreviewButton"[^>]*data-i18n-aria-label="hideLivePreview"/);
+  assert.match(html, /role="menuitemradio" data-editor-layout="editor-only"/);
+});
+
+test('restore preview control is editor-only, ordered after Save As, and remembers the split orientation', () => {
+  const { context, storage } = harness();
+  for (const layout of ['editor-left', 'preview-left']) {
+    context.setEditorLayout(layout);
+    context.setEditorLayout('editor-only');
+    assert.equal(context.state.lastSplitLayout, layout);
+    assert.equal(storage.get('lastSplitLayout'), layout);
+  }
+  assert.match(html, /id="saveAsButton"[^\n]+\n\s*<button id="restoreLivePreviewButton"[^\n]+\n\s*<button id="exitEditButton"/);
+  assert.match(css, /#restoreLivePreviewButton \{ display: none; \}/);
+  assert.match(css, /body\[data-editor-layout="editor-only"\] #restoreLivePreviewButton \{ display: inline-flex;/);
+  assert.match(source, /\$\('#restoreLivePreviewButton'\)\.addEventListener\('click', \(\) => \{\s*setEditorLayout\(state.lastSplitLayout === 'editor-left' \? 'editor-left' : 'preview-left'\);\s*focusCodeEditor\(\);/);
 });
 
 test('both controls are accessible and narrow screens retain the editor', () => {

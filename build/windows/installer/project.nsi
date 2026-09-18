@@ -28,7 +28,7 @@
 !define INFO_PROJECTNAME    "quillite-markdown"
 !define INFO_COMPANYNAME    "Quillite Open Source"
 !define INFO_PRODUCTNAME    "轻阅 Markdown"
-!define INFO_PRODUCTVERSION "2.7.4"
+!define INFO_PRODUCTVERSION "2.7.5"
 !define INFO_COPYRIGHT      "Copyright © 2026 柳航"
 !define PRODUCT_EXECUTABLE  "QuilliteMarkdown.exe"
 !define LEGACY_PRODUCTNAME  "MD阅读助手"
@@ -172,7 +172,7 @@ Function un.VerifyInstallOwnership
     ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
     StrCmp $1 "$INSTDIR" 0 verifyInstallOwnershipDone
     ReadRegStr $1 HKCU "${UNINST_KEY}" "UninstallString"
-    StrCmp $1 "$\"$INSTDIR\uninstall.exe$\"" 0 verifyInstallOwnershipDone
+    StrCmp $1 "$\"$INSTDIR\uninstall.exe$\" _?=$INSTDIR" 0 verifyInstallOwnershipDone
     StrCmp $EXEPATH "$INSTDIR\uninstall.exe" 0 verifyInstallOwnershipDone
     StrCpy $InstallOwned "1"
     verifyInstallOwnershipDone:
@@ -438,6 +438,10 @@ Section
 
     !insertmacro ExitIfExternalCancelled 08
     !insertmacro wails.writeUninstaller
+    # Force the normal Apps & Features entry to run the owned uninstaller in
+    # place. Without _?= NSIS self-copies to Temp and the strict EXEPATH check
+    # correctly rejects it, leaving users unable to uninstall normally.
+    WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\" _?=$INSTDIR"
     # Persist the actual directory selected by the user so future upgrades
     # open the directory page at the same location.
     SetRegView 64

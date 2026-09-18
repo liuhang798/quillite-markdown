@@ -19,6 +19,18 @@
   </p>
 </div>
 
+Conflict recovery retains the original revision and paused state across restarts. Legacy snapshots require comparison before saving. Backups remain intact while conflicts are unresolved, and outdated merge drafts cannot be applied to newer edits without restarting the merge explicitly.
+
+Unreleased save protection: final publication never overwrites a concurrently recreated destination. Windows exclusively verifies the original; unavailable protection is treated as a conflict. Failed saves restore the original or retain recovery material. macOS/Linux retain hidden `.quillite-save-recovery-*` original-file backups beside the document to preserve late writes through other applications' open handles. These consume disk space and are not automatically cleaned. Unsupported filesystem operations fail closed; save a new copy instead.
+
+Unreleased: More → Document tools includes basic Markdown checks, folder text search, batch replacement previews, a safety center, templates and diagnostic export. Checks never edit text; templates create new documents; recovery/history inspection is read-only and exports new copies. Diagnostics contain version, platform, status flags and session error-category counts, never content, paths or keys, and are not uploaded.
+
+Search is case-sensitive literal disk search with relative-path and file-type filters, excluding the open document. Limits: 800 files, five directory levels, 32 MiB total, 2 MiB per file and 500 matching lines. Batch replacement is limited to 40 files and 256 KiB per file; previews expire after ten minutes and require explicit selection and confirmation. History failures, changed links or revision conflicts skip the affected file without automatic retries. Up to 20 custom templates (64 KiB each) support `{{title}}` and `{{date}}`.
+
+Save receipts reflect only the bytes written by that operation, so later external changes still require comparison rather than being acknowledged by the next autosave. Manual merges in reading mode also update recovery backups without requiring an initialized editor.
+
+Unreleased: saving conflicts display disk and editor versions side by side. Keeping edits pauses autosave; using the disk version updates only the editor and can be undone. Save Copy requires a new filename. Manual merges are applied to the editor first, then explicitly confirmed on the next save with disk revision revalidation. Deleted or unreadable disk files never replace the current buffer with empty text.
+
 AI settings use consistent cross-platform provider and model pickers in provider/endpoint, API key, then model order. Entering an endpoint and API key automatically discovers account models without requiring the key to be saved first; the draft key is used only for that request and is not written to preferences. Alibaba Cloud workspace endpoints are translated to their dedicated model-list API automatically. Connection diagnostics report endpoint, credential, model-list, and real model-request results separately. Successful model lists are cached for seven days and shown with a timestamp during temporary API failures. Before a DeepSeek key is saved, built-in candidates are shown without claiming account access. Custom OpenAI-compatible endpoints do not assume a default model: users choose a discovered model or enter the service's actual model ID. The reading view can generate a closable AI brief in place beneath the document actions, showing live progress before a one-sentence overview and three to five key points designed for a 5–10 second read; long documents are summarized by section and consolidated. The editor AI menu provides generate, edit, proofread, continue, translate, condense, expand, and custom workflows. Every workflow has a task-specific prompt; Continue and Expand optionally accept a target length, and Condense optionally accepts a retention ratio or target size. Leaving this field blank applies no limit. Translation supports the same 30 targets in both the interface and backend, each shown as its native label followed by a Chinese-language annotation. AI Edit streams generated text as it arrives and offers per-change acceptance or original-text retention before applying once; closing an active AI operation also cancels its network request.
 
 On Windows, the startup window adapts to its monitor's available work area and DPI scaling so the title bar stays visible on smaller or mixed-DPI displays.
@@ -29,7 +41,7 @@ Ordinary document saves stage and sync a temporary file before replacement, pres
 
 Chart security checks distinguish raw data from executable options, preserving legitimate column names and dimension mappings. Large arrays are traversed incrementally to avoid argument-count errors.
 
-Choose **More → Editor layout** to place the editor or preview on the left, or use the swap arrows in the live-preview header. Your layout preference is remembered.
+Close the live preview to enter full-width **Editor only**. Click **Restore preview** after Save As to restore the previous split orientation, or choose **More → Editor layout** to select either orientation. Your choice is remembered. Press `Ctrl + E` (`⌘ + E` on Mac) to switch to the full reading preview and back. Hidden live previews stop automatic rendering and release chart instances; restoring split view renders the latest text. Saving and on-demand exports remain available.
 
 > **Official website and downloads: <https://qm.ssssa.cn/>**
 > Updates, installers for all platforms, release notes, and feedback are served only from this hostname, without relying on the apex or `www` domains.
@@ -48,7 +60,9 @@ It is a good fit for reading long Markdown documents, editing README files, main
 
 ## Product improvement program
 
-> V2.7.4 rebuild: saving detects external changes and retains edits for Save As on conflict. Reading, saving and recovery share a 64 MiB limit. Failed Pandoc conversion preserves existing output, and remote export images cannot access private networks. Unsupported metadata or directory permissions fail safely with a Save As prompt. See the changelog for the remaining legacy-uninstaller identification limitation. Cross-platform installation/update validation and production signing are not fully complete. Existing users of the same version must download the new installer manually.
+In V2.7.5, legacy-uninstaller remediation requires both an audited SHA-256 risk allowlist and matching uninstall registration. Unknown files and registrations are preserved. The production list is currently empty pending verified historical specimens, so unmarked files are not automatically deleted or renamed. Unconfirmed safety blocks in-app updates and recommends backup followed by a fresh installation directory.
+
+> V2.7.5 adds document tools, safe batch replacement, side-by-side conflict comparison, and a full-width Editor only layout with one-click preview restoration. The normal Windows uninstall entry now runs in place under strict ownership validation, while release CI verifies document preservation across installation, upgrade, and uninstall. Production code signing is still not configured.
 
 About Quillite Markdown includes a “Join the product improvement program” checkbox that controls error logs only. When enabled, sanitized software error logs, server-resolved country/region/city, coarse Windows/macOS/Linux type, and app version are submitted silently after an error. Unchecking it stops error reports.
 
@@ -77,12 +91,12 @@ The macOS installer image carries a metadata no-index marker. On launch, the ins
 
 Documents and folders opened through macOS system panels, Finder, or file associations are persisted as native security-scoped bookmarks. Recent, Favorites, and Explorer silently restore read and edit access after relaunch and refresh stale bookmarks automatically. A preselected system panel is needed only for legacy records or when an unsigned update changes the app identity.
 
-## What's new in 2.7.4
+## What's new in 2.7.5
 
-- The editor AI menu now groups Generate, Edit, Proofread, Continue, Translate, Condense, Expand, and Custom, with task-specific prompts, optional length targets, and 30 translation languages.
-- The reader gains a closable AI document brief with explicit whole-document consent, sensitive-content detection, optional redaction, and chunk progress before the result appears inline.
-- Added local version history and crash recovery. Large documents use chunked AI processing, deferred preview work, and lightweight history metadata reads to reduce typing and recovery stalls.
-- Added Alibaba Cloud Model Studio, SiliconFlow, OpenRouter, and custom OpenAI-compatible endpoints with draft-key model discovery, connection diagnostics, caching, and cancellation.
+- Added document tools for Markdown checks, folder search, explicitly selected batch-replacement previews, safety inspection, custom templates, and privacy-safe diagnostics.
+- Save conflicts now compare Disk version and Current edits side by side, with keep, use disk, save copy, and manual merge actions—never an automatic overwrite.
+- Added persistent full-width Editor only layout. Hidden previews stop live rendering; `Ctrl/⌘ + E` toggles the full preview and Restore preview returns to the previous split direction.
+- Strengthened Windows install/upgrade/uninstall gates around the real registered uninstall command and user-file preservation. Unknown legacy uninstallers are neither deleted nor renamed.
 
 ## What's new in 2.7.2
 

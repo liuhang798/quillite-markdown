@@ -3,10 +3,27 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestDocumentCommitActiveWriterIsNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	target, staged := filepath.Join(dir, "document.md"), filepath.Join(dir, "stage")
+	os.WriteFile(target, []byte("external"), 0600)
+	os.WriteFile(staged, []byte("editor"), 0600)
+	f, err := os.OpenFile(target, os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err = commitDocumentReplacement(staged, target, documentRevision([]byte("external"))); !errors.Is(err, errDocumentConflict) {
+		t.Fatalf("writer not excluded: %v", err)
+	}
+	assertDocumentBytes(t, target, "external")
+}
 
 func TestDocumentReplacementPreservesAlternateStream(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "document.md")

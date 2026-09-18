@@ -180,7 +180,7 @@ test('reader search includes Markdown inline code and fenced code text', () => {
 
 test('returning to the app reloads an externally changed document without overwriting local edits', () => {
   assert.match(renderer, /async function refreshCurrentFileFromDisk\(\)/);
-  assert.match(renderer, /if \(!state\.currentFile\?\.path \|\| state\.dirty \|\| state\.saving \|\| externalRefreshInProgress\) return/);
+  assert.match(renderer, /if \(!state\.currentFile\?\.path \|\| state\.documentConflict \|\| state\.dirty \|\| state\.saving \|\| externalRefreshInProgress\) return/);
   assert.match(renderer, /const refreshed = await window\.quilliteMarkdown\.readFile\(requestedPath\)/);
   assert.match(renderer, /if \(requestedSession !== state.documentSession \|\| !state\.currentFile \|\| !sameDocumentPath\(state\.currentFile\.path, requestedPath\) \|\| state\.dirty \|\| state\.saving\) return/);
   assert.match(renderer, /window\.addEventListener\('focus', \(\) => \{[\s\S]*scheduleMacWindowModeSync\(\);[\s\S]*refreshCurrentFileFromDisk\(\);[\s\S]*\}\)/);
@@ -460,7 +460,7 @@ test('unwritable documents explain the cause and offer Save Copy and Edit withou
   assert.match(renderer, /\$\('#saveCopyAndEdit'\)\.addEventListener\('click', savePermissionCopyAndEdit\)/);
   assert.match(styles, /\.edit-permission-reasons \{[^}]*border-left: 3px solid var\(--accent\);[^}]*background: var\(--accent-soft\);/);
   assert.match(renderer, /if \(state\.saveAsRequired && options\.auto\) return;/);
-  assert.match(renderer, /if \(state\.saveAsRequired && !options\.auto\) saveAs = true;/);
+  assert.match(renderer, /if \(state\.saveAsRequired && !options\.auto && !options\.conflictRevision\) saveAs = true;/);
   assert.match(renderer, /state\.saveAsRequired = true;/);
   assert.match(renderer, /fallbackToSaveAs = true;/);
   assert.match(renderer, /if \(fallbackToSaveAs && isCurrentSession\(\)\) return await saveDocument\(true, options\);/);
@@ -542,7 +542,7 @@ test('editor split panes are draggable without a maximum width limit', () => {
   assert.match(renderer, /editorPreviewWidth/);
   assert.match(renderer, /setEditorPreviewWidth\(startPercent \+ deltaPercent\)/);
   assert.match(renderer, /Math\.max\(12, Math\.min\(max, Math\.round\(percent\)\)\)/);
-  assert.match(renderer, /els\.editorResizer\?\.classList\.toggle\('hidden', !state\.editing\)/);
+  assert.match(renderer, /els\.editorResizer\?\.classList\.toggle\('hidden', !state\.editing \|\| state\.editorLayout === 'editor-only'\)/);
   assert.match(styles, /\.editor-preview-pane \{ flex: 0 0 var\(--editor-preview-width, 47%\);/);
   assert.match(styles, /\.editor-preview-pane, \.editor-resizer \{ display: none; \}/);
   assert.match(renderer, /localStorage\.setItem\('editorPreviewWidth', String\(state\.editorPreviewWidth\)\)/);
@@ -924,9 +924,12 @@ test('AI privacy, chunk progress, paragraph review, and local version history ar
   assert.match(styles, /\.ai-send-privacy \{[^}]*display: grid/);
 });
 
-test('unsafe Windows uninstallers force a full installer instead of in-app update', () => {
+test('unverified Windows uninstallers preserve files and require a new install directory', () => {
   assert.match(html, /id="manualUpdateTitle"[\s\S]*id="manualUpdateDescription"/);
-  assert.match(renderer, /unsafeWindowsUninstallerTitle: '检测到旧版卸载程序，必须完整安装'/);
+  assert.match(renderer, /unsafeWindowsUninstallerTitle: '无法确认卸载程序安全性'/);
+  assert.match(renderer, /选择新的专属目录安装/);
+  assert.match(renderer, /Uninstaller safety could not be confirmed/);
+  assert.match(renderer, /choose a new dedicated folder/);
   assert.match(renderer, /function openUpdateDialog\(info\)[\s\S]*manualInstallReason === 'windows-unsafe-uninstaller'[\s\S]*#applyUpdate'[\s\S]*manualInstallRequired/);
   assert.match(renderer, /if \(info\?\.available \|\| info\?\.manualInstallRequired\) openUpdateDialog\(info\)/);
   assert.match(renderer, /manualInstallRequired \? state\.updateInfo\?\.manualInstallerUrl[\s\S]*installerURL \|\| 'https:\/\/qm\.ssssa\.cn\/#download'/);

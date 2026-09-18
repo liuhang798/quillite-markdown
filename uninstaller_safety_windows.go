@@ -4,12 +4,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"unicode/utf16"
 
 	"golang.org/x/sys/windows/registry"
@@ -23,8 +23,8 @@ const (
 )
 
 var (
-	windowsRemoveUninstaller                = os.Remove
-	windowsRenameUninstaller                = os.Rename
+	windowsRemoveUninstaller                = deleteVerifiedUninstallerHandle
+	windowsRenameUninstaller                = renameVerifiedUninstallerHandle
 	windowsHasMatchingUninstallRegistration = hasMatchingWindowsUninstallRegistration
 	windowsDisableUninstallRegistrations    = disableMatchingWindowsUninstallRegistrations
 )
@@ -37,10 +37,8 @@ func isWindowsUninstallerSafe() bool {
 	return isWindowsUninstallerFileSafe(filepath.Join(filepath.Dir(executable), "uninstall.exe"))
 }
 
-// prepareWindowsUninstallerForUpdate neutralizes only an installed legacy
-// Quillite uninstaller whose registered command points to the exact file next
-// to this executable. A safe-marked uninstaller is always preserved. An absent
-// uninstaller is also safe for a portable or already-remediated application.
+// Both a verified binary digest and exact registration are required. Neither
+// a filename/version nor the absence of the safe marker establishes ownership.
 func prepareWindowsUninstallerForUpdate() bool {
 	executable, err := os.Executable()
 	if err != nil {
@@ -55,21 +53,28 @@ func prepareWindowsUninstallerForExecutable(executable string) bool {
 	}
 	installDirectory := filepath.Dir(executable)
 	uninstallerPath := filepath.Join(installDirectory, "uninstall.exe")
-	if isWindowsUninstallerFileSafe(uninstallerPath) {
-		return true
-	}
-	info, err := os.Lstat(uninstallerPath)
+	file, data, err := openLockedUninstaller(uninstallerPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	if hasWindowsSafeUninstallerMarker(data) {
+		return true
+	}
+	if !isVerifiedRiskyUninstaller(data) {
 		return false
 	}
 	if !windowsHasMatchingUninstallRegistration(uninstallerPath, installDirectory) {
-		return false
+		// The verified risky binary has no matching Windows uninstall entry,
+		// including after registry-only neutralization on a previous run. Match
+		// the updater readiness check, but do not mutate an unregistered file.
+		return true
 	}
 
-	neutralized, _ := neutralizeOwnedRiskyUninstallerFile(uninstallerPath)
+	neutralized, _ := neutralizeVerifiedUninstaller(file)
 	if neutralized {
 		windowsDisableUninstallRegistrations(uninstallerPath, installDirectory)
 		return true
@@ -81,15 +86,13 @@ func prepareWindowsUninstallerForExecutable(executable string) bool {
 	return !windowsHasMatchingUninstallRegistration(uninstallerPath, installDirectory)
 }
 
-func neutralizeOwnedRiskyUninstallerFile(path string) (bool, string) {
-	if isWindowsUninstallerFileSafe(path) {
-		return true, "safe"
-	}
-	if err := windowsRemoveUninstaller(path); err == nil || errors.Is(err, os.ErrNotExist) {
+// Only called with the still-open, hash-verified, write/delete-share-denying handle.
+func neutralizeVerifiedUninstaller(file *os.File) (bool, string) {
+	if err := windowsRemoveUninstaller(file); err == nil {
 		return true, "deleted"
 	}
-	disabledPath := path + ".unsafe-disabled-" + time.Now().UTC().Format("20060102T150405")
-	if err := windowsRenameUninstaller(path, disabledPath); err == nil {
+	disabledPath, err := disabledUninstallerPath(file.Name())
+	if err == nil && windowsRenameUninstaller(file, disabledPath) == nil {
 		return true, disabledPath
 	}
 	return false, ""
@@ -184,20 +187,35 @@ func isWindowsUninstallerReadyForExecutable(executable string) bool {
 	}
 	installDirectory := filepath.Dir(executable)
 	uninstallerPath := filepath.Join(installDirectory, "uninstall.exe")
-	if isWindowsUninstallerFileSafe(uninstallerPath) {
+	file, data, err := openLockedUninstaller(uninstallerPath)
+	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
-	if _, err := os.Lstat(uninstallerPath); errors.Is(err, os.ErrNotExist) {
-		return true
-	}
-	return !hasMatchingWindowsUninstallRegistration(uninstallerPath, installDirectory)
-}
-
-func isWindowsUninstallerFileSafe(path string) bool {
-	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
+	defer file.Close()
+	if hasWindowsSafeUninstallerMarker(data) {
+		return true
+	}
+	return isVerifiedRiskyUninstaller(data) && !windowsHasMatchingUninstallRegistration(uninstallerPath, installDirectory)
+}
+
+func isWindowsUninstallerFileSafe(path string) bool {
+	file, data, err := openLockedUninstaller(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	return hasWindowsSafeUninstallerMarker(data)
+}
+
+func isVerifiedRiskyUninstaller(data []byte) bool {
+	_, confirmed := verifiedRiskyWindowsUninstallers[sha256.Sum256(data)]
+	return confirmed && !hasWindowsSafeUninstallerMarker(data)
+}
+
+func hasWindowsSafeUninstallerMarker(data []byte) bool {
 	// NSIS stores version-resource strings as UTF-16LE. Accept ASCII as well so
 	// the check remains valid if a future installer toolchain changes encoding.
 	return bytes.Contains(data, []byte(windowsSafeUninstallerMarker)) ||

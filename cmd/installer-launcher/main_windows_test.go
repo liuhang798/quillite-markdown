@@ -396,6 +396,7 @@ func TestInstallerPreservesUnverifiedShortcutsAndDestinations(t *testing.T) {
 		`Call VerifyInstallDestination`,
 		`IfFileExists "$INSTDIR\uninstall.exe" installDestinationReserved`,
 		`ReadRegStr $1 HKCU "${UNINST_KEY}" "UninstallString"`,
+		`WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\" _?=$INSTDIR"`,
 		`StrCmp $EXEPATH "$INSTDIR\uninstall.exe" 0 verifyInstallOwnershipDone`,
 		`StrCmp $1 "Quillite Markdown 2.7.3$\r$\n" installDestinationMarkerOwned`,
 		`IfFileExists "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" publicStartMenuRemains`,

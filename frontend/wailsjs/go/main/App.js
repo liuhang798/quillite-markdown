@@ -6,6 +6,10 @@ export function AddFavorite(arg1) {
   return window['go']['main']['App']['AddFavorite'](arg1);
 }
 
+export function ApplyWorkspaceReplace(arg1, arg2) {
+  return window['go']['main']['App']['ApplyWorkspaceReplace'](arg1, arg2);
+}
+
 export function CanEditFile(arg1) {
   return window['go']['main']['App']['CanEditFile'](arg1);
 }
@@ -16,6 +20,10 @@ export function CancelAIDocumentReview() {
 
 export function CancelAIRewrite() {
   return window['go']['main']['App']['CancelAIRewrite']();
+}
+
+export function CheckDocumentAssets(arg1, arg2) {
+  return window['go']['main']['App']['CheckDocumentAssets'](arg1, arg2);
 }
 
 export function CheckForUpdates(arg1) {
@@ -102,6 +110,10 @@ export function GetPreferences() {
   return window['go']['main']['App']['GetPreferences']();
 }
 
+export function GetRecoveryBackup() {
+  return window['go']['main']['App']['GetRecoveryBackup']();
+}
+
 export function GetRecoverySnapshot() {
   return window['go']['main']['App']['GetRecoverySnapshot']();
 }
@@ -170,8 +182,16 @@ export function OpenReferenceDocument(arg1) {
   return window['go']['main']['App']['OpenReferenceDocument'](arg1);
 }
 
+export function PreviewWorkspaceReplace(arg1) {
+  return window['go']['main']['App']['PreviewWorkspaceReplace'](arg1);
+}
+
 export function Print() {
   return window['go']['main']['App']['Print']();
+}
+
+export function ReadDocumentConflict(arg1) {
+  return window['go']['main']['App']['ReadDocumentConflict'](arg1);
 }
 
 export function ReadFile(arg1) {
@@ -214,6 +234,14 @@ export function SaveAs(arg1, arg2) {
   return window['go']['main']['App']['SaveAs'](arg1, arg2);
 }
 
+export function SaveConflictCopy(arg1, arg2) {
+  return window['go']['main']['App']['SaveConflictCopy'](arg1, arg2);
+}
+
+export function SaveDiagnosticReport(arg1) {
+  return window['go']['main']['App']['SaveDiagnosticReport'](arg1);
+}
+
 export function SaveExportImage(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SaveExportImage'](arg1, arg2, arg3, arg4);
 }
@@ -240,6 +268,10 @@ export function SavePastedImage(arg1, arg2) {
 
 export function SaveRecoverySnapshot(arg1) {
   return window['go']['main']['App']['SaveRecoverySnapshot'](arg1);
+}
+
+export function SearchWorkspace(arg1) {
+  return window['go']['main']['App']['SearchWorkspace'](arg1);
 }
 
 export function SelectFeedbackImages() {
@@ -292,6 +324,10 @@ export function SetTheme(arg1) {
 
 export function SetUsageAnalytics(arg1) {
   return window['go']['main']['App']['SetUsageAnalytics'](arg1);
+}
+
+export function ShowDocumentBackupDirectory() {
+  return window['go']['main']['App']['ShowDocumentBackupDirectory']();
 }
 
 export function ShowInFolder(arg1) {

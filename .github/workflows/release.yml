@@ -48,6 +48,8 @@ jobs:
         working-directory: frontend
       - run: go test ./...
       - run: go vet ./...
+      - name: Release safety regression gate
+        run: node scripts/test-release-safety.mjs
   windows:
     needs: verify
     name: Windows x64
@@ -148,6 +150,7 @@ jobs:
             throw "Expected NSIS installer was not found: $installer"
           }
 
+          ./scripts/test-windows-install-lifecycle.ps1 -CoreInstaller $installer
           ./scripts/build-windows-launcher.ps1 -CoreInstaller $installer -Output $installer
 
           $releaseDir = New-Item -ItemType Directory -Force build/bin/release

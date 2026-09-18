@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,26 +24,32 @@ const (
 // deliberately stored outside preferences so a large document cannot bloat or
 // corrupt ordinary application settings.
 type RecoverySnapshot struct {
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Directory string `json:"directory"`
-	Content   string `json:"content"`
-	UpdatedAt string `json:"updatedAt"`
+	BaseRevision string `json:"baseRevision,omitempty"`
+	Conflict     bool   `json:"conflict,omitempty"`
+	Path         string `json:"path"`
+	Name         string `json:"name"`
+	Directory    string `json:"directory"`
+	Content      string `json:"content"`
+	UpdatedAt    string `json:"updatedAt"`
 }
 
 type RecoverySnapshotInput struct {
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Directory string `json:"directory"`
-	Content   string `json:"content"`
+	BaseRevision string `json:"baseRevision,omitempty"`
+	Conflict     bool   `json:"conflict,omitempty"`
+	Path         string `json:"path"`
+	Name         string `json:"name"`
+	Directory    string `json:"directory"`
+	Content      string `json:"content"`
 }
 
 type recoverySnapshotMetadata struct {
-	Path      string `json:"path"`
-	Name      string `json:"name"`
-	Directory string `json:"directory"`
-	UpdatedAt string `json:"updatedAt"`
-	Size      int64  `json:"size"`
+	BaseRevision string `json:"baseRevision,omitempty"`
+	Conflict     bool   `json:"conflict,omitempty"`
+	Path         string `json:"path"`
+	Name         string `json:"name"`
+	Directory    string `json:"directory"`
+	UpdatedAt    string `json:"updatedAt"`
+	Size         int64  `json:"size"`
 }
 
 func (a *App) recoverySnapshotPath() string {
@@ -51,6 +58,7 @@ func (a *App) recoverySnapshotPath() string {
 
 func encodeRecoverySnapshot(snapshot RecoverySnapshot) ([]byte, error) {
 	metadata := recoverySnapshotMetadata{
+		BaseRevision: snapshot.BaseRevision, Conflict: snapshot.Conflict,
 		Path: snapshot.Path, Name: snapshot.Name, Directory: snapshot.Directory,
 		UpdatedAt: snapshot.UpdatedAt, Size: int64(len(snapshot.Content)),
 	}
@@ -91,7 +99,7 @@ func decodeRecoverySnapshot(path string, fileSize int64) (RecoverySnapshot, erro
 		if int64(len(content)) != metadata.Size {
 			return RecoverySnapshot{}, errors.New("recovery snapshot content size is invalid")
 		}
-		return RecoverySnapshot{Path: metadata.Path, Name: metadata.Name, Directory: metadata.Directory, Content: string(content), UpdatedAt: metadata.UpdatedAt}, nil
+		return RecoverySnapshot{Path: metadata.Path, Name: metadata.Name, Directory: metadata.Directory, Content: string(content), UpdatedAt: metadata.UpdatedAt, BaseRevision: metadata.BaseRevision, Conflict: metadata.Conflict}, nil
 	}
 
 	// Pre-2.7.3 development builds stored one JSON object. Account for the
@@ -121,7 +129,14 @@ func (a *App) SaveRecoverySnapshot(input RecoverySnapshotInput) error {
 	if len(input.Content) > maxRecoverySnapshotSize {
 		return fmt.Errorf("recovery document exceeds %d bytes", maxRecoverySnapshotSize)
 	}
+	if input.BaseRevision != "" {
+		decoded, err := hex.DecodeString(input.BaseRevision)
+		if err != nil || len(decoded) != 32 {
+			return errors.New("recovery base revision is invalid")
+		}
+	}
 	snapshot := RecoverySnapshot{
+		BaseRevision: strings.ToLower(input.BaseRevision), Conflict: input.Conflict,
 		Path:      filepath.Clean(path),
 		Name:      strings.TrimSpace(input.Name),
 		Directory: strings.TrimSpace(input.Directory),
@@ -167,7 +182,7 @@ func (a *App) GetRecoverySnapshot() (*RecoverySnapshot, error) {
 	// the snapshot. Do not offer a recovery copy that is already on disk.
 	currentPath := filepath.Clean(snapshot.Path)
 	currentInfo, statErr := os.Stat(currentPath)
-	if statErr == nil && !currentInfo.IsDir() && currentInfo.Size() == int64(len(snapshot.Content)) {
+	if !snapshot.Conflict && statErr == nil && !currentInfo.IsDir() && currentInfo.Size() == int64(len(snapshot.Content)) {
 		current, readErr := os.ReadFile(currentPath)
 		if readErr != nil || string(current) != snapshot.Content {
 			return &snapshot, nil

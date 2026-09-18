@@ -2,6 +2,40 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [Unreleased]
+
+## [2.7.5] - 2026-09-18
+
+### 简体中文
+
+- 修复 Windows“应用和功能”普通卸载入口：登记命令使用 NSIS 原位运行参数，保持严格的卸载程序路径、安装标识和注册表三重校验，同时让正常卸载不再因临时副本路径被拒绝。发布 CI 会核对真实登记命令并在 GitHub 托管临时机完成安装、原位升级、卸载和用户文档保留验证。
+- 仅编辑模式在“另存为”与“退出编辑”之间显示“恢复预览”，一键恢复上次分栏方向及最新正文，恢复后自动隐藏按钮。
+- 新增持久化的“仅编辑”布局：实时预览标题栏可关闭预览，编辑器占满可用宽度；“更多 → 编辑布局”可恢复两种分栏方向。`Ctrl/⌘ + E` 在完整预览与编辑间切换，保留光标与撤销记录。隐藏期间取消预览调度、停止后续图表渲染并释放图表实例，导出时按需渲染最新正文。
+- 修复本轮审计的五项问题：最终文档写入改为保护原文件后仅向空目标位置提交，Windows 使用排他句柄校验并移动原文件；提交位置被外部程序占用时拒绝覆盖，保留恢复材料。macOS/Linux 无法强制约束其他编辑器的已有写句柄，成功保存后也保留原 inode 对应的 `.quillite-save-recovery-*` 本地恢复副本，不自动清理。修复工具定位时权限提示被遮挡、模板新建后预览空白、嵌套/HTML 标题锚点误报，以及安装回归脚本从错误位置运行卸载器的问题。
+- 新增“更多 → 文档工具”：基础 Markdown 问题检查与定位、文件夹全文搜索、批量替换前后预览、文档安全中心、自定义模板与隐私诊断导出。批量替换默认不勾选文件，跳过当前文档与链接，必须经一次性预览令牌确认；写入前保存历史版本并重新核对修订号，冲突逐文件跳过，不自动重试。备份及历史只能另存新副本，不覆盖原文件。
+- 发布流水线新增安全回归门禁与仅限 GitHub 托管 Windows 临时环境运行的安装/升级/卸载文档保留验证；本地不会自动执行真实安装卸载测试。
+- 保存、另存与冲突副本的返回内容和修订号固定对应本次实际写入的字节，避免写入后被外部修改的版本成为下一次覆盖依据；前端拒绝内容不一致的保存回执。阅读模式下手动合并也主动更新恢复备份，不再依赖编辑器初始化。
+- 修复冲突恢复保护：恢复快照持久化原始修订号与冲突状态，旧快照或版本不匹配时继续暂停自动保存；冲突未解决时不因内容等于旧基线清除备份。过期合并草稿需明确确认丢弃后重新合并。统一已确认风险卸载器仅禁用登记后的再次更新检查，不扩大文件处理权限。
+- 文档保存冲突新增“磁盘版本／当前编辑”并排对比，可保留当前编辑、使用磁盘版本、另存新副本或手动合并。冲突期间暂停自动保存；合并先应用到编辑器，再次保存需明确确认，并重新校验磁盘修订。副本只允许新文件名，不覆盖已有文件。
+- Windows 旧卸载器自动处理要求完整文件 SHA-256 命中已审核风险名单，并精确匹配本产品卸载登记；未知文件即使命中旧登记也不删除、不改名、不移除登记。安全标记版本继续保留。
+- 文件核验和删除/禁用使用同一锁定句柄，防止检查后替换；改名禁止覆盖现存文件。无安全标记且身份不明时暂停热更新，引导用户备份后选择新目录完整安装。
+- 当前未取得可验证的旧卸载器样本，生产风险名单为空；不会用安装包哈希、版本号或现场采集哈希冒充已确认身份。
+
+### English
+
+- Fixed the normal Windows Apps & Features uninstall entry. The registered command now uses NSIS in-place execution, preserving strict executable-path, ownership-marker, and registry checks without rejecting a legitimate uninstall from a temporary self-copy. Release CI validates the registered command and performs install, in-place upgrade, uninstall, and user-document preservation checks on a disposable GitHub-hosted runner.
+- Editor-only mode shows Restore preview between Save As and Exit editing. It restores the previous split orientation and latest content, then hides itself.
+- Added persistent Editor only layout: close the live-preview pane for full-width editing and restore either split orientation from More → Editor layout. `Ctrl/⌘ + E` toggles the full reading preview while preserving the caret and undo history. Hidden previews cancel scheduled rendering and pending chart work, dispose chart instances, and render fresh content only when explicitly exporting or restoring the preview.
+- Fixed five audit findings: final document publication is create-only after preserving the original; Windows verifies and moves the original through an exclusive handle. Concurrently recreated destinations are never overwritten, and recovery material is retained on failure. Since POSIX cannot exclude other editors' open writers, macOS/Linux retain original-inode `.quillite-save-recovery-*` backups after successful saves too, without automatic deletion. Fixed obscured permission prompts during tool navigation, blank template previews, nested/HTML heading anchor checks, and lifecycle tests running an uninstaller from the wrong location.
+- Added More → Document tools: basic Markdown checks with source navigation, folder text search, before/after batch replacement previews, a document safety center, custom templates and private diagnostic export. Batch replacement starts with no files selected, excludes the open document and links, and requires a single-use preview token. Each write captures history and rechecks revisions; conflicts are skipped without automatic retries. Recovery/history exports only create new copies.
+- Added a release safety regression gate and a real install/upgrade/uninstall document-preservation test restricted to disposable GitHub-hosted Windows runners. Local runs never automatically install or uninstall the application.
+- Save, Save As and conflict-copy receipts now describe the bytes written by that operation, never a subsequently reread external version. The frontend rejects mismatched receipt content. Reader-only manual merges explicitly update recovery backups without requiring an initialized editor.
+- Recovery snapshots persist the original revision and conflict state; legacy or mismatched snapshots remain paused for comparison. Unresolved conflicts keep backups even when content matches the old baseline. Stale merge drafts require explicit discard before restarting. Repeated update checks now agree after registry-only remediation of a verified risky uninstaller, without expanding file mutation authority.
+- Document conflicts now show disk and editor versions side by side, with keep edits, use disk, save a new copy, and manual merge actions. Autosave stays paused during conflicts. Merges are applied to the editor first and require explicit save confirmation with revision revalidation. Conflict copies never overwrite existing files.
+- Legacy Windows uninstaller remediation requires an audited full-file SHA-256 allowlist match plus exact product uninstall registration. Unknown files and registrations remain untouched, even with stale matching registry entries. Safe-marked files remain preserved.
+- Verification and deletion/disable use the same locked handle; rename never overwrites an existing destination. Unverified unmarked files block in-app updates and guide users to back up and install into a new dedicated directory.
+- No verified historical uninstaller specimen is currently available, so the production risk allowlist is empty. Installer hashes, version strings and hashes learned on users' machines are never treated as proof.
+
 ## [2.7.4] - 2026-09-14
 
 ### 简体中文

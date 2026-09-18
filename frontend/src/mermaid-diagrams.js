@@ -646,6 +646,10 @@ function showRenderError(element, error, messages) {
   element.removeAttribute('aria-busy');
 }
 
+export function cancelMermaidRendering(container) {
+  renderGenerations.set(container, (renderGenerations.get(container) || 0) + 1);
+}
+
 export function renderMermaidDiagrams(container, messages) {
   const generation = (renderGenerations.get(container) || 0) + 1;
   renderGenerations.set(container, generation);

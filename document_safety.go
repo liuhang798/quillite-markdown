@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
+	"time"
 )
 
 const maxSupportedDocumentBytes = 64 * 1024 * 1024
@@ -17,6 +19,25 @@ var errDocumentConflict = errors.New("DOCUMENT_CONFLICT: the file changed on dis
 func documentRevision(content []byte) string {
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])
+}
+
+// A save receipt describes exactly the bytes this operation wrote. Never read
+// content/revision back from the path: another writer may have changed it in
+// the meantime, and that revision must not authorize the next editor save.
+func (a *App) savedDocumentReceipt(path, content string, remember bool) (*Document, error) {
+	absPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return nil, err
+	}
+	doc := &Document{
+		Path: absPath, Name: filepath.Base(absPath), Directory: filepath.Dir(absPath),
+		Content: content, Revision: documentRevision([]byte(content)), Size: int64(len(content)),
+		ModifiedAt: time.Now().Format(time.RFC3339Nano),
+	}
+	if remember {
+		_ = a.rememberFile(absPath)
+	}
+	return doc, nil
 }
 
 func readDocumentBytes(path string) ([]byte, error) {
