@@ -66,6 +66,18 @@ test('an occupied export target is explained without uploading a software error'
   assert.match(renderer, /async function exportHTMLDocument\(options = \{\}\)[\s\S]*catch \(error\) \{\s*if \(isExportFileInUseError\(error\)\) \{\s*showToast\(t\('exportFileInUse'\), 'warning'\);\s*return false;/);
   assert.match(renderer, /exportFileInUse: '导出文件正被其他程序占用/);
   assert.match(renderer, /exportFileInUse: 'The export file is open in another app/);
+  assert.match(renderer, /function diagnosticErrorMessage\(error\)[\s\S]*Browser \$\{eventType\} event[\s\S]*Unknown browser error/);
+  assert.doesNotMatch(renderer, /function diagnosticErrorMessage\(error\)[\s\S]{0,1200}JSON\.stringify\(error\)/);
+  assert.match(renderer, /function isExpectedOperationalError\(error, source\)[\s\S]*document\.save[\s\S]*permission denied[\s\S]*export_document_too_large[\s\S]*export_source_document_too_large[\s\S]*http 401/);
+  assert.match(renderer, /function isExportTooLargeError\(error\)[\s\S]*EXPORT_DOCUMENT_TOO_LARGE/);
+  assert.match(renderer, /function isExportSourceTooLargeError\(error\)[\s\S]*EXPORT_SOURCE_DOCUMENT_TOO_LARGE/);
+  assert.match(renderer, /exportDocumentTooLarge: '渲染后的文档超过 96 MiB/);
+  assert.match(renderer, /exportSourceDocumentTooLarge: '源文档超过 64 MiB/);
+  assert.match(renderer, /catch \(error\) \{[\s\S]*reportSilentError\(error, 'ai\.summary'\)/);
+  assert.match(renderer, /reportSilentError\(error, 'ai\.edit'\)/);
+  assert.match(renderer, /reportSilentError\(error, 'ai\.review'\)/);
+  assert.doesNotMatch(renderer, /reportErrorLog\?\.\('ai\.(?:summary|edit|review)'/);
+  assert.match(renderer, /async function exportPDFWithBookmarks[\s\S]*isExportTooLargeError\(error\)[\s\S]*exportDocumentTooLarge/);
 });
 
 test('library rows use their full width and remove recent records from the context menu only', () => {
@@ -767,6 +779,11 @@ test('export center groups formats and only exposes settings required by the sel
   assert.match(renderer, /stage\.style\.width = requestedLongImage \? '1280px' : '840px'[\s\S]*stage\.style\.fontSize = '16px'/);
   assert.match(renderer, /scaledWidth \* scaledHeight > 64000000/);
   assert.match(renderer, /stage\.style\.top = `\$\{\(splitIntoPages \? pageMargin : 0\) - range\.start\}px`[\s\S]*toCanvas\(viewport, \{[\s\S]*skipAutoScale: true[\s\S]*slices\.push\(canvas\.toDataURL\('image\/png'\)\)/);
+  assert.match(renderer, /function assertExportImagesReady\(container\)[\s\S]*naturalWidth <= 0[\s\S]*EXPORT_IMAGE_RESOURCE_FAILED/);
+  assert.match(renderer, /function embedExportImagesForRaster\(container, scale = 1\)[\s\S]*drawImage\(image[\s\S]*toDataURL\('image\/png'\)/);
+  assert.match(renderer, /image\.style\.width = `\$\{geometry\.displayWidth\}px`;[\s\S]*image\.style\.height = `\$\{geometry\.displayHeight\}px`;[\s\S]*image\.src = canvas\.toDataURL/);
+  assert.match(renderer, /await waitForPreviewImages\(stage\);\s*assertExportImagesReady\(stage\);\s*await embedExportImagesForRaster\(stage, options\.imageScale\)/);
+  assert.doesNotMatch(renderer, /imagePlaceholder:/);
   assert.match(renderer, /function createExportImagePageRanges\(stage, maximumContentHeight\)[\s\S]*minimumUsefulBreak[\s\S]*ranges\.push\(\{ start, end \}\)/);
   assert.match(renderer, /if \(splitIntoPages\) \{[\s\S]*saveExportImagePages\(state\.currentFile\.path, state\.currentFile\.name, format, slices\)[\s\S]*return paths\?\.length \? \{ paths, autoPaginatedLongImage \} : null/);
   assert.match(renderer, /saveExportImageSlices\(state\.currentFile\.path, state\.currentFile\.name, format, slices\)/);

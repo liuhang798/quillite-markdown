@@ -29,9 +29,13 @@ import (
 )
 
 const (
-	maxDOCXHTMLSize            = 24 * 1024 * 1024
+	// Rendered HTML can be substantially larger than the Markdown source when
+	// diagrams and local images are embedded. Keep a bounded limit, but allow a
+	// full 64 MiB supported document plus that normal export expansion.
+	maxRenderedExportHTMLSize  = 96 * 1024 * 1024
 	maxDOCXImageSize           = 20 * 1024 * 1024
 	exportFileInUseErrorMarker = "EXPORT_FILE_IN_USE"
+	exportTooLargeErrorMarker  = "EXPORT_DOCUMENT_TOO_LARGE"
 )
 
 type docxRelationship struct {
@@ -102,8 +106,8 @@ var cssColorPattern = regexp.MustCompile(`(?i)(?:^|;)\s*color\s*:\s*#([0-9a-f]{6
 // ExportDOCX writes the current rendered Markdown document as a standards-based
 // DOCX file. The conversion and packaging happen locally in Go.
 func (a *App) ExportDOCX(sourcePath, title, renderedHTML string) (string, error) {
-	if len(renderedHTML) > maxDOCXHTMLSize {
-		return "", errors.New("document is too large to export")
+	if err := validateRenderedExportHTMLSize(len(renderedHTML)); err != nil {
+		return "", err
 	}
 	defaultName := strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath))
 	if strings.TrimSpace(defaultName) == "" || defaultName == "." {
@@ -153,10 +157,17 @@ func classifyExportWriteError(platform string, err error) error {
 }
 
 func buildDOCX(renderedHTML, title, baseDirectory string) ([]byte, error) {
-	if len(renderedHTML) > maxDOCXHTMLSize {
-		return nil, errors.New("document is too large to export")
+	if err := validateRenderedExportHTMLSize(len(renderedHTML)); err != nil {
+		return nil, err
 	}
-	document, err := html.Parse(strings.NewReader("<!doctype html><html><body>" + renderedHTML + "</body></html>"))
+	// Avoid allocating a second full-size copy of large rendered documents just
+	// to add the parser wrapper. The DOM is still bounded by the checked input
+	// limit, while the source is streamed into the parser.
+	document, err := html.Parse(io.MultiReader(
+		strings.NewReader("<!doctype html><html><body>"),
+		strings.NewReader(renderedHTML),
+		strings.NewReader("</body></html>"),
+	))
 	if err != nil {
 		return nil, fmt.Errorf("parse rendered document: %w", err)
 	}
@@ -178,6 +189,13 @@ func buildDOCX(renderedHTML, title, baseDirectory string) ([]byte, error) {
 		builder.writeParagraph("Normal", 0, []docxRun{{Text: strings.TrimSpace(title)}})
 	}
 	return builder.packageDOCX(title)
+}
+
+func validateRenderedExportHTMLSize(size int) error {
+	if size > maxRenderedExportHTMLSize {
+		return errors.New(exportTooLargeErrorMarker + ": rendered document exceeds the 96 MiB export limit")
+	}
+	return nil
 }
 
 func findHTMLBody(node *html.Node) *html.Node {

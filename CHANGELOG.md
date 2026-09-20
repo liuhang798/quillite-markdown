@@ -8,6 +8,10 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复部分 OpenAI 兼容服务流式返回空内容时 AI 总结失败的问题：仅在尚未产生任何文本时自动回退一次非流式请求，并兼容更多文本字段。
+- 修复大文档与图片导出的边界问题：Pandoc 源文档上限与 64 MiB 文档限制一致，Word、HTML 和 PDF 渲染内容使用独立的 96 MiB 上限；PNG/JPEG 导出会先验证并内嵌图片，同时保持原显示尺寸，无法读取图片时停止导出而不生成缺图文件。
+- Windows 应用内更新在 AppData 执行助手被系统策略拒绝时，可在已安装程序旁创建独占命名的临时助手；重启后只通过同一文件句柄删除与已确认旧版本完全一致的助手，未知文件不按路径删除，也不安排重启后延迟删除。
+- 错误诊断不再上报权限拒绝、无效 API Key、文件已不存在等可预期操作结果；新增常见凭据脱敏，并只读取错误对象的白名单字段，避免任意对象携带文档数据进入诊断。
 - 修复 Windows“应用和功能”普通卸载入口：登记命令使用 NSIS 原位运行参数，保持严格的卸载程序路径、安装标识和注册表三重校验，同时让正常卸载不再因临时副本路径被拒绝。发布 CI 会核对真实登记命令并在 GitHub 托管临时机完成安装、原位升级、卸载和用户文档保留验证。
 - 仅编辑模式在“另存为”与“退出编辑”之间显示“恢复预览”，一键恢复上次分栏方向及最新正文，恢复后自动隐藏按钮。
 - 新增持久化的“仅编辑”布局：实时预览标题栏可关闭预览，编辑器占满可用宽度；“更多 → 编辑布局”可恢复两种分栏方向。`Ctrl/⌘ + E` 在完整预览与编辑间切换，保留光标与撤销记录。隐藏期间取消预览调度、停止后续图表渲染并释放图表实例，导出时按需渲染最新正文。
@@ -23,6 +27,10 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Fixed AI summaries for OpenAI-compatible gateways that return an empty streamed response. A single non-streaming fallback is used only before any text has been emitted, with support for additional compatible text fields.
+- Fixed large-document and image-export boundaries. Pandoc now shares the 64 MiB source-document limit; Word, HTML, and PDF rendered exports have a separate 96 MiB limit; and PNG/JPEG export validates and embeds images without changing their displayed size. Unreadable images stop the export instead of producing incomplete output.
+- Windows in-app updates can stage an exclusively named helper beside the installed application when policy blocks execution from AppData. After restart, cleanup deletes only the file object held and verified as byte-identical to the confirmed previous version; unknown paths are untouched and no reboot-time path deletion is scheduled.
+- Diagnostics no longer submit expected permission, invalid-key, or missing-file outcomes. Common credential formats are redacted, and only allowlisted error fields are read so arbitrary objects cannot carry document data into diagnostics.
 - Fixed the normal Windows Apps & Features uninstall entry. The registered command now uses NSIS in-place execution, preserving strict executable-path, ownership-marker, and registry checks without rejecting a legitimate uninstall from a temporary self-copy. Release CI validates the registered command and performs install, in-place upgrade, uninstall, and user-document preservation checks on a disposable GitHub-hosted runner.
 - Editor-only mode shows Restore preview between Save As and Exit editing. It restores the previous split orientation and latest content, then hides itself.
 - Added persistent Editor only layout: close the live-preview pane for full-width editing and restore either split orientation from More → Editor layout. `Ctrl/⌘ + E` toggles the full reading preview while preserving the caret and undo history. Hidden previews cancel scheduled rendering and pending chart work, dispose chart instances, and render fresh content only when explicitly exporting or restoring the preview.

@@ -3,8 +3,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,9 +14,17 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
-const windowsUpdateExecutableName = "QuilliteMarkdown.exe"
+const (
+	windowsUpdateExecutableName    = "QuilliteMarkdown.exe"
+	updateCleanupHelperEnvironment = "QUILLITE_CONFIRMED_UPDATE_HELPER"
+	updateCleanupBackupEnvironment = "QUILLITE_CONFIRMED_UPDATE_BACKUP"
+	windowsSharingViolation        = syscall.Errno(32)
+	windowsLockViolation           = syscall.Errno(33)
+)
 
 // applyUpdate starts a hidden helper instance of the same executable that
 // performs the replacement after this process exits. A batch script cannot be
@@ -31,18 +41,46 @@ func applyUpdate(downloadPath string) error {
 		return fmt.Errorf("refuse unsafe update request: %w", err)
 	}
 
-	// Windows keeps a running executable locked. Starting helper mode from the
-	// installed executable would make the helper hold the exact file it needs
-	// to replace. Stage a separate copy in the update directory so the installed
-	// executable becomes writable as soon as the main process exits.
-	helperPath := filepath.Join(filepath.Dir(downloadPath), "apply-update-helper-"+strconv.Itoa(os.Getpid())+".exe")
-	if err := copyExecutable(executable, helperPath); err != nil {
-		return fmt.Errorf("stage update helper: %w", err)
-	}
+	return stageAndStartUpdateHelper(executable, downloadPath, strconv.Itoa(os.Getpid()), startUpdateHelperProcess)
+}
 
-	command := exec.Command(helperPath, "--apply-update", downloadPath, executable, strconv.Itoa(os.Getpid()))
+type updateHelperLauncher func(helperPath, downloadPath, executable, parentPID string) error
+
+func startUpdateHelperProcess(helperPath, downloadPath, executable, parentPID string) error {
+	command := exec.Command(helperPath, "--apply-update", downloadPath, executable, parentPID)
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return command.Start()
+}
+
+// stageAndStartUpdateHelper normally runs the detached helper from the private
+// update directory. Some Windows application-control policies deny executables
+// launched from AppData even though the installed application itself is
+// trusted. Only for that precise access-denied case, retry with an exclusive,
+// application-owned helper beside the installed executable. No existing file
+// is overwritten and all other launch failures remain failures.
+func stageAndStartUpdateHelper(executable, downloadPath, parentPID string, launch updateHelperLauncher) error {
+	updateHelperPath := filepath.Join(filepath.Dir(downloadPath), "apply-update-helper-"+parentPID+".exe")
+	if err := copyExecutable(executable, updateHelperPath); err != nil {
+		return fmt.Errorf("stage update helper: %w", err)
+	}
+	if err := launch(updateHelperPath, downloadPath, executable, parentPID); err == nil {
+		return nil
+	} else if !errors.Is(err, syscall.ERROR_ACCESS_DENIED) && !os.IsPermission(err) {
+		return fmt.Errorf("start update helper: %w", err)
+	}
+
+	fallbackName := fmt.Sprintf(".quillite-update-helper-%s-%d.exe", parentPID, time.Now().UnixNano())
+	fallbackPath := filepath.Join(filepath.Dir(executable), fallbackName)
+	if err := copyExecutableCreateOnly(executable, fallbackPath); err != nil {
+		return fmt.Errorf("the update helper was blocked in AppData and could not be staged beside the application: %w", err)
+	}
+	if err := launch(fallbackPath, downloadPath, executable, parentPID); err != nil {
+		// Keep the exclusively named helper on failure. Deleting it by path after
+		// the launcher returns would reintroduce a check/delete race if another
+		// process replaced the pathname in that narrow interval.
+		return fmt.Errorf("start trusted update helper fallback: %w", err)
+	}
+	return nil
 }
 
 // runUpdateHelperIfRequested handles the "--apply-update" helper mode: it
@@ -61,6 +99,211 @@ func runUpdateHelperIfRequested() {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+func isUpdateHelperFilename(name string) bool {
+	name = strings.ToLower(filepath.Base(name))
+	return (strings.HasPrefix(name, "apply-update-helper-") || strings.HasPrefix(name, ".quillite-update-helper-")) && strings.HasSuffix(name, ".exe")
+}
+
+// cleanupUpdateHelperAfterRestart is the primary cleanup path for both update
+// helper locations. It never scans a directory. The exact helper path is
+// inherited from the verified helper, constrained to an application-owned
+// directory, and must be byte-identical to the previous-version backup before
+// this process removes that single file.
+func cleanupUpdateHelperAfterRestart() {
+	helperPath := os.Getenv(updateCleanupHelperEnvironment)
+	backupPath := os.Getenv(updateCleanupBackupEnvironment)
+	_ = os.Unsetenv(updateCleanupHelperEnvironment)
+	_ = os.Unsetenv(updateCleanupBackupEnvironment)
+	if strings.TrimSpace(helperPath) == "" || strings.TrimSpace(backupPath) == "" {
+		return
+	}
+	currentExecutable, err := os.Executable()
+	if err != nil {
+		return
+	}
+	go func() {
+		deadline := time.Now().Add(30 * time.Second)
+		delay := 500 * time.Millisecond
+		// The helper only launches the new version immediately before it exits.
+		// Waiting once avoids hashing a large executable while it is still locked
+		// in the normal successful path.
+		time.Sleep(delay)
+		for {
+			// Revalidate immediately before every retry. If anything replaced or
+			// altered the path after the running helper released its file lock,
+			// cleanup stops instead of deleting the new occupant.
+			err := removeConfirmedUpdateHelper(helperPath, backupPath, currentExecutable)
+			if err == nil || errors.Is(err, os.ErrNotExist) {
+				return
+			}
+			if !errors.Is(err, windowsSharingViolation) && !errors.Is(err, windowsLockViolation) && !errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+				return
+			}
+			if time.Now().After(deadline) {
+				return
+			}
+			time.Sleep(delay)
+			if delay < 4*time.Second {
+				delay *= 2
+			}
+		}
+	}()
+}
+
+// removeConfirmedUpdateHelper deletes the exact file object that was opened,
+// hashed and approved. Deleting through the held Windows handle closes the
+// check/delete race that would exist if cleanup called os.Remove(path) after
+// validation: a different file can never be substituted at that path between
+// the identity check and deletion.
+func removeConfirmedUpdateHelper(helperPath, backupPath, currentExecutable string) error {
+	confirmedPath, confirmedBackupPath, err := validatedUpdateHelperCleanupPaths(helperPath, backupPath, currentExecutable)
+	if err != nil {
+		return err
+	}
+	pointer, err := windows.UTF16PtrFromString(confirmedPath)
+	if err != nil {
+		return err
+	}
+	handle, err := windows.CreateFile(
+		pointer,
+		windows.FILE_GENERIC_READ|windows.DELETE,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		0,
+	)
+	if err != nil {
+		return err
+	}
+	file := os.NewFile(uintptr(handle), confirmedPath)
+	if file == nil {
+		_ = windows.CloseHandle(handle)
+		return errors.New("open confirmed update helper handle")
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("cleanup helper handle is not a regular file")
+	}
+	helperDigest, err := fileSHA256(file)
+	if err != nil {
+		return err
+	}
+	backupDigest, err := fileSHA256Path(confirmedBackupPath)
+	if err != nil {
+		return err
+	}
+	if helperDigest != backupDigest {
+		return errors.New("cleanup helper handle does not match the confirmed previous version")
+	}
+	deleteFile := byte(1)
+	if err := windows.SetFileInformationByHandle(handle, windows.FileDispositionInfo, &deleteFile, 1); err != nil {
+		return err
+	}
+	return file.Close()
+}
+
+func confirmedUpdateHelperPath(helperPath, backupPath, currentExecutable string) (string, error) {
+	confirmedPath, confirmedBackupPath, err := validatedUpdateHelperCleanupPaths(helperPath, backupPath, currentExecutable)
+	if err != nil {
+		return "", err
+	}
+	matching, err := filesHaveSameSHA256(confirmedPath, confirmedBackupPath)
+	if err != nil {
+		return "", err
+	}
+	if !matching {
+		return "", errors.New("cleanup helper does not match the confirmed previous version")
+	}
+	return confirmedPath, nil
+}
+
+func validatedUpdateHelperCleanupPaths(helperPath, backupPath, currentExecutable string) (string, string, error) {
+	var err error
+	helperPath, err = filepath.Abs(filepath.Clean(helperPath))
+	if err != nil {
+		return "", "", err
+	}
+	backupPath, err = filepath.Abs(filepath.Clean(backupPath))
+	if err != nil {
+		return "", "", err
+	}
+	currentExecutable, err = filepath.Abs(filepath.Clean(currentExecutable))
+	if err != nil {
+		return "", "", err
+	}
+	if !isUpdateHelperFilename(filepath.Base(helperPath)) {
+		return "", "", errors.New("cleanup target is not an update helper")
+	}
+	if !strings.EqualFold(filepath.Base(backupPath), "previous-version.exe") {
+		return "", "", errors.New("cleanup backup has an unexpected name")
+	}
+	configDirectory, err := os.UserConfigDir()
+	if err != nil {
+		return "", "", err
+	}
+	updateRoot := filepath.Join(configDirectory, appNameZH, "update")
+	backupDirectory := filepath.Dir(backupPath)
+	if !sameFilesystemPath(filepath.Dir(backupDirectory), updateRoot) || !strings.HasPrefix(strings.ToLower(filepath.Base(backupDirectory)), "run-") {
+		return "", "", errors.New("cleanup backup is outside the application update directory")
+	}
+	helperDirectory := filepath.Dir(helperPath)
+	if !sameFilesystemPath(helperDirectory, backupDirectory) && !sameFilesystemPath(helperDirectory, filepath.Dir(currentExecutable)) {
+		return "", "", errors.New("cleanup helper is outside an application-owned directory")
+	}
+	if sameFilesystemPath(helperPath, backupPath) || sameFilesystemPath(helperPath, currentExecutable) {
+		return "", "", errors.New("cleanup helper aliases a protected executable")
+	}
+	for label, path := range map[string]string{"cleanup helper": helperPath, "previous-version backup": backupPath} {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			return "", "", fmt.Errorf("%s is unavailable: %w", label, statErr)
+		}
+		if !info.Mode().IsRegular() {
+			return "", "", fmt.Errorf("%s is not a regular file", label)
+		}
+	}
+	return helperPath, backupPath, nil
+}
+
+func filesHaveSameSHA256(firstPath, secondPath string) (bool, error) {
+	first, err := fileSHA256Path(firstPath)
+	if err != nil {
+		return false, err
+	}
+	second, err := fileSHA256Path(secondPath)
+	if err != nil {
+		return false, err
+	}
+	return first == second, nil
+}
+
+func fileSHA256Path(path string) ([sha256.Size]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	defer file.Close()
+	return fileSHA256(file)
+}
+
+func fileSHA256(file *os.File) ([sha256.Size]byte, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	var result [sha256.Size]byte
+	copy(result[:], hash.Sum(nil))
+	return result, nil
 }
 
 func runUpdateHelper(newBinary, oldExecutable, parentPID, logPath string) error {
@@ -104,7 +347,11 @@ func runUpdateHelper(newBinary, oldExecutable, parentPID, logPath string) error 
 	}
 
 	writeLog("[apply-update] starting the new version")
-	if err := exec.Command(oldExecutable).Start(); err != nil {
+	restart := exec.Command(oldExecutable)
+	if helperPath, executableErr := os.Executable(); executableErr == nil && isUpdateHelperFilename(filepath.Base(helperPath)) {
+		restart.Env = updateRestartEnvironment(helperPath, backupPath)
+	}
+	if err := restart.Start(); err != nil {
 		startErr := err
 		if restoreErr := replaceFile(backupPath, oldExecutable); restoreErr != nil {
 			err = fmt.Errorf("start failed: %w; restore failed and backup was preserved at %s: %v", startErr, backupPath, restoreErr)
@@ -116,6 +363,23 @@ func runUpdateHelper(newBinary, oldExecutable, parentPID, logPath string) error 
 	}
 	writeLog("[apply-update] done")
 	return nil
+}
+
+func updateRestartEnvironment(helperPath, backupPath string) []string {
+	helperPrefix := strings.ToLower(updateCleanupHelperEnvironment + "=")
+	backupPrefix := strings.ToLower(updateCleanupBackupEnvironment + "=")
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		lower := strings.ToLower(entry)
+		if strings.HasPrefix(lower, helperPrefix) || strings.HasPrefix(lower, backupPrefix) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment,
+		updateCleanupHelperEnvironment+"="+helperPath,
+		updateCleanupBackupEnvironment+"="+backupPath,
+	)
 }
 
 func validateUpdateHelperRequest(newBinary, oldExecutable, parentPID, logPath string) error {
@@ -188,4 +452,25 @@ func copyExecutable(source, target string) error {
 		return err
 	}
 	return writeFileAtomically(target, data)
+}
+
+func copyExecutableCreateOnly(source, target string) error {
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+	if err != nil {
+		return err
+	}
+	if _, err = file.Write(data); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	// A partial exclusively named file is intentionally retained on write
+	// failure. Path-based cleanup after closing the handle could delete a
+	// replacement file; a harmless orphan is safer than ambiguous deletion.
+	return err
 }

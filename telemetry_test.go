@@ -189,6 +189,35 @@ func TestErrorLogRemovesLocalPaths(t *testing.T) {
 	}
 }
 
+func TestErrorLogRemovesProviderCredentials(t *testing.T) {
+	secrets := []string{
+		"sk-exampleSecret123456",
+		"github_pat_exampleSecret1234567890",
+		"eyJexampleHeader.eyJexamplePayload.exampleSignature",
+		"plain-provider-key-987654321",
+		"query-secret-123456789",
+		"oauth-client-secret-123456789",
+		"oauth-refresh-token-123456789",
+		"url-encoded-secret%2F123456789",
+		"P@ssw0rd!#$-with-symbols",
+	}
+	log := buildSanitizedErrorLog(
+		"ai.summary",
+		"HTTP 401: api key: "+secrets[0]+" authorization=Bearer "+secrets[2]+
+			" endpoint=https://provider.invalid/v1?key="+secrets[4]+" client_secret="+secrets[5],
+		"access_token="+secrets[3]+" refresh_token="+secrets[6]+
+			" client_secret%3D"+secrets[7]+" password="+secrets[8]+" github="+secrets[1],
+	)
+	for _, secret := range secrets {
+		if strings.Contains(log, secret) {
+			t.Fatalf("错误日志仍包含凭据 %q：%q", secret, log)
+		}
+	}
+	if !strings.Contains(log, "[已隐藏]") {
+		t.Fatalf("错误日志没有保留脱敏标记：%q", log)
+	}
+}
+
 func TestErrorReportingSilentlyHandlesOfflineNetwork(t *testing.T) {
 	client := &http.Client{Transport: failingRoundTripper{}}
 	if sendAppErrorLog("https://telemetry.invalid/error", "render: failure", client) {

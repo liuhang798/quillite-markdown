@@ -31,6 +31,7 @@ import { documentHasDiagrams, documentPerformanceProfile } from './document-perf
 import { documentVersionLineDifference, historyPreviewText } from './version-history.js';
 import { createDocumentTools } from './document-tools.js';
 import { recordToolDiagnostic } from './document-tools-core.js';
+import { rasterImageGeometry } from './export-image.js';
 
 const $ = selector => document.querySelector(selector);
 const DOC_WIDTH_LEVELS = ['narrow', 'medium', 'wide', 'full'];
@@ -285,12 +286,54 @@ let lastRecoveryContent = '';
 let lastRecoveryContext = '';
 let largeDocumentNoticeSession = -1;
 
+function diagnosticErrorMessage(error) {
+  if (error instanceof Error) return String(error.message || error.name || 'Unknown error');
+  if (typeof error === 'string') return error.trim() || 'Unknown error';
+  if (error && typeof error === 'object') {
+    const nested = error.reason instanceof Error ? error.reason.message : error.reason?.message;
+    if (nested) return String(nested);
+    if (error.message) return String(error.message);
+    const eventType = String(error.type || '').trim();
+    if (eventType) {
+      const tag = String(error.target?.tagName || error.currentTarget?.tagName || '').toLowerCase();
+      return `Browser ${eventType} event${tag ? ` while processing ${tag}` : ''}`;
+    }
+    const code = String(error.code || error.name || '').trim();
+    if (code) return `Browser error (${code.slice(0, 80)})`;
+    // Never stringify an arbitrary object here. Provider/browser objects can
+    // contain request bodies, DOM state or document data that diagnostics are
+    // explicitly forbidden to upload.
+    return 'Unknown browser error';
+  }
+  return String(error ?? 'Unknown error');
+}
+
+function isExpectedOperationalError(error, source) {
+  const message = diagnosticErrorMessage(error).toLowerCase();
+  if (source === 'document.save' && (
+    message.includes('permission denied') || message.includes('access is denied')
+    || message.includes('document_safe_save_access') || message.includes('document_metadata_requires_copy')
+    || message.includes('document_conflict') || message.includes('document_copy_exists')
+  )) return true;
+  if (source.startsWith('document.export-') && (
+    message.includes('export_document_too_large') || message.includes('export_source_document_too_large')
+  )) return true;
+  if (source.startsWith('ai.') && (
+    message.includes('http 401') || message.includes('unauthorized') || message.includes('authentication fail')
+    || message.includes('invalid api key') || message.includes('api key is required')
+    || (message.includes('api key') && message.includes('invalid'))
+  )) return true;
+  if (source.startsWith('document.open') && (message.includes('cannot find the file') || message.includes('no such file'))) return true;
+  return false;
+}
+
 function reportSilentError(error, source = 'frontend') {
   recordToolDiagnostic(source);
   try {
     if (isExportFileInUseError(error)) return;
     if (isKnownMacUpdateMigrationError(error)) return;
-    const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+    if (isExpectedOperationalError(error, source)) return;
+    const message = diagnosticErrorMessage(error);
     const stack = error instanceof Error ? error.stack || '' : '';
     Promise.resolve(window.quilliteMarkdown?.reportErrorLog?.(source, message, stack)).catch(() => undefined);
   } catch {
@@ -304,8 +347,20 @@ function isKnownMacUpdateMigrationError(error) {
 }
 
 function isExportFileInUseError(error) {
-  const message = error instanceof Error ? error.message : String(error ?? '');
+  const message = diagnosticErrorMessage(error);
   return message.includes('EXPORT_FILE_IN_USE');
+}
+
+function isExportTooLargeError(error) {
+  return diagnosticErrorMessage(error).includes('EXPORT_DOCUMENT_TOO_LARGE');
+}
+
+function isExportSourceTooLargeError(error) {
+  return diagnosticErrorMessage(error).includes('EXPORT_SOURCE_DOCUMENT_TOO_LARGE');
+}
+
+function isExportImageResourceError(error) {
+  return diagnosticErrorMessage(error).includes('EXPORT_IMAGE_RESOURCE_FAILED');
 }
 
 function isMacAccessNotGrantedError(error) {
@@ -338,7 +393,7 @@ const translations = {
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
     toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', openCompactToc: '展开本页目录', closeCompactToc: '收起本页目录', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
-    exportHTML: '导出 HTML', htmlExported: 'HTML 网页已导出', htmlExportFailed: 'HTML 导出失败', exportFileInUse: '导出文件正被其他程序占用，请关闭该文件后重试，或选择其他文件名',
+    exportHTML: '导出 HTML', htmlExported: 'HTML 网页已导出', htmlExportFailed: 'HTML 导出失败', exportFileInUse: '导出文件正被其他程序占用，请关闭该文件后重试，或选择其他文件名', exportDocumentTooLarge: '渲染后的文档超过 96 MiB 导出上限。请压缩大图片或拆分文档后重试', exportSourceDocumentTooLarge: '源文档超过 64 MiB 导出上限。请拆分文档后重试', exportImageResourceFailed: '部分图片无法读取，已停止导出，避免生成缺失内容的图片。请检查原图片后重试',
     zoomIn: '放大文字', zoomOut: '缩小文字', zoomReset: '恢复字号', textSizePresets: '文字大小调节', textSizeControl: '文字大小', fontScaleDefault: '默认 100%', fontScaleShortcuts: '<span class="font-scale-shortcut"><kbd>Ctrl +</kbd><em>放大</em></span><span class="font-scale-shortcut"><kbd>Ctrl −</kbd><em>缩小</em></span><span class="font-scale-shortcut"><kbd>Ctrl 0</kbd><em>默认</em></span>', fontScaleAuto: '自动适配显示器', autoFontScaleEnabled: '已自动适配显示器：{percent}%', exportDocument: '导出文档', exportWord: '导出 Word', exportPDF: '导出 PDF', systemPrint: '系统打印', wordExported: 'Word 文档已导出', wordExportFailed: 'Word 导出失败', pdfExportHint: '请在系统打印窗口中选择“Microsoft Print to PDF”或“存储为 PDF”', pdfTutorialLabel: 'PDF 导出指南', pdfTutorialTitle: '使用系统打印保存 PDF', pdfTutorialIntro: '为了尽量保持 Markdown 预览中的表格、代码块和图片样式，轻阅将打开系统打印窗口。请按下面步骤保存为 PDF。', pdfTutorialStep1Title: '打开系统打印', pdfTutorialStep1Text: '点击下方继续按钮，等待打印窗口出现。', pdfTutorialStep2Title: '选择 PDF 选项', pdfTutorialStep2Text: 'Windows 选择“Microsoft Print to PDF”；macOS 选择“存储为 PDF”。', pdfTutorialStep3Title: '选择位置并保存', pdfTutorialStep3Text: '确认打印后，输入文件名并选择保存目录。', pdfWindowsPrintTitle: '打印', pdfPrinterLabel: '打印机', pdfPagesLabel: '页面', pdfAllPages: '全部', pdfPrintButton: '打印', pdfWindowsCallout: '在“打印机”中选择 Microsoft Print to PDF', pdfMacPrintTitle: '打印', pdfSelectedPrinter: '已选择的打印机', pdfPresetsLabel: '预设', pdfDefaultPreset: '默认设置', pdfSaveAsPDF: '存储为 PDF…', pdfMacCallout: '打开左下角 PDF 菜单并选择“存储为 PDF”', pdfTutorialNote: '打印窗口由操作系统提供，实际界面可能因系统版本略有不同。', pdfContinueToPrint: '继续并打开打印窗口', exportNoDocument: '请先打开一个文档', printDocument: '打印文档', copy: '复制', copied: '已复制',
     clipboardOptions: '复制选项', copyAsMarkdown: '复制为 Markdown', copyAsPlainText: '复制为纯文本', copiedAsMarkdown: '已复制 Markdown 源码', copiedAsPlainText: '已复制纯文本', clipboardCopyFailed: '无法写入剪贴板', richPasteConverted: '已将网页或 Word 富文本转换为 Markdown',
     spellcheck: '拼写检查', spellcheckEnabled: '标记英文错词', spellcheckLanguage: '词典语言', spellcheckAuto: '自动', spellcheckUS: 'English (US)', spellcheckGB: 'English (UK)', clearPersonalDictionary: '清空个人词典', personalDictionaryCount: '{count} 个词', spellcheckLoadFailed: '拼写词典加载失败', spellingSuggestions: '拼写建议', noSpellingSuggestions: '暂无纠错建议', ignoreSpellingWord: '在本文中忽略', addToPersonalDictionary: '加入个人词典', spellingIgnored: '已在本文中忽略“{word}”', spellingAdded: '已将“{word}”加入个人词典', clearPersonalDictionaryConfirm: '确定清空个人词典吗？已加入的词将重新参与拼写检查。', personalDictionaryCleared: '个人词典已清空', personalDictionaryEmpty: '个人词典中还没有词',
@@ -392,7 +447,7 @@ const translations = {
     codeLang: 'Select a language', codeNoLang: 'No language (plain text)',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> Save　 <kbd>Ctrl</kbd> + <kbd>E</kbd> Preview', backToTop: 'Back to top', backToTopAria: 'Back to document top',
     toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', openCompactToc: 'Open table of contents', closeCompactToc: 'Close table of contents', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
-    exportHTML: 'Export HTML', htmlExported: 'HTML page exported', htmlExportFailed: 'HTML export failed', exportFileInUse: 'The export file is open in another app. Close it and try again, or choose a different file name.',
+    exportHTML: 'Export HTML', htmlExported: 'HTML page exported', htmlExportFailed: 'HTML export failed', exportFileInUse: 'The export file is open in another app. Close it and try again, or choose a different file name.', exportDocumentTooLarge: 'The rendered document exceeds the 96 MiB export limit. Compress large images or split the document and try again.', exportSourceDocumentTooLarge: 'The source document exceeds the 64 MiB export limit. Split the document and try again.', exportImageResourceFailed: 'Some images could not be read. Export was stopped to avoid creating an incomplete image. Check the source images and try again.',
     zoomIn: 'Increase text size', zoomOut: 'Decrease text size', zoomReset: 'Reset text size', textSizePresets: 'Text size control', textSizeControl: 'Text size', fontScaleDefault: 'Default 100%', fontScaleShortcuts: '<span class="font-scale-shortcut"><kbd>Ctrl +</kbd><em>Larger</em></span><span class="font-scale-shortcut"><kbd>Ctrl −</kbd><em>Smaller</em></span><span class="font-scale-shortcut"><kbd>Ctrl 0</kbd><em>Default</em></span>', fontScaleAuto: 'Fit to display automatically', autoFontScaleEnabled: 'Display-adapted text size: {percent}%', exportDocument: 'Export document', exportWord: 'Export Word', exportPDF: 'Export PDF', systemPrint: 'System print', wordExported: 'Word document exported', wordExportFailed: 'Word export failed', pdfExportHint: 'Choose “Microsoft Print to PDF” or “Save as PDF” in the system print dialog', pdfTutorialLabel: 'PDF EXPORT GUIDE', pdfTutorialTitle: 'Save a PDF with system printing', pdfTutorialIntro: 'To preserve the tables, code blocks, images, and overall Markdown preview styling, Quillite opens the system print window. Follow these steps to save a PDF.', pdfTutorialStep1Title: 'Open system printing', pdfTutorialStep1Text: 'Select Continue below and wait for the print window to appear.', pdfTutorialStep2Title: 'Choose the PDF option', pdfTutorialStep2Text: 'On Windows choose “Microsoft Print to PDF”; on macOS choose “Save as PDF”.', pdfTutorialStep3Title: 'Choose a location and save', pdfTutorialStep3Text: 'Confirm printing, enter a file name, and choose the destination folder.', pdfWindowsPrintTitle: 'Print', pdfPrinterLabel: 'Printer', pdfPagesLabel: 'Pages', pdfAllPages: 'All', pdfPrintButton: 'Print', pdfWindowsCallout: 'Choose Microsoft Print to PDF under Printer', pdfMacPrintTitle: 'Print', pdfSelectedPrinter: 'Selected printer', pdfPresetsLabel: 'Presets', pdfDefaultPreset: 'Default Settings', pdfSaveAsPDF: 'Save as PDF…', pdfMacCallout: 'Open the PDF menu at bottom left and choose “Save as PDF”', pdfTutorialNote: 'The print window is provided by your operating system, so its appearance may vary slightly by system version.', pdfContinueToPrint: 'Continue to print window', exportNoDocument: 'Open a document first', printDocument: 'Print document', copy: 'Copy', copied: 'Copied',
     clipboardOptions: 'Copy options', copyAsMarkdown: 'Copy as Markdown', copyAsPlainText: 'Copy as plain text', copiedAsMarkdown: 'Markdown source copied', copiedAsPlainText: 'Plain text copied', clipboardCopyFailed: 'Unable to write to the clipboard', richPasteConverted: 'Web or Word rich text converted to Markdown',
     spellcheck: 'Spell check', spellcheckEnabled: 'Mark misspelled English words', spellcheckLanguage: 'Dictionary language', spellcheckAuto: 'Auto', spellcheckUS: 'English (US)', spellcheckGB: 'English (UK)', clearPersonalDictionary: 'Clear personal dictionary', personalDictionaryCount: '{count} words', spellcheckLoadFailed: 'Unable to load the spelling dictionary', spellingSuggestions: 'Spelling suggestions', noSpellingSuggestions: 'No suggestions available', ignoreSpellingWord: 'Ignore in this document', addToPersonalDictionary: 'Add to personal dictionary', spellingIgnored: '“{word}” ignored in this document', spellingAdded: '“{word}” added to your personal dictionary', clearPersonalDictionaryConfirm: 'Clear the personal dictionary? Added words will be checked again.', personalDictionaryCleared: 'Personal dictionary cleared', personalDictionaryEmpty: 'Your personal dictionary is empty',
@@ -6042,6 +6097,54 @@ async function waitForPreviewImages(container, timeout = 3000) {
   ]);
 }
 
+function assertExportImagesReady(container) {
+  const failed = [...container.querySelectorAll('img')].filter(image => (
+    !image.complete || image.naturalWidth <= 0
+    || image.classList.contains('local-image-loading')
+    || image.classList.contains('local-image-error')
+  ));
+  if (failed.length) {
+    // Never include image paths or URLs in the error: it is user-facing and may
+    // also pass through optional diagnostics.
+    throw new Error(`EXPORT_IMAGE_RESOURCE_FAILED: ${failed.length} image(s) could not be loaded`);
+  }
+}
+
+async function embedExportImagesForRaster(container, scale = 1) {
+  const pendingDecodes = [];
+  for (const image of container.querySelectorAll('img')) {
+    if (String(image.currentSrc || image.src || '').startsWith('data:')) continue;
+    const bounds = image.getBoundingClientRect();
+    const geometry = rasterImageGeometry(bounds, image.naturalWidth, image.naturalHeight, scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = geometry.bitmapWidth;
+    canvas.height = geometry.bitmapHeight;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('EXPORT_IMAGE_RESOURCE_FAILED: image canvas is unavailable');
+    try {
+      context.drawImage(image, 0, 0, geometry.bitmapWidth, geometry.bitmapHeight);
+      // Replacing src changes the intrinsic dimensions. Freeze the dimensions
+      // that were actually rendered before swapping in the high-DPI data URL,
+      // otherwise the default 2x scale would also double small images in the
+      // exported layout.
+      image.style.width = `${geometry.displayWidth}px`;
+      image.style.height = `${geometry.displayHeight}px`;
+      image.src = canvas.toDataURL('image/png');
+      image.removeAttribute('srcset');
+      if (typeof image.decode === 'function') pendingDecodes.push(image.decode());
+    } catch {
+      // A tainted or unreadable image must stop the export; otherwise
+      // html-to-image silently removes it while still returning a canvas.
+      throw new Error('EXPORT_IMAGE_RESOURCE_FAILED: an image could not be embedded safely');
+    }
+  }
+  try {
+    await Promise.all(pendingDecodes);
+  } catch {
+    throw new Error('EXPORT_IMAGE_RESOURCE_FAILED: an embedded image could not be decoded');
+  }
+}
+
 async function cleanRenderedHTMLForExport(container) {
   await renderMermaidDiagrams(container, {
     diagramLabel: t('mermaidDiagram'),
@@ -6149,6 +6252,10 @@ async function exportWordDocument(options = {}) {
       showToast(t('exportFileInUse'), 'warning');
       return false;
     }
+    if (isExportTooLargeError(error)) {
+      showToast(t('exportDocumentTooLarge'), 'warning');
+      return false;
+    }
     reportSilentError(error, 'document.export-word');
     console.error(error);
     showToast(t('wordExportFailed'), 'error');
@@ -6174,6 +6281,10 @@ async function exportHTMLDocument(options = {}) {
   } catch (error) {
     if (isExportFileInUseError(error)) {
       showToast(t('exportFileInUse'), 'warning');
+      return false;
+    }
+    if (isExportTooLargeError(error)) {
+      showToast(t('exportDocumentTooLarge'), 'warning');
       return false;
     }
     reportSilentError(error, 'document.export-html');
@@ -6222,6 +6333,10 @@ async function exportPDFWithBookmarks(options = {}, { allowSystemFallback = true
     }
     if (isExportFileInUseError(error)) {
       showToast(t('exportFileInUse'), 'warning');
+      return false;
+    }
+    if (isExportTooLargeError(error)) {
+      showToast(t('exportDocumentTooLarge'), 'warning');
       return false;
     }
     reportSilentError(error, 'document.export-pdf');
@@ -6443,6 +6558,8 @@ async function exportDocumentImage(format, options) {
   document.body.append(host);
   try {
     await waitForPreviewImages(stage);
+    assertExportImagesReady(stage);
+    await embedExportImagesForRaster(stage, options.imageScale);
     if (document.fonts?.ready) await document.fonts.ready;
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const scale = options.imageScale;
@@ -6481,14 +6598,19 @@ async function exportDocumentImage(format, options) {
       viewport.style.height = `${currentHeight}px`;
       stage.style.top = `${(splitIntoPages ? pageMargin : 0) - range.start}px`;
       await new Promise(resolve => requestAnimationFrame(resolve));
-      const canvas = await toCanvas(viewport, {
-        width,
-        height: currentHeight,
-        pixelRatio: scale,
-        backgroundColor,
-        cacheBust: true,
-        skipAutoScale: true
-      });
+      let canvas;
+      try {
+        canvas = await toCanvas(viewport, {
+          width,
+          height: currentHeight,
+          pixelRatio: scale,
+          backgroundColor,
+          cacheBust: true,
+          skipAutoScale: true
+        });
+      } catch (error) {
+        throw new Error(`EXPORT_IMAGE_RENDER_FAILED: ${diagnosticErrorMessage(error)}`);
+      }
       hasVisibleContent ||= imageCanvasHasVisibleContent(canvas, backgroundColor);
       slices.push(canvas.toDataURL('image/png'));
     }
@@ -6595,6 +6717,9 @@ async function performExportCenter() {
   } catch (error) {
     if (String(error?.message || error).includes('EXPORT_IMAGE_TOO_TALL')) showToast(t('imageExportTooTall'), 'warning');
     else if (String(error?.message || error).includes('EXPORT_IMAGE_BLANK')) showToast(t('imageExportBlank'), 'warning');
+    else if (isExportImageResourceError(error)) showToast(t('exportImageResourceFailed'), 'warning');
+    else if (isExportSourceTooLargeError(error)) showToast(t('exportSourceDocumentTooLarge'), 'warning');
+    else if (isExportTooLargeError(error)) showToast(t('exportDocumentTooLarge'), 'warning');
     else if (isExportFileInUseError(error)) showToast(t('exportFileInUse'), 'warning');
     else {
       reportSilentError(error, `document.export-${options?.format || 'unknown'}`);
@@ -7121,7 +7246,7 @@ function closeAbout() {
 }
 
 function aiErrorMessage(error) {
-  return String(error?.message || error || '').replace(/^Error:\s*/i, '').trim();
+  return diagnosticErrorMessage(error).replace(/^Error:\s*/i, '').trim();
 }
 
 const aiProviderConfigs = Object.freeze({
@@ -7954,7 +8079,7 @@ async function generateAIDocumentSummary() {
     stopDocumentSummaryProgress();
     els.documentSummaryStatus.textContent = `${t('aiSummaryFailed')}: ${aiErrorMessage(error)}`;
     els.documentSummaryStatus.classList.remove('hidden');
-    void window.quilliteMarkdown.reportErrorLog?.('ai.summary', aiErrorMessage(error), '');
+    reportSilentError(error, 'ai.summary');
   } finally {
     if (requestNumber === documentSummaryRequest) {
       activeDocumentSummaryRequestID = '';
@@ -8268,7 +8393,7 @@ async function generateAIRewrite() {
     if (requestNumber !== aiRewriteRequest) return;
     stopAIRewriteProgress();
     els.aiRewriteStatus.textContent = `${t('aiRequestFailed')}: ${aiErrorMessage(error)}`;
-    void window.quilliteMarkdown.reportErrorLog?.('ai.edit', aiErrorMessage(error), '');
+    reportSilentError(error, 'ai.edit');
   } finally {
     if (requestNumber === aiRewriteRequest) {
       activeAIRewriteRequestID = '';
@@ -8615,7 +8740,7 @@ async function runAIDocumentReview() {
     setAIReviewEmptyState('aiReviewFailedTitle', 'aiReviewFailedHint');
     els.runAIReview.classList.add('hidden');
     els.rerunAIReview.classList.remove('hidden');
-    void window.quilliteMarkdown.reportErrorLog?.('ai.review', aiErrorMessage(error), '');
+    reportSilentError(error, 'ai.review');
   } finally {
     if (requestID === aiReviewRequest) {
       activeAIReviewRequestID = '';

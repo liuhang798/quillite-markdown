@@ -38,6 +38,8 @@ type appErrorEvent struct {
 var windowsPathPattern = regexp.MustCompile(`(?i)\b[A-Z]:[\\/][^\s\r\n"']+`)
 var unixPathPattern = regexp.MustCompile(`(^|[\s"'(])/(?:[^\s\r\n"'()]+)`)
 var userFileNamePattern = regexp.MustCompile(`(?i)(^|[\s"'(])[^\\/\s"'():]+\.(?:md|markdown|txt|png|jpe?g|gif|webp|svg|pdf|docx?)([\s"'():,;]|$)`)
+var labeledSecretPattern = regexp.MustCompile(`(?i)\b((?:x[ _-]?)?api[ _-]?key|key|access[ _-]?(?:key|token)|client[ _-]?secret|refresh[ _-]?token|id[ _-]?token|auth[ _-]?token|authorization|bearer|token|secret|password)\b(["']?\s*(?::|=|%3d)\s*["']?\s*)(?:bearer\s+)?[^\s&;,<>"']{6,}`)
+var commonSecretPattern = regexp.MustCompile(`(?i)\b(?:sk-[A-Za-z0-9_-]{6,}|github_pat_[A-Za-z0-9_]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|AIza[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b`)
 
 func newTelemetryEventID() (string, error) {
 	random := make([]byte, 16)
@@ -281,6 +283,10 @@ func sanitizeErrorText(value string, limit int) string {
 	value = windowsPathPattern.ReplaceAllString(value, "[路径]")
 	value = unixPathPattern.ReplaceAllString(value, "$1[路径]")
 	value = userFileNamePattern.ReplaceAllString(value, "$1[文件名]$2")
+	// Provider and network errors are untrusted text. Remove credentials even
+	// when a caller accidentally forwards an authentication failure.
+	value = labeledSecretPattern.ReplaceAllString(value, "$1$2[已隐藏]")
+	value = commonSecretPattern.ReplaceAllString(value, "[已隐藏]")
 	value = strings.TrimSpace(value)
 	if len(value) > limit {
 		value = value[:limit]

@@ -56,7 +56,10 @@ const (
 // Calls that need a deadline provide one through their request context. A full
 // document review intentionally has no deadline and waits until the provider
 // returns a result or the network/API reports an actual failure.
-var aiHTTPClient = &http.Client{}
+var (
+	aiHTTPClient    = &http.Client{}
+	errAIEmptyReply = errors.New("the AI service returned an empty message")
+)
 
 type aiCredentialStore interface {
 	Get(service, account string) (string, error)
@@ -1240,10 +1243,13 @@ func (a *App) callOpenAICompatibleStreamWithKey(ctx context.Context, baseURL, mo
 			Choices []struct {
 				Delta struct {
 					Content json.RawMessage `json:"content"`
+					Text    json.RawMessage `json:"text"`
 				} `json:"delta"`
 				Message struct {
 					Content json.RawMessage `json:"content"`
+					Text    json.RawMessage `json:"text"`
 				} `json:"message"`
+				Text json.RawMessage `json:"text"`
 			} `json:"choices"`
 		}
 		if json.Unmarshal([]byte(data), &event) != nil || len(event.Choices) == 0 {
@@ -1251,7 +1257,16 @@ func (a *App) callOpenAICompatibleStreamWithKey(ctx context.Context, baseURL, mo
 		}
 		raw := event.Choices[0].Delta.Content
 		if len(raw) == 0 {
+			raw = event.Choices[0].Delta.Text
+		}
+		if len(raw) == 0 {
 			raw = event.Choices[0].Message.Content
+		}
+		if len(raw) == 0 {
+			raw = event.Choices[0].Message.Text
+		}
+		if len(raw) == 0 {
+			raw = event.Choices[0].Text
 		}
 		part, decodeErr := decodeAIMessageContent(raw)
 		if decodeErr != nil || part == "" {
@@ -1264,7 +1279,19 @@ func (a *App) callOpenAICompatibleStreamWithKey(ctx context.Context, baseURL, mo
 		return "", fmt.Errorf("read AI response stream: %w", err)
 	}
 	if strings.TrimSpace(combined.String()) == "" {
-		return "", errors.New("the AI service returned an empty message")
+		// Several OpenAI-compatible gateways advertise SSE but only produce
+		// usage/finish events for streamed requests. Retry once without streaming
+		// so summaries and edits still work instead of surfacing a false empty
+		// response. This retry only happens when no user-visible text was emitted.
+		// Close the completed/empty stream before opening the compatibility
+		// request so providers with tight per-client connection limits do not
+		// deadlock the retry behind their first response.
+		_ = response.Body.Close()
+		fallback, err := a.callOpenAICompatibleWithSystemKey(ctx, baseURL, model, key, systemPrompt, prompt)
+		if err != nil {
+			return "", fmt.Errorf("streaming response was empty and the non-streaming retry failed: %w", err)
+		}
+		return fallback, nil
 	}
 	return combined.String(), nil
 }
@@ -1296,7 +1323,7 @@ func decodeAIChatResponse(reader io.Reader) (string, error) {
 		content = result.Choices[0].Message.ReasoningContent
 	}
 	if strings.TrimSpace(content) == "" {
-		return "", errors.New("the AI service returned an empty message")
+		return "", errAIEmptyReply
 	}
 	return content, nil
 }
@@ -1339,7 +1366,7 @@ func (a *App) callOpenAICompatibleWithSystemKey(ctx context.Context, baseURL, mo
 		content = result.Choices[0].Message.ReasoningContent
 	}
 	if strings.TrimSpace(content) == "" {
-		return "", errors.New("the AI service returned an empty message")
+		return "", errAIEmptyReply
 	}
 	return content, nil
 }

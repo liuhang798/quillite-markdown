@@ -12,3 +12,5 @@ func applyUpdate(downloadPath string) error {
 
 // runUpdateHelperIfRequested is a no-op on platforms without self-update.
 func runUpdateHelperIfRequested() {}
+
+func cleanupUpdateHelperAfterRestart() {}

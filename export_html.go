@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -18,8 +17,8 @@ var exportAccentPattern = regexp.MustCompile(`(?i)^#[0-9a-f]{6}$`)
 
 // ExportHTML writes the rendered document as a safe, standalone HTML file.
 func (a *App) ExportHTML(sourcePath, title, renderedHTML, colorMode, accentColor string) (string, error) {
-	if len(renderedHTML) > maxDOCXHTMLSize {
-		return "", errors.New("document is too large to export")
+	if err := validateRenderedExportHTMLSize(len(renderedHTML)); err != nil {
+		return "", err
 	}
 	defaultName := strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath))
 	if strings.TrimSpace(defaultName) == "" || defaultName == "." {
@@ -54,8 +53,8 @@ func (a *App) ExportHTML(sourcePath, title, renderedHTML, colorMode, accentColor
 
 // ExportPlainHTML writes semantic, sanitized HTML without an application theme.
 func (a *App) ExportPlainHTML(sourcePath, title, renderedHTML, header, footer string) (string, error) {
-	if len(renderedHTML) > maxDOCXHTMLSize {
-		return "", errors.New("document is too large to export")
+	if err := validateRenderedExportHTMLSize(len(renderedHTML)); err != nil {
+		return "", err
 	}
 	defaultName := exportBaseName(sourcePath, title) + ".html"
 	filePath, err := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{

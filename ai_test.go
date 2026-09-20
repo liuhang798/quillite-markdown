@@ -734,3 +734,41 @@ func TestOpenAICompatibleStreamingCombinesSSEChunks(t *testing.T) {
 		t.Fatalf("unexpected streaming result: %q", result)
 	}
 }
+
+func TestOpenAICompatibleStreamingRetriesWithoutStreamingWhenGatewayEmitsNoText(t *testing.T) {
+	app, _ := aiTestApp(t)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests++
+		var payload struct {
+			Stream bool `json:"stream"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if requests == 1 {
+			if !payload.Stream {
+				t.Error("the first request must use streaming")
+			}
+			response.Header().Set("Content-Type", "text/event-stream")
+			_, _ = response.Write([]byte("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
+			return
+		}
+		if payload.Stream {
+			t.Error("the compatibility retry must disable streaming")
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"choices":[{"message":{"content":"兼容重试成功"}}]}`))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := app.callOpenAICompatibleStreamWithKey(ctx, server.URL, "stream-model", "stream-key", "request-empty", aiSystemPrompt, "总结")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "兼容重试成功" || requests != 2 {
+		t.Fatalf("unexpected compatibility retry: result=%q requests=%d", result, requests)
+	}
+}

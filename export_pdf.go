@@ -28,6 +28,9 @@ type pdfBrowserProcessResult struct {
 }
 
 func (a *App) ExportPDF(sourcePath, title, renderedHTML, header, footer string) (string, error) {
+	if err := validateRenderedExportHTMLSize(len(renderedHTML)); err != nil {
+		return "", err
+	}
 	browsers := findPDFBrowsers()
 	if len(browsers) == 0 {
 		return "", errors.New("PDF_ENGINE_NOT_FOUND")
@@ -316,6 +319,9 @@ func localFileURL(path string) string {
 }
 
 func buildPDFHTML(renderedHTML, title, language, header, footer string) ([]byte, error) {
+	if err := validateRenderedExportHTMLSize(len(renderedHTML)); err != nil {
+		return nil, err
+	}
 	document, err := buildStandaloneHTML(renderedHTML, title, language, "light", "#159A63")
 	if err != nil {
 		return nil, err

@@ -3,11 +3,13 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -51,6 +53,193 @@ func TestProcessAlive(t *testing.T) {
 	}
 	if processAlive("99999999") {
 		t.Fatal("a non-existent PID must not be reported as alive")
+	}
+}
+
+func TestStageAndStartUpdateHelperFallsBackBesideApplicationWhenAppDataExecutionIsDenied(t *testing.T) {
+	root := t.TempDir()
+	installDir := filepath.Join(root, "installed")
+	updateDir := filepath.Join(root, "config", appNameZH, "update", "run-test")
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	executable := filepath.Join(installDir, windowsUpdateExecutableName)
+	downloadPath := filepath.Join(updateDir, "release-windows-amd64.bin")
+	if err := os.WriteFile(executable, []byte("trusted application bytes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(downloadPath, []byte("new version"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var launched []string
+	launcher := func(helperPath, _, _, _ string) error {
+		launched = append(launched, helperPath)
+		if len(launched) == 1 {
+			return &os.PathError{Op: "fork/exec", Path: helperPath, Err: syscall.ERROR_ACCESS_DENIED}
+		}
+		return nil
+	}
+	if err := stageAndStartUpdateHelper(executable, downloadPath, "4242", launcher); err != nil {
+		t.Fatal(err)
+	}
+	if len(launched) != 2 {
+		t.Fatalf("launch attempts = %d, want 2", len(launched))
+	}
+	if filepath.Dir(launched[0]) != updateDir {
+		t.Fatalf("primary helper was not staged in the private update directory: %s", launched[0])
+	}
+	if filepath.Dir(launched[1]) != installDir || !strings.HasPrefix(filepath.Base(launched[1]), ".quillite-update-helper-4242-") {
+		t.Fatalf("fallback helper was not narrowly staged beside the application: %s", launched[1])
+	}
+	if data, err := os.ReadFile(launched[1]); err != nil || string(data) != "trusted application bytes" {
+		t.Fatalf("fallback helper content = %q, %v", data, err)
+	}
+	_ = os.Remove(launched[1])
+}
+
+func TestFailedFallbackLaunchRetainsOnlyItsExclusiveHelper(t *testing.T) {
+	root := t.TempDir()
+	installDir := filepath.Join(root, "installed")
+	updateDir := filepath.Join(root, "config", appNameZH, "update", "run-test")
+	for _, directory := range []string{installDir, updateDir} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executable := filepath.Join(installDir, windowsUpdateExecutableName)
+	downloadPath := filepath.Join(updateDir, "release-windows-amd64.bin")
+	unknownPath := filepath.Join(installDir, ".quillite-update-helper-user-file.exe")
+	if err := os.WriteFile(executable, []byte("trusted application bytes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(downloadPath, []byte("new version"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(unknownPath, []byte("unrelated user bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	attempts := 0
+	err := stageAndStartUpdateHelper(executable, downloadPath, "5151", func(helperPath, _, _, _ string) error {
+		attempts++
+		if attempts == 1 {
+			return &os.PathError{Op: "fork/exec", Path: helperPath, Err: syscall.ERROR_ACCESS_DENIED}
+		}
+		return errors.New("launcher failed")
+	})
+	if err == nil || attempts != 2 {
+		t.Fatalf("fallback launch result = %v, attempts = %d", err, attempts)
+	}
+	if data, readErr := os.ReadFile(unknownPath); readErr != nil || string(data) != "unrelated user bytes" {
+		t.Fatalf("unrelated file changed after failed launch: %q, %v", data, readErr)
+	}
+	matches, globErr := filepath.Glob(filepath.Join(installDir, ".quillite-update-helper-5151-*.exe"))
+	if globErr != nil || len(matches) != 1 {
+		t.Fatalf("failed fallback should retain exactly its unique helper: %v, %v", matches, globErr)
+	}
+	if data, readErr := os.ReadFile(matches[0]); readErr != nil || string(data) != "trusted application bytes" {
+		t.Fatalf("retained helper content = %q, %v", data, readErr)
+	}
+}
+
+func TestConfirmedUpdateHelperCleanupRequiresExactPreviousVersionIdentity(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	t.Setenv("APPDATA", configDir)
+	updateDir := filepath.Join(configDir, appNameZH, "update", "run-cleanup-test")
+	installDir := filepath.Join(root, "installed")
+	if err := os.MkdirAll(updateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	currentExecutable := filepath.Join(installDir, windowsUpdateExecutableName)
+	backupPath := filepath.Join(updateDir, "previous-version.exe")
+	helperPath := filepath.Join(installDir, ".quillite-update-helper-4242-123.exe")
+	if err := os.WriteFile(currentExecutable, []byte("new safe version"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{backupPath, helperPath} {
+		if err := os.WriteFile(path, []byte("confirmed previous version"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	confirmed, err := confirmedUpdateHelperPath(helperPath, backupPath, currentExecutable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameFilesystemPath(confirmed, helperPath) {
+		t.Fatalf("confirmed cleanup path = %q, want %q", confirmed, helperPath)
+	}
+	if err := removeConfirmedUpdateHelper(confirmed, backupPath, currentExecutable); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(helperPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("confirmed helper was not removed: %v", err)
+	}
+	for _, protected := range []string{backupPath, currentExecutable} {
+		if _, err := os.Stat(protected); err != nil {
+			t.Fatalf("protected file was affected: %s: %v", protected, err)
+		}
+	}
+
+	unknownPath := filepath.Join(installDir, ".quillite-update-helper-4242-unknown.exe")
+	if err := os.WriteFile(unknownPath, []byte("unrelated user file"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := confirmedUpdateHelperPath(unknownPath, backupPath, currentExecutable); err == nil {
+		t.Fatal("an identity-mismatched file must never be approved for cleanup")
+	}
+	if err := removeConfirmedUpdateHelper(unknownPath, backupPath, currentExecutable); err == nil {
+		t.Fatal("an identity-mismatched file must never be removed through handle-bound cleanup")
+	}
+	if _, err := os.Stat(unknownPath); err != nil {
+		t.Fatalf("rejected cleanup target was modified: %v", err)
+	}
+
+	primaryHelper := filepath.Join(updateDir, "apply-update-helper-4242.exe")
+	if err := os.WriteFile(primaryHelper, []byte("confirmed previous version"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(updateCleanupHelperEnvironment, primaryHelper)
+	t.Setenv(updateCleanupBackupEnvironment, backupPath)
+	cleanupUpdateHelperAfterRestart()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		_, statErr := os.Stat(primaryHelper)
+		if errors.Is(statErr, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("confirmed primary helper was not cleaned up: %v", statErr)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func TestUpdaterNeverSchedulesPathOnlyDeletionAtReboot(t *testing.T) {
+	source, err := os.ReadFile("updater_windows.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if strings.Contains(text, "MOVEFILE_DELAY_UNTIL_REBOOT") || strings.Contains(text, "MoveFileEx") {
+		t.Fatal("the updater must not leave a path-only deletion pending across a reboot")
+	}
+	if strings.Contains(text, "os.Remove(confirmedPath)") {
+		t.Fatal("the updater must delete an identity-checked helper through its held file handle, not by path")
+	}
+	if strings.Contains(text, "os.Remove(fallbackPath)") || strings.Contains(text, "os.Remove(target)") {
+		t.Fatal("failed exclusive helper creation or launch must not trigger path-based deletion")
+	}
+	if !strings.Contains(text, "SetFileInformationByHandle") {
+		t.Fatal("the updater must bind confirmed helper cleanup to the verified file handle")
 	}
 }
 

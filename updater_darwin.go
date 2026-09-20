@@ -203,3 +203,5 @@ func macUpdateError(message string) error {
 // runUpdateHelperIfRequested is a no-op on darwin: the detached shell script
 // performs the atomic bundle replacement after the application exits.
 func runUpdateHelperIfRequested() {}
+
+func cleanupUpdateHelperAfterRestart() {}

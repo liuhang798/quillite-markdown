@@ -15,6 +15,49 @@ import (
 	"testing"
 )
 
+func TestRenderedExportLimitAllowsSupportedLargeDocumentsToExpand(t *testing.T) {
+	if maxRenderedExportHTMLSize != 96*1024*1024 {
+		t.Fatalf("rendered export limit = %d, want 96 MiB", maxRenderedExportHTMLSize)
+	}
+	if maxRenderedExportHTMLSize <= maxSupportedDocumentBytes {
+		t.Fatalf("rendered export limit %d must exceed source document limit %d", maxRenderedExportHTMLSize, maxSupportedDocumentBytes)
+	}
+	if maxPandocSourceSize != maxSupportedDocumentBytes {
+		t.Fatalf("Pandoc source limit = %d, want document limit %d", maxPandocSourceSize, maxSupportedDocumentBytes)
+	}
+	if exportSourceTooLargeErrorMarker == exportTooLargeErrorMarker {
+		t.Fatal("source and rendered export limits must have distinct error markers")
+	}
+	if err := validateRenderedExportHTMLSize(maxRenderedExportHTMLSize); err != nil {
+		t.Fatalf("exact rendered export limit was rejected: %v", err)
+	}
+	if err := validateRenderedExportHTMLSize(maxRenderedExportHTMLSize + 1); err == nil || !strings.Contains(err.Error(), exportTooLargeErrorMarker) {
+		t.Fatalf("oversized rendered export did not return the stable marker: %v", err)
+	}
+}
+
+func TestBuildDOCXExportsRenderedDocumentAboveLegacyLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large export regression test")
+	}
+	// This exercises the real HTML parser and DOCX writer above the former
+	// 24 MiB ceiling instead of merely asserting the new constant.
+	rendered := "<p>" + strings.Repeat("large document text ", 1400000) + "</p>"
+	if len(rendered) <= 24*1024*1024 || len(rendered) >= maxRenderedExportHTMLSize {
+		t.Fatalf("large rendered fixture has unexpected size: %d", len(rendered))
+	}
+	document, err := buildDOCX(rendered, "Large document", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(document) == 0 {
+		t.Fatal("large DOCX export returned no data")
+	}
+	if _, err := zip.NewReader(bytes.NewReader(document), int64(len(document))); err != nil {
+		t.Fatalf("large DOCX export is not a valid ZIP package: %v", err)
+	}
+}
+
 func TestImageSizeEMUPreservesWideChartAspectRatio(t *testing.T) {
 	var data bytes.Buffer
 	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 2000, 840))); err != nil {

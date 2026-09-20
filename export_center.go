@@ -22,16 +22,17 @@ import (
 )
 
 const (
-	maxExportPresets      = 24
-	maxPandocSourceSize   = 24 * 1024 * 1024
-	maxExportImageSize    = 96 * 1024 * 1024
-	maxExportImageSlices  = 64
-	maxExportImagePixels  = 64_000_000
-	maxExportPagePixels   = 120_000_000
-	maxExportPageDataSize = 192 * 1024 * 1024
-	maxExportImageSide    = 30_000
-	maxExportSliceSide    = 8_192
-	maxPandocArgumentSize = 4000
+	maxExportPresets                = 24
+	maxPandocSourceSize             = maxSupportedDocumentBytes
+	maxExportImageSize              = 96 * 1024 * 1024
+	maxExportImageSlices            = 64
+	maxExportImagePixels            = 64_000_000
+	exportSourceTooLargeErrorMarker = "EXPORT_SOURCE_DOCUMENT_TOO_LARGE"
+	maxExportPagePixels             = 120_000_000
+	maxExportPageDataSize           = 192 * 1024 * 1024
+	maxExportImageSide              = 30_000
+	maxExportSliceSide              = 8_192
+	maxPandocArgumentSize           = 4000
 )
 
 var pandocWriterPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+.-]{0,63}$`)
@@ -262,7 +263,7 @@ func executablePattern() string {
 
 func (a *App) ExportWithPandoc(input PandocExportInput) (string, error) {
 	if len(input.Content) > maxPandocSourceSize {
-		return "", errors.New("document is too large to export")
+		return "", errors.New(exportSourceTooLargeErrorMarker + ": source document exceeds the 64 MiB export limit")
 	}
 	format := strings.ToLower(strings.TrimSpace(input.Format))
 	definition, supported := pandocFormats[format]
