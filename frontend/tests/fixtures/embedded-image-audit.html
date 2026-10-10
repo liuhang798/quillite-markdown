@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="zh-CN"><meta charset="utf-8"><title>内嵌图片编辑器回归验证</title>
 <body><h1>内嵌图片编辑器回归验证</h1>
-<nav><button id="sample">示例文档</button><button id="mixed">混合图片文档</button><button id="row">同段多图</button><button id="missing">缺图文档</button><button id="async">异步读取验证</button><button id="large">大图片文档</button><button id="undo">撤销修改</button><button id="refresh">刷新阅读预览</button><button id="check">运行安全检查</button></nav>
+<nav><button id="sample">示例文档</button><button id="mixed">混合图片文档</button><button id="row">同段多图</button><button id="missing">缺图文档</button><button id="async">异步读取验证</button><button id="large">大图片文档</button><button id="formula-large">公式+大图</button><button id="undo">撤销修改</button><button id="refresh">刷新阅读预览</button><button id="check">运行安全检查</button></nav>
 <button id="directory">另存目录会话验证</button>
 <output id="result" aria-live="polite"></output>
 <output id="checks" aria-live="polite"></output>
 <div class="audit-panes"><section><h2>编辑器</h2><div id="markdownEditor"></div></section><section><h2>阅读预览</h2><div id="reading" class="markdown-body"></div></section></div>
 <script type="module">
 import '../../src/styles.css';
+import 'katex/dist/katex.min.css';
 import { basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -16,7 +17,11 @@ import { undo, undoDepth } from '@codemirror/commands';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { embeddedImagePreview, imagePreviewField, imagePreviewPhrases, refreshImagePreviews, imagePreviewContext, updateImagePreviewDirectory } from '../../src/embedded-image-preview.js';
+import { editorFormulaPreview, editorFormulaField, formulaPreviewContext, formulaPreviewPhrases } from '../../src/editor-formula-preview.js';
 import { normalizeImageRows } from '../../src/image-layout.js';
+import { mathExtensions } from '../../src/math-rendering.js';
+
+marked.use({ extensions: mathExtensions });
 
 const canvas = document.createElement('canvas'); canvas.width = 240; canvas.height = 140;
 const context = canvas.getContext('2d'); context.fillStyle = '#d6f3e5'; context.fillRect(0, 0, 240, 140);
@@ -35,10 +40,12 @@ let baseline = original;
 const output = document.querySelector('#result');
 const snapshot = () => {
   const field = view.state.field(imagePreviewField);
-  output.textContent = `图片 ${field.items.length} · 折叠 ${field.atoms.size} · 正文字符 ${view.state.doc.length} · 撤销深度 ${undoDepth(view.state)} · ${view.state.doc.toString() === baseline ? '原文未改动' : '正文已修改'}`;
+  const formulas = view.state.field(editorFormulaField);
+  output.textContent = `图片 ${field.items.length} · 图片折叠 ${field.atoms.size} · 公式 ${formulas.items.length} · 公式折叠 ${formulas.atoms.size} · 正文字符 ${view.state.doc.length} · 撤销深度 ${undoDepth(view.state)} · ${view.state.doc.toString() === baseline ? '原文未改动' : '正文已修改'}`;
 };
 const extensions = [basicSetup, markdown(), embeddedImagePreview, imagePreviewContext.of({ directory: '/fixture', readImageData: localRead }), EditorView.lineWrapping,
-  EditorState.phrases.of(imagePreviewPhrases), EditorView.updateListener.of(() => snapshot())];
+  editorFormulaPreview, formulaPreviewContext.of({ sanitize: html => DOMPurify.sanitize(html) }),
+  EditorState.phrases.of({ ...imagePreviewPhrases, ...formulaPreviewPhrases }), EditorView.updateListener.of(() => snapshot())];
 const view = new EditorView({ state: EditorState.create({ doc: original, extensions }), parent: document.querySelector('#markdownEditor') });
 const render = () => {
   const reading = document.querySelector('#reading'); reading.innerHTML = DOMPurify.sanitize(marked.parse(view.state.doc.toString())); normalizeImageRows(reading);
@@ -85,6 +92,15 @@ document.querySelector('#large').onclick = () => {
   for (let i = 0; i < pixels.data.length; i += 4) { seed = (seed * 1664525 + 1013904223) >>> 0; pixels.data[i] = seed & 255; pixels.data[i + 1] = (seed >>> 8) & 255; pixels.data[i + 2] = (seed >>> 16) & 255; pixels.data[i + 3] = 255; }
   context.putImageData(pixels, 0, 0);
   baseline = `# 大图片\n\n![测试](${canvas.toDataURL('image/png')})\n\n结尾文字`;
+  view.setState(EditorState.create({ doc: baseline, extensions })); snapshot(); render();
+};
+document.querySelector('#formula-large').onclick = () => {
+  canvas.width = 640; canvas.height = 480;
+  const pixels = context.createImageData(640, 480);
+  let seed = 31;
+  for (let i = 0; i < pixels.data.length; i += 4) { seed = (seed * 1664525 + 1013904223) >>> 0; pixels.data[i] = seed & 255; pixels.data[i + 1] = (seed >>> 8) & 255; pixels.data[i + 2] = (seed >>> 16) & 255; pixels.data[i + 3] = 255; }
+  context.putImageData(pixels, 0, 0);
+  baseline = `$y = ax+b$\n\n$x_i^{2}$\n\n$\\left(\\vec a\\right)\\cdot\\left(\\vec b\\right)=\\lVert\\vec a\\rVert\\lVert\\vec b\\rVert\\cos\\left(\\theta\\right)$\n\n![测试](${canvas.toDataURL('image/png')})`;
   view.setState(EditorState.create({ doc: baseline, extensions })); snapshot(); render();
 };
 document.querySelector('#undo').onclick = () => { undo(view); snapshot(); render(); };

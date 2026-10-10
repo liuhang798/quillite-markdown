@@ -121,7 +121,7 @@ test('nonmodal typography panel previews actual prose without persisting or rend
   for (const id of ['bodyStyle', 'bodyFormulaSize']) assert.match(html, new RegExp(`for="${id}"`));
   assert.doesNotMatch(html, /id="bodyChineseFont"|id="bodyEnglishFont"|id="typographySample"/);
   assert.match(renderer, /addEventListener\('close', \(\) => \{\s*applyBodyTypography\(state\.bodyTypography/);
-  assert.match(styles, /\.markdown-body \.katex, \.formula-preview \.katex, \.typography-math-sample \.katex \{ font-size: calc\(1em \* var\(--math-font-scale, 1\.21\)\)/);
+  assert.match(styles, /\.markdown-body \.katex, \.formula-preview \.katex, \.typography-math-sample \.katex, \.cm-formula-render \.katex \{ font-size: calc\(1em \* var\(--math-font-scale, 1\.21\)\)/);
   assert.doesNotMatch(styles, /\.katex[^}]*font-family: var\(--body-font-family/);
   assert.match(renderer, /tags\.monospace[^\n]*Cascadia Code/);
 });

@@ -19,9 +19,12 @@ import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearance
 import { previewWheelZoomDirection } from './font-wheel-zoom.js';
 import { clampFontScale, readFontScaleStorage, recommendedFontScale } from './font-scaling.js';
 import { escapeMarkdownText, highlightExtension, nextFootnoteNumber, prepareFootnotes, renderFootnoteSection } from './markdown-formats.js';
-import { buildFormulaExpression, buildFormulaMarkdown, FORMULA_DISCIPLINES, FORMULA_GROUP_LABELS, formulaPreviewExpression, formulaTemplateById, formulaTemplatesForDiscipline, formulaValues, parseFormulaMarkdown } from './formula-templates.js';
-import { findFormulaAt, scanMarkdownFormulas } from './formula-editing.js';
-import { mathExtensions, renderLatex } from './math-rendering.js';
+import { buildFormulaExpression, buildFormulaMarkdown, FORMULA_DISCIPLINES, FORMULA_GROUP_LABELS, formulaInlineHasNewline, formulaPreviewExpression, formulaTemplateById, searchFormulaTemplates, formulaValues, parseFormulaMarkdown, resolveFormulaOutput } from './formula-templates.js';
+import { applyFormulaInlineLayout, formulaInlineLayout } from './formula-templates.js';
+import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas } from './formula-editing.js';
+import { mathExtensions, renderLatexResult, collectFormulaRendering, formulaMarkdownMatches } from './math-rendering.js';
+import { formulaFallbackSource } from './formula-export.js';
+import { FORMULA_STRUCTURES } from './formula-visual-policy.js';
 import { scanMarkdownBlockStartLines } from './preview-line-map.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
@@ -56,6 +59,10 @@ const NEW_FILE_COOLDOWN_MS = 3000;
 let codeEditor;
 let embeddedImagePreview;
 let imagePreviewContext;
+let editorFormulaPreview;
+let formulaPreviewContext;
+let setFormulaDisplayEffect;
+let editorFormulaField;
 let updateImagePreviewDirectory;
 let editorExtensions = [];
 let basicSetup;
@@ -242,6 +249,7 @@ const state = {
   bodyTypography: readBodyTypography(localStorage),
   docWidth: normalizeDocWidth(localStorage.getItem('docWidth')),
   editorLayout: normalizeEditorLayout(localStorage.getItem('editorLayout')),
+  formulaDisplay: localStorage.getItem('formulaDisplay') === 'source' ? 'source' : 'preview',
   lastSplitLayout: localStorage.getItem('lastSplitLayout') === 'editor-left' ? 'editor-left' : 'preview-left',
   language: localStorage.getItem('language') === 'en' ? 'en' : 'zh-CN',
   spellcheckEnabled: localStorage.getItem('spellcheckEnabled') !== 'false',
@@ -390,6 +398,25 @@ window.addEventListener('unhandledrejection', event => reportSilentError(event.r
 
 const translations = {
   'zh-CN': {
+    formulaEditStale: '文档或公式内容已变化。未写入任何修改，请关闭后重新打开公式。',
+    formulaReplaceDraftConfirm: '重新生成公式会替换手动编辑的源码，是否继续？',
+    formulaSyntaxError: '公式无法解析，请检查下方提示与源码；未写入文档。',
+    formulaInlineMultiline: '行内公式不能包含换行，请选择“块级公式”或“编号公式”；源码已保留。',
+    formulaDelimiterInvalid: '公式分隔符与内容冲突，未写入文档。请改用块级公式，或在高级源码中使用 \\(...\\) 包住完整行内公式；输入已保留。',
+    formulaDisplay: '公式显示', formulaDisplayPreview: '公式排版', formulaDisplaySource: '公式源码',
+    formulaVariableInvalid: '变量或函数名称请使用单个字母、LaTeX 符号或带下标的名称（如 x、\\theta、x_1），不要填写括号或运算式。复杂表达式请使用自定义公式。',
+    formulaVariablesInvalid: '请填写 1–16 个逗号分隔的变量，不能有空项。',
+    formulaSearchPlaceholder: '名称、学科或关键词', formulaSearchLabel: '搜索公式模板', formulaSearchClear: '清除',
+    formulaVisualTitle: '可视化编辑', formulaStructureToolbar: '公式结构工具栏', formulaParameters: '模板参数', formulaAdvanced: '高级：查看／修改源码',
+    formulaInlineLayout: '行内排版', formulaLayoutNormal: '常规排版', formulaLayoutLarge: '大号排版', formulaLayoutHint: '仅改变当前行内公式的排版，展开分数和求和符号，不改为独立一行。',
+    formulaVisualEditHint: '直接在公式中修改，或展开模板参数；保存后原位替换，源码位于“高级”。', formulaVisualWizardHint: '选择模板填写参数，或用结构按钮直接编辑公式；源码位于“高级”。',
+    formulaChemicalContent: '化学内容（如 H2SO4、2H2 + O2 -> 2H2O）', formulaChemicalHint: '化学内容作为整体保留；请在模板参数中修改元素、系数、电荷和反应箭头。',
+    formulaStructure_removeRow: '矩阵删行', formulaStructure_removeColumn: '矩阵删列',
+    formulaVisualLoading: '正在准备离线公式编辑器…', formulaVisualHint: '点击公式中的位置即可修改；方向键移动，Tab 切换空位。下方是最终阅读效果。',
+    formulaVisualFallback: '此公式暂不能无损地可视化编辑，原源码已保留。请在高级源码中修改，或选择模板填写参数。',
+    formulaStructure_fraction: '分数', formulaStructure_root: '根号', formulaStructure_power: '上标', formulaStructure_subscript: '下标', formulaStructure_integral: '积分', formulaStructure_sum: '求和', formulaStructure_parentheses: '括号', formulaStructure_matrix: '矩阵',
+    formulaStructure_pi: 'π', formulaStructure_theta: 'θ', formulaStructure_infinity: '∞', formulaStructure_times: '×', formulaStructure_plusminus: '±', formulaStructure_undo: '撤销', formulaStructure_redo: '重做', formulaStructure_addRowAfter: '矩阵加行', formulaStructure_addColumnAfter: '矩阵加列',
+    formulaSearchCount: '{count} 个模板', formulaSearchEmpty: '没有匹配的模板。试试其他关键词、选择“全部”或清除搜索。',
     bodyStyle: '正文风格', bodyStyleDefault: '默认（跟随软件）', bodyStyleModern: '现代简洁', bodyStyleClear: '清晰易读', bodyStyleBook: '书籍阅读', bodyStyleClassic: '经典文档', bodyStyleLiterary: '文艺随笔', bodyStyleHandwritten: '手写气息', bodyStyleGentle: '柔和圆润', bodyStyleMagazine: '杂志风格', bodyStyleTechnical: '技术文档', bodyStyleMono: '等宽正文', bodyStyleLegacy: '原有自定义搭配',
 bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', bodyEnglishFont: '英文正文字体', fontFollowApp: '跟随软件字体', bodyFontSans: '无衬线（微软雅黑 / 苹方）', bodyFontArial: 'Arial（无衬线）', bodyFontGeorgia: 'Georgia（衬线）', bodyFontTimes: 'Times New Roman（衬线）', bodyFontVerdana: 'Verdana（无衬线）', formulaTextSize: '公式字号', formulaSizeSmall: '小', formulaSizeStandard: '标准', formulaSizeLarge: '大', typographyHint: '切换后直接预览当前文档；保存后记忆，取消恢复原设置。左右正文同步，界面与代码不变。', typographyFallbackHint: '使用本机字体，未安装时自动回退；公式保留 KaTeX 数学字体，仅调整大小。', typographySample: '混合文字与公式预览', typographyReset: '恢复默认', typographySaved: '正文与公式设置已保存', typographySaveFailed: '设置保存失败，已恢复原有显示，请重试。',
     documentTools: '文档工具',
@@ -427,7 +454,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.7.6', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.7.7', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -437,15 +464,34 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     downloadAndUpdate: '下载并更新', manualMacUpdateTitle: '此版本需要一次手动升级', manualMacUpdateDescription: 'macOS 2.5.0 使用了旧更新格式，无法安全替换完整应用。请从官网下载安装一次最新版；之后即可继续使用应用内自动更新。', manualMacUpdateButton: '打开官网下载新版', unsafeWindowsUninstallerTitle: '无法确认卸载程序安全性', unsafeWindowsUninstallerDescription: '当前卸载程序无法确认安全或无法完成风险处理，已原样保留，应用内更新暂不可用。请勿手动运行未知卸载程序；备份重要文档后，下载完整安装包并选择新的专属目录安装。', unsafeWindowsUninstallerButton: '下载完整安装包', installerRepairRequired: '需要修复安装组件', unsafeUninstallerDialogLabel: '安装安全警告', unsafeUninstallerDialogTitle: '当前卸载程序存在重大缺陷', unsafeUninstallerDialogDescription: '检测到当前安装使用旧版卸载程序。该版本卸载时可能误删安装目录内由你创建的文档及其他文件。为避免数据损失，请不要卸载或继续使用热更新；请下载完整安装包并覆盖安装安全版本。安装前请先备份安装目录中的重要文件。', unsafeUninstallerDialogNote: '完成覆盖安装后，新版安全卸载程序会自动替换旧文件，之后即可恢复应用内更新。', unsafeUninstallerLater: '稍后处理', unsafeUninstallerDownload: '下载安全版本', downloadingUpdate: '正在下载更新… {percent}%', preparingUpdate: '正在安装更新…', updateFailed: '更新失败，请稍后重试', updateBlockedByUnsavedChanges: '请先保存当前文档再更新',
     formatToolbar: 'Markdown 格式工具栏', undoTitle: '撤回 (Ctrl+Z)', formatPainter: '格式刷', formatPainterTitle: '格式刷：复制选中文本的格式，再选中目标文本即可自动应用', formatCopied: '已复制格式，选中目标文本后自动应用', formatApplied: '格式已应用', formatNeedSelection: '请先选中要复制格式的文本', formatCleared: '已取消格式刷', heading: '标题', paragraph: '正文', heading1: '标题 1', heading2: '标题 2', heading3: '标题 3', heading4: '标题 4', heading5: '标题 5', heading6: '标题 6',
     boldTitle: '加粗 (Ctrl+B)', italicTitle: '斜体 (Ctrl+I)', strikethroughTitle: '删除线 (Ctrl+Shift+X)', highlightTitle: '高亮 (Ctrl+Shift+H)', textColorTitle: '文字颜色', textColorMenu: '选择文字颜色', textColorDefault: '默认颜色', textColorOption: '颜色', coloredText: '彩色文字', linkTitle: '插入链接 (Ctrl+K)', inlineCode: '行内代码', codeBlock: '代码块', quote: '引用', unorderedList: '无序列表', orderedList: '有序列表', taskList: '任务列表', horizontalRule: '分隔线', insertTable: '插入表格', insertImage: '插入图片', imageAlt: '图片说明',
-    moreFormats: '更多格式', toolbarOverflow: '折叠的工具栏格式', extendedFormats: '扩展格式', boldItalic: '粗斜体', underline: '下划线', superscript: '上标', subscript: '下标', formulaBuilder: '学科公式 🔥', diagramBuilder: '图表生成器 🔥', diagramGuide: '查看图表教程 ↗', mermaidFlowchart: 'Mermaid 流程图', mermaidSequence: 'Mermaid 时序图', mermaidGantt: 'Mermaid 甘特图', mermaidDiagram: 'Mermaid 图表', mermaidRenderError: '图表语法有误', mermaidRenderHint: '请检查 Mermaid 源码，文档其他内容不受影响。', dataChart: '数据图表', dataChartRenderError: '数据图表配置有误', dataChartRenderHint: '请检查 ECharts JSON 配置，文档其他内容不受影响。', inlineMath: '行内公式', mathBlock: '块级公式', chemicalFormula: '化学公式', mathGuide: '查看公式教程 ↗', numberedMath: '编号公式', mathExpression: 'LaTeX 公式', hardBreak: '强制换行', footnote: '脚注', referenceLink: '引用式链接', collapsible: '折叠区块', keyboardKey: '键盘按键', autolink: '自动链接', escapeSyntax: '转义符号', htmlBlock: 'HTML 区块', comment: '注释', footnotes: '脚注', footnoteText: '脚注内容', referenceName: '引用名称', collapsibleTitle: '折叠标题',
+    moreFormats: '更多格式', toolbarOverflow: '折叠的工具栏格式', extendedFormats: '扩展格式', boldItalic: '粗斜体', underline: '下划线', superscript: '上标', subscript: '下标', formulaBuilder: '学科公式 🔥', formulaShort: '公式', diagramBuilder: '图表生成器 🔥', diagramShort: '图表', diagramGuide: '查看图表教程 ↗', mermaidFlowchart: 'Mermaid 流程图', mermaidSequence: 'Mermaid 时序图', mermaidGantt: 'Mermaid 甘特图', mermaidDiagram: 'Mermaid 图表', mermaidRenderError: '图表语法有误', mermaidRenderHint: '请检查 Mermaid 源码，文档其他内容不受影响。', dataChart: '数据图表', dataChartRenderError: '数据图表配置有误', dataChartRenderHint: '请检查 ECharts JSON 配置，文档其他内容不受影响。', inlineMath: '行内公式', mathBlock: '块级公式', chemicalFormula: '化学公式', mathGuide: '查看公式教程 ↗', numberedMath: '编号公式', mathExpression: 'LaTeX 公式', hardBreak: '强制换行', footnote: '脚注', referenceLink: '引用式链接', collapsible: '折叠区块', keyboardKey: '键盘按键', autolink: '自动链接', escapeSyntax: '转义符号', htmlBlock: 'HTML 区块', comment: '注释', footnotes: '脚注', footnoteText: '脚注内容', referenceName: '引用名称', collapsibleTitle: '折叠标题',
     markdownTool: 'MARKDOWN 工具', tableDialogHint: '直接填写单元格，拖动行列调整顺序或列宽，并设置每列对齐方式。', visualTableEditor: '可视化表格编辑', editTable: '编辑表格', insertTableAction: '插入表格', saveTable: '保存表格', rows: '行数', columns: '列数', columnNumber: '第 {number} 列', headerRow: '表头', rowNumber: '第 {number} 行', addRow: '添加行', addColumn: '添加列', deleteRow: '删除行', deleteColumn: '删除列', alignment: '对齐', alignLeft: '左对齐', alignCenter: '居中', alignRight: '右对齐', dragTableHint: '拖动手柄调整行列顺序', resizeTableHint: '拖动列边界调整宽度', tableCellPlaceholder: '填写内容', tableMinimumSize: 'Markdown 表格至少需要 2 行、1 列', cancel: '取消', insert: '插入', newFileFailed: '无法新建文档', imageSelectFailed: '无法导入图片', imageImported: '图片已复制到 assets 资源目录', imagePasteFailed: '无法粘贴图片', languageSaveFailed: '无法保存语言设置，请重试', imageDialogHint: '选择本地图片或粘贴在线链接；本地图片会自动复制到 assets 资源目录。', imageUrlLabel: '图片链接', imageUrlPlaceholder: 'https:// 或 http:// 链接', imageAltPlaceholder: '可选的图片说明', imageWidth: '显示宽度', imageWidthHint: '拖拽和粘贴图片也会使用此宽度', localImage: '本地图片…', imageUrlInvalid: '请输入有效的 http:// 或 https:// 链接',
-    chooseImage: '选择图片…', imageUploadSettings: '图床设置', imageUploadSettingsHint: '可直接登录 PicGo 在线图床，无需安装额外软件；也可继续使用本地 assets 或已安装的 PicGo。', imageInsertMode: '图片插入方式', localAssetsMode: '本地 assets', localAssetsModeHint: '保存相对路径，离线可用', localAssetsReadyTitle: '本地模式已就绪', localAssetsReadyHint: '图片会复制到文档旁的 assets，便于离线阅读和移动。', picGoCloudMode: 'PicGo 在线图床', picGoCloudModeHint: '浏览器登录，无需安装 PicGo', picGoCloudSetupTitle: '登录后直接上传', picGoCloudSetupHint: '将在浏览器打开 PicGo Cloud 登录页。登录令牌仅保存在本机；免费账户提供 200 个文件、500 MB 存储空间，额度与计费以 PicGo Cloud 为准。', picGoCloudConnectedTitle: 'PicGo Cloud 已连接', loginPicGoCloud: '登录 PicGo Cloud', logoutPicGoCloud: '退出登录', testPicGoCloud: '检查连接', picGoCloudSigningIn: '请在浏览器完成 PicGo Cloud 登录…', picGoCloudChecking: '正在检查 PicGo Cloud 连接…', picGoCloudConnected: '连接正常，可以启用在线图床', picGoCloudLoginFailed: 'PicGo Cloud 登录失败，请重试', picGoCloudConnectionFailed: 'PicGo Cloud 连接失效，请重新登录', picGoCloudLoggedOut: '已退出 PicGo Cloud', picGoMode: '本机 PicGo', picGoModeHint: '兼容已安装的 PicGo 与其他图床', picGoSetupProgress: '本机 PicGo 配置进度', picGoSetupInstallShort: '安装 PicGo', picGoSetupConfigureShort: '配置并检测', picGoSetupReadyShort: '完成', picGoSetupStep1: '第 1 步', picGoSetupInstallTitle: '安装并启动 PicGo', picGoSetupInstallHint: '此兼容模式需要安装 PicGo。安装后打开，并让它保持在后台运行。', downloadPicGo: '打开 PicGo 下载页', picGoInstalledNext: '已经安装，下一步', picGoSetupStep2: '第 2 步', picGoSetupConfigureTitle: '配置图床并开启 Server', picGoSetupConfigureHost: '在 PicGo 中配置要使用的图床。', picGoSetupEnableServer: '打开“PicGo 设置 → PicGo-Server”，确认服务已开启，端口为 36677。', picGoSetupKeepRunning: '保持 PicGo 在后台运行，然后让轻阅自动检测。', picGoSetupBack: '上一步', autoDetectPicGo: '自动检测 PicGo', picGoSetupStep3: '第 3 步', picGoSetupReadyTitle: '本机 PicGo 已连接', picGoSetupReadyHint: '保存后，粘贴、拖拽和选择的图片将自动上传；失败时仍会安全使用本地 assets。', picGoAdvancedSettings: '高级设置', picGoServerURL: 'PicGo 服务地址', picGoSecret: '服务密钥（可选）', picGoSecretPlaceholder: '留空则保留已保存密钥', clearPicGoSecret: '清除已保存密钥', picGoSecurityHint: '默认无需修改。仅允许连接本机 localhost 地址；第三方图床密钥继续由 PicGo 管理。', testPicGo: '测试连接', saveSettings: '保存设置', enablePicGo: '启用在线图床', picGoTesting: '正在自动检测 PicGo…', picGoConnected: '检测成功，可以启用本机 PicGo', picGoConnectionFailed: '没有检测到 PicGo。请确认 PicGo 正在运行并已开启 36677 端口的 PicGo-Server；如改过地址或密钥，请在高级设置中核对。', imageUploadSettingsSaved: '图床设置已保存', imageUploadSettingsSaveFailed: '图床设置保存失败', imageUploaded: '图片已上传到在线图床', picGoUploadFailedFallback: '在线图床上传失败，已自动使用本地图片', imageUploadingTitle: '正在上传图片', imageUploadPreparing: '正在准备图片…', imageUploadingCloud: '正在上传到 PicGo Cloud…', imageUploadingLocalPicGo: '正在发送到本机 PicGo…', imageUploadFinalizing: '正在生成在线链接…', imageUploadComplete: '上传完成',
-    formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式', formulaWizardHint: '按学科选择常用公式，填写参数后直接插入 Markdown。', formulaEditTitle: '修改当前公式', formulaEditHint: '直接修改参数、公式源码或插入方式，保存后会原位替换当前公式。', editFormulaDirectly: '编辑当前公式', formulaPreviewEditHint: '双击修改此公式', formulaSubject: '学科分类', formulaOutput: '插入方式', selectedFormula: '已选公式', equationNumber: '公式编号', formulaPreview: '实时预览', generatedMarkdown: '生成的 Markdown', insertFormula: '插入公式', saveFormulaChanges: '保存修改', formulaModeInline: '行内公式', formulaModeBlock: '块级公式', formulaModeNumbered: '编号公式', formulaInvalid: '请填写有效的公式内容',
+    chooseImage: '选择图片…', imageUploadSettings: '图床设置', imageUploadSettingsAction: '设置 4 种图片方式', imageStorageSupportTitle: '支持 4 种图片存储方式', imageStorageSupportList: '本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo', imageUploadSettingsHint: '可直接登录 PicGo 在线图床，无需安装额外软件；也可继续使用本地 assets 或已安装的 PicGo。', imageInsertMode: '图片插入方式', localAssetsMode: '本地 assets', localAssetsModeHint: '保存相对路径，离线可用', localAssetsReadyTitle: '本地模式已就绪', localAssetsReadyHint: '图片会复制到文档旁的 assets，便于离线阅读和移动。', picGoCloudMode: 'PicGo 在线图床', picGoCloudModeHint: '浏览器登录，无需安装 PicGo', picGoCloudSetupTitle: '登录后直接上传', picGoCloudSetupHint: '将在浏览器打开 PicGo Cloud 登录页。登录令牌仅保存在本机；免费账户提供 200 个文件、500 MB 存储空间，额度与计费以 PicGo Cloud 为准。', picGoCloudConnectedTitle: 'PicGo Cloud 已连接', loginPicGoCloud: '登录 PicGo Cloud', logoutPicGoCloud: '退出登录', testPicGoCloud: '检查连接', picGoCloudSigningIn: '请在浏览器完成 PicGo Cloud 登录…', picGoCloudChecking: '正在检查 PicGo Cloud 连接…', picGoCloudConnected: '连接正常，可以启用在线图床', picGoCloudLoginFailed: 'PicGo Cloud 登录失败，请重试', picGoCloudConnectionFailed: 'PicGo Cloud 连接失效，请重新登录', picGoCloudLoggedOut: '已退出 PicGo Cloud', picGoMode: '本机 PicGo', picGoModeHint: '兼容已安装的 PicGo 与其他图床', picGoSetupProgress: '本机 PicGo 配置进度', picGoSetupInstallShort: '安装 PicGo', picGoSetupConfigureShort: '配置并检测', picGoSetupReadyShort: '完成', picGoSetupStep1: '第 1 步', picGoSetupInstallTitle: '安装并启动 PicGo', picGoSetupInstallHint: '此兼容模式需要安装 PicGo。安装后打开，并让它保持在后台运行。', downloadPicGo: '打开 PicGo 下载页', picGoInstalledNext: '已经安装，下一步', picGoSetupStep2: '第 2 步', picGoSetupConfigureTitle: '配置图床并开启 Server', picGoSetupConfigureHost: '在 PicGo 中配置要使用的图床。', picGoSetupEnableServer: '打开“PicGo 设置 → PicGo-Server”，确认服务已开启，端口为 36677。', picGoSetupKeepRunning: '保持 PicGo 在后台运行，然后让轻阅自动检测。', picGoSetupBack: '上一步', autoDetectPicGo: '自动检测 PicGo', picGoSetupStep3: '第 3 步', picGoSetupReadyTitle: '本机 PicGo 已连接', picGoSetupReadyHint: '保存后，粘贴、拖拽和选择的图片将自动上传；失败时仍会安全使用本地 assets。', picGoAdvancedSettings: '高级设置', picGoServerURL: 'PicGo 服务地址', picGoSecret: '服务密钥（可选）', picGoSecretPlaceholder: '留空则保留已保存密钥', clearPicGoSecret: '清除已保存密钥', picGoSecurityHint: '默认无需修改。仅允许连接本机 localhost 地址；第三方图床密钥继续由 PicGo 管理。', testPicGo: '测试连接', saveSettings: '保存设置', enablePicGo: '启用在线图床', picGoTesting: '正在自动检测 PicGo…', picGoConnected: '检测成功，可以启用本机 PicGo', picGoConnectionFailed: '没有检测到 PicGo。请确认 PicGo 正在运行并已开启 36677 端口的 PicGo-Server；如改过地址或密钥，请在高级设置中核对。', imageUploadSettingsSaved: '图床设置已保存', imageUploadSettingsSaveFailed: '图床设置保存失败', imageUploaded: '图片已上传到在线图床', picGoUploadFailedFallback: '在线图床上传失败，已自动使用本地图片', imageUploadingTitle: '正在上传图片', imageUploadPreparing: '正在准备图片…', imageUploadingCloud: '正在上传到 PicGo Cloud…', imageUploadingLocalPicGo: '正在发送到本机 PicGo…', imageUploadFinalizing: '正在生成在线链接…', imageUploadComplete: '上传完成',
+formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式', formulaWizardHint: '按学科选择常用公式，填写参数后直接插入 Markdown。', formulaEditTitle: '修改当前公式', formulaEditHint: '直接修改参数、公式源码或插入方式，保存后会原位替换当前公式。', formulaPreviewEditHint: '双击修改此公式', formulaSubject: '学科分类', formulaOutput: '插入方式', selectedFormula: '已选公式', equationNumber: '公式编号', formulaPreview: '实时预览', generatedMarkdown: '生成的 Markdown', insertFormula: '插入公式', saveFormulaChanges: '保存修改', formulaModeInline: '行内公式', formulaModeBlock: '块级公式', formulaModeNumbered: '编号公式', formulaInvalid: '请填写有效的公式内容',
     diagramWizardLabel: 'MERMAID 图表', diagramWizardTitle: '选择并生成图表', diagramWizardHint: '带画布图标的常用图表支持可视化编辑；其他图表可编辑源码并实时预览。', diagramCategory: '图表分类', selectedDiagram: '已选图表', diagramSource: '图表源码', diagramPreview: '实时预览', insertDiagram: '插入图表', saveDiagramChanges: '保存修改', editFlowchartVisually: '在画布中编辑流程图', visualEditorAvailable: '支持可视化编辑', structuredDiagramEditorAria: '可视化图表数据编辑器', structuredDiagramAddRow: '添加一行', structuredDiagramHint: '直接修改字段，右侧预览会实时更新。', structuredDiagramRemoveRow: '删除此行', diagramInvalid: '请输入有效的 Mermaid 图表源码', diagramFullscreen: '全屏绘图', diagramExitFullscreen: '退出全屏',
     flowchartVisualMode: '可视化编辑', flowchartSourceMode: '源码模式', flowchartVisualSafeHint: '操作会自动生成兼容 Mermaid 的源码', flowchartEditModeAria: '流程图编辑方式', flowchartEditorAria: '可视化流程图编辑器', flowchartAddAria: '添加流程图节点', flowchartCanvasAria: '可编辑流程图画布', flowchartZoomAria: '画布缩放', flowchartZoomOut: '缩小画布', flowchartZoomIn: '放大画布', flowchartZoomReset: '恢复 100%', flowchartProcess: '步骤', flowchartDecision: '判断', flowchartTerminal: '开始／结束', flowchartAddProcess: '添加处理步骤', flowchartAddDecision: '添加判断分支', flowchartAddTerminal: '添加开始或结束', flowchartConnect: '连接节点', flowchartConnectHint: '依次点击两个节点创建连线', flowchartAutoLayout: '自动排列', flowchartAutoLayoutHint: '按照流程方向自动排列', flowchartDirection: '流程方向', flowchartDirectionLR: '左 → 右', flowchartDirectionTD: '上 → 下', flowchartDirectionRL: '右 → 左', flowchartDirectionBT: '下 → 上', flowchartCanvasHint: '双击空白处添加步骤；拖动节点调整位置；连接模式下依次点击两个节点。', flowchartProperties: '所选元素', flowchartNothingSelected: '点击节点或连线后，可在这里修改。', flowchartNodeText: '节点文字', flowchartNodeShape: '节点形状', flowchartEdgeText: '连线文字', flowchartEdgeStyle: '连线样式', flowchartEdgeSolid: '箭头', flowchartEdgeDashed: '虚线箭头', flowchartEdgeThick: '粗箭头', flowchartEdgeLine: '无箭头直线', flowchartDeleteSelection: '删除所选元素', flowchartConnectActive: '请点击起点节点', flowchartConnectTarget: '再点击终点节点', flowchartVisualUnsupported: '当前源码包含子图、样式或其他高级语法，请继续使用源码模式，避免内容丢失。', flowchartNodeDefault: '新步骤', flowchartDecisionDefault: '是否满足条件？', flowchartTerminalDefault: '开始／结束',
     resizeSidebar: '拖动调整文档库宽度', resizeToc: '拖动调整目录宽度', resizeEditor: '拖动调整预览宽度'
   },
   en: {
+    formulaEditStale: 'The document or formula changed. Nothing was written. Close and reopen the formula.',
+    formulaReplaceDraftConfirm: 'Regenerating replaces the formula source you edited. Continue?',
+    formulaSyntaxError: 'Unable to parse the equation. Check the message and source; nothing was written.',
+    formulaInlineMultiline: 'Inline equations cannot contain newlines. Choose Display or Numbered; your source has been preserved.',
+    formulaDelimiterInvalid: 'Equation delimiters conflict with the content; nothing was written. Choose Display output or wrap the complete inline equation in \\(...\\) under Advanced. Your input is retained.',
+    formulaDisplay: 'Equation display', formulaDisplayPreview: 'Rendered equations', formulaDisplaySource: 'Equation source',
+    formulaVariableInvalid: 'Use a single letter, LaTeX symbol or subscripted name (e.g. x, \\theta, x_1), without parentheses or operations. Use Custom formula for complex expressions.',
+    formulaVariablesInvalid: 'Enter 1–16 comma-separated variables without empty entries.',
+    formulaSearchPlaceholder: 'Name, subject or keyword', formulaSearchLabel: 'Search formula templates', formulaSearchClear: 'Clear',
+    formulaVisualTitle: 'Visual editing', formulaStructureToolbar: 'Equation structure toolbar', formulaParameters: 'Template parameters', formulaAdvanced: 'Advanced: view/edit source',
+    formulaInlineLayout: 'Inline layout', formulaLayoutNormal: 'Normal layout', formulaLayoutLarge: 'Large layout', formulaLayoutHint: 'Expand fractions and sum symbols in this inline equation only, without moving it to a separate line.',
+    formulaVisualEditHint: 'Edit inside the equation or expand template parameters; save replaces it in place. Source is under Advanced.', formulaVisualWizardHint: 'Fill template parameters or use structure buttons to edit visually. Source is under Advanced.',
+    formulaChemicalContent: 'Chemistry content (e.g. H2SO4, 2H2 + O2 -> 2H2O)', formulaChemicalHint: 'Chemistry content stays intact as a unit. Edit elements, coefficients, charges and arrows in template parameters.',
+    formulaStructure_removeRow: 'Remove row', formulaStructure_removeColumn: 'Remove column',
+    formulaVisualLoading: 'Preparing the offline equation editor…', formulaVisualHint: 'Click inside the equation to edit; use arrow keys to move and Tab for placeholders. Final reading appearance is shown below.',
+    formulaVisualFallback: 'This equation cannot yet be edited visually without loss. Original source is retained. Edit it under Advanced, or choose a template and fill its parameters.',
+    formulaStructure_fraction: 'Fraction', formulaStructure_root: 'Root', formulaStructure_power: 'Superscript', formulaStructure_subscript: 'Subscript', formulaStructure_integral: 'Integral', formulaStructure_sum: 'Sum', formulaStructure_parentheses: 'Brackets', formulaStructure_matrix: 'Matrix',
+    formulaStructure_pi: 'π', formulaStructure_theta: 'θ', formulaStructure_infinity: '∞', formulaStructure_times: '×', formulaStructure_plusminus: '±', formulaStructure_undo: 'Undo', formulaStructure_redo: 'Redo', formulaStructure_addRowAfter: 'Matrix row', formulaStructure_addColumnAfter: 'Matrix column',
+    formulaSearchCount: '{count} templates', formulaSearchEmpty: 'No matching templates. Try another keyword, select All, or clear the search.',
     bodyStyle: 'Body style', bodyStyleDefault: 'Default (follow app)', bodyStyleModern: 'Modern', bodyStyleClear: 'Clear & readable', bodyStyleBook: 'Book reading', bodyStyleClassic: 'Classic document', bodyStyleLiterary: 'Literary', bodyStyleHandwritten: 'Handwritten feel', bodyStyleGentle: 'Soft & rounded', bodyStyleMagazine: 'Magazine', bodyStyleTechnical: 'Technical', bodyStyleMono: 'Monospaced prose', bodyStyleLegacy: 'Previous custom pairing',
     bodyTypography: 'Body & math typography', bodyChineseFont: 'Chinese body font', bodyEnglishFont: 'English body font', fontFollowApp: 'Follow app font', bodyFontSans: 'Sans serif (YaHei / PingFang)', bodyFontArial: 'Arial (sans serif)', bodyFontGeorgia: 'Georgia (serif)', bodyFontTimes: 'Times New Roman (serif)', bodyFontVerdana: 'Verdana (sans serif)', formulaTextSize: 'Math size', formulaSizeSmall: 'Small', formulaSizeStandard: 'Standard', formulaSizeLarge: 'Large', typographyHint: 'Preview directly in your document. Save to remember; cancel to restore. Editor and preview stay in sync; UI and code are unchanged.', typographyFallbackHint: 'Uses local fonts with automatic fallback when unavailable. Formulas retain KaTeX math fonts; only their size changes.', typographySample: 'Mixed text and math preview', typographyReset: 'Reset defaults', typographySaved: 'Body and math settings saved', typographySaveFailed: 'Could not save settings. The previous display is unchanged; please retry.',
     documentTools: 'Document tools',
@@ -483,7 +529,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.7.6', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.7.7', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -493,10 +539,10 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     downloadAndUpdate: 'Download & Update', manualMacUpdateTitle: 'One manual upgrade is required', manualMacUpdateDescription: 'macOS 2.5.0 used the retired update format and cannot safely replace the complete app. Install the latest version once from the website; future in-app updates will work normally.', manualMacUpdateButton: 'Get the latest version', unsafeWindowsUninstallerTitle: 'Uninstaller safety could not be confirmed', unsafeWindowsUninstallerDescription: 'The uninstaller could not be verified or remediated and has been preserved. In-app updating is unavailable. Do not run an unknown uninstaller. Back up important documents, then download the full installer and choose a new dedicated folder.', unsafeWindowsUninstallerButton: 'Download full installer', installerRepairRequired: 'Installation repair required', unsafeUninstallerDialogLabel: 'INSTALLATION SAFETY WARNING', unsafeUninstallerDialogTitle: 'The current uninstaller has a critical defect', unsafeUninstallerDialogDescription: 'This installation uses a legacy uninstaller that may delete documents or other files you created inside the install folder. To prevent data loss, do not uninstall or continue with in-app updates. Download the full installer and install the safe version over this copy. Back up important files in the install folder first.', unsafeUninstallerDialogNote: 'The full installation replaces the legacy uninstaller with the safe version and restores normal in-app updates.', unsafeUninstallerLater: 'Later', unsafeUninstallerDownload: 'Download safe version', downloadingUpdate: 'Downloading update… {percent}%', preparingUpdate: 'Installing update…', updateFailed: 'Update failed. Please try again.', updateBlockedByUnsavedChanges: 'Save the current document before updating',
     formatToolbar: 'Markdown formatting toolbar', undoTitle: 'Undo (Ctrl+Z)', formatPainter: 'Format painter', formatPainterTitle: 'Format painter: copy the selected text format, then select the target text to apply automatically', formatCopied: 'Format copied. Select the target text to apply automatically.', formatApplied: 'Format applied', formatNeedSelection: 'Select the text whose format you want to copy first', formatCleared: 'Format painter cancelled', heading: 'Heading', paragraph: 'Paragraph', heading1: 'Heading 1', heading2: 'Heading 2', heading3: 'Heading 3', heading4: 'Heading 4', heading5: 'Heading 5', heading6: 'Heading 6',
     boldTitle: 'Bold (Ctrl+B)', italicTitle: 'Italic (Ctrl+I)', strikethroughTitle: 'Strikethrough (Ctrl+Shift+X)', highlightTitle: 'Highlight (Ctrl+Shift+H)', textColorTitle: 'Text color', textColorMenu: 'Choose text color', textColorDefault: 'Default', textColorOption: 'Color', coloredText: 'colored text', linkTitle: 'Insert link (Ctrl+K)', inlineCode: 'Inline code', codeBlock: 'Code block', quote: 'Quote', unorderedList: 'Bulleted list', orderedList: 'Numbered list', taskList: 'Task list', horizontalRule: 'Horizontal rule', insertTable: 'Insert table', insertImage: 'Insert image', imageAlt: 'Image description',
-    moreFormats: 'More formats', toolbarOverflow: 'Collapsed toolbar formats', extendedFormats: 'Extended formats', boldItalic: 'Bold italic', underline: 'Underline', superscript: 'Superscript', subscript: 'Subscript', formulaBuilder: 'Academic formulas 🔥', diagramBuilder: 'Diagram builder 🔥', diagramGuide: 'Diagram guide ↗', mermaidFlowchart: 'Mermaid flowchart', mermaidSequence: 'Mermaid sequence diagram', mermaidGantt: 'Mermaid Gantt chart', mermaidDiagram: 'Mermaid diagram', mermaidRenderError: 'Invalid diagram syntax', mermaidRenderHint: 'Check the Mermaid source. The rest of the document is unaffected.', dataChart: 'Data chart', dataChartRenderError: 'Invalid data chart configuration', dataChartRenderHint: 'Check the ECharts JSON. The rest of the document is unaffected.', inlineMath: 'Inline formula', mathBlock: 'Display formula', chemicalFormula: 'Chemical formula', mathGuide: 'Formula guide ↗', numberedMath: 'Numbered formula', mathExpression: 'LaTeX expression', hardBreak: 'Hard line break', footnote: 'Footnote', referenceLink: 'Reference link', collapsible: 'Collapsible section', keyboardKey: 'Keyboard key', autolink: 'Autolink', escapeSyntax: 'Escape syntax', htmlBlock: 'HTML block', comment: 'Comment', footnotes: 'Footnotes', footnoteText: 'Footnote text', referenceName: 'reference', collapsibleTitle: 'Section title',
+    moreFormats: 'More formats', toolbarOverflow: 'Collapsed toolbar formats', extendedFormats: 'Extended formats', boldItalic: 'Bold italic', underline: 'Underline', superscript: 'Superscript', subscript: 'Subscript', formulaBuilder: 'Academic formulas 🔥', formulaShort: 'Formula', diagramBuilder: 'Diagram builder 🔥', diagramShort: 'Diagram', diagramGuide: 'Diagram guide ↗', mermaidFlowchart: 'Mermaid flowchart', mermaidSequence: 'Mermaid sequence diagram', mermaidGantt: 'Mermaid Gantt chart', mermaidDiagram: 'Mermaid diagram', mermaidRenderError: 'Invalid diagram syntax', mermaidRenderHint: 'Check the Mermaid source. The rest of the document is unaffected.', dataChart: 'Data chart', dataChartRenderError: 'Invalid data chart configuration', dataChartRenderHint: 'Check the ECharts JSON. The rest of the document is unaffected.', inlineMath: 'Inline formula', mathBlock: 'Display formula', chemicalFormula: 'Chemical formula', mathGuide: 'Formula guide ↗', numberedMath: 'Numbered formula', mathExpression: 'LaTeX expression', hardBreak: 'Hard line break', footnote: 'Footnote', referenceLink: 'Reference link', collapsible: 'Collapsible section', keyboardKey: 'Keyboard key', autolink: 'Autolink', escapeSyntax: 'Escape syntax', htmlBlock: 'HTML block', comment: 'Comment', footnotes: 'Footnotes', footnoteText: 'Footnote text', referenceName: 'reference', collapsibleTitle: 'Section title',
     markdownTool: 'MARKDOWN TOOL', tableDialogHint: 'Edit cells directly, drag rows or columns to reorder or resize, and set alignment for each column.', visualTableEditor: 'Visual table editor', editTable: 'Edit table', insertTableAction: 'Insert table', saveTable: 'Save table', rows: 'Rows', columns: 'Columns', columnNumber: 'Column {number}', headerRow: 'Header', rowNumber: 'Row {number}', addRow: 'Add row', addColumn: 'Add column', deleteRow: 'Delete row', deleteColumn: 'Delete column', alignment: 'Alignment', alignLeft: 'Align left', alignCenter: 'Center', alignRight: 'Align right', dragTableHint: 'Drag handles to reorder rows or columns', resizeTableHint: 'Drag column borders to resize', tableCellPlaceholder: 'Enter content', tableMinimumSize: 'A Markdown table needs at least 2 rows and 1 column', cancel: 'Cancel', insert: 'Insert', newFileFailed: 'Unable to create the document', imageSelectFailed: 'Unable to import the image', imageImported: 'Image copied to the assets folder', imagePasteFailed: 'Unable to paste the image', languageSaveFailed: 'Unable to save the language setting. Please try again.', imageDialogHint: 'Pick a local image or paste an online link. Local images are copied to the assets folder automatically.', imageUrlLabel: 'Image URL', imageUrlPlaceholder: 'https:// or http:// link', imageAltPlaceholder: 'Optional image description', imageWidth: 'Display width', imageWidthHint: 'Dropped and pasted images use this width too', localImage: 'Local image…', imageUrlInvalid: 'Enter a valid http:// or https:// link',
-    chooseImage: 'Choose image…', imageUploadSettings: 'Image hosting', imageUploadSettingsHint: 'Sign in to PicGo Cloud directly without installing another app, or keep local assets or an existing PicGo installation.', imageInsertMode: 'Image insertion mode', localAssetsMode: 'Local assets', localAssetsModeHint: 'Portable relative paths that work offline', localAssetsReadyTitle: 'Local mode is ready', localAssetsReadyHint: 'Images are copied to an assets folder beside the document for offline use and portability.', picGoCloudMode: 'PicGo Cloud', picGoCloudModeHint: 'Browser sign-in; no PicGo installation', picGoCloudSetupTitle: 'Sign in and upload directly', picGoCloudSetupHint: 'Quillite opens PicGo Cloud in your browser. The login token stays on this device. Free accounts include 200 files and 500 MB of storage; current limits and billing are controlled by PicGo Cloud.', picGoCloudConnectedTitle: 'PicGo Cloud connected', loginPicGoCloud: 'Sign in to PicGo Cloud', logoutPicGoCloud: 'Sign out', testPicGoCloud: 'Check connection', picGoCloudSigningIn: 'Complete PicGo Cloud sign-in in your browser…', picGoCloudChecking: 'Checking the PicGo Cloud connection…', picGoCloudConnected: 'Connected. Online hosting is ready to enable.', picGoCloudLoginFailed: 'PicGo Cloud sign-in failed. Please try again.', picGoCloudConnectionFailed: 'The PicGo Cloud connection expired. Sign in again.', picGoCloudLoggedOut: 'Signed out of PicGo Cloud', picGoMode: 'Local PicGo', picGoModeHint: 'Use an installed PicGo and its other providers', picGoSetupProgress: 'Local PicGo setup progress', picGoSetupInstallShort: 'Install PicGo', picGoSetupConfigureShort: 'Configure & detect', picGoSetupReadyShort: 'Ready', picGoSetupStep1: 'Step 1', picGoSetupInstallTitle: 'Install and start PicGo', picGoSetupInstallHint: 'This compatibility mode requires PicGo. Open it after installation and keep it running in the background.', downloadPicGo: 'Open PicGo download page', picGoInstalledNext: 'Installed — continue', picGoSetupStep2: 'Step 2', picGoSetupConfigureTitle: 'Configure hosting and enable Server', picGoSetupConfigureHost: 'Configure the provider you want to use inside PicGo.', picGoSetupEnableServer: 'Open PicGo Settings → PicGo-Server, enable it, and keep port 36677.', picGoSetupKeepRunning: 'Keep PicGo running in the background, then let Quillite detect it.', picGoSetupBack: 'Back', autoDetectPicGo: 'Detect PicGo automatically', picGoSetupStep3: 'Step 3', picGoSetupReadyTitle: 'Local PicGo connected', picGoSetupReadyHint: 'After saving, chosen, dropped, and pasted images upload automatically. Failures still fall back safely to local assets.', picGoAdvancedSettings: 'Advanced settings', picGoServerURL: 'PicGo server address', picGoSecret: 'Server secret (optional)', picGoSecretPlaceholder: 'Leave blank to keep the saved secret', clearPicGoSecret: 'Clear the saved secret', picGoSecurityHint: 'No changes are normally needed. Only localhost connections are allowed, and third-party provider credentials remain managed by PicGo.', testPicGo: 'Test connection', saveSettings: 'Save settings', enablePicGo: 'Enable online hosting', picGoTesting: 'Detecting PicGo automatically…', picGoConnected: 'Detection succeeded. Local PicGo is ready to enable.', picGoConnectionFailed: 'PicGo was not detected. Make sure it is running with PicGo-Server enabled on port 36677. If you changed the address or secret, check Advanced settings.', imageUploadSettingsSaved: 'Image hosting settings saved', imageUploadSettingsSaveFailed: 'Unable to save image hosting settings', imageUploaded: 'Image uploaded to online hosting', picGoUploadFailedFallback: 'Online upload failed; the local image was used instead', imageUploadingTitle: 'Uploading image', imageUploadPreparing: 'Preparing the image…', imageUploadingCloud: 'Uploading to PicGo Cloud…', imageUploadingLocalPicGo: 'Sending to local PicGo…', imageUploadFinalizing: 'Generating the online link…', imageUploadComplete: 'Upload complete',
-    formulaWizardLabel: 'ACADEMIC FORMULAS', formulaWizardTitle: 'Choose and build a formula', formulaWizardHint: 'Choose a common formula by subject, fill in its values, and insert the generated Markdown.', formulaEditTitle: 'Edit current formula', formulaEditHint: 'Edit its values, source, or output mode; saving replaces the current formula in place.', editFormulaDirectly: 'Edit current formula', formulaPreviewEditHint: 'Double-click to edit this formula', formulaSubject: 'Subjects', formulaOutput: 'Insert as', selectedFormula: 'Selected formula', equationNumber: 'Equation number', formulaPreview: 'Live preview', generatedMarkdown: 'Generated Markdown', insertFormula: 'Insert formula', saveFormulaChanges: 'Save changes', formulaModeInline: 'Inline', formulaModeBlock: 'Display', formulaModeNumbered: 'Numbered', formulaInvalid: 'Enter valid formula content',
+    chooseImage: 'Choose image…', imageUploadSettings: 'Image hosting', imageUploadSettingsAction: 'Set up 4 image methods', imageStorageSupportTitle: 'Supports 4 image storage methods', imageStorageSupportList: 'Local assets · Embedded Base64 · PicGo Cloud · Local PicGo', imageUploadSettingsHint: 'Sign in to PicGo Cloud directly without installing another app, or keep local assets or an existing PicGo installation.', imageInsertMode: 'Image insertion mode', localAssetsMode: 'Local assets', localAssetsModeHint: 'Portable relative paths that work offline', localAssetsReadyTitle: 'Local mode is ready', localAssetsReadyHint: 'Images are copied to an assets folder beside the document for offline use and portability.', picGoCloudMode: 'PicGo Cloud', picGoCloudModeHint: 'Browser sign-in; no PicGo installation', picGoCloudSetupTitle: 'Sign in and upload directly', picGoCloudSetupHint: 'Quillite opens PicGo Cloud in your browser. The login token stays on this device. Free accounts include 200 files and 500 MB of storage; current limits and billing are controlled by PicGo Cloud.', picGoCloudConnectedTitle: 'PicGo Cloud connected', loginPicGoCloud: 'Sign in to PicGo Cloud', logoutPicGoCloud: 'Sign out', testPicGoCloud: 'Check connection', picGoCloudSigningIn: 'Complete PicGo Cloud sign-in in your browser…', picGoCloudChecking: 'Checking the PicGo Cloud connection…', picGoCloudConnected: 'Connected. Online hosting is ready to enable.', picGoCloudLoginFailed: 'PicGo Cloud sign-in failed. Please try again.', picGoCloudConnectionFailed: 'The PicGo Cloud connection expired. Sign in again.', picGoCloudLoggedOut: 'Signed out of PicGo Cloud', picGoMode: 'Local PicGo', picGoModeHint: 'Use an installed PicGo and its other providers', picGoSetupProgress: 'Local PicGo setup progress', picGoSetupInstallShort: 'Install PicGo', picGoSetupConfigureShort: 'Configure & detect', picGoSetupReadyShort: 'Ready', picGoSetupStep1: 'Step 1', picGoSetupInstallTitle: 'Install and start PicGo', picGoSetupInstallHint: 'This compatibility mode requires PicGo. Open it after installation and keep it running in the background.', downloadPicGo: 'Open PicGo download page', picGoInstalledNext: 'Installed — continue', picGoSetupStep2: 'Step 2', picGoSetupConfigureTitle: 'Configure hosting and enable Server', picGoSetupConfigureHost: 'Configure the provider you want to use inside PicGo.', picGoSetupEnableServer: 'Open PicGo Settings → PicGo-Server, enable it, and keep port 36677.', picGoSetupKeepRunning: 'Keep PicGo running in the background, then let Quillite detect it.', picGoSetupBack: 'Back', autoDetectPicGo: 'Detect PicGo automatically', picGoSetupStep3: 'Step 3', picGoSetupReadyTitle: 'Local PicGo connected', picGoSetupReadyHint: 'After saving, chosen, dropped, and pasted images upload automatically. Failures still fall back safely to local assets.', picGoAdvancedSettings: 'Advanced settings', picGoServerURL: 'PicGo server address', picGoSecret: 'Server secret (optional)', picGoSecretPlaceholder: 'Leave blank to keep the saved secret', clearPicGoSecret: 'Clear the saved secret', picGoSecurityHint: 'No changes are normally needed. Only localhost connections are allowed, and third-party provider credentials remain managed by PicGo.', testPicGo: 'Test connection', saveSettings: 'Save settings', enablePicGo: 'Enable online hosting', picGoTesting: 'Detecting PicGo automatically…', picGoConnected: 'Detection succeeded. Local PicGo is ready to enable.', picGoConnectionFailed: 'PicGo was not detected. Make sure it is running with PicGo-Server enabled on port 36677. If you changed the address or secret, check Advanced settings.', imageUploadSettingsSaved: 'Image hosting settings saved', imageUploadSettingsSaveFailed: 'Unable to save image hosting settings', imageUploaded: 'Image uploaded to online hosting', picGoUploadFailedFallback: 'Online upload failed; the local image was used instead', imageUploadingTitle: 'Uploading image', imageUploadPreparing: 'Preparing the image…', imageUploadingCloud: 'Uploading to PicGo Cloud…', imageUploadingLocalPicGo: 'Sending to local PicGo…', imageUploadFinalizing: 'Generating the online link…', imageUploadComplete: 'Upload complete',
+    formulaWizardLabel: 'ACADEMIC FORMULAS', formulaWizardTitle: 'Choose and build a formula', formulaWizardHint: 'Choose a common formula by subject, fill in its values, and insert the generated Markdown.', formulaEditTitle: 'Edit current formula', formulaEditHint: 'Edit its values, source, or output mode; saving replaces the current formula in place.', formulaPreviewEditHint: 'Double-click to edit this formula', formulaSubject: 'Subjects', formulaOutput: 'Insert as', selectedFormula: 'Selected formula', equationNumber: 'Equation number', formulaPreview: 'Live preview', generatedMarkdown: 'Generated Markdown', insertFormula: 'Insert formula', saveFormulaChanges: 'Save changes', formulaModeInline: 'Inline', formulaModeBlock: 'Display', formulaModeNumbered: 'Numbered', formulaInvalid: 'Enter valid formula content',
     diagramWizardLabel: 'MERMAID DIAGRAMS', diagramWizardTitle: 'Choose and build a diagram', diagramWizardHint: 'Popular diagrams marked with the canvas icon support visual editing; the others retain source editing and live preview.', diagramCategory: 'Diagram categories', selectedDiagram: 'Selected diagram', diagramSource: 'Diagram source', diagramPreview: 'Live preview', insertDiagram: 'Insert diagram', saveDiagramChanges: 'Save changes', editFlowchartVisually: 'Edit flowchart on canvas', visualEditorAvailable: 'Visual editing available', structuredDiagramEditorAria: 'Visual diagram data editor', structuredDiagramAddRow: 'Add row', structuredDiagramHint: 'Edit fields directly; the preview updates as you type.', structuredDiagramRemoveRow: 'Remove this row', diagramInvalid: 'Enter valid Mermaid diagram source', diagramFullscreen: 'Full-screen drawing', diagramExitFullscreen: 'Exit full screen',
     flowchartVisualMode: 'Visual editor', flowchartSourceMode: 'Source mode', flowchartVisualSafeHint: 'Actions automatically generate compatible Mermaid source', flowchartEditModeAria: 'Flowchart editing mode', flowchartEditorAria: 'Visual flowchart editor', flowchartAddAria: 'Add flowchart nodes', flowchartCanvasAria: 'Editable flowchart canvas', flowchartZoomAria: 'Canvas zoom', flowchartZoomOut: 'Zoom out', flowchartZoomIn: 'Zoom in', flowchartZoomReset: 'Reset to 100%', flowchartProcess: 'Process', flowchartDecision: 'Decision', flowchartTerminal: 'Start / end', flowchartAddProcess: 'Add a process node', flowchartAddDecision: 'Add a decision node', flowchartAddTerminal: 'Add a start or end node', flowchartConnect: 'Connect nodes', flowchartConnectHint: 'Click two nodes in order to create a connection', flowchartAutoLayout: 'Auto layout', flowchartAutoLayoutHint: 'Arrange nodes in the selected flow direction', flowchartDirection: 'Flow direction', flowchartDirectionLR: 'Left → right', flowchartDirectionTD: 'Top → bottom', flowchartDirectionRL: 'Right → left', flowchartDirectionBT: 'Bottom → top', flowchartCanvasHint: 'Double-click empty space to add a process; drag nodes to move them; in Connect mode, click two nodes.', flowchartProperties: 'Selected element', flowchartNothingSelected: 'Select a node or connection to edit it here.', flowchartNodeText: 'Node text', flowchartNodeShape: 'Node shape', flowchartEdgeText: 'Connection text', flowchartEdgeStyle: 'Connection style', flowchartEdgeSolid: 'Arrow', flowchartEdgeDashed: 'Dashed arrow', flowchartEdgeThick: 'Thick arrow', flowchartEdgeLine: 'Line without arrow', flowchartDeleteSelection: 'Delete selected element', flowchartConnectActive: 'Click the starting node', flowchartConnectTarget: 'Now click the target node', flowchartVisualUnsupported: 'This source contains subgraphs, styling, or other advanced syntax. Keep using Source mode so no content is lost.', flowchartNodeDefault: 'New step', flowchartDecisionDefault: 'Condition met?', flowchartTerminalDefault: 'Start / end',
     resizeSidebar: 'Drag to resize the library', resizeToc: 'Drag to resize the outline', resizeEditor: 'Drag to resize the preview'
@@ -768,7 +814,7 @@ const els = {
   editorResizer: $('#editorResizer'),
   searchInput: $('#searchInput'), searchCount: $('#searchCount'), dropOverlay: $('#dropOverlay'),
   moreMenu: $('#moreMenu'), accentMenu: $('#accentMenu'), recentContextMenu: $('#recentContextMenu'), editorClipboardMenu: $('#editorClipboardMenu'), spellcheckContextMenu: $('#spellcheckContextMenu'), spellingContextWord: $('#spellingContextWord'), spellingSuggestions: $('#spellingSuggestions'), spellingNoSuggestions: $('#spellingNoSuggestions'), personalDictionaryCount: $('#personalDictionaryCount'), toast: $('#toast'), imageUploadProgress: $('#imageUploadProgress'), imageUploadProgressTitle: $('#imageUploadProgressTitle'), imageUploadProgressDetail: $('#imageUploadProgressDetail'), imageUploadProgressPercent: $('#imageUploadProgressPercent'), imageUploadProgressBar: $('#imageUploadProgressBar'), editorView: $('#editorView'), fontScaleSlider: $('#fontScaleSlider'), fontScaleValue: $('#fontScaleValue'),
-  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editFormulaButton: $('#editFormulaButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiToolbarButton: $('#aiToolbarButton'), aiToolbarMenu: $('#aiToolbarMenu'), documentHistoryButton: $('#documentHistoryButton'),
+  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiToolbarButton: $('#aiToolbarButton'), aiToolbarMenu: $('#aiToolbarMenu'), documentHistoryButton: $('#documentHistoryButton'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), recoveryDialog: $('#recoveryDialog'), recoveryFileName: $('#recoveryFileName'), recoveryUpdatedAt: $('#recoveryUpdatedAt'), unsavedCloseDialog: $('#unsavedCloseDialog'), aboutDialog: $('#aboutDialog'),
@@ -847,8 +893,9 @@ function loadEditorDependencies() {
     import('@codemirror/language'),
     import('@codemirror/lang-markdown'),
     import('@lezer/highlight'),
-    import('./embedded-image-preview.js')
-  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule]) => {
+    import('./embedded-image-preview.js'),
+    import('./editor-formula-preview.js')
+  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule]) => {
     basicSetup = codemirrorModule.basicSetup;
     Compartment = stateModule.Compartment;
     StateEffect = stateModule.StateEffect;
@@ -872,6 +919,11 @@ function loadEditorDependencies() {
     imagePreviewContext = imagePreviewModule.imagePreviewContext;
     updateImagePreviewDirectory = imagePreviewModule.updateImagePreviewDirectory;
     Object.assign(codeMirrorTranslations['zh-CN'], imagePreviewModule.imagePreviewPhrases);
+    editorFormulaPreview = formulaPreviewModule.editorFormulaPreview;
+    formulaPreviewContext = formulaPreviewModule.formulaPreviewContext;
+    setFormulaDisplayEffect = formulaPreviewModule.setFormulaDisplay;
+    editorFormulaField = formulaPreviewModule.editorFormulaField;
+    Object.assign(codeMirrorTranslations['zh-CN'], formulaPreviewModule.formulaPreviewPhrases);
     editorLanguage = new Compartment();
     markdownHighlightStyle = createMarkdownHighlightStyle();
     initializeSpellcheckExtension();
@@ -888,9 +940,14 @@ function isPlainTextFile(path) {
 }
 
 function createEditorState(content = '', moveToStart = true) {
+  const session = state.documentSession, path = state.currentFile?.path;
   const language = isPlainTextFile(state.currentFile?.path)
     ? []
-    : [markdown(), syntaxHighlighting(markdownHighlightStyle), embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) })];
+    : [markdown(), syntaxHighlighting(markdownHighlightStyle), embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
+      editorFormulaPreview, formulaPreviewContext.of({ enabled: state.formulaDisplay !== 'source', sanitize: html => DOMPurify.sanitize(html),
+        edit: (formula, view) => {
+          if (codeEditor === view && state.editing && state.documentSession === session && state.currentFile?.path === path) openFormulaDialog(formula);
+        } })];
   return EditorState.create({
     doc: content,
     selection: { anchor: moveToStart ? 0 : content.length },
@@ -1058,14 +1115,23 @@ function replaceEditorContent(content, moveToStart = false) {
 }
 
 let activeFlowchartFence = null;
-let activeFormulaMatch = null;
+let indexedFormulaDocument = null;
+let indexedFormulas = [];
+const previewFormulaContexts = new WeakMap();
+
+function currentFormulaIndex() {
+  if (!codeEditor) return [];
+  if (indexedFormulaDocument !== codeEditor.state.doc) {
+    indexedFormulaDocument = codeEditor.state.doc;
+    indexedFormulas = scanMarkdownFormulas(indexedFormulaDocument.toString());
+  }
+  return indexedFormulas;
+}
 
 function updateExistingFlowchartButton() {
-  if (!els.editFlowchartButton || !els.editFormulaButton || !codeEditor || !state.editing) {
+  if (!els.editFlowchartButton || !codeEditor || !state.editing) {
     els.editFlowchartButton?.classList.add('hidden');
-    els.editFormulaButton?.classList.add('hidden');
     activeFlowchartFence = null;
-    activeFormulaMatch = null;
     return;
   }
   const selection = codeEditor.state.selection.main;
@@ -1073,19 +1139,11 @@ function updateExistingFlowchartButton() {
   activeFlowchartFence = findEditableDiagramFenceAt(source, selection.head)
     || findEditableDiagramFenceAt(source, selection.from);
   els.editFlowchartButton.classList.toggle('hidden', !activeFlowchartFence);
-  activeFormulaMatch = activeFlowchartFence ? null : findFormulaAt(source, selection.from, selection.to);
-  els.editFormulaButton.classList.toggle('hidden', !activeFormulaMatch);
   if (activeFlowchartFence) {
     const label = t('editThisDiagram');
     els.editFlowchartButton.title = label;
     els.editFlowchartButton.setAttribute('aria-label', label);
     els.editFlowchartButton.querySelector('span').textContent = label;
-  }
-  if (activeFormulaMatch) {
-    const label = t('editFormulaDirectly');
-    els.editFormulaButton.title = label;
-    els.editFormulaButton.setAttribute('aria-label', label);
-    els.editFormulaButton.querySelector('span').textContent = label;
   }
 }
 
@@ -1690,11 +1748,86 @@ function initializeFormatToolbarOverflow() {
 
 const formulaWizardState = {
   mode: 'inline',
+  inlineLayout: 'normal',
   discipline: 'all',
   templateId: 'equation',
+  searchQuery: '',
   valuesByTemplate: new Map(),
   editRange: null,
+  context: null,
+  initialMarkdown: '',
+  sourceEdited: false,
 };
+let formulaInertElements = [];
+let formulaVisualEditor = null;
+let formulaVisualModule = null;
+let formulaVisualRequest = 0;
+
+function syncFormulaVisualEditor() {
+  const request = ++formulaVisualRequest, context = formulaWizardState.context;
+  const markdown = els.formulaMarkdownSource.value;
+  const parsedSource = parseFormulaMarkdown(markdown);
+  const sourceExpression = parsedSource.expression.replace(/\s*\\tag\{[^{}]*\}\s*$/, '');
+  const sourceIsDelimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(markdown.trim());
+  const visualInline = sourceIsDelimited ? !parsedSource.displayMode : formulaWizardState.mode === 'inline';
+  const expression = visualInline ? formulaInlineLayout(sourceExpression).expression : sourceExpression;
+  $('#formulaVisualStatus').textContent = t('formulaVisualLoading');
+  const apply = module => {
+    if (request !== formulaVisualRequest || context !== formulaWizardState.context || els.formulaDialog.classList.contains('hidden')) return;
+    if (!formulaVisualEditor) formulaVisualEditor = module.createFormulaVisualEditor($('#formulaVisualHost'), value => {
+      if (els.formulaDialog.classList.contains('hidden') || !formulaWizardState.context) return;
+      const current = els.formulaMarkdownSource.value.trim(), parsed = parseFormulaMarkdown(current);
+      const tag = parsed.expression.match(/\s*\\tag\{([^{}]*)\}\s*$/);
+      const delimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(current);
+      const mode = tag ? 'numbered' : delimited ? parsed.displayMode ? 'block' : 'inline' : formulaWizardState.mode;
+      const layout = formulaInlineLayout(parsed.expression).layout;
+      try { els.formulaMarkdownSource.value = buildFormulaMarkdown(mode, mode === 'inline' ? applyFormulaInlineLayout(value, layout) : value, tag?.[1] || $('#formulaNumber').value); }
+      catch { els.formulaPreview.textContent = t('formulaInlineMultiline'); $('#insertFormula').disabled = true; return; }
+      formulaWizardState.mode = mode;
+      $('#formulaNumberField').classList.toggle('hidden', mode !== 'numbered');
+      renderFormulaOutputModes();
+      $('#formulaParameters').open = false;
+      updateFormulaPreviewFromMarkdown(false);
+    });
+    const supported = formulaVisualEditor.load(expression, state.language === 'en' ? 'en' : 'zh-CN', t('formulaVisualTitle'));
+    $('#formulaVisualHost').classList.toggle('hidden', !supported);
+    $('#formulaVisualStatus').textContent = t(supported ? /\\ce\b/.test(expression) ? 'formulaChemicalHint' : 'formulaVisualHint' : 'formulaVisualFallback');
+    for (const button of $('#formulaStructureToolbar').querySelectorAll('button')) button.disabled = !supported;
+    if (!supported) $('#formulaAdvanced').open = true;
+  };
+  if (formulaVisualEditor) apply({});
+  else {
+    formulaVisualModule ||= import('./formula-visual-editor.js');
+    formulaVisualModule.then(apply).catch(() => {
+      formulaVisualModule = null;
+      if (request !== formulaVisualRequest || context !== formulaWizardState.context || els.formulaDialog.classList.contains('hidden')) return;
+      $('#formulaVisualHost').classList.add('hidden');
+      $('#formulaVisualStatus').textContent = t('formulaVisualFallback');
+      $('#formulaAdvanced').open = true;
+      for (const button of $('#formulaStructureToolbar').querySelectorAll('button')) button.disabled = true;
+    });
+  }
+}
+
+function renderFormulaStructureToolbar() {
+  const toolbar = $('#formulaStructureToolbar');
+  toolbar.replaceChildren();
+  for (const [key, latex] of FORMULA_STRUCTURES) {
+    const button = document.createElement('button'); button.type = 'button';
+    button.textContent = t(`formulaStructure_${key}`);
+    button.disabled = true;
+    button.onpointerdown = event => event.preventDefault();
+    button.onclick = () => formulaVisualEditor?.insert(latex);
+    toolbar.append(button);
+  }
+  for (const command of ['undo', 'redo', 'addRowAfter', 'addColumnAfter', 'removeRow', 'removeColumn']) {
+    const button = document.createElement('button'); button.type = 'button';
+    button.textContent = t(`formulaStructure_${command}`); button.disabled = true;
+    button.onpointerdown = event => event.preventDefault();
+    button.onclick = () => formulaVisualEditor?.command(command);
+    toolbar.append(button);
+  }
+}
 
 function formulaLocale() {
   return state.language === 'en' ? 'en' : 'zh';
@@ -1704,7 +1837,7 @@ function selectedFormulaDetails() {
   if (!codeEditor) return { source: '', templateId: 'equation', mode: 'inline', equationNumber: '1', editRange: null };
   const selection = codeEditor.state.selection.main;
   const documentSource = codeEditor.state.doc.toString();
-  const existing = findFormulaAt(documentSource, selection.from, selection.to);
+  const existing = findFormulaAt(documentSource, selection.from, selection.to, currentFormulaIndex());
   if (existing) return { ...existing, editRange: { from: existing.from, to: existing.to } };
   const raw = codeEditor.state.doc.sliceString(selection.from, selection.to).trim();
   if (!raw) return { source: '', templateId: 'equation', mode: 'inline', equationNumber: '1', editRange: null };
@@ -1764,8 +1897,16 @@ function renderFormulaDisciplineTabs() {
 
 function renderFormulaTemplateList() {
   const locale = formulaLocale();
-  const templates = formulaTemplatesForDiscipline(formulaWizardState.discipline);
+  const templates = searchFormulaTemplates(formulaWizardState.discipline, formulaWizardState.searchQuery);
   els.formulaTemplateList.replaceChildren();
+  $('#formulaSearchStatus').textContent = t('formulaSearchCount', { count: templates.length });
+  $('#clearFormulaSearch').classList.toggle('hidden', !formulaWizardState.searchQuery);
+  if (!templates.length) {
+    const empty = document.createElement('p');
+    empty.className = 'formula-search-empty';
+    empty.textContent = t('formulaSearchEmpty');
+    els.formulaTemplateList.append(empty);
+  }
   let lastGroup = '';
   for (const template of templates) {
     if (template.group !== lastGroup) {
@@ -1795,6 +1936,14 @@ function renderFormulaOutputModes() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   }
+  const inline = formulaWizardState.mode === 'inline';
+  $('#formulaInlineLayoutSection').classList.toggle('hidden', !inline);
+  $('#formulaInlineLayoutHint').classList.toggle('hidden', !inline);
+  for (const button of $('#formulaInlineLayouts').querySelectorAll('[data-formula-layout]')) {
+    const active = button.dataset.formulaLayout === formulaWizardState.inlineLayout;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
 }
 
 function renderFormulaFields() {
@@ -1803,15 +1952,16 @@ function renderFormulaFields() {
   if (!template) return;
   const values = formulaTemplateValues(template);
   els.formulaFields.replaceChildren();
+  $('#formulaParameters').classList.toggle('hidden', template.id === 'custom');
   $('#formulaTemplateName').textContent = template.name[locale];
   $('#formulaTemplateKind').textContent = template.kind === 'chemistry' ? 'mhchem' : 'LaTeX';
   for (const item of template.fields) {
     const label = document.createElement('label');
     const caption = document.createElement('span');
-    caption.textContent = item.label[locale];
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.maxLength = 240;
+    caption.textContent = template.id === 'chem-custom' ? t('formulaChemicalContent') : item.label[locale];
+    const input = document.createElement(item.key === 'formula' ? 'textarea' : 'input');
+    if (input.tagName === 'INPUT') input.type = 'text';
+    else input.rows = 3;
     input.autocomplete = 'off';
     input.dataset.formulaField = item.key;
     input.value = values[item.key] ?? item.value;
@@ -1829,95 +1979,210 @@ function updateFormulaPreview() {
   if (!template) return;
   const values = formulaFieldValues();
   formulaWizardState.valuesByTemplate.set(template.id, values);
-  const expression = buildFormulaExpression(template, values);
+  formulaWizardState.sourceEdited = false;
+  let expression;
+  try {
+    expression = buildFormulaExpression(template, values);
+  } catch (error) {
+    els.formulaMarkdownSource.value = '';
+    if (typeof syncFormulaVisualEditor === 'function') syncFormulaVisualEditor();
+    els.formulaPreview.textContent = t(error.message === 'FORMULA_VARIABLES_INVALID' ? 'formulaVariablesInvalid' : 'formulaVariableInvalid');
+    $('#insertFormula').disabled = true;
+    return;
+  }
   const equationNumber = $('#formulaNumber').value;
+  if (formulaWizardState.mode === 'inline' && formulaInlineHasNewline(expression)) {
+    els.formulaMarkdownSource.value = expression;
+    if (typeof syncFormulaVisualEditor === 'function') syncFormulaVisualEditor();
+    formulaWizardState.sourceEdited = false;
+    els.formulaPreview.textContent = t('formulaInlineMultiline');
+    $('#insertFormula').disabled = true;
+    return;
+  }
+  if (formulaWizardState.mode === 'inline') expression = applyFormulaInlineLayout(expression, formulaWizardState.inlineLayout);
   const markdownSource = buildFormulaMarkdown(formulaWizardState.mode, expression, equationNumber);
   els.formulaMarkdownSource.value = markdownSource;
+  formulaWizardState.sourceEdited = false;
   if (!expression) {
     els.formulaPreview.textContent = t('formulaInvalid');
+    $('#insertFormula').disabled = true;
     return;
   }
   const previewExpression = formulaPreviewExpression(formulaWizardState.mode, expression, equationNumber);
   const displayMode = formulaWizardState.mode === 'block' || formulaWizardState.mode === 'numbered';
-  els.formulaPreview.innerHTML = DOMPurify.sanitize(renderLatex(previewExpression, displayMode));
+  renderFormulaPreview(previewExpression, displayMode);
+  syncFormulaVisualEditor();
 }
 
-function updateFormulaPreviewFromMarkdown() {
-  const { expression, displayMode } = parseFormulaMarkdown(els.formulaMarkdownSource.value);
-  if (!expression) {
-    els.formulaPreview.textContent = t('formulaInvalid');
+function renderFormulaPreview(expression, displayMode, markdown = els.formulaMarkdownSource.value) {
+  if (!formulaMarkdownMatches(markdown, expression, displayMode)) {
+    els.formulaPreview.textContent = t('formulaDelimiterInvalid');
+    $('#insertFormula').disabled = true;
     return;
   }
-  els.formulaPreview.innerHTML = DOMPurify.sanitize(renderLatex(expression, displayMode));
+  const result = renderLatexResult(expression, displayMode);
+  els.formulaPreview.innerHTML = DOMPurify.sanitize(result.html);
+  $('#insertFormula').disabled = !expression || !result.valid;
+  if (!result.valid) {
+    const message = document.createElement('p');
+    message.className = 'formula-validation-message';
+    message.textContent = `${t('formulaSyntaxError')} ${result.message}`;
+    els.formulaPreview.append(message);
+  }
+}
+
+function updateFormulaPreviewFromMarkdown(syncVisual = true) {
+  formulaWizardState.sourceEdited = true;
+  if (syncVisual && typeof syncFormulaVisualEditor === 'function') syncFormulaVisualEditor();
+  const { expression, displayMode } = parseFormulaMarkdown(els.formulaMarkdownSource.value);
+  const delimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(els.formulaMarkdownSource.value.trim());
+  if (delimited) {
+    formulaWizardState.mode = displayMode ? /\s*\\tag\{[^{}]*\}\s*$/.test(expression) ? 'numbered' : 'block' : 'inline';
+    $('#formulaNumberField').classList.toggle('hidden', formulaWizardState.mode !== 'numbered');
+  }
+  formulaWizardState.inlineLayout = formulaInlineLayout(expression).layout;
+  renderFormulaOutputModes();
+  const effectiveDisplayMode = delimited ? displayMode : formulaWizardState.mode !== 'inline';
+  if (!effectiveDisplayMode && formulaInlineHasNewline(expression)) {
+    els.formulaPreview.textContent = t('formulaInlineMultiline');
+    $('#insertFormula').disabled = true;
+    return;
+  }
+  if (!expression) {
+    els.formulaPreview.textContent = t('formulaInvalid');
+    $('#insertFormula').disabled = true;
+    return;
+  }
+  const output = resolveFormulaOutput(els.formulaMarkdownSource.value, formulaWizardState.mode, $('#formulaNumber').value);
+  renderFormulaPreview(output.expression, output.displayMode, output.markdown);
 }
 
 function chooseFormulaTemplate(templateId) {
   const template = formulaTemplateById(templateId);
   if (!template) return;
+  if (template.id === formulaWizardState.templateId) return;
+  if (formulaWizardState.sourceEdited && !window.confirm(t('formulaReplaceDraftConfirm'))) return;
   rememberFormulaFieldValues();
   formulaWizardState.templateId = templateId;
   renderFormulaTemplateList();
   renderFormulaFields();
   els.formulaBuilderPanel.scrollTop = 0;
-  requestAnimationFrame(() => els.formulaFields.querySelector('input')?.focus());
+  requestAnimationFrame(() => {
+    if (!els.formulaDialog.classList.contains('hidden')) els.formulaFields.querySelector('input, textarea')?.focus();
+  });
 }
 
 function chooseFormulaDiscipline(discipline) {
   if (!FORMULA_DISCIPLINES.some(item => item.id === discipline)) return;
-  rememberFormulaFieldValues();
   formulaWizardState.discipline = discipline;
-  const templates = formulaTemplatesForDiscipline(discipline);
-  if (!templates.some(template => template.id === formulaWizardState.templateId)) {
-    formulaWizardState.templateId = templates[0]?.id || 'equation';
-  }
   renderFormulaDisciplineTabs();
   renderFormulaTemplateList();
-  renderFormulaFields();
-  els.formulaBuilderPanel.scrollTop = 0;
+}
+
+function updateFormulaSearch() {
+  const query = $('#formulaSearch').value;
+  // The first query searches all subjects; selecting a subject then narrows it.
+  // Catalog changes never regenerate the formula or change its selected template.
+  if (query.trim() && !formulaWizardState.searchQuery.trim()) {
+    formulaWizardState.discipline = 'all';
+    renderFormulaDisciplineTabs();
+  }
+  formulaWizardState.searchQuery = query;
+  renderFormulaTemplateList();
 }
 
 function chooseFormulaMode(mode) {
   if (!['inline', 'block', 'numbered'].includes(mode)) return;
+  if (mode === 'inline') {
+    const expression = parseFormulaMarkdown(els.formulaMarkdownSource.value).expression;
+    if (formulaInlineHasNewline(expression)) {
+      showToast(t('formulaInlineMultiline'), 'warning');
+      return; // Keep both the original mode and exact source, including comments.
+    }
+  }
   formulaWizardState.mode = mode;
   $('#formulaNumberField').classList.toggle('hidden', mode !== 'numbered');
   renderFormulaOutputModes();
-  updateFormulaPreview();
+  if (formulaWizardState.sourceEdited) {
+    const { expression } = parseFormulaMarkdown(els.formulaMarkdownSource.value);
+    const withoutTag = expression.replace(/\s*\\tag\{[^{}]*\}\s*$/, '');
+    els.formulaMarkdownSource.value = buildFormulaMarkdown(mode, withoutTag, $('#formulaNumber').value);
+    updateFormulaPreviewFromMarkdown();
+  } else updateFormulaPreview();
+}
+
+function chooseFormulaInlineLayout(layout) {
+  if (formulaWizardState.mode !== 'inline' || !['normal', 'large'].includes(layout)) return;
+  const parsed = parseFormulaMarkdown(els.formulaMarkdownSource.value);
+  if (formulaInlineHasNewline(parsed.expression)) {
+    showToast(t('formulaInlineMultiline'), 'warning');
+    return;
+  }
+  // Explicit user action only; saving without edits retains the original bytes.
+  const expression = applyFormulaInlineLayout(parsed.expression, layout);
+  els.formulaMarkdownSource.value = buildFormulaMarkdown('inline', expression);
+  updateFormulaPreviewFromMarkdown();
 }
 
 function openFormulaDialog(existingFormula = null) {
-  if (!state.currentFile || !codeEditor) return;
+  if (!state.currentFile || !codeEditor || !state.editing) return;
   const selected = existingFormula
     ? { ...existingFormula, editRange: { from: existingFormula.from, to: existingFormula.to } }
     : selectedFormulaDetails();
   const preferred = selected.source ? selected.templateId : 'equation';
   const template = formulaTemplateById(preferred);
   formulaWizardState.mode = selected.mode;
+  formulaWizardState.inlineLayout = formulaInlineLayout(selected.source).layout;
   formulaWizardState.discipline = selected.source ? template.group : 'all';
   formulaWizardState.templateId = preferred;
+  formulaWizardState.searchQuery = '';
+  $('#formulaSearch').value = '';
   formulaWizardState.valuesByTemplate = new Map();
   formulaWizardState.editRange = selected.editRange;
+  const selection = codeEditor.state.selection.main;
+  formulaWizardState.context = { session: state.documentSession, path: state.currentFile.path, document: codeEditor.state.doc,
+    selection: { from: selection.from, to: selection.to } };
+  if (selected.editRange) formulaWizardState.editRange = {
+    ...selected, ...selected.editRange, raw: codeEditor.state.doc.sliceString(selected.editRange.from, selected.editRange.to)
+  };
   if (selected.source) {
     formulaWizardState.valuesByTemplate.set(preferred, formulaValues(template, { formula: selected.source }));
   }
   $('#formulaNumber').value = selected.equationNumber || '1';
   const editing = Boolean(formulaWizardState.editRange);
   $('#formulaDialogTitle').textContent = t(editing ? 'formulaEditTitle' : 'formulaWizardTitle');
-  $('#formulaDialogHint').textContent = t(editing ? 'formulaEditHint' : 'formulaWizardHint');
+  $('#formulaDialogHint').textContent = t(editing ? 'formulaVisualEditHint' : 'formulaVisualWizardHint');
   $('#insertFormula').textContent = t(editing ? 'saveFormulaChanges' : 'insertFormula');
+  $('#formulaAdvanced').open = false;
+  $('#formulaParameters').open = true;
+  renderFormulaStructureToolbar();
   renderFormulaDisciplineTabs();
   renderFormulaTemplateList();
   renderFormulaFields();
+  formulaWizardState.initialMarkdown = els.formulaMarkdownSource.value;
+  if (selected.editRange) $('#insertFormula').disabled = false; // A no-op never destroys unsupported original source.
   els.formulaBuilderPanel.scrollTop = 0;
   els.formulaDialog.classList.remove('hidden');
+  syncFormulaVisualEditor();
+  formulaInertElements = [...document.body.children].filter(element => !element.contains(els.formulaDialog) && !['SCRIPT', 'STYLE'].includes(element.tagName))
+    .map(element => ({ element, inert: element.inert }));
+  formulaInertElements.forEach(({ element }) => { element.inert = true; });
   document.body.classList.add('dialog-open');
-  requestAnimationFrame(() => els.formulaTemplateList.querySelector('.active')?.focus());
+  requestAnimationFrame(() => {
+    if (!els.formulaDialog.classList.contains('hidden')) els.formulaTemplateList.querySelector('.active')?.focus();
+  });
 }
 
-function closeFormulaDialog() {
+function closeFormulaDialog(focusEditor = true) {
   if (els.formulaDialog.classList.contains('hidden')) return;
   els.formulaDialog.classList.add('hidden');
-  document.body.classList.remove('dialog-open');
-  focusCodeEditor();
+  ++formulaVisualRequest;
+  formulaVisualEditor?.blur();
+  formulaInertElements.forEach(({ element, inert }) => { element.inert = inert; });
+  formulaInertElements = [];
+  formulaWizardState.context = null;
+  if (!document.querySelector('.dialog-backdrop:not(.hidden)')) document.body.classList.remove('dialog-open');
+  if (focusEditor) focusCodeEditor();
 }
 
 function insertGeneratedFormula() {
@@ -1927,18 +2192,49 @@ function insertGeneratedFormula() {
     els.formulaMarkdownSource.focus();
     return;
   }
+  const context = formulaWizardState.context;
+  if (!state.editing || !codeEditor || !formulaEditIsCurrent(context, {
+    session: state.documentSession, path: state.currentFile?.path, document: codeEditor.state.doc
+  })) {
+    showToast(t('formulaEditStale'), 'warning');
+    return;
+  }
   const editRange = formulaWizardState.editRange;
+  const unchanged = editRange && markdownSource === formulaWizardState.initialMarkdown;
+  if (unchanged) { closeFormulaDialog(); return; }
+  let output;
+  try { output = resolveFormulaOutput(markdownSource, formulaWizardState.mode, $('#formulaNumber').value); }
+  catch (error) {
+    showToast(t(error.message === 'FORMULA_INLINE_MULTILINE' ? 'formulaInlineMultiline' : 'formulaInvalid'), 'warning');
+    return;
+  }
+  if (!output.displayMode && formulaInlineHasNewline(output.expression)) {
+    showToast(t('formulaInlineMultiline'), 'warning');
+    return;
+  }
+  if (!output.expression || !renderLatexResult(output.expression, output.displayMode).valid) {
+    showToast(t('formulaInvalid'), 'warning');
+    return;
+  }
+  if (!formulaMarkdownMatches(output.markdown, output.expression, output.displayMode)) {
+    showToast(t('formulaDelimiterInvalid'), 'warning');
+    return;
+  }
+  const source = codeEditor.state.doc.toString();
+  const normalizedMarkdown = output.markdown;
+  const range = editRange || context.selection;
+  const replacement = editRange ? formulaReplacement(source, editRange, normalizedMarkdown, formulaWizardState.initialMarkdown)
+    : formulaInsertion(source, range.from, range.to, normalizedMarkdown);
   closeFormulaDialog();
-  if (editRange && codeEditor) {
+  if (codeEditor) {
     codeEditor.dispatch({
-      changes: { from: editRange.from, to: editRange.to, insert: markdownSource },
-      selection: { anchor: editRange.from + markdownSource.length },
+      changes: { from: range.from, to: range.to, insert: replacement },
+      selection: { anchor: range.from + replacement.length },
       scrollIntoView: true
     });
     codeEditor.focus();
     return;
   }
-  replaceSelection(markdownSource, markdownSource.length, 0);
 }
 
 const diagramWizardState = {
@@ -4311,6 +4607,11 @@ function editorResizeDirection() {
 }
 
 function syncEditorLayoutOptions() {
+  document.querySelectorAll('#moreMenu button[data-formula-display]').forEach(button => {
+    const active = button.dataset.formulaDisplay === state.formulaDisplay;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
   document.querySelectorAll('#moreMenu button[data-editor-layout]').forEach(button => {
     const active = button.dataset.editorLayout === state.editorLayout;
     button.classList.toggle('active', active);
@@ -4318,6 +4619,13 @@ function syncEditorLayoutOptions() {
   });
   const current = $('#editorLayoutCurrent');
   if (current) current.textContent = t(editorLayoutLabel());
+}
+
+function setEditorFormulaDisplay(mode) {
+  state.formulaDisplay = mode === 'source' ? 'source' : 'preview';
+  localStorage.setItem('formulaDisplay', state.formulaDisplay);
+  if (codeEditor?.state.field(editorFormulaField, false)) codeEditor.dispatch({ effects: setFormulaDisplayEffect.of(state.formulaDisplay) });
+  syncEditorLayoutOptions();
 }
 
 function setEditorLayout(layout, silent = false) {
@@ -5390,8 +5698,12 @@ function renderMarkdownTo(container, doc, content) {
   const reusableECharts = reusableEChartsDiagrams(container, mermaidThemeKey);
   const tableLayouts = findMarkdownTables(content);
   const prepared = prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(content)));
-  let html = marked.parse(prepared.markdown);
-  html += renderFootnoteSection(prepared.notes, text => marked.parseInline(text), t('footnotes'));
+  const renderedMath = collectFormulaRendering(() => {
+    let html = marked.parse(prepared.markdown);
+    html += renderFootnoteSection(prepared.notes, text => marked.parseInline(text), t('footnotes'));
+    return html;
+  });
+  let html = renderedMath.html;
   html = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel', 'data-md-color'] });
   // The reusable snapshots above are plain SVG strings. Release the live
   // ECharts instances and ResizeObservers before replacing the preview DOM,
@@ -5400,12 +5712,6 @@ function renderMarkdownTo(container, doc, content) {
   releaseEChartsDiagrams(container);
   container.innerHTML = html;
   normalizeImageRows(container);
-  if (container === els.editorPreview && state.editing) {
-    container.querySelectorAll('.math-inline, .math-block').forEach(formula => {
-      formula.classList.add('editable-preview-formula');
-      formula.title = t('formulaPreviewEditHint');
-    });
-  }
   const documentHeadings = collectDocumentHeadings(container);
   renderDynamicTocs(container, documentHeadings);
   restoreReusableMermaidDiagrams(container, reusableMermaid, mermaidThemeKey);
@@ -5450,6 +5756,19 @@ function renderMarkdownTo(container, doc, content) {
   });
   bindDocumentActions(container);
   injectPreviewLineNumbers(container, prepared);
+  if (container === els.editorPreview && state.editing && codeEditor?.state.doc.toString() === content) {
+    const elements = renderedMath.formulas.map(item => {
+      const matches = container.querySelectorAll(`[data-math-origin="${item.id}"]`);
+      return matches.length === 1 ? matches[0] : null;
+    });
+    const matches = matchPreviewFormulas(currentFormulaIndex(), renderedMath.formulas, prepared.notes.length === 0);
+    elements.forEach((element, i) => {
+      if (!element || !matches[i]) return;
+      previewFormulaContexts.set(element, { range: matches[i], session: state.documentSession, path: doc.path, document: codeEditor.state.doc });
+      element.classList.add('editable-preview-formula');
+      element.title = t('formulaPreviewEditHint');
+    });
+  }
   applyMarkdownTableLayouts(container, tableLayouts);
   return diagramRender;
 }
@@ -5540,6 +5859,9 @@ function syncDocumentAccessControls() {
 
 function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
+  closeFormulaDialog(false);
+  indexedFormulaDocument = null;
+  indexedFormulas = [];
   resetDocumentConflict();
   if (state.currentFile && state.dirty) void clearRecoverySnapshot();
   cancelScheduledEditorPreview();
@@ -5586,6 +5908,9 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  closeFormulaDialog(false);
+  indexedFormulaDocument = null;
+  indexedFormulas = [];
   resetDocumentConflict();
   if (state.dirty) void clearRecoverySnapshot();
   cancelScheduledEditorPreview();
@@ -6439,10 +6764,11 @@ async function cleanRenderedHTMLForExport(container) {
       });
       formula.replaceChildren(mathOnly);
     } else {
-      formula.replaceChildren();
+      formula.replaceChildren(formula.ownerDocument.createTextNode(formulaFallbackSource(formula)));
     }
   });
   clone.querySelectorAll('button, script, style, svg').forEach(element => element.remove());
+  clone.querySelectorAll('[data-math-origin]').forEach(element => element.removeAttribute('data-math-origin'));
   clone.querySelectorAll('[id], [data-line], [contenteditable]').forEach(element => {
     if (!element.matches('h1, h2, h3, h4, h5, h6')) element.removeAttribute('id');
     element.removeAttribute('data-line');
@@ -9140,9 +9466,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.7.6', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.7.7', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.6';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.7';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -9200,7 +9526,7 @@ function openUpdateDialog(info) {
   state.updateInfo = info;
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
-  $('#currentVersion').textContent = info.currentVersion || '2.7.6';
+  $('#currentVersion').textContent = info.currentVersion || '2.7.7';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -10041,12 +10367,40 @@ els.formulaTemplateList.addEventListener('click', event => {
   const button = event.target.closest('[data-formula-template]');
   if (button) chooseFormulaTemplate(button.dataset.formulaTemplate);
 });
+$('#formulaSearch').addEventListener('input', updateFormulaSearch);
+$('#clearFormulaSearch').addEventListener('click', () => {
+  $('#formulaSearch').value = '';
+  updateFormulaSearch();
+  $('#formulaSearch').focus();
+});
+$('#formulaSearch').addEventListener('keydown', event => {
+  if (event.isComposing) return;
+  if (event.key === 'Escape' && $('#formulaSearch').value) {
+    event.preventDefault();
+    $('#formulaSearch').value = '';
+    updateFormulaSearch();
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    els.formulaTemplateList.querySelector('button')?.focus();
+  }
+});
 els.formulaOutputModes.addEventListener('click', event => {
   const button = event.target.closest('[data-formula-mode]');
   if (button) chooseFormulaMode(button.dataset.formulaMode);
 });
-els.formulaFields.addEventListener('input', updateFormulaPreview);
-$('#formulaNumber').addEventListener('input', updateFormulaPreview);
+$('#formulaInlineLayouts').addEventListener('click', event => {
+  const button = event.target.closest('[data-formula-layout]');
+  if (button) chooseFormulaInlineLayout(button.dataset.formulaLayout);
+});
+els.formulaFields.addEventListener('input', event => {
+  if (formulaWizardState.sourceEdited && !window.confirm(t('formulaReplaceDraftConfirm'))) {
+    const template = formulaTemplateById(formulaWizardState.templateId);
+    event.target.value = formulaTemplateValues(template)[event.target.dataset.formulaField] ?? '';
+    return;
+  }
+  updateFormulaPreview();
+});
+$('#formulaNumber').addEventListener('input', () => chooseFormulaMode(formulaWizardState.mode));
 els.formulaMarkdownSource.addEventListener('input', updateFormulaPreviewFromMarkdown);
 els.formulaMarkdownSource.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.isComposing) {
@@ -10055,12 +10409,10 @@ els.formulaMarkdownSource.addEventListener('keydown', event => {
   }
 });
 els.formulaFields.addEventListener('keydown', event => {
-  if (event.key === 'Enter' && !event.isComposing) insertGeneratedFormula();
-});
-els.editFormulaButton.addEventListener('pointerdown', event => event.stopPropagation());
-els.editFormulaButton.addEventListener('click', () => {
-  updateExistingFlowchartButton();
-  if (activeFormulaMatch) openFormulaDialog(activeFormulaMatch);
+  if (event.key === 'Enter' && !event.isComposing && (event.target.tagName !== 'TEXTAREA' || event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    insertGeneratedFormula();
+  }
 });
 $('#closeDiagramDialog').addEventListener('click', closeDiagramDialog);
 $('#cancelDiagram').addEventListener('click', closeDiagramDialog);
@@ -10485,6 +10837,7 @@ els.moreMenu.addEventListener('click', event => {
   else if (button?.dataset.fontScale) setFontScale(Number(button.dataset.fontScale));
   if (button?.dataset.docWidth) setDocumentWidth(button.dataset.docWidth);
   if (button?.dataset.editorLayout) setEditorLayout(button.dataset.editorLayout);
+  if (button?.dataset.formulaDisplay) setEditorFormulaDisplay(button.dataset.formulaDisplay);
   if (button.hasAttribute('data-spellcheck-toggle')) setSpellcheckEnabled(!state.spellcheckEnabled);
   if (button.dataset.spellcheckLanguage) setSpellcheckLanguage(button.dataset.spellcheckLanguage);
   if (button.hasAttribute('data-spellcheck-clear')) clearPersonalDictionary();
@@ -10699,16 +11052,25 @@ els.editorPreview.addEventListener('contextmenu', locateEditorFromPreview);
 els.editorPreview.addEventListener('dblclick', event => {
   const formula = event.target.closest('.editable-preview-formula');
   if (!formula || !state.editing || !codeEditor) return;
-  const previewFormulas = [...els.editorPreview.querySelectorAll('.editable-preview-formula')];
-  const sourceFormulas = scanMarkdownFormulas(codeEditor.state.doc.toString());
-  const match = sourceFormulas[previewFormulas.indexOf(formula)];
-  if (!match) return;
   event.preventDefault();
-  openFormulaDialog(match);
+  const context = previewFormulaContexts.get(formula);
+  if (formulaEditIsCurrent(context, { session: state.documentSession, path: state.currentFile?.path, document: codeEditor.state.doc })) openFormulaDialog(context.range);
+  else showToast(t('formulaEditStale'), 'warning');
 });
 
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented) return;
+  if (!els.formulaDialog.classList.contains('hidden')) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); $('#formulaSearch').focus(); }
+    else if (event.key === 'Escape') { event.preventDefault(); closeFormulaDialog(); }
+    else if (event.key === 'Tab') {
+      const controls = [...els.formulaDialog.querySelectorAll('button, input, textarea, math-field, summary, a[href]')].filter(element => !element.disabled && element.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    } else if ((event.ctrlKey || event.metaKey) && /^[noesp]$/i.test(event.key)) event.preventDefault();
+    return;
+  }
   if ($('#typographyDialog').contains(document.activeElement)) return;
   const primaryModifier = event.ctrlKey || event.metaKey;
   if (event.key === 'Escape' && cancelPinnedPointerReorder()) event.preventDefault();

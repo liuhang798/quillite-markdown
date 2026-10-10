@@ -27,3 +27,41 @@
 - 无剩余发布阻断项。
 
 final result: passed
+
+---
+
+# Design QA：公式窗口紧凑布局（2026-10-10）
+
+- source visual truth path: `C:/Users/柳航/AppData/Local/Temp/codex-clipboard-76c24d0a-7a7d-45a9-a0ae-f3c817957c98.png`
+- implementation screenshot path: `D:/工作/CodexTemp/quillite-formula-compact-20261010/compact-desktop.png`
+- viewport: 1134 × 831 CSS px; source and implementation both 1134 × 831 pixels, 1:1 comparison, no density normalization.
+- state: light theme, Chinese, editing the same geometric-sequence inline equation with custom template and Advanced collapsed. Source builder is partly scrolled; implementation shows its full heading. Do not treat the newly visible heading as added functionality.
+- full-view comparison evidence: both source and implementation opened together in one image-comparison tool result; screenshot annotations treated as requested spacing changes, not UI to reproduce.
+- focused region comparison: not needed; header text, option labels, editing controls and footer are legible at 1:1 in the full captures.
+
+## Findings and required fidelity surfaces
+
+- No actionable P0/P1/P2 findings. Header now measures 50.34 px; output/layout options occupy one 32 px row at the reference desktop size. Visual editor, live preview and Advanced remain visible without builder scrolling for this equation.
+- Fonts/typography: existing application and equation fonts retained. Title reduced from 25 to 21 px and guidance from 14 to 12 px; equation input and preview sizes unchanged. Title hierarchy and Chinese/English labels remain legible.
+- Spacing/layout rhythm: intentionally reduced dialog padding, header gaps, builder heading spacing and output-control margins. Desktop options share a row; 800 × 600 windows wrap to two rows. At 600 × 600 the existing single-column/catalog scrolling layout remains usable, with persistent footer buttons outside the scroll area.
+- Colors/tokens: existing accent, paper, border and muted-text tokens retained. No color or contrast redesign.
+- Image quality/assets: no raster assets or logos changed. Existing vector close icon and formula font rendering retained, without generated substitutes.
+- Copy/content: all existing labels and explanatory text retained in both languages. Tutorial, close, source, template search, layout choices, Cancel and Save remain present.
+- Scope: new CSS rules restricted to `#formulaDialog`; shared diagram-dialog spacing is unchanged. No formula-parser, file-write, deletion, installer or update logic changed in this task.
+
+## Behavior and responsive checks
+
+- Chinese desktop (1134 × 831), short window (800 × 600) and narrow window (600 × 600): no horizontal layout overflow; Cancel/Save remain within viewport.
+- English desktop and 800 × 600: long labels fit or wrap their groups, with no panel overflow and all five output/layout buttons within panel bounds.
+- Large layout updates only the inline draft; Display mode hides inline-layout controls and hint. Cancel followed by reopen preserves the original source exactly.
+- Save then reopen retains the selected Large layout and standard LaTeX source.
+- Browser error console: no errors recorded on this test page.
+- Additional evidence: `compact-small.png`, `compact-narrow.png`, `compact-english.png` in the same temporary verification directory.
+- Frontend tests: 581 passed. Go tests/vet, renderer syntax, production build and source-level safety gate passed. Complete Windows installer includes the custom launcher and verified `QUILLITE_PAYLOAD` footer.
+- Residual test gap: no native macOS/Linux runtime or real installer lifecycle performed on the user's machine; installer lifecycle remains restricted to disposable Windows CI.
+
+## Comparison history
+
+- First post-change visual comparison found no actionable P0/P1/P2 differences; no further visual fix was necessary. Differences in density are the user's requested compacting, not fidelity defects.
+
+final result: passed

@@ -1,14 +1,15 @@
 {
   "name": "quillite-markdown-wails-frontend",
   "private": true,
-  "version": "2.7.6",
+  "version": "2.7.7",
   "type": "module",
   "scripts": {
     "prepare:mermaid": "node scripts/prepare-mermaid.mjs",
     "prepare:spellcheck": "node scripts/prepare-spellcheck.mjs",
-    "prepare:vendor": "npm run prepare:mermaid && npm run prepare:spellcheck",
-    "dev": "npm run prepare:mermaid && npm run prepare:spellcheck && vite",
-    "build": "npm run prepare:mermaid && npm run prepare:spellcheck && vite build",
+    "prepare:mathlive": "node scripts/prepare-mathlive.mjs",
+    "prepare:vendor": "npm run prepare:mermaid && npm run prepare:spellcheck && npm run prepare:mathlive",
+    "dev": "npm run prepare:mermaid && npm run prepare:spellcheck && npm run prepare:mathlive && vite",
+    "build": "npm run prepare:mermaid && npm run prepare:spellcheck && npm run prepare:mathlive && vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs"
   },
@@ -31,6 +32,7 @@
     "html-to-image": "^1.11.13",
     "katex": "^0.16.47",
     "marked": "^15.0.12",
+    "mathlive": "0.111.0",
     "mermaid": "^11.17.2",
     "nspell": "^2.1.5",
     "turndown": "^7.2.4",

@@ -328,7 +328,7 @@ func buildPDFHTML(renderedHTML, title, language, header, footer string) ([]byte,
 	}
 	styles := `<style>` + pdfPageRule(header, footer, title) + `
 html,body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-@media print{body{padding:0}.markdown-body{overflow:visible}.code-block{max-width:100%;overflow:visible;box-shadow:none}.markdown-body pre,.code-block pre{max-width:100%;overflow:visible!important;white-space:pre-wrap!important;overflow-wrap:anywhere;word-break:break-word}.markdown-table-scroll,.markdown-body .math-block{max-width:100%;overflow:visible!important}.markdown-table-scroll table,.markdown-body table{width:100%!important;max-width:100%;table-layout:fixed}.markdown-body th,.markdown-body td{min-width:0!important;overflow-wrap:anywhere;word-break:break-word}.markdown-body img,.markdown-body svg{max-width:100%!important;height:auto!important}.markdown-dynamic-toc a{color:#333}}
+@media print{body{padding:0}.markdown-body{overflow:visible}.code-block{max-width:100%;overflow:visible;box-shadow:none}.markdown-body pre,.code-block pre{max-width:100%;overflow:visible!important;white-space:pre-wrap!important;overflow-wrap:anywhere;word-break:break-word}.markdown-table-scroll,.markdown-body .math-block{max-width:100%;overflow:visible!important}.markdown-table-scroll table,.markdown-body table{width:100%!important;max-width:100%;table-layout:fixed}.markdown-body th,.markdown-body td{min-width:0!important;overflow-wrap:anywhere;word-break:break-word}.markdown-body img,.markdown-body svg{max-width:100%!important}.markdown-body img:not([height]),.markdown-body svg{height:auto!important}.markdown-dynamic-toc a{color:#333}}
 </style>`
 	result := strings.Replace(string(document), "</head>", styles+"</head>", 1)
 	return []byte(result), nil

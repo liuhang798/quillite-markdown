@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>79 个公式可视化编辑验证</title>
+<style>body{font:14px/1.6 system-ui;max-width:1150px;margin:20px auto;background:#f6f8f7;color:#20382c}section{background:white;border:1px solid #dce5df;padding:16px;margin:10px;border-radius:8px}math-field{display:block;font-size:22px}button{padding:10px}#status{position:sticky;top:0;background:#def3e6;padding:10px;z-index:2}#examples{display:grid;grid-template-columns:1fr 1fr}pre{white-space:pre-wrap}</style>
+<h1>逐公式验证 / Visual formula audit</h1><p id="status">准备中</p><button id="run">验证全部模板</button><pre id="report"></pre><div id="examples"></div>
+<style>html,body{overflow:auto!important;height:auto!important}</style>
+<button id="edgesRun">验证结构按钮与安全回退</button><pre id="edgeReport"></pre><section id="edgeExample"></section>
+<script type="module">
+import '/src/styles.css';
+import 'katex/dist/katex.min.css';
+import DOMPurify from 'dompurify';
+import { createFormulaVisualEditor } from '/src/formula-visual-editor.js';
+import { FORMULA_STRUCTURES } from '/src/formula-visual-policy.js';
+import { FORMULA_TEMPLATES, buildFormulaExpression, buildFormulaMarkdown, parseFormulaMarkdown, applyFormulaInlineLayout, formulaInlineLayout } from '/src/formula-templates.js';
+import { scanMarkdownFormulas, formulaReplacement } from '/src/formula-editing.js';
+import { renderLatex, renderLatexResult } from '/src/math-rendering.js';
+import { EditorState } from '@codemirror/state';
+import { history, undo } from '@codemirror/commands';
+document.querySelector('#status').textContent = `${FORMULA_TEMPLATES.length} 个模板待验证`;
+document.querySelector('#run').onclick = async () => {
+  const results = []; document.querySelector('#examples').replaceChildren();
+  for (const template of FORMULA_TEMPLATES) {
+    const section = document.createElement('section'), heading = document.createElement('h2'), host = document.createElement('div'), preview = document.createElement('div');
+    heading.textContent = `${template.id} · ${template.name.zh}`; section.append(heading,host,preview); document.querySelector('#examples').append(section);
+    let changed = ''; const editor = createFormulaVisualEditor(host, value => { changed = value; });
+    editor.field.removeAttribute('id');
+    const original = buildFormulaExpression(template), checks = {}, errors = [];
+    const check = (name, predicate) => { checks[name] = Boolean(predicate); if (!predicate) errors.push(name); };
+    check('load', editor.load(original, 'zh-CN', template.name.zh));
+    check('noOp', editor.value() === original);
+    editor.field.position = -1;
+    editor.insert('+0');
+    // MathLive notifications can be queued; the test observes the same input event the product uses.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const exported = editor.value();
+    check('edit', exported !== original && exported.endsWith('+0'));
+    // First-mount MathLive font/model work may postpone its queued input event.
+    // Wait for the actual callback, bounded to 40 frames; never synthesize input.
+    for (let frame = 0; frame < 40 && changed !== exported; frame++) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    check('event', changed === exported);
+    check('preview', !/katex-error/.test(renderLatex(exported,true)));
+    check('reload', editor.load(exported,'zh-CN',template.name.zh) && editor.value() === exported);
+    // Establish a fresh undo baseline, then exercise a real mathfield edit/undo/redo.
+    editor.insert('+1'); await new Promise(resolve => requestAnimationFrame(resolve));
+    editor.command('undo'); await new Promise(resolve => requestAnimationFrame(resolve));
+    const undoValue = editor.value();
+    check('visualUndo', editor.value() === exported);
+    editor.command('redo'); await new Promise(resolve => requestAnimationFrame(resolve));
+    check('visualRedo', editor.value() !== exported);
+    const large = applyFormulaInlineLayout(original, 'large');
+    check('large:preview', !/katex-error/.test(renderLatex(large, false)));
+    check('large:visualLoad', editor.load(formulaInlineLayout(large).expression, 'zh-CN', template.name.zh));
+    check('large:noOp', applyFormulaInlineLayout(editor.value(), 'large') === large);
+    editor.field.position = -1; editor.insert('+0');
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const editedLarge = applyFormulaInlineLayout(editor.value(), 'large');
+    check('large:visualEdit', editedLarge.startsWith('\\displaystyle ') && editedLarge.endsWith('+0') && !/katex-error/.test(renderLatex(editedLarge, false)));
+    check('large:roundTrip', applyFormulaInlineLayout(large, 'normal') === original);
+    for (const mode of ['inline','block','numbered']) {
+      const source = buildFormulaMarkdown(mode, original, 'A-1'), range = scanMarkdownFormulas(source)[0];
+      check(`${mode}:noOp`, formulaReplacement(source,range,source,source) === source);
+      const edited = buildFormulaMarkdown(mode,exported,'A-1');
+      check(`${mode}:preview`, !/katex-error/.test(renderLatex(parseFormulaMarkdown(edited).expression,mode!=='inline')));
+      const originalDoc = `before\n\n${source}\n\nafter`;
+      let state = EditorState.create({doc:originalDoc,extensions:[history()]});
+      state = state.update({changes:{from:8,to:8+source.length,insert:edited}}).state;
+      const view = {state}; view.dispatch = transaction => {view.state=transaction.state;};
+      check(`${mode}:documentUndo`, undo(view) && view.state.doc.toString() === originalDoc);
+    }
+    preview.innerHTML = DOMPurify.sanitize(renderLatex(exported,true));
+    editor.blur();
+    results.push({id:template.id,name:template.name.zh,passed:errors.length===0,checks,errors,original,exported,undoValue});
+    document.querySelector('#status').textContent = `${results.length}/${FORMULA_TEMPLATES.length}，失败 ${results.filter(result=>!result.passed).length}`;
+  }
+  await document.fonts.ready;
+  document.querySelector('#report').textContent = JSON.stringify({total:results.length,passed:results.filter(r=>r.passed).length,results},null,2);
+};
+document.querySelector('#edgesRun').onclick = async () => {
+  const host = document.querySelector('#edgeExample'), editor = createFormulaVisualEditor(host, () => {}), checks = {}, matrixResults = [];
+  const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const clickGlyph = async text => {
+    await document.fonts.ready; await settle();
+    const target = [...editor.field.shadowRoot.querySelectorAll('[data-atom-id]')].find(el => el.textContent === text);
+    const bounds = target.getBoundingClientRect();
+    editor.field.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, composed:true, clientX:bounds.right-1, clientY:(bounds.top+bounds.bottom)/2, button:0, buttons:1, pointerId:1, pointerType:'mouse', isPrimary:true }));
+    document.dispatchEvent(new PointerEvent('pointerup',{ bubbles:true, composed:true, button:0, buttons:0, pointerId:1, pointerType:'mouse', isPrimary:true }));
+    editor.insert('2'); await settle();
+  };
+  checks.applicationChromeNonSelectable = getComputedStyle(document.body).userSelect === 'none';
+  checks.mathfieldSelectable = getComputedStyle(editor.field).userSelect === 'text';
+  for (const [key, structure] of FORMULA_STRUCTURES) {
+    editor.load('x'); editor.field.select(); editor.insert(structure); await settle();
+    checks[`structure:${key}:insert`] = editor.value() !== 'x';
+    editor.command('undo'); await settle(); checks[`structure:${key}:undo`] = editor.value() === 'x';
+    editor.field.select(); editor.insert(structure); await settle();
+    for (let i=0; i<12 && editor.value().includes('\\placeholder'); i++) {
+      editor.insert('2'); editor.command('moveToNextPlaceholder'); await settle();
+    }
+    checks[`structure:${key}:filledPreview`] = !editor.value().includes('\\placeholder') && !/katex-error/.test(renderLatex(editor.value(),true));
+  }
+  for (const source of ['x% note\n+y', '\\href{https://example.org}{x}', 'x'.repeat(8193), '{'.repeat(65)+'x'+'}'.repeat(65)]) {
+    checks[`fallback:${Object.keys(checks).length}`] = !editor.load(source) && editor.field.readOnly;
+  }
+  checks.recoverAfterFallback = editor.load('x + y') && editor.value() === 'x + y';
+  const literalErrorText = '\\text{katex-error}';
+  checks.literalErrorRender = renderLatexResult(literalErrorText, false).valid;
+  checks.literalErrorVisualLoad = editor.load(literalErrorText) && editor.value() === literalErrorText;
+  editor.field.position = -1; editor.insert('+0'); await settle();
+  checks.literalErrorVisualEdit = renderLatexResult(editor.value(), false).valid && editor.value().endsWith('+0');
+  checks.literalErrorComment = renderLatexResult('x% katex-error\n+y', true).valid;
+  editor.load('\\frac{a+b}{c+d}'); await settle();
+  await clickGlyph('b');
+  checks.pointerNumerator = /^\\frac\{[^}]*2[^}]*\}\{c\+d\}$/.test(editor.value());
+  editor.load('\\frac{a+b}{c+d}'); await clickGlyph('d');
+  checks.pointerDenominator = /^\\frac\{a\+b\}\{[^}]*2[^}]*\}$/.test(editor.value());
+  editor.load('x_{a}^{n}'); await clickGlyph('n');
+  checks.pointerSuperscript = /\^\{(?:n2|2n)\}/.test(editor.value());
+  editor.load('x_{a}^{n}'); await clickGlyph('a');
+  checks.pointerSubscript = /_\{(?:a2|2a)\}/.test(editor.value());
+  editor.load('\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}'); await clickGlyph('b');
+  checks.pointerMatrixCell = /a & (?:b2|2b)\\\\ c & d/.test(editor.value());
+  editor.load('\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}'); editor.field.position=1;
+  for (const command of ['addRowAfter','addColumnAfter','removeRow','removeColumn']) {
+    const before = editor.value(); editor.command(command); await settle();
+    const after = editor.value();
+    checks[`matrix:${command}:changed`] = after !== before;
+    // New matrix cells intentionally contain MathLive placeholders. They are
+    // not valid final KaTeX: require filling them, just like structure buttons.
+    if (after.includes('\\placeholder')) {
+      checks[`matrix:${command}:unfilledBlocked`] = !renderLatexResult(after,true).valid;
+      for (let i=0; i<20 && editor.value().includes('\\placeholder'); i++) {
+        editor.insert('0'); editor.command('moveToNextPlaceholder'); await settle();
+      }
+    }
+    checks[`matrix:${command}:filledPreview`] = !editor.value().includes('\\placeholder') && renderLatexResult(editor.value(),true).valid;
+    matrixResults.push({command,before,after,filled:editor.value()});
+  }
+  editor.blur();
+  document.querySelector('#edgeReport').textContent = JSON.stringify({passed:Object.values(checks).every(Boolean),checks,matrixResults,value:editor.value()},null,2);
+};
+</script></html>

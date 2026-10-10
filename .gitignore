@@ -4,6 +4,7 @@ frontend/dist/
 frontend/package.json.md5
 frontend/public/vendor/mermaid.min.js
 frontend/public/vendor/dictionaries/
+frontend/public/vendor/mathlive/
 
 # Compiled desktop applications and installers
 build/bin/

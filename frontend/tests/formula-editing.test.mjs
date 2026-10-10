@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findFormulaAt, scanMarkdownFormulas } from '../src/formula-editing.js';
+import { findFormulaAt, scanMarkdownFormulas, FORMULA_SCAN_DOCUMENT_LIMIT } from '../src/formula-editing.js';
 
 test('formula lookup detects inline, display, numbered, and chemistry formulas', () => {
   const markdown = [
@@ -43,4 +43,16 @@ test('formula lookup recognises bracket display formulas and does not treat curr
   assert.equal(formulas.length, 1);
   assert.equal(formulas[0].source, '\\frac{1}{2}');
   assert.equal(formulas[0].mode, 'block');
+});
+
+test('scanner fails closed for extreme Markdown without leaking partial edit ranges', () => {
+  for (const source of ['> '.repeat(4000) + '$x$', '> '.repeat(129) + '$x$',
+    ' '.repeat(513) + '$x$', 'x'.repeat(FORMULA_SCAN_DOCUMENT_LIMIT) + '$x$']) {
+    assert.deepEqual(scanMarkdownFormulas('$normal$\n\n' + source), []);
+    assert.equal(findFormulaAt(source, source.length - 2), null);
+  }
+  assert.equal(scanMarkdownFormulas('> '.repeat(10) + '$x$').length, 1);
+  // Deep inline token recursion is not a container prefix; lexer exceptions
+  // must also leave the entire document editable, with no partial formula map.
+  assert.doesNotThrow(() => scanMarkdownFormulas('['.repeat(4000) + '$x$' + '](url)'.repeat(4000)));
 });

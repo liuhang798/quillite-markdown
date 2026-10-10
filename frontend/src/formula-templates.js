@@ -38,7 +38,7 @@ export const FORMULA_TEMPLATES = [
     field('base', '底数', 'Base', 'x'),
     field('exponent', '指数', 'Exponent', '2'),
     field('subscript', '下标（可空）', 'Subscript (optional)', 'i', ''),
-  ], values => `${values.base}${values.subscript ? `_{${values.subscript}}` : ''}${values.exponent ? `^{${values.exponent}}` : ''}`),
+  ], values => `${values.subscript && /_/.test(values.base) ? `\\left(${values.base}\\right)` : formulaOperand(values.base)}${values.subscript ? `_{${values.subscript}}` : ''}${values.exponent ? `^{${values.exponent}}` : ''}`),
   mathTemplate('root', 'mathematics', '根式', 'Root', [
     field('radicand', '被开方数', 'Radicand', 'a^2+b^2'),
     field('index', '根指数（平方根可空）', 'Root index (optional)', '', '3'),
@@ -52,24 +52,24 @@ export const FORMULA_TEMPLATES = [
   ], values => `\\left|${values.expression}\\right|`),
   mathTemplate('factorial', 'mathematics', '阶乘', 'Factorial', [
     field('value', '数值或变量', 'Value or variable', 'n'),
-  ], values => `${values.value}!`),
+  ], values => `${formulaOperand(values.value)}!`),
   mathTemplate('permutation', 'mathematics', '排列数', 'Permutation', [
     field('total', '总数 n', 'Total n', 'n'),
     field('chosen', '选取数 r', 'Chosen r', 'r'),
-  ], values => `A_{${values.total}}^{${values.chosen}}=\\frac{${values.total}!}{(${values.total}-${values.chosen})!}`),
+  ], values => `A_{${values.total}}^{${values.chosen}}=\\frac{${formulaOperand(values.total)}!}{(${formulaOperand(values.total)}-${formulaOperand(values.chosen)})!}`),
   mathTemplate('combination', 'mathematics', '组合数', 'Combination', [
     field('total', '总数 n', 'Total n', 'n'),
     field('chosen', '选取数 r', 'Chosen r', 'r'),
-  ], values => `C_{${values.total}}^{${values.chosen}}=\\binom{${values.total}}{${values.chosen}}=\\frac{${values.total}!}{${values.chosen}!(${values.total}-${values.chosen})!}`),
+  ], values => `C_{${values.total}}^{${values.chosen}}=\\binom{${values.total}}{${values.chosen}}=\\frac{${formulaOperand(values.total)}!}{${formulaOperand(values.chosen)}!(${formulaOperand(values.total)}-${formulaOperand(values.chosen)})!}`),
   mathTemplate('quadratic', 'algebra', '一元二次方程求根', 'Quadratic formula', [
     field('a', '系数 a', 'Coefficient a', 'a'),
     field('b', '系数 b', 'Coefficient b', 'b'),
     field('c', '系数 c', 'Coefficient c', 'c'),
-  ], values => `x = \\frac{-${values.b} \\pm \\sqrt{${values.b}^{2}-4${values.a}${values.c}}}{2${values.a}}`),
+  ], values => `x = \\frac{-${formulaOperand(values.b)} \\pm \\sqrt{${formulaPower(values.b, '2')}-${formulaProduct('4', values.a, values.c)}}}{${formulaProduct('2', values.a)}}`),
   mathTemplate('linear-equation', 'algebra', '一元一次方程', 'Linear equation', [
     field('a', '系数 a', 'Coefficient a', 'a'),
     field('b', '常数 b', 'Constant b', 'b'),
-  ], values => `${values.a}x+${values.b}=0\\quad\\Rightarrow\\quad x=-\\frac{${values.b}}{${values.a}}`),
+  ], values => `${formulaProduct(values.a, 'x')}+${formulaOperand(values.b)}=0\\quad\\Rightarrow\\quad x=-\\frac{${values.b}}{${values.a}}`),
   mathTemplate('system2', 'algebra', '二元一次方程组', 'Two-variable system', [
     field('equation1', '第一个方程', 'First equation', 'a_1x+b_1y=c_1'),
     field('equation2', '第二个方程', 'Second equation', 'a_2x+b_2y=c_2'),
@@ -78,65 +78,65 @@ export const FORMULA_TEMPLATES = [
     field('left', '第一项', 'First term', 'a'),
     field('right', '第二项', 'Second term', 'b'),
     field('power', '次数 n', 'Power n', 'n'),
-  ], values => `(${values.left}+${values.right})^{${values.power}}=\\sum_{k=0}^{${values.power}}\\binom{${values.power}}{k}${values.left}^{${values.power}-k}${values.right}^{k}`),
+  ], values => `(${formulaOperand(values.left)}+${formulaOperand(values.right)})^{${values.power}}=\\sum_{k=0}^{${values.power}}\\binom{${values.power}}{k}${formulaPower(values.left, `${values.power}-k`)}\\cdot ${formulaPower(values.right, 'k')}`),
   mathTemplate('arithmetic-sequence', 'algebra', '等差数列通项', 'Arithmetic sequence', [
     field('first', '首项', 'First term', 'a_1'),
     field('difference', '公差', 'Common difference', 'd'),
     field('index', '项数', 'Index', 'n'),
-  ], values => `a_{${values.index}}=${values.first}+(${values.index}-1)${values.difference}`),
+  ], values => `a_{${values.index}}=${formulaOperand(values.first)}+${formulaProduct(`${formulaOperand(values.index)}-1`, values.difference)}`),
   mathTemplate('arithmetic-sum', 'algebra', '等差数列求和', 'Arithmetic series sum', [
     field('first', '首项', 'First term', 'a_1'),
     field('last', '末项', 'Last term', 'a_n'),
     field('count', '项数', 'Number of terms', 'n'),
-  ], values => `S_{${values.count}}=\\frac{${values.count}(${values.first}+${values.last})}{2}`),
+  ], values => `S_{${values.count}}=\\frac{${formulaProduct(values.count, `${formulaOperand(values.first)}+${formulaOperand(values.last)}`)}}{2}`),
   mathTemplate('geometric-sequence', 'algebra', '等比数列通项', 'Geometric sequence', [
     field('first', '首项', 'First term', 'a_1'),
     field('ratio', '公比', 'Common ratio', 'q'),
     field('index', '项数', 'Index', 'n'),
-  ], values => `a_{${values.index}}=${values.first}${values.ratio}^{${values.index}-1}`),
+  ], values => `a_{${values.index}}=${formulaOperand(values.first)}\\cdot ${formulaPower(values.ratio, `${formulaOperand(values.index)}-1`)}`),
   mathTemplate('geometric-sum', 'algebra', '等比数列求和', 'Geometric series sum', [
     field('first', '首项', 'First term', 'a_1'),
     field('ratio', '公比', 'Common ratio', 'q'),
     field('count', '项数', 'Number of terms', 'n'),
-  ], values => `S_{${values.count}}=${values.first}\\frac{1-${values.ratio}^{${values.count}}}{1-${values.ratio}}`),
+  ], values => `S_{${values.count}}=${formulaOperand(values.first)}\\cdot \\frac{1-${formulaPower(values.ratio, values.count)}}{1-${formulaOperand(values.ratio)}}`),
   mathTemplate('pythagorean', 'geometry', '勾股定理', 'Pythagorean theorem', [
     field('a', '直角边 a', 'Side a', 'a'),
     field('b', '直角边 b', 'Side b', 'b'),
     field('c', '斜边 c', 'Hypotenuse c', 'c'),
-  ], values => `${values.a}^{2}+${values.b}^{2}=${values.c}^{2}`),
+  ], values => `${formulaPower(values.a, '2')}+${formulaPower(values.b, '2')}=${formulaPower(values.c, '2')}`),
   mathTemplate('distance2d', 'geometry', '两点间距离', 'Distance between two points', [
     field('x1', 'x₁', 'x₁', 'x_1'),
     field('y1', 'y₁', 'y₁', 'y_1'),
     field('x2', 'x₂', 'x₂', 'x_2'),
     field('y2', 'y₂', 'y₂', 'y_2'),
-  ], values => `d=\\sqrt{(${values.x2}-${values.x1})^2+(${values.y2}-${values.y1})^2}`),
+  ], values => `d=\\sqrt{(${formulaOperand(values.x2)}-${formulaOperand(values.x1)})^2+(${formulaOperand(values.y2)}-${formulaOperand(values.y1)})^2}`),
   mathTemplate('midpoint', 'geometry', '中点坐标', 'Midpoint', [
     field('x1', 'x₁', 'x₁', 'x_1'),
     field('y1', 'y₁', 'y₁', 'y_1'),
     field('x2', 'x₂', 'x₂', 'x_2'),
     field('y2', 'y₂', 'y₂', 'y_2'),
-  ], values => `M\\left(\\frac{${values.x1}+${values.x2}}{2},\\frac{${values.y1}+${values.y2}}{2}\\right)`),
+  ], values => `M\\left(\\frac{${formulaOperand(values.x1)}+${formulaOperand(values.x2)}}{2},\\frac{${formulaOperand(values.y1)}+${formulaOperand(values.y2)}}{2}\\right)`),
   mathTemplate('slope', 'geometry', '直线斜率', 'Slope', [
     field('x1', 'x₁', 'x₁', 'x_1'),
     field('y1', 'y₁', 'y₁', 'y_1'),
     field('x2', 'x₂', 'x₂', 'x_2'),
     field('y2', 'y₂', 'y₂', 'y_2'),
-  ], values => `k=\\frac{${values.y2}-${values.y1}}{${values.x2}-${values.x1}}`),
+  ], values => `k=\\frac{${formulaOperand(values.y2)}-${formulaOperand(values.y1)}}{${formulaOperand(values.x2)}-${formulaOperand(values.x1)}}`),
   mathTemplate('circle-area', 'geometry', '圆的面积', 'Circle area', [
     field('radius', '半径', 'Radius', 'r'),
-  ], values => `S=\\pi ${values.radius}^{2}`),
+  ], values => `S=\\pi\\cdot ${formulaPower(values.radius, '2')}`),
   mathTemplate('circle-circumference', 'geometry', '圆的周长', 'Circle circumference', [
     field('radius', '半径', 'Radius', 'r'),
-  ], values => `C=2\\pi ${values.radius}`),
+  ], values => `C=${formulaProduct('2', '\\pi', values.radius)}`),
   mathTemplate('triangle-area', 'geometry', '三角形面积', 'Triangle area', [
     field('base', '底边', 'Base', 'a'),
     field('height', '高', 'Height', 'h'),
-  ], values => `S=\\frac{1}{2}${values.base}${values.height}`),
+  ], values => `S=\\frac{1}{2}\\cdot ${formulaProduct(values.base, values.height)}`),
   mathTemplate('heron', 'geometry', '海伦公式', 'Heron formula', [
     field('a', '边 a', 'Side a', 'a'),
     field('b', '边 b', 'Side b', 'b'),
     field('c', '边 c', 'Side c', 'c'),
-  ], values => `p=\\frac{${values.a}+${values.b}+${values.c}}{2},\\quad S=\\sqrt{p(p-${values.a})(p-${values.b})(p-${values.c})}`),
+  ], values => `p=\\frac{${formulaOperand(values.a)}+${formulaOperand(values.b)}+${formulaOperand(values.c)}}{2},\\quad S=\\sqrt{p(p-${formulaOperand(values.a)})(p-${formulaOperand(values.b)})(p-${formulaOperand(values.c)})}`),
   mathTemplate('sine-law', 'geometry', '正弦定理', 'Law of sines', [
     field('a', '边 a', 'Side a', 'a'),
     field('b', '边 b', 'Side b', 'b'),
@@ -147,7 +147,7 @@ export const FORMULA_TEMPLATES = [
     field('b', '边 b', 'Side b', 'b'),
     field('c', '边 c', 'Side c', 'c'),
     field('angle', '夹角', 'Included angle', 'C'),
-  ], values => `${values.c}^{2}=${values.a}^{2}+${values.b}^{2}-2${values.a}${values.b}\\cos ${values.angle}`),
+  ], values => `${formulaPower(values.c, '2')}=${formulaPower(values.a, '2')}+${formulaPower(values.b, '2')}-${formulaProduct('2', values.a, values.b)}\\cdot \\cos\\left(${values.angle}\\right)`),
   mathTemplate('derivative', 'calculus', '导数', 'Derivative', [
     field('function', '函数', 'Function', 'f(x)'),
     field('variable', '变量', 'Variable', 'x'),
@@ -174,17 +174,28 @@ export const FORMULA_TEMPLATES = [
   mathTemplate('double-integral', 'calculus', '二重积分', 'Double integral', [
     field('domain', '积分区域', 'Domain', 'D'),
     field('expression', '被积函数', 'Integrand', 'f(x,y)'),
-    field('variables', '积分变量', 'Variables', 'x\\,y'),
-  ], values => `\\iint_{${values.domain}} ${values.expression}\\,d${values.variables}`),
+    field('variable1', '第一积分变量', 'First integration variable', 'x'),
+    field('variable2', '第二积分变量', 'Second integration variable', 'y'),
+  ], values => `\\iint_{${values.domain}} ${values.expression}\\,d${formulaVariable(values.variable1)}\\,d${formulaVariable(values.variable2)}`),
   mathTemplate('taylor-series', 'calculus', '泰勒展开', 'Taylor series', [
-    field('function', '函数', 'Function', 'f(x)'),
+    field('function', '函数名称（不含括号）', 'Function name (without parentheses)', 'f'),
+    field('variable', '自变量', 'Independent variable', 'x'),
     field('center', '展开点', 'Center', 'a'),
     field('index', '求和下标', 'Index', 'n'),
-  ], values => `${values.function}=\\sum_{${values.index}=0}^{\\infty}\\frac{f^{(${values.index})}(${values.center})}{${values.index}!}(x-${values.center})^{${values.index}}`),
+  ], values => {
+    const name = formulaVariable(values.function), variable = formulaVariable(values.variable);
+    const index = formulaVariable(values.index);
+    return `${name}(${variable})=\\sum_{${index}=0}^{\\infty}\\frac{${name}^{(${index})}(${values.center})}{${index}!}\\left(${variable}-${formulaOperand(values.center)}\\right)^{${index}}`;
+  }),
   mathTemplate('gradient', 'calculus', '梯度', 'Gradient', [
     field('function', '标量函数', 'Scalar function', 'f'),
-    field('variables', '变量', 'Variables', 'x,y,z'),
-  ], values => `\\nabla ${values.function}=\\left(\\frac{\\partial ${values.function}}{\\partial x},\\frac{\\partial ${values.function}}{\\partial y},\\frac{\\partial ${values.function}}{\\partial z}\\right)\\quad(${values.variables})`),
+    field('variables', '变量（逗号分隔，最多 16 个）', 'Variables (comma-separated, up to 16)', 'x,y,z'),
+  ], values => {
+    const variables = values.variables.split(/[,，]/).map(value => value.trim());
+    if (!variables.length || variables.length > 16 || variables.some(value => !value)) throw new Error('FORMULA_VARIABLES_INVALID');
+    const terms = variables.map(value => `\\frac{\\partial ${values.function}}{\\partial ${formulaVariable(value)}}`);
+    return `\\nabla ${values.function}=\\left(${terms.join(',')}\\right)`;
+  }),
   mathTemplate('limit', 'calculus', '极限', 'Limit', [
     field('variable', '变量', 'Variable', 'x'),
     field('target', '趋近值', 'Approaches', '0'),
@@ -216,7 +227,7 @@ export const FORMULA_TEMPLATES = [
     field('left', '向量 a', 'Vector a', '\\vec a'),
     field('right', '向量 b', 'Vector b', '\\vec b'),
     field('angle', '夹角', 'Angle', '\\theta'),
-  ], values => `${values.left}\\cdot${values.right}=\\lVert${values.left}\\rVert\\lVert${values.right}\\rVert\\cos ${values.angle}`),
+  ], values => `${formulaProduct(values.left, values.right)}=\\lVert${values.left}\\rVert\\lVert${values.right}\\rVert\\cos\\left(${values.angle}\\right)`),
   mathTemplate('cross-product', 'linear-algebra', '向量叉积', 'Cross product', [
     field('left', '向量 a', 'Vector a', '\\vec a'),
     field('right', '向量 b', 'Vector b', '\\vec b'),
@@ -227,7 +238,7 @@ export const FORMULA_TEMPLATES = [
     field('a12', '第 1 行第 2 列', 'Row 1, column 2', 'b'),
     field('a21', '第 2 行第 1 列', 'Row 2, column 1', 'c'),
     field('a22', '第 2 行第 2 列', 'Row 2, column 2', 'd'),
-  ], values => `\\begin{vmatrix}${values.a11}&${values.a12}\\\\${values.a21}&${values.a22}\\end{vmatrix}=${values.a11}${values.a22}-${values.a12}${values.a21}`),
+  ], values => `\\begin{vmatrix}${values.a11}&${values.a12}\\\\${values.a21}&${values.a22}\\end{vmatrix}=${formulaProduct(values.a11, values.a22)}-${formulaProduct(values.a12, values.a21)}`),
   mathTemplate('matrix3', 'linear-algebra', '3×3 矩阵', '3×3 matrix', [
     field('row1', '第 1 行', 'Row 1', 'a,b,c'),
     field('row2', '第 2 行', 'Row 2', 'd,e,f'),
@@ -238,7 +249,7 @@ export const FORMULA_TEMPLATES = [
     field('b', '元素 b', 'Element b', 'b'),
     field('c', '元素 c', 'Element c', 'c'),
     field('d', '元素 d', 'Element d', 'd'),
-  ], values => `A^{-1}=\\frac{1}{${values.a}${values.d}-${values.b}${values.c}}\\begin{bmatrix}${values.d}&-${values.b}\\\\-${values.c}&${values.a}\\end{bmatrix}`),
+  ], values => `A^{-1}=\\frac{1}{${formulaProduct(values.a, values.d)}-${formulaProduct(values.b, values.c)}}\\begin{bmatrix}${values.d}&-${formulaOperand(values.b)}\\\\-${formulaOperand(values.c)}&${values.a}\\end{bmatrix}`),
   mathTemplate('eigenvalue', 'linear-algebra', '特征值方程', 'Eigenvalue equation', [
     field('matrix', '矩阵', 'Matrix', 'A'),
     field('eigenvalue', '特征值', 'Eigenvalue', '\\lambda'),
@@ -263,19 +274,19 @@ export const FORMULA_TEMPLATES = [
   mathTemplate('variance', 'probability', '方差', 'Variance', [
     field('variable', '随机变量', 'Random variable', 'X'),
     field('mean', '均值', 'Mean', '\\mu'),
-  ], values => `\\operatorname{Var}(${values.variable})=\\mathbb{E}\\left[(${values.variable}-${values.mean})^2\\right]`),
+  ], values => `\\operatorname{Var}(${values.variable})=\\mathbb{E}\\left[(${formulaOperand(values.variable)}-${formulaOperand(values.mean)})^2\\right]`),
   mathTemplate('standard-deviation', 'probability', '标准差', 'Standard deviation', [
     field('variance', '方差', 'Variance', '\\operatorname{Var}(X)'),
   ], values => `\\sigma=\\sqrt{${values.variance}}`),
   mathTemplate('normal-distribution', 'probability', '正态分布', 'Normal distribution', [
     field('mean', '均值', 'Mean', '\\mu'),
     field('deviation', '标准差', 'Standard deviation', '\\sigma'),
-  ], values => `f(x)=\\frac{1}{${values.deviation}\\sqrt{2\\pi}}\\exp\\left[-\\frac{(x-${values.mean})^2}{2${values.deviation}^2}\\right]`),
+  ], values => `f(x)=\\frac{1}{${formulaOperand(values.deviation)}\\cdot \\sqrt{2\\pi}}\\exp\\left[-\\frac{(x-${formulaOperand(values.mean)})^2}{2\\cdot ${formulaPower(values.deviation, '2')}}\\right]`),
   mathTemplate('binomial-distribution', 'probability', '二项分布', 'Binomial distribution', [
     field('trials', '试验次数', 'Trials', 'n'),
     field('successes', '成功次数', 'Successes', 'k'),
     field('probability', '成功概率', 'Probability', 'p'),
-  ], values => `P(X=${values.successes})=\\binom{${values.trials}}{${values.successes}}${values.probability}^{${values.successes}}(1-${values.probability})^{${values.trials}-${values.successes}}`),
+  ], values => `P(X=${values.successes})=\\binom{${values.trials}}{${values.successes}}\\cdot ${formulaPower(values.probability, values.successes)}\\cdot (1-${formulaOperand(values.probability)})^{${formulaOperand(values.trials)}-${formulaOperand(values.successes)}}`),
   mathTemplate('conditional-probability', 'probability', '条件概率', 'Conditional probability', [
     field('eventA', '事件 A', 'Event A', 'A'),
     field('eventB', '事件 B', 'Event B', 'B'),
@@ -293,41 +304,41 @@ export const FORMULA_TEMPLATES = [
     field('force', '合力', 'Force', 'F'),
     field('mass', '质量', 'Mass', 'm'),
     field('acceleration', '加速度', 'Acceleration', 'a'),
-  ], values => `${values.force}=${values.mass}${values.acceleration}`),
+  ], values => `${values.force}=${formulaProduct(values.mass, values.acceleration)}`),
   mathTemplate('kinetic-energy', 'physics', '动能', 'Kinetic energy', [
     field('mass', '质量', 'Mass', 'm'),
     field('velocity', '速度', 'Velocity', 'v'),
-  ], values => `E_k=\\frac{1}{2}${values.mass}${values.velocity}^2`),
+  ], values => `E_k=\\frac{1}{2}\\cdot ${formulaOperand(values.mass)}\\cdot ${formulaPower(values.velocity, '2')}`),
   mathTemplate('potential-energy', 'physics', '重力势能', 'Gravitational potential energy', [
     field('mass', '质量', 'Mass', 'm'),
     field('gravity', '重力加速度', 'Gravity', 'g'),
     field('height', '高度', 'Height', 'h'),
-  ], values => `E_p=${values.mass}${values.gravity}${values.height}`),
+  ], values => `E_p=${formulaProduct(values.mass, values.gravity, values.height)}`),
   mathTemplate('mass-energy', 'physics', '质能方程', 'Mass-energy equivalence', [
     field('mass', '质量', 'Mass', 'm'),
     field('lightSpeed', '光速', 'Speed of light', 'c'),
-  ], values => `E=${values.mass}${values.lightSpeed}^2`),
+  ], values => `E=${formulaOperand(values.mass)}\\cdot ${formulaPower(values.lightSpeed, '2')}`),
   mathTemplate('ohms-law', 'physics', '欧姆定律', "Ohm's law", [
     field('voltage', '电压', 'Voltage', 'U'),
     field('current', '电流', 'Current', 'I'),
     field('resistance', '电阻', 'Resistance', 'R'),
-  ], values => `${values.voltage}=${values.current}${values.resistance}`),
+  ], values => `${values.voltage}=${formulaProduct(values.current, values.resistance)}`),
   mathTemplate('electric-power', 'physics', '电功率', 'Electric power', [
     field('voltage', '电压', 'Voltage', 'U'),
     field('current', '电流', 'Current', 'I'),
-  ], values => `P=${values.voltage}${values.current}`),
+  ], values => `P=${formulaProduct(values.voltage, values.current)}`),
   mathTemplate('wave-relation', 'physics', '波速关系', 'Wave relation', [
     field('speed', '波速', 'Wave speed', 'v'),
     field('frequency', '频率', 'Frequency', 'f'),
     field('wavelength', '波长', 'Wavelength', '\\lambda'),
-  ], values => `${values.speed}=${values.frequency}${values.wavelength}`),
+  ], values => `${values.speed}=${formulaProduct(values.frequency, values.wavelength)}`),
   mathTemplate('ideal-gas', 'physics', '理想气体状态方程', 'Ideal gas law', [
     field('pressure', '压强', 'Pressure', 'p'),
     field('volume', '体积', 'Volume', 'V'),
     field('amount', '物质的量', 'Amount', 'n'),
     field('constant', '气体常数', 'Gas constant', 'R'),
     field('temperature', '温度', 'Temperature', 'T'),
-  ], values => `${values.pressure}${values.volume}=${values.amount}${values.constant}${values.temperature}`),
+  ], values => `${formulaProduct(values.pressure, values.volume)}=${formulaProduct(values.amount, values.constant, values.temperature)}`),
 
   chemistryTemplate('chem-custom', 'chemistry', '自定义化学式', 'Custom chemistry', [
     field('formula', 'mhchem 内容', 'mhchem source', '2H2 + O2 -> 2H2O'),
@@ -408,6 +419,35 @@ export function formulaTemplatesForDiscipline(discipline = 'all') {
     .flatMap(item => FORMULA_TEMPLATES.filter(template => template.group === item.id));
 }
 
+const FORMULA_SEARCH_ALIASES = {
+  power: '平方 立方 指数 exponent square cube', root: '平方根 开方 sqrt radical',
+  fraction: '分式 frac', quadratic: '二次方程 判别式 quadratic discriminant',
+  pythagorean: '毕达哥拉斯 pythagoras', derivative: '求导 differentiation',
+  integral: '积分 integration', 'normal-distribution': '高斯 gaussian',
+  'newton-second-law': '牛顿 力 force newton', 'ohms-law': '欧姆 电阻 ohm',
+  'chem-custom': '化学式 mhchem ce',
+};
+const searchText = value => String(value).normalize('NFKC').toLowerCase().replace(/[-_]/g, ' ').trim();
+const formulaSearchIndex = new Map();
+
+export function searchFormulaTemplates(discipline = 'all', query = '') {
+  const terms = searchText(query).split(/\s+/).filter(Boolean);
+  const templates = formulaTemplatesForDiscipline(discipline);
+  if (!terms.length) return templates;
+  return templates.filter(template => {
+    if (!formulaSearchIndex.has(template.id)) {
+      const group = FORMULA_GROUP_LABELS[template.group] || {};
+      formulaSearchIndex.set(template.id, searchText([
+        template.name.zh, template.name.en, template.id, group.zh, group.en,
+        template.kind === 'chemistry' ? 'chemistry mhchem 化学' : 'math latex 数学',
+        FORMULA_SEARCH_ALIASES[template.id] || '',
+        ...template.fields.flatMap(item => [item.label.zh, item.label.en]),
+      ].join(' ')));
+    }
+    return terms.every(term => formulaSearchIndex.get(template.id).includes(term));
+  });
+}
+
 export function formulaTemplatesForMode(mode) {
   return FORMULA_TEMPLATES.filter(template => template.modes.includes(mode));
 }
@@ -416,10 +456,36 @@ export function formulaTemplateById(id) {
   return FORMULA_TEMPLATES.find(template => template.id === id);
 }
 
+// A compound/negative operand needs visible grouping, not just TeX braces.
+export function formulaOperand(value) {
+  const text = String(value).trim();
+  return /^(?:[A-Za-z]|\d+(?:\.\d+)?|\\[A-Za-z]+)(?:_(?:\{[^{}]*\}|[A-Za-z0-9]))?$/.test(text)
+    ? text : `\\left(${text}\\right)`;
+}
+
+export function formulaProduct(...values) {
+  return values.map(formulaOperand).join('\\cdot ');
+}
+
+export function formulaPower(value, exponent) {
+  return `${formulaOperand(value)}^{${exponent}}`;
+}
+
+// Template variables are names, not arbitrary expressions or argument lists.
+function formulaVariable(value) {
+  const text = String(value).trim();
+  if (!/^(?:[A-Za-z]|\\[A-Za-z]+)(?:_(?:\{[A-Za-z0-9]+\}|[A-Za-z0-9]))?$/.test(text)) throw new Error('FORMULA_VARIABLE_INVALID');
+  return text;
+}
+
+export function formulaInlineHasNewline(expression) {
+  return /[\r\n]/.test(String(expression).trim());
+}
+
 export function formulaValues(template, values = {}) {
   return Object.fromEntries(template.fields.map(item => {
     const supplied = values[item.key];
-    return [item.key, supplied === undefined ? item.value : String(supplied).trim().slice(0, 240)];
+    return [item.key, supplied === undefined ? item.value : String(supplied)];
   }));
 }
 
@@ -436,9 +502,30 @@ export function formulaPreviewExpression(mode, expression, equationTag = '1') {
   return mode === 'numbered' ? `${expression} \\tag{${safeEquationTag(equationTag)}}` : expression;
 }
 
+// Only a leading, whole style declaration belongs to this control. Never
+// rewrite nested groups, commands, comments or user-authored formula structure.
+export function formulaInlineLayout(expression) {
+  const source = String(expression);
+  const declaration = source.match(/^\s*\\(displaystyle|textstyle)(?![A-Za-z])\s*/);
+  return {
+    layout: declaration?.[1] === 'displaystyle' ? 'large' : 'normal',
+    expression: declaration ? source.slice(declaration[0].length) : source,
+  };
+}
+
+export function applyFormulaInlineLayout(expression, layout) {
+  if (!['normal', 'large'].includes(layout)) throw new Error('FORMULA_LAYOUT_INVALID');
+  const parsed = formulaInlineLayout(expression);
+  return layout === 'large' && parsed.expression.trim()
+    ? `\\displaystyle ${parsed.expression}` : parsed.expression;
+}
+
 export function buildFormulaMarkdown(mode, expression, equationTag = '1') {
   const source = String(expression).trim();
-  if (mode === 'inline') return `$${source}$`;
+  if (mode === 'inline') {
+    if (formulaInlineHasNewline(source)) throw new Error('FORMULA_INLINE_MULTILINE');
+    return `$${source}$`;
+  }
   const rendered = formulaPreviewExpression(mode, source, equationTag);
   return `$$\n${rendered}\n$$`;
 }
@@ -459,4 +546,13 @@ export function parseFormulaMarkdown(source = '') {
     return { expression: markdown.slice(1, -1).trim(), displayMode: false };
   }
   return { expression: markdown, displayMode: true };
+}
+
+// Preview and every save path validate exactly the Markdown that will be written.
+export function resolveFormulaOutput(source, mode, equationTag = '1') {
+  const input = String(source).trim();
+  const delimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(input);
+  const parsed = parseFormulaMarkdown(input);
+  const markdown = delimited ? input : buildFormulaMarkdown(mode, parsed.expression, equationTag);
+  return { ...parseFormulaMarkdown(markdown), markdown, delimited };
 }

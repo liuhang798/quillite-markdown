@@ -4,6 +4,28 @@ const MAX_ENCODED_IMAGE = Math.ceil(25 * 1024 * 1024 / 3) * 4;
 export const MAX_IMAGE_ROW = 6;
 const escapeAttribute = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
+function normalizedImageDimension(value, axis) {
+  const text = String(value ?? '').trim();
+  if (!text || text.toLowerCase() === 'auto') return '';
+  const match = text.match(/^(\d{1,4})(%|px)?$/i);
+  if (!match) throw new Error(`Invalid image ${axis}`);
+  const amount = Number(match[1]), unit = (match[2] || '').toLowerCase();
+  if (amount < 1 || amount > 4096 || (unit === '%' && (axis !== 'width' || amount > 100))) throw new Error(`Invalid image ${axis}`);
+  return unit === '%' ? `${amount}%` : String(amount);
+}
+
+export function imageDimensions(image) {
+  const attribute = name => image.attributes?.find(item => item.name === name)?.ref || '';
+  let width = '', height = '';
+  try { width = normalizedImageDimension(attribute('width'), 'width'); } catch {}
+  try { height = normalizedImageDimension(attribute('height'), 'height'); } catch {}
+  return { width, height };
+}
+
+export function imageDimensionStyle(value) {
+  return value && !value.endsWith('%') ? `${value}px` : value;
+}
+
 export function imageSourceKind(ref) {
   if (!ref || /[\x00-\x1f]/.test(ref)) return null;
   if (/^data:/i.test(ref)) {
@@ -54,6 +76,28 @@ export function alignedImageSource(source, item, alignment) {
   return source.slice(0, insert) + ` ${replacement}` + source.slice(insert);
 }
 
+export function sizedImageSource(source, item, dimensions) {
+  const width = normalizedImageDimension(dimensions?.width, 'width');
+  const height = normalizedImageDimension(dimensions?.height, 'height');
+  if (item.kind !== 'html') {
+    const html = alignedImageSource(source, item, item.alignment);
+    return sizedImageSource(html, editorImageItems(html)[0], { width, height });
+  }
+  const changes = [];
+  for (const [name, value] of [['width', width], ['height', height]]) {
+    const attribute = item.attributes.find(entry => entry.name === name);
+    if (attribute) changes.push({ from: attribute.start, to: attribute.end, insert: value ? `${name}="${escapeAttribute(value)}"` : '' });
+  }
+  const additions = [['width', width], ['height', height]]
+    .filter(([name, value]) => value && !item.attributes.some(attribute => attribute.name === name))
+    .map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join('');
+  if (additions) {
+    const end = source.lastIndexOf('>'), insert = source[end - 1] === '/' ? end - 1 : end;
+    changes.push({ from: insert, to: insert, insert: additions });
+  }
+  return changes.sort((a, b) => b.from - a.from).reduce((result, change) => result.slice(0, change.from) + change.insert + result.slice(change.to), source);
+}
+
 export function imageRowSource(source, images) {
   if (images.length < 2 || images.length > MAX_IMAGE_ROW) throw new Error('Invalid image row size');
   const width = Number((100 / images.length).toFixed(4));
@@ -88,6 +132,27 @@ export function alignImageChanges(source, group, index, alignment) {
   let insert = alignedImageSource(source.slice(target.from, target.to), target, alignment);
   // An img-only first line starts an HTML block. End that block before the
   // remaining Markdown prose, retaining the surrounding quote/list container.
+  if (target.kind !== 'html' && target.paragraphFrom === target.from && /^\s*\n/.test(source.slice(target.to, target.paragraphTo))) {
+    const continuation = imageContinuation(source, group);
+    if (continuation === null) return null;
+    insert += `\n${continuation}`;
+  }
+  return { from: target.from, to: target.to, insert };
+}
+
+export function resizeImageChanges(source, group, index, dimensions) {
+  const target = group.images[index];
+  if (!target) throw new Error('Invalid image index');
+  if (group.row && target.paragraphFrom !== undefined) {
+    // As with alignment, first materialize the complete Markdown-only row so
+    // an HTML img cannot swallow the remaining Markdown images.
+    let row = imageRowSource(source, group.images).replaceAll('\n', '');
+    const rowTarget = editorImageItems(row)[index];
+    const replacement = sizedImageSource(row.slice(rowTarget.from, rowTarget.to), rowTarget, dimensions);
+    row = row.slice(0, rowTarget.from) + replacement + row.slice(rowTarget.to);
+    return { from: group.from, to: group.to, insert: row };
+  }
+  let insert = sizedImageSource(source.slice(target.from, target.to), target, dimensions);
   if (target.kind !== 'html' && target.paragraphFrom === target.from && /^\s*\n/.test(source.slice(target.to, target.paragraphTo))) {
     const continuation = imageContinuation(source, group);
     if (continuation === null) return null;

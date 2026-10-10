@@ -46,6 +46,19 @@ func TestBuildStandaloneHTMLPreservesDocumentAndAppearance(t *testing.T) {
 	}
 }
 
+func TestBuildStandaloneHTMLPreservesExplicitImageDimensions(t *testing.T) {
+	data, err := buildStandaloneHTML(`<img src="data:image/png;base64,AAAA" width="64%" height="280">`, "Sized image", "en", "light", "#159A63")
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(data)
+	for _, expected := range []string{`width="64%"`, `height="280"`, `img:not([height]){height:auto}`, `.markdown-body img:not([height]),.markdown-body svg{height:auto!important}`} {
+		if !strings.Contains(document, expected) {
+			t.Fatalf("standalone HTML did not preserve custom image sizing %q", expected)
+		}
+	}
+}
+
 func TestBuildStandaloneHTMLRemovesFlattenedKatexSource(t *testing.T) {
 	fragment := `<p>分数：</p><div class="math-block" data-math-source="y%3D%5Cfrac%7Bx%2B1%7D%7Bx-1%7D"><math display="block"><mrow><mi>y</mi><mo>=</mo><mfrac><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow><mrow><mi>x</mi><mo>-</mo><mn>1</mn></mrow></mfrac></mrow>y=\frac{x+1}{x-1}</math></div>`
 	data, err := buildStandaloneHTML(fragment, "Math", "zh-CN", "light", "#159A63")

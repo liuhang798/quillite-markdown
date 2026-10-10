@@ -335,12 +335,12 @@
             <button type="button" data-format="table" data-format-overflow="table" data-format-label="insertTable" data-format-group="asset" data-overflow-priority="20" data-i18n-title="insertTable" title="插入表格"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16M15 4v16"/></svg></button>
             <button type="button" data-format="image" data-format-overflow="image" data-format-label="insertImage" data-format-group="asset" data-overflow-priority="10" data-i18n-title="insertImage" title="插入图片"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 2-2 6 5"/></svg></button>
             <span class="format-divider" data-divider-before="extended"></span>
-            <button type="button" class="extended-format-button" data-format="bold-italic" data-format-overflow="bold-italic" data-format-label="boldItalic" data-format-group="extended" data-overflow-priority="-4" data-format-command="bold-italic" data-i18n="boldItalic">粗斜体</button>
-            <button type="button" class="extended-format-button" data-format="underline" data-format-overflow="underline" data-format-label="underline" data-format-group="extended" data-overflow-priority="-3" data-format-command="underline" data-i18n="underline">下划线</button>
+            <button type="button" class="extended-format-button icon-format-button" data-format="bold-italic" data-format-overflow="bold-italic" data-format-label="boldItalic" data-format-group="extended" data-overflow-priority="-4" data-format-command="bold-italic" data-i18n-title="boldItalic" data-i18n-aria-label="boldItalic" title="粗斜体" aria-label="粗斜体"><span class="bold-italic-label" aria-hidden="true"><strong>B</strong><em>I</em></span></button>
+            <button type="button" class="extended-format-button icon-format-button" data-format="underline" data-format-overflow="underline" data-format-label="underline" data-format-group="extended" data-overflow-priority="-3" data-format-command="underline" data-i18n-title="underline" data-i18n-aria-label="underline" title="下划线" aria-label="下划线"><span class="underline-label" aria-hidden="true">U</span></button>
             <button type="button" class="extended-format-button" data-format="superscript" data-format-overflow="superscript" data-format-label="superscript" data-format-group="extended" data-overflow-priority="-8" data-format-command="superscript" data-i18n="superscript">上标</button>
             <button type="button" class="extended-format-button" data-format="subscript" data-format-overflow="subscript" data-format-label="subscript" data-format-group="extended" data-overflow-priority="-9" data-format-command="subscript" data-i18n="subscript">下标</button>
-            <button type="button" class="extended-format-button popular-format-button" data-format="formula-builder" data-format-overflow="formula-builder" data-format-label="formulaBuilder" data-format-group="extended" data-overflow-priority="-1" data-format-command="formula-builder" data-i18n="formulaBuilder">学科公式 🔥</button>
-            <button type="button" class="extended-format-button popular-format-button" data-format="diagram-builder" data-format-overflow="diagram-builder" data-format-label="diagramBuilder" data-format-group="extended" data-overflow-priority="-2" data-format-command="diagram-builder" data-i18n="diagramBuilder">图表生成器 🔥</button>
+            <button type="button" class="extended-format-button popular-format-button" data-format="formula-builder" data-format-overflow="formula-builder" data-format-label="formulaBuilder" data-format-group="extended" data-overflow-priority="-1" data-format-command="formula-builder" data-i18n-title="formulaBuilder" title="学科公式"><span data-i18n="formulaShort">公式</span></button>
+            <button type="button" class="extended-format-button popular-format-button" data-format="diagram-builder" data-format-overflow="diagram-builder" data-format-label="diagramBuilder" data-format-group="extended" data-overflow-priority="-2" data-format-command="diagram-builder" data-i18n-title="diagramBuilder" title="图表生成器"><span data-i18n="diagramShort">图表</span></button>
             <button type="button" class="extended-format-button" data-format="hard-break" data-format-overflow="hard-break" data-format-label="hardBreak" data-format-group="extended" data-overflow-priority="-6" data-format-command="hard-break" data-i18n="hardBreak">强制换行</button>
             <button type="button" class="extended-format-button" data-format="footnote" data-format-overflow="footnote" data-format-label="footnote" data-format-group="extended" data-overflow-priority="-5" data-format-command="footnote" data-i18n="footnote">脚注</button>
             <button type="button" class="extended-format-button" data-format="reference-link" data-format-overflow="reference-link" data-format-label="referenceLink" data-format-group="extended" data-overflow-priority="-10" data-format-command="reference-link" data-i18n="referenceLink">引用式链接</button>
@@ -360,10 +360,6 @@
             <button id="editFlowchartButton" class="edit-flowchart-button hidden" type="button" data-i18n-title="editThisDiagram" data-i18n-aria-label="editThisDiagram" title="编辑此图表" aria-label="编辑此图表">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h3a4 4 0 0 1 4 4v3M14 11l3 3 3-3"/></svg>
               <span data-i18n="editThisDiagram">编辑此图表</span>
-            </button>
-            <button id="editFormulaButton" class="edit-flowchart-button hidden" type="button" title="编辑当前公式" aria-label="编辑当前公式">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4l10-10-4-4L4 14v4Z"/><path d="m12 6 4 4M5 6h5M7.5 3.5v5"/></svg>
-              <span>编辑当前公式</span>
             </button>
           </div>
           <div class="editor-footer">
@@ -484,6 +480,12 @@
         <button type="button" role="menuitemradio" data-editor-layout="editor-only" aria-checked="false"><span data-i18n="editorOnly">仅编辑</span><span class="settings-option-check">✓</span></button>
         <button type="button" role="menuitemradio" data-editor-layout="preview-left" aria-checked="true"><span data-i18n="previewOnLeft">预览在左</span><span class="settings-option-check">✓</span></button>
         <button type="button" role="menuitemradio" data-editor-layout="editor-left" aria-checked="false"><span data-i18n="editorOnLeft">编辑在左</span><span class="settings-option-check">✓</span></button>
+        <hr>
+        <div class="popover-label" data-i18n="formulaDisplay">公式显示</div>
+        <div role="group" data-i18n-aria-label="formulaDisplay" aria-label="公式显示">
+          <button type="button" role="menuitemradio" data-formula-display="preview" aria-checked="true"><span data-i18n="formulaDisplayPreview">公式排版</span><span class="settings-option-check">✓</span></button>
+          <button type="button" role="menuitemradio" data-formula-display="source" aria-checked="false"><span data-i18n="formulaDisplaySource">公式源码</span><span class="settings-option-check">✓</span></button>
+        </div>
       </div>
     </div>
     <hr>
@@ -513,7 +515,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.6</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.7</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -715,7 +717,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.7.6</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 2.7.7</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -948,7 +950,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.6</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.7</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -970,9 +972,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.6</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.7</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.6</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.7</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>
@@ -1198,6 +1200,10 @@
       <span class="eyebrow" data-i18n="markdownTool">MARKDOWN 工具</span>
       <h2 id="imageDialogTitle" data-i18n="insertImage">插入图片</h2>
       <p data-i18n="imageDialogHint">选择本地图片，或粘贴在线图片链接。</p>
+      <aside class="image-storage-callout" aria-labelledby="imageStorageSupportTitle">
+        <span class="image-storage-callout-icon" aria-hidden="true">4</span>
+        <span><strong id="imageStorageSupportTitle" data-i18n="imageStorageSupportTitle">支持 4 种图片存储方式</strong><small data-i18n="imageStorageSupportList">本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo</small></span>
+      </aside>
       <div class="image-dialog-fields">
         <label><span data-i18n="imageUrlLabel">图片链接</span><input id="imageUrl" type="text" data-i18n-placeholder="imageUrlPlaceholder" placeholder="https://…"></label>
         <label><span data-i18n="imageAlt">图片说明</span><input id="imageAltInput" type="text" data-i18n-placeholder="imageAltPlaceholder" placeholder="可选的图片说明"></label>
@@ -1205,7 +1211,7 @@
       </div>
       <div class="table-dialog-actions image-dialog-actions">
         <button id="pickLocalImage" class="large-button secondary" type="button" data-i18n="chooseImage">选择图片…</button>
-        <button id="openImageUploadSettings" class="large-button secondary" type="button" data-i18n="imageUploadSettings">图床设置</button>
+        <button id="openImageUploadSettings" class="large-button image-storage-settings-button" type="button" data-i18n="imageUploadSettingsAction">设置 4 种图片方式</button>
         <button id="cancelImage" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
         <button id="confirmImage" class="large-button primary" type="button" data-i18n="insert">插入</button>
       </div>
@@ -1321,7 +1327,14 @@
       </header>
       <div class="formula-dialog-layout">
         <aside class="formula-template-panel" aria-label="公式模板">
-          <div class="formula-catalog-heading" data-i18n="formulaSubject">学科分类</div>
+          <div class="formula-catalog-heading">
+            <span data-i18n="formulaSubject">学科分类</span>
+            <div class="formula-search-field">
+              <input id="formulaSearch" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="formulaSearchPlaceholder" data-i18n-aria-label="formulaSearchLabel" aria-label="搜索公式模板" placeholder="名称、学科或关键词" aria-controls="formulaTemplateList" aria-describedby="formulaSearchStatus">
+              <button id="clearFormulaSearch" type="button" class="hidden" data-i18n="formulaSearchClear">清除</button>
+            </div>
+            <small id="formulaSearchStatus" role="status" aria-live="polite" aria-atomic="true"></small>
+          </div>
           <div id="formulaDisciplineTabs" class="formula-discipline-tabs" role="tablist" aria-label="学科分类"></div>
           <div id="formulaTemplateList" class="formula-template-list"></div>
         </aside>
@@ -1330,6 +1343,7 @@
             <div><span data-i18n="selectedFormula">已选公式</span><strong id="formulaTemplateName">等式</strong></div>
             <code id="formulaTemplateKind">LaTeX</code>
           </div>
+          <div class="formula-options-bar">
           <div class="formula-output-section">
             <span data-i18n="formulaOutput">插入方式</span>
             <div id="formulaOutputModes" class="formula-output-modes" role="group" aria-label="插入方式">
@@ -1338,7 +1352,25 @@
               <button type="button" data-formula-mode="numbered" data-i18n="formulaModeNumbered">编号公式</button>
             </div>
           </div>
-          <div id="formulaFields" class="formula-fields"></div>
+          <div id="formulaInlineLayoutSection" class="formula-output-section">
+            <span data-i18n="formulaInlineLayout">行内排版</span>
+            <div id="formulaInlineLayouts" class="formula-output-modes formula-inline-layouts" role="group" data-i18n-aria-label="formulaInlineLayout" aria-label="行内排版">
+              <button type="button" data-formula-layout="normal" data-i18n="formulaLayoutNormal">常规排版</button>
+              <button type="button" data-formula-layout="large" data-i18n="formulaLayoutLarge">大号排版</button>
+            </div>
+          </div>
+          </div>
+          <p id="formulaInlineLayoutHint" class="formula-visual-status" data-i18n="formulaLayoutHint">仅改变当前行内公式的排版，展开分数和求和符号，不改为独立一行。</p>
+          <section class="formula-visual-card">
+            <strong data-i18n="formulaVisualTitle">可视化编辑</strong>
+            <div id="formulaStructureToolbar" class="formula-structure-toolbar" role="toolbar" data-i18n-aria-label="formulaStructureToolbar" aria-label="公式结构工具栏"></div>
+            <div id="formulaVisualHost"></div>
+            <p id="formulaVisualStatus" class="formula-visual-status" role="status" aria-live="polite"></p>
+          </section>
+          <details id="formulaParameters" class="formula-parameters" open>
+            <summary data-i18n="formulaParameters">模板参数</summary>
+            <div id="formulaFields" class="formula-fields"></div>
+          </details>
           <label id="formulaNumberField" class="formula-number-field hidden">
             <span data-i18n="equationNumber">公式编号</span>
             <input id="formulaNumber" type="text" maxlength="24" value="1" autocomplete="off">
@@ -1347,10 +1379,11 @@
             <span data-i18n="formulaPreview">实时预览</span>
             <div id="formulaPreview" class="formula-preview"></div>
           </section>
-          <section class="formula-source-card">
+          <details id="formulaAdvanced" class="formula-source-card">
+            <summary data-i18n="formulaAdvanced">高级：查看／修改源码</summary>
             <span data-i18n="generatedMarkdown">生成的 Markdown</span>
             <textarea id="formulaMarkdownSource" rows="4" spellcheck="false" data-i18n-aria-label="generatedMarkdown" aria-label="生成的 Markdown"></textarea>
-          </section>
+          </details>
         </main>
       </div>
       <div class="formula-dialog-actions">

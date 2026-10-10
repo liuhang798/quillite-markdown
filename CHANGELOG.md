@@ -4,6 +4,48 @@ All notable changes to Quillite Markdown are documented here.
 
 ## [Unreleased]
 
+## [2.7.7] - 2026-10-10
+
+### 简体中文
+
+- 修复行内公式含嵌套美元符号时弹窗预览正常、保存后被 Markdown 拆成错误公式的问题：模板、源码、可视化预览及按钮／快捷键保存共用实际分隔符解析校验；冲突时保留输入并提示块级或 `\(...\)`，不自动改写公式，无新增文件或目录删除操作。
+- 编辑页标题区与格式工具栏进一步紧凑化，并优先直接显示“公式”“图表”等高频功能；粗斜体与下划线改为和其他格式工具一致的紧凑图标，减少进入“更多格式”的次数。
+- 修复公式审计发现的三项问题：深度嵌套 Markdown 扫描超限或失败时保留源码编辑、不使用部分定位结果；合法正文和注释中的 `katex-error` 不再误判为语法错误；预览与保存统一按最终行内／块级／编号输出校验，快捷键不能绕过错误检查。不新增文件或目录删除操作。
+- 图片预览工具栏新增自定义宽高：宽度支持百分比或像素，高度可保持原比例自动计算或指定像素值，并可一键恢复原始尺寸。图片操作默认隐藏，鼠标悬停、键盘聚焦或触屏点击时以不挤压版面的浮层显示；修改使用标准 HTML 图片属性、单步可撤销，多图同排及阅读预览、样式 HTML、PDF 均保留尺寸，不修改或移动图片文件。
+- 修复插入较大的内嵌 Base64 图片后，图片编码被计入公式预览性能阈值、导致同一文档中的公式全部退回源码的问题；公式扫描会跳过图片编码，同时保持原文、公式位置和撤回历史不变。
+- 插入图片窗口醒目标注支持 4 种存储／图床方式，并直接列出本地 assets、内嵌 Base64、PicGo Cloud 与本机 PicGo；设置按钮同步改为“设置 4 种图片方式”，避免把本地与内嵌方式误解成只能配置图床。
+- 收紧公式窗口标题、说明和排版选项，宽窗口将插入方式与行内排版并排展示，窄窗口自动换行；为可视化编辑与实时预览保留更多空间，不缩小公式或改变内容。
+- 行内公式新增“常规排版／大号排版”，大号展开分数与求和符号但仍留在正文行内，编辑器与预览一致；使用标准 LaTeX `\displaystyle` 保存，仅作用于当前公式，可切回常规，不批量改写已有文档。
+
+- 移除编辑器右上角重复的“编辑当前公式”浮动入口，保留每个公式旁的“修改公式／查看源码”、双击和回车编辑；排版模式下操作按钮仅在悬停或获得焦点时显示，图表编辑入口不受影响。
+- 修复公式可视化输入继承页面禁止选择样式，导致鼠标点击不能定位的问题；分子、分母、上下标和矩阵单元支持点击定位输入。浏览器回归加载实际应用样式，避免独立测试页漏掉该冲突。
+- 公式窗口默认采用离线可视化编辑，可修改分子／分母、上下标、矩阵单元并插入常用结构，支持矩阵增删行列和撤销／重做。模板参数保留，源码收进“高级”；化学内容保留参数输入，复杂、含注释或超限的公式安全回退源码。未改动／撤销保留原文；异步载入核验窗口会话，重新打开重置独立撤销基线。增加全部 79 个模板的逐项浏览器与三种输出方式回归。
+- 编辑器内公式默认按预览效果排版显示，支持行内／块级／编号与化学式；双击或选中后回车打开原位编辑，查看／收起源码不改正文。复制保留 Markdown，删除可撤销；错误公式显示源码和提示。更多 → 编辑布局可切换并记忆公式排版／源码，仅编辑模式同样可用。最多排版 256 个公式，30 万字符及以上保留源码以控制开销。
+- 修复多行公式行内输出与预览不一致：阻止无效行内插入并保留源码，提示改用块级／编号。梯度按实际变量列表生成偏导，二重积分分别生成两个微分项；泰勒展开独立设置函数名称和自变量，并对复合展开点分组。无效变量提供双语提示，不改动已有文档公式。
+- 公式模板新增中英文名称、学科和关键词搜索，提供结果数量、无结果提示、一键清除与窗口内 Ctrl/⌘+F。搜索和学科切换仅筛选列表，不再自动更换当前公式或覆盖草稿。
+- 修复长公式编辑时被裁剪、预览双击定位到错误公式、旧公式窗口跨文档写入，以及数字／复合参数拼接改变数学含义的问题。保存核验文档会话和原文快照，未修改的公式保持原始源码；无法可靠定位时不替换内容。
+- 自定义公式改为多行编辑；手动源码切换行内／块级／编号时保留表达式，切换模板前确认。块级插入与转换保留引用／列表结构；错误或超限公式保留源码，HTML／PDF 导出不再静默清空。缓存公式索引，避免每次移动光标重复解析。无新增文件或目录删除操作。
+
+### English
+
+- Fix nested dollars passing inline equation preview but splitting into invalid formulas after saving. Template/source/visual previews and button/shortcut submission share actual Markdown delimiter validation. Conflicts retain the draft and guide users to Display or `\(...\)` without rewriting equations or adding file/directory deletion operations.
+- Make the editor header and formatting toolbar more compact, prioritize direct access to frequently used Formula and Diagram actions, and present Bold Italic and Underline as compact toolbar icons consistent with the other formatting tools.
+- Fix three equation-audit findings: excessive or failed Markdown scanning retains editable source without partial location results; legitimate `katex-error` text/comments are not syntax errors; preview and all save paths validate the final inline/display/numbered output, so keyboard shortcuts cannot bypass validation. No new file or directory deletion operations.
+- Add custom width and height controls to the image preview toolbar. Width accepts percent or pixels; height can preserve the original aspect ratio or use an explicit pixel value, with one-click reset. Image actions stay hidden until hover, keyboard focus or a touch tap, then appear as an overlay without reflow. Standard HTML image attributes keep edits undoable and preserve sizing in image rows, reading preview, styled HTML and PDF without modifying or moving image files.
+- Fix formulas falling back to source after a large embedded Base64 image pushed the document past the formula-preview performance threshold. Formula scanning now skips encoded image payloads while preserving the original document, exact formula offsets, and undo history.
+- Highlight all four image storage/hosting methods in the Insert Image dialog—local assets, embedded Base64, PicGo Cloud and local PicGo—and rename its settings action so local and embedded modes are not mistaken for hosting-only options.
+- Compact the equation dialog header, guidance and layout controls. Arrange output and inline-layout options side by side when space permits and wrap on narrower windows, leaving more room for visual editing and live preview without scaling or changing equations.
+- Add Normal/Large layout for inline equations. Large layout expands fractions and sum symbols without moving equations to a separate line; editor and preview stay consistent. Persist standard LaTeX `\displaystyle` per equation, allow switching back and never rewrite existing documents in bulk.
+
+- Remove the duplicate floating equation-edit button. Keep per-equation Edit/Show source actions, double-click and Enter editing; rendered equation controls appear on hover or focus, without affecting diagram editing.
+- Fix visual equations inheriting non-selectable application chrome, which blocked mouse caret placement. Enable click-to-edit inside fractions, scripts and matrix cells; browser regression now includes the real application stylesheet.
+- Default to offline visual equation editing for fractions, scripts and matrix cells, with common structure insertion, matrix row/column operations and undo/redo. Retain template parameters and collapse source under Advanced; chemistry keeps parameter input and complex/commented/oversized input falls back safely. Preserve unchanged source, guard asynchronous dialog sessions and reset undo baselines on reopening. Add per-template browser and three-output-mode regression coverage for all 79 templates.
+- Render equations inside the editor using the preview styling, including inline/display/numbered and chemistry formulas. Double-click or select and press Enter to edit in place; showing/hiding source never changes the document. Copy retains Markdown and deletion is undoable; invalid equations retain source with guidance. More → Editor layout remembers rendered/source display, including editor-only mode. Limit previews to 256 equations and retain source for documents with 300,000+ characters.
+- Prevent invalid multiline inline equations while preserving source and guiding users to Display/Numbered output. Generate gradients from the actual variable list and both differentials in double integrals. Taylor series now uses separate function-name/variable fields and groups compound expansion centers. Invalid variable names show localized guidance; existing document equations are not rewritten.
+- Add equation-template search by bilingual names, subjects and keywords, with result counts, empty-state guidance, Clear and dialog-scoped Ctrl/⌘+F. Search and subject changes only filter the catalog, without switching the current equation or overwriting drafts.
+- Fix long-equation truncation, incorrect preview-to-source mapping, stale cross-document equation writes, and numeric/compound operand concatenation. Saving verifies the document session and original editor snapshot; no-op edits preserve source exactly, and ambiguous mappings never replace content.
+- Add multiline custom equation editing, retain manually edited source when changing output modes, and confirm template replacement. Display insertion/conversion preserves quote/list containers. Failed or oversized equations retain readable source in HTML/PDF exports; cached indexes avoid reparsing on cursor movement. No new file or directory deletion operations.
+
 ## [2.7.6] - 2026-10-08
 
 ### 简体中文

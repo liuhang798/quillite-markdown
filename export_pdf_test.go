@@ -22,6 +22,19 @@ func TestBuildPDFHTMLKeepsHeadingsAndCreatesRunningContent(t *testing.T) {
 	}
 }
 
+func TestBuildPDFHTMLPreservesExplicitImageDimensions(t *testing.T) {
+	document, err := buildPDFHTML(`<img src="data:image/png;base64,AAAA" width="640" height="280">`, "Sized image", "en", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(document)
+	for _, expected := range []string{`width="640"`, `height="280"`, `.markdown-body img:not([height]),.markdown-body svg{height:auto!important}`} {
+		if !strings.Contains(html, expected) {
+			t.Fatalf("PDF HTML did not preserve custom image sizing %q", expected)
+		}
+	}
+}
+
 func TestPDFBrowserArgumentsRequestHeadingOutline(t *testing.T) {
 	arguments := pdfBrowserArguments("profile", "document.pdf", "document.html")
 	joined := strings.Join(arguments, "\n")

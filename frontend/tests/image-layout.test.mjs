@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Text } from '@codemirror/state';
-import { editorImageItems, editorImageGroups, alignedImageSource, imageRowSource, canJoinImageGroups, imageSourceKind } from '../src/image-layout.js';
+import { editorImageItems, editorImageGroups, alignedImageSource, imageRowSource, canJoinImageGroups, imageSourceKind, imageDimensions, sizedImageSource, resizeImageChanges } from '../src/image-layout.js';
 import { transformMarkdownImages } from '../src/portable-images.js';
 import { separateImageChanges, alignImageChanges } from '../src/image-layout.js';
 import { marked } from 'marked';
@@ -85,6 +85,42 @@ test('HTML paths do not undergo Markdown unescaping; entities decode exactly onc
     const [item] = editorImageItems(source); assert.equal(item.ref, expected);
     assert.equal(editorImageItems(alignedImageSource(source, item, 'left'))[0].ref, expected);
   }
+});
+
+test('custom image width and height persist, reset cleanly, and undo in one step', () => {
+  const source = '![产品图](assets/product.png "保留标题")';
+  const group = editorImageGroups(source)[0];
+  const change = resizeImageChanges(source, group, 0, { width: '64%', height: '280' });
+  const output = apply(source, change), [image] = editorImageItems(output);
+  assert.deepEqual(imageDimensions(image), { width: '64%', height: '280' });
+  assert.match(output, /title="保留标题"/);
+  assert.match(marked(output), /width="64%"/);
+  assert.match(marked(output), /height="280"/);
+
+  let state = EditorState.create({ doc: source, extensions: [history()] });
+  state = state.update({ changes: change, annotations: isolateHistory.of('full'), userEvent: 'input.image-layout' }).state;
+  assert.equal(undo({ state, dispatch: transaction => { state = transaction.state; } }), true);
+  assert.equal(state.doc.toString(), source);
+
+  const resetChange = resizeImageChanges(output, editorImageGroups(output)[0], 0, { width: '', height: '' });
+  const reset = apply(output, resetChange), [resetImage] = editorImageItems(reset);
+  assert.deepEqual(imageDimensions(resetImage), { width: '', height: '' });
+  assert.ok(!/\s(?:width|height)=/i.test(reset));
+  assert.match(reset, /title="保留标题"/);
+});
+
+test('resizing one image in a Markdown row keeps every sibling and validates dimensions', () => {
+  const source = '![a](a.png) ![b](b.png)';
+  const output = apply(source, resizeImageChanges(source, editorImageGroups(source)[0], 1, { width: '320px', height: '180px' }));
+  const [group] = editorImageGroups(output);
+  assert.equal(group.row, true);
+  assert.deepEqual(group.images.map(image => image.ref), ['a.png', 'b.png']);
+  assert.deepEqual(imageDimensions(group.images[1]), { width: '320', height: '180' });
+  assert.deepEqual(imageDimensions(group.images[0]), { width: '', height: '' });
+  const [item] = editorImageItems('![a](a.png)');
+  assert.throws(() => sizedImageSource('![a](a.png)', item, { width: '101%', height: '' }), /Invalid image width/);
+  assert.throws(() => sizedImageSource('![a](a.png)', item, { width: '50%', height: '5000' }), /Invalid image height/);
+  assert.throws(() => sizedImageSource('![a](a.png)', item, { width: '1;display:none', height: '' }), /Invalid image width/);
 });
 
 test('all supported storage forms expose alignment without changing their references', () => {

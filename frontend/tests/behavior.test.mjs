@@ -6,6 +6,7 @@ const renderer = await readFile(new URL('../src/renderer.js', import.meta.url), 
 const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const embeddedImagePreview = await readFile(new URL('../src/embedded-image-preview.js', import.meta.url), 'utf8');
 const aiChunkingSource = await readFile(new URL('../../ai_chunking.go', import.meta.url), 'utf8');
 
 test('opening an existing recent document updates it in place', () => {
@@ -320,13 +321,22 @@ test('More Formats uses an immediate in-app menu instead of the delayed native m
   assert.match(html, /id="overflowFormatOptions"/);
   assert.match(html, /data-format-command="formula-builder"/);
   assert.match(html, /data-format-command="diagram-builder"/);
+  assert.match(html, /data-format-command="bold-italic"[^>]*data-i18n-title="boldItalic"[^>]*data-i18n-aria-label="boldItalic"[^>]*>\s*<span class="bold-italic-label"/);
+  assert.match(html, /data-format-command="underline"[^>]*data-i18n-title="underline"[^>]*data-i18n-aria-label="underline"[^>]*>\s*<span class="underline-label"/);
+  assert.match(html, /data-format="formula-builder"[^>]*data-i18n-title="formulaBuilder"[^>]*>\s*<span data-i18n="formulaShort">公式<\/span>/);
+  assert.match(html, /data-format="diagram-builder"[^>]*data-i18n-title="diagramBuilder"[^>]*>\s*<span data-i18n="diagramShort">图表<\/span>/);
   assert.doesNotMatch(html, /<select id="moreFormatSelect"/);
   assert.match(renderer, /function openMoreFormatMenu\(\)/);
   assert.match(renderer, /menu\.classList\.remove\('hidden'\);\s*button\.setAttribute\('aria-expanded', 'true'\)/);
   assert.match(renderer, /button\.dataset\.formatCommand = element\.dataset\.formatOverflow/);
   assert.match(renderer, /els\.moreFormatButton\.addEventListener\('click'/);
+  assert.match(renderer, /formulaShort: '公式'/);
+  assert.match(renderer, /diagramShort: '图表'/);
   assert.match(renderer, /els\.moreFormatMenu\.addEventListener\('keydown'/);
   assert.match(styles, /\.more-format-menu \{[^}]*max-height:[^}]*overflow-y: auto;/);
+  assert.match(styles, /\.editor-format-bar \{[^}]*min-height: 39px;[^}]*gap: 1px;[^}]*padding: 4px 8px;/);
+  assert.match(styles, /#moreFormatButton \{[^}]*width: 92px;[^}]*min-width: 92px;/);
+  assert.match(styles, /\.editor-format-bar \.icon-format-button \{ width: 28px; min-width: 28px; padding: 0; \}/);
 });
 
 test('plain text files render without Markdown parsing and edit without Markdown syntax highlighting', () => {
@@ -373,6 +383,10 @@ test('visual table designer edits cells, structure, order, alignment and persist
 test('images support links, asset imports, drag and paste, and display scaling', () => {
   assert.match(html, /id="imageDialog"/);
   assert.match(html, /id="imageUrl"/);
+  assert.match(html, /class="image-storage-callout"[\s\S]*data-i18n="imageStorageSupportTitle"[\s\S]*data-i18n="imageStorageSupportList"/);
+  assert.match(html, /id="openImageUploadSettings"[\s\S]*data-i18n="imageUploadSettingsAction"/);
+  assert.match(renderer, /imageStorageSupportTitle: '支持 4 种图片存储方式'/);
+  assert.match(renderer, /imageStorageSupportList: '本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo'/);
   assert.match(html, /id="imageAltInput"/);
   assert.match(html, /id="imageWidth" type="range" min="10" max="100" step="5"/);
   assert.match(html, /id="pickLocalImage"/);
@@ -398,6 +412,11 @@ test('images support links, asset imports, drag and paste, and display scaling',
   assert.match(mainSource, /savePastedImage: \(filePath, dataURL\) => desktopRuntime \? Backend\.SavePastedImage\(filePath, dataURL\)/);
   assert.match(styles, /\.image-dialog-fields input:focus \{ border-color: var\(--accent\);/);
   assert.match(styles, /\.image-width-field input\[type="range"\] \{ height: 24px; padding: 0; border: 0; accent-color: var\(--accent-strong\);/);
+  assert.match(styles, /\.cm-embedded-image > \.cm-image-tools,[\s\S]*opacity: 0; visibility: hidden; pointer-events: none;/);
+  assert.match(styles, /\.cm-embedded-image:hover > \.cm-image-tools,[\s\S]*\.cm-image-card\.is-size-open > \.cm-image-size-tools \{ opacity: 1; visibility: visible; pointer-events: auto;/);
+  assert.match(embeddedImagePreview, /card\.tabIndex = 0; card\.setAttribute\('role', 'group'\)/);
+  assert.match(embeddedImagePreview, /if \(!event\.target\.closest\('button, input, select, a'\)\) card\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(embeddedImagePreview, /card\.classList\.toggle\('is-size-open'\)/);
 });
 
 test('the update dialog offers in-app download and apply with progress', () => {
@@ -435,7 +454,8 @@ test('Word, HTML, and PDF export are available through the unified Export docume
   assert.match(renderer, /\[mathOnly, \.\.\.mathOnly\.querySelectorAll\('semantics'\)\]/);
   assert.match(renderer, /child\.nodeType === 3 && child\.textContent\.trim\(\)/);
   assert.match(renderer, /formula\.replaceChildren\(mathOnly\)/);
-  assert.match(renderer, /formula\.replaceChildren\(\)/);
+  assert.match(renderer, /formula\.replaceChildren\(formula\.ownerDocument\.createTextNode\(formulaFallbackSource\(formula\)\)\)/);
+  assert.doesNotMatch(renderer, /formula\.replaceChildren\(\)/);
   assert.match(html, /id="pdfTutorialDialog"/);
   assert.match(html, /Microsoft Print to PDF/);
   assert.match(html, /data-i18n="pdfSaveAsPDF"/);
@@ -541,7 +561,7 @@ test('code blocks let the user pick a common programming language', () => {
 test('LaTeX math, chemistry, and numbered equations are available in preview and editor formats', () => {
   assert.match(renderer, /import 'katex\/dist\/katex\.min\.css'/);
   assert.match(renderer, /extensions: \[highlightExtension, \.\.\.mathExtensions\]/);
-  assert.match(html, /data-format-command="formula-builder" data-i18n="formulaBuilder"/);
+  assert.match(html, /data-format-command="formula-builder" data-i18n-title="formulaBuilder"/);
   assert.doesNotMatch(html, /value="(?:inline-math|math-block|chemical-formula|numbered-math|math-guide)"/);
   assert.match(renderer, /command === 'formula-builder'/);
   assert.match(renderer, /MATH_GUIDE_URL = 'https:\/\/qm\.ssssa\.cn\/guides\/formulas\/'/);
@@ -557,22 +577,27 @@ test('LaTeX math, chemistry, and numbered equations are available in preview and
   assert.match(html, /id="formulaFields"/);
   assert.match(html, /id="formulaPreview"/);
   assert.match(renderer, /FORMULA_DISCIPLINES/);
-  assert.match(renderer, /formulaTemplatesForDiscipline/);
+  assert.match(renderer, /searchFormulaTemplates/);
   assert.match(renderer, /openFormulaDialog\(\)/);
   assert.match(renderer, /buildFormulaMarkdown\(formulaWizardState\.mode, expression/);
   assert.match(renderer, /function chooseFormulaTemplate\(templateId\)[\s\S]*els\.formulaBuilderPanel\.scrollTop = 0;/);
-  assert.match(renderer, /function chooseFormulaDiscipline\(discipline\)[\s\S]*els\.formulaBuilderPanel\.scrollTop = 0;/);
-  assert.match(html, /data-format-command="formula-builder" data-i18n="formulaBuilder">学科公式 🔥<\/button>/);
+  const filterSubject = renderer.slice(renderer.indexOf('function chooseFormulaDiscipline('), renderer.indexOf('\nfunction updateFormulaSearch('));
+  assert.match(filterSubject, /renderFormulaTemplateList\(\)/);
+  assert.doesNotMatch(filterSubject, /renderFormulaFields|templateId\s*=/);
+  assert.match(html, /data-format-command="formula-builder" data-i18n-title="formulaBuilder" title="学科公式"><span data-i18n="formulaShort">公式<\/span><\/button>/);
   assert.match(renderer, /formulaBuilder: '学科公式 🔥'/);
   assert.match(styles, /\.formula-dialog-layout \{ display: grid;/);
   assert.match(styles, /\.formula-preview \.katex-display \{ width: 100%; margin: 0; \}/);
   assert.match(html, /<textarea id="formulaMarkdownSource"[^>]*data-i18n-aria-label="generatedMarkdown"/);
   assert.match(renderer, /els\.formulaMarkdownSource\.addEventListener\('input', updateFormulaPreviewFromMarkdown\)/);
   assert.match(renderer, /const markdownSource = els\.formulaMarkdownSource\.value\.trim\(\)/);
-  assert.match(html, /id="editFormulaButton" class="edit-flowchart-button hidden"/);
+  assert.doesNotMatch(html, /id="editFormulaButton"/);
   assert.match(renderer, /mode: 'inline',[\s\S]*editRange: null/);
-  assert.match(renderer, /activeFormulaMatch = activeFlowchartFence \? null : findFormulaAt/);
-  assert.match(renderer, /changes: \{ from: editRange\.from, to: editRange\.to, insert: markdownSource \}/);
+  assert.doesNotMatch(renderer, /editFormulaButton|activeFormulaMatch/);
+  assert.match(renderer, /changes: \{ from: range\.from, to: range\.to, insert: replacement \}/);
+  assert.match(renderer, /formulaEditIsCurrent\(context/);
+  assert.match(renderer, /previewFormulaContexts\.get\(formula\)/);
+  assert.doesNotMatch(renderer, /sourceFormulas\[previewFormulas\.indexOf/);
   assert.match(renderer, /els\.editorPreview\.addEventListener\('dblclick'/);
   assert.match(styles, /\.markdown-body \.math-block \{[^}]*overflow-x: auto;/);
 });
@@ -938,7 +963,7 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(styles, /\.ai-review-suggestions \{[^}]*flex: 0 0 auto;[^}]*overflow: visible/);
   assert.match(styles, /\.ai-review-comparison pre \{[^}]*height: auto;[^}]*max-height: 300px;[^}]*overflow-y: auto/);
   assert.match(styles, /\.ai-edit-button \{[^}]*color: var\(--accent-strong\)/);
-  assert.match(styles, /\.editor-format-bar #aiToolbarButton \{[^}]*width: 57px;[^}]*color: var\(--accent-strong\)/);
+  assert.match(styles, /\.editor-format-bar #aiToolbarButton \{[^}]*width: 49px;[^}]*color: var\(--accent-strong\)/);
   assert.match(styles, /\.ai-toolbar-menu \{[^}]*width: 190px;[^}]*z-index: 90/);
   assert.match(styles, /\.ai-toolbar-menu \.ai-toolbar-generate \{[^}]*background: var\(--accent-strong\);[^}]*font-weight: 750/);
   assert.match(styles, /\.ai-request-settings \{[^}]*grid-template-columns: minmax\(220px, \.32fr\) minmax\(0, 1fr\) auto;[^}]*align-items: start/);
