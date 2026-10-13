@@ -4,7 +4,10 @@ export const STRUCTURED_VISUAL_DIAGRAM_IDS = Object.freeze([
 ]);
 
 const text = value => String(value ?? '').trim();
-const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+const number = value => {
+  if (!['string', 'number'].includes(typeof value) || String(value).trim() === '' || !Number.isFinite(Number(value))) throw new Error('invalid-number');
+  return Number(value);
+};
 const safeMermaidText = value => text(value).replace(/[\r\n]+/gu, ' ').replaceAll('"', '＂').replaceAll('[', '［').replaceAll(']', '］');
 const safeId = (value, fallback) => text(value).replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^\d/u, '_$&') || fallback;
 
@@ -125,8 +128,9 @@ function parseECharts(templateId, source) {
   if (templateId === 'doughnut-chart') {
     if (option?.series?.length !== 1 || option.series[0]?.type !== 'pie') throw new Error('unsupported-series');
     const data = option?.series?.[0]?.data;
-    if (!Array.isArray(data) || data.some(item => !item || typeof item.name !== 'string' || typeof item.value !== 'number')) throw new Error('unsupported-data');
-    return { originalOption: option, settings: { title, seriesName: text(option?.series?.[0]?.name) }, rows: data.map(item => ({ originalItem: item, label: text(item.name), value: item.value })) };
+    if (!Array.isArray(data) || data.some(item => !item || typeof item.name !== 'string' || typeof item.value !== 'number' || !Number.isFinite(item.value))) throw new Error('unsupported-data');
+    if (new Set(data.map(item => item.name)).size !== data.length) throw new Error('ambiguous-names');
+    return { originalOption: option, settings: { title, seriesName: text(option?.series?.[0]?.name) }, rows: data.map(item => ({ originalItem: item, label: item.name, value: item.value })) };
   }
   const expectedType = templateId === 'line-chart' ? 'line' : 'bar';
   if (option?.series?.length !== 1 || option.series[0]?.type !== expectedType || option?.xAxis?.type !== 'category') throw new Error('unsupported-series');
@@ -177,7 +181,7 @@ export function parseStructuredDiagram(templateId, source) {
     else if (templateId === 'mindmap') model = parseMindmap(source);
     else if (templateId === 'gantt') model = parseGantt(source);
     else if (['bar-chart', 'line-chart', 'doughnut-chart'].includes(templateId)) model = parseECharts(templateId, source);
-    if (model) return { valid: !model.unsupportedLines?.length, model, unsupportedLines: model.unsupportedLines || [] };
+    if (model) return { valid: !model.unsupportedLines?.length && validateStructuredDiagram(templateId, model).valid, model, unsupportedLines: model.unsupportedLines || [] };
   } catch (error) {
     return { valid: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -218,7 +222,7 @@ function serializeState(model) {
 function serializePie(model) {
   const lines = [`pie${model.settings.showData ? ' showData' : ''}`];
   if (model.settings.title) lines.push(`    title ${safeMermaidText(model.settings.title)}`);
-  model.rows.forEach(row => { if (row.label && number(row.value) > 0) lines.push(`    "${safeMermaidText(row.label)}" : ${number(row.value)}`); });
+  model.rows.forEach(row => lines.push(`    "${safeMermaidText(row.label)}" : ${decimalNumber(number(row.value))}`));
   return lines.join('\n');
 }
 
@@ -259,14 +263,52 @@ function serializeGantt(model) {
   return lines.join('\n');
 }
 
+// Mermaid pie numbers do not accept scientific notation.
+function decimalNumber(value) {
+  const raw = String(value);
+  if (!/e/i.test(raw)) return raw;
+  const [mantissa, exponent] = raw.split(/e/i);
+  const digits = mantissa.replace('.', '');
+  const point = (mantissa.indexOf('.') < 0 ? mantissa.length : mantissa.indexOf('.')) + Number(exponent);
+  return point <= 0 ? '0.' + '0'.repeat(-point) + digits : point >= digits.length ? digits + '0'.repeat(point - digits.length) : digits.slice(0, point) + '.' + digits.slice(point);
+}
+
+function syncLegendNames(option, changes, added = []) {
+  const legends = option.legend ? (Array.isArray(option.legend) ? option.legend : [option.legend]) : [];
+  for (const legend of legends) {
+    if (Array.isArray(legend.data)) {
+      legend.data = legend.data.flatMap(item => {
+        const name = typeof item === 'string' ? item : item?.name;
+        if (!changes.has(name)) return [item];
+        const replacement = changes.get(name);
+        return replacement === null ? [] : [typeof item === 'string' ? replacement : { ...item, name: replacement }];
+      });
+      for (const name of added) if (!legend.data.some(item => (typeof item === 'string' ? item : item?.name) === name)) legend.data.push(name);
+    }
+    if (legend.selected && typeof legend.selected === 'object') {
+      // Build a fresh map so swaps, collisions and names such as __proto__ do
+      // not mutate an unrelated key or inherit prototype properties.
+      legend.selected = Object.fromEntries(Object.entries(legend.selected).flatMap(([name, value]) => {
+        const replacement = changes.has(name) ? changes.get(name) : name;
+        return replacement === null ? [] : [[replacement, value]];
+      }));
+    }
+  }
+}
+
 function serializeECharts(templateId, model) {
   if (model.originalOption) {
     const option = JSON.parse(JSON.stringify(model.originalOption));
     option.title = { ...(option.title || {}), text: text(model.settings.title) };
+    const oldSeriesName = option.series[0].name;
     option.series[0].name = text(model.settings.seriesName);
     if (templateId === 'doughnut-chart') {
-      option.series[0].data = model.rows.map(row => ({ ...(row.originalItem || {}), name: text(row.label), value: number(row.value) }));
+      const changes = new Map(option.series[0].data.map(item => [item.name, null]));
+      for (const row of model.rows) if (row.originalItem) changes.set(row.originalItem.name, String(row.label));
+      syncLegendNames(option, changes, model.rows.filter(row => !row.originalItem).map(row => String(row.label)));
+      option.series[0].data = model.rows.map(row => ({ ...(row.originalItem || {}), name: String(row.label), value: number(row.value) }));
     } else {
+      if (oldSeriesName !== option.series[0].name) syncLegendNames(option, new Map([[oldSeriesName, option.series[0].name]]));
       option.xAxis.data = model.rows.map(row => text(row.label));
       option.yAxis = { ...(option.yAxis || {}), name: text(model.settings.yAxisName) };
       option.series[0].data = model.rows.map(row => number(row.value));
@@ -282,6 +324,8 @@ function serializeECharts(templateId, model) {
 }
 
 export function serializeStructuredDiagram(templateId, model) {
+  const validation = validateStructuredDiagram(templateId, model);
+  if (!validation.valid) throw Object.assign(new Error(validation.code), validation);
   if (templateId === 'sankey') return serializeSankey(model);
   if (templateId === 'sequence') return serializeSequence(model);
   if (templateId === 'timeline') return serializeTimeline(model);
@@ -292,6 +336,30 @@ export function serializeStructuredDiagram(templateId, model) {
   if (templateId === 'gantt') return serializeGantt(model);
   if (['bar-chart', 'line-chart', 'doughnut-chart'].includes(templateId)) return serializeECharts(templateId, model);
   return '';
+}
+
+export function validateStructuredDiagram(templateId, model) {
+  if (!model?.rows || !model.settings) return { valid: false, code: 'invalid-model' };
+  const statistical = ['pie', 'doughnut-chart', 'bar-chart', 'line-chart', 'sankey'].includes(templateId);
+  if (statistical && !model.rows.length) return { valid: false, code: 'empty-rows' };
+  const fields = structuredDiagramDefinition(templateId).columns;
+  const names = new Set();
+  for (const [rowIndex, row] of model.rows.entries()) {
+    for (const field of fields) {
+      const fail = code => ({ valid: false, code, row: rowIndex, field: field.key });
+      if (field.type === 'number') {
+        let value;
+        try { value = number(row[field.key]); } catch { return fail('invalid-number'); }
+        if (field.min !== undefined && value < field.min || field.max !== undefined && value > field.max) return fail('number-range');
+      } else if (statistical && !text(row[field.key])) return fail('empty-label');
+    }
+    if (['pie', 'doughnut-chart'].includes(templateId)) {
+      const name = templateId === 'pie' ? safeMermaidText(row.label) : String(row.label);
+      if (names.has(name)) return { valid: false, code: 'duplicate-label', row: rowIndex, field: 'label' };
+      names.add(name);
+    }
+  }
+  return { valid: true };
 }
 
 export function structuredDiagramDefinition(templateId, locale = 'zh') {

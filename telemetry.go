@@ -11,6 +11,7 @@ import (
 	goruntime "runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -298,10 +299,7 @@ func buildSanitizedErrorLog(source, message, stack string) string {
 		parts = append(parts, stack)
 	}
 	result := strings.TrimSpace(strings.Join(parts, "\n"))
-	if len(result) > 4096 {
-		result = result[:4096]
-	}
-	return result
+	return truncateDiagnosticText(result, 4096)
 }
 
 func sanitizeErrorText(value string, limit int) string {
@@ -326,10 +324,22 @@ func sanitizeErrorText(value string, limit int) string {
 	value = labeledSecretPattern.ReplaceAllString(value, "$1$2[已隐藏]")
 	value = commonSecretPattern.ReplaceAllString(value, "[已隐藏]")
 	value = strings.TrimSpace(value)
-	if len(value) > limit {
-		value = value[:limit]
+	return truncateDiagnosticText(value, limit)
+}
+
+func truncateDiagnosticText(value string, limit int) string {
+	const marker = " [truncated]"
+	if len(value) <= limit {
+		return value
 	}
-	return value
+	if limit < len(marker) {
+		return ""
+	}
+	end := limit - len(marker)
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end] + marker
 }
 
 func filepathSlash(value string) string {

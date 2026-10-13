@@ -14,8 +14,8 @@ test('formula actions stay attached to each equation without the duplicate float
   const source = await readFile(new URL('../src/editor-formula-preview.js', import.meta.url), 'utf8');
   const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.doesNotMatch(html + renderer, /editFormulaButton|activeFormulaMatch/);
-  assert.match(html, /id="editFlowchartButton"/);
-  assert.match(renderer, /if \(!els\.editFlowchartButton \|\| !codeEditor \|\| !state\.editing\)/);
+  assert.doesNotMatch(html + renderer, /editFlowchartButton|activeFlowchartFence/);
+  assert.match(renderer, /editorDiagramPreview, diagramPreviewContext\.of/);
   assert.match(source, /for \(const action of \['edit', 'source'\]\)/);
   assert.match(source, /root\.ondblclick =/);
   assert.match(source, /event\.key === 'Enter'/);

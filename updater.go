@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -113,7 +114,7 @@ func (a *App) downloadFile(url, destination string) error {
 	if !isOfficialWebsiteURL(url) {
 		return errors.New("update download URL is not hosted by the official website")
 	}
-	return a.downloadFileFromURL(url, destination, officialHTTPClient(30 * time.Minute))
+	return a.downloadFileFromURL(url, destination, officialHTTPClient(30*time.Minute))
 }
 
 func (a *App) downloadFileFromURL(url, destination string, client *http.Client) error {
@@ -125,7 +126,7 @@ func (a *App) downloadFileFromURL(url, destination string, client *http.Client) 
 
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("download update: %w", err)
+		return updateDownloadError(err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -158,11 +159,25 @@ func (a *App) downloadFileFromURL(url, destination string, client *http.Client) 
 			break
 		}
 		if readErr != nil {
-			return readErr
+			return updateDownloadError(readErr)
 		}
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync downloaded update: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close downloaded update: %w", err)
 	}
 	a.emitProgress(written, total)
 	return nil
+}
+
+func updateDownloadError(err error) error {
+	var networkError net.Error
+	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &networkError) && networkError.Timeout() {
+		return fmt.Errorf("UPDATE_DOWNLOAD_TIMEOUT: %w", err)
+	}
+	return fmt.Errorf("download update: %w", err)
 }
 
 func (a *App) emitProgress(done, total int64) {

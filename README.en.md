@@ -20,19 +20,25 @@
   </p>
 </div>
 
-Unreleased fixes: Windows cloud-folder saves no longer create hard links, while failed saves restore the original or retain recovery material. Diagram/formula scanning handles very long lines without whole-line regular expressions that can exhaust the WebView stack. AI operations support up to 2,000,000 Unicode characters and explain size, empty-answer, truncation and provider-filter errors before applying output. Responses exceeding 8 MiB, unterminated SSE or provider errors stop processing; partial output cannot be applied. Diagnostics hide complete paths and retain only fixed safe error categories. File opening remains limited to 64 MiB. For occupied or unwritable export targets, close the occupying app or select a writable folder and a new filename.
+Reliability fixes: Windows cloud-folder saves no longer create hard links, while failed saves restore the original or retain recovery material. Diagram/formula scanning handles very long lines without whole-line regular expressions that can exhaust the WebView stack. AI operations support up to 2,000,000 Unicode characters and explain size, empty-answer, truncation and provider-filter errors before applying output. Responses exceeding 8 MiB, unterminated SSE or provider errors stop processing; partial output cannot be applied. Diagnostics hide complete paths and retain only fixed safe error categories. File opening remains limited to 64 MiB. For occupied or unwritable export targets, close the occupying app or select a writable folder and a new filename.
 
 Conflict recovery retains the original revision and paused state across restarts. Legacy snapshots require comparison before saving. Backups remain intact while conflicts are unresolved, and outdated merge drafts cannot be applied to newer edits without restarting the merge explicitly.
 
-Unreleased save protection: final publication never overwrites a concurrently recreated destination. Windows exclusively verifies the original; unavailable protection is treated as a conflict. Failed saves restore the original or retain recovery material. macOS/Linux retain hidden `.quillite-save-recovery-*` original-file backups beside the document to preserve late writes through other applications' open handles. These consume disk space and are not automatically cleaned. Unsupported filesystem operations fail closed; save a new copy instead.
+Reliability protection: virtual dropped files without disk paths receive save-first guidance; missing startup files do not block opening another document. Display-extension `isEmpty` failures fall back to source editing for the current session with text, save and undo retained; other initialization failures can be retried. Timed-out updates offer retry/full-installer guidance and never apply incomplete downloads.
 
-Unreleased: More → Document tools includes basic Markdown checks, folder text search, batch replacement previews, a safety center, templates and diagnostic export. Checks never edit text; templates create new documents; recovery/history inspection is read-only and exports new copies. Diagnostics contain version, platform, status flags and session error-category counts, never content, paths or keys, and are not uploaded.
+Opt-in error logs include the frontend asset fingerprint, editor failure stage and source-fallback mode, with explicit truncation markers. No document content, paths, credentials or activity history are added.
+
+New diagrams appear rendered with source collapsed and the caret on the following blank line. Show source remains available, and an explicitly selected global source mode is respected.
+
+Save protection: final publication never overwrites a concurrently recreated destination. Windows exclusively verifies the original; unavailable protection is treated as a conflict. Failed saves restore the original or retain recovery material. macOS/Linux retain hidden `.quillite-save-recovery-*` original-file backups beside the document to preserve late writes through other applications' open handles. These consume disk space and are not automatically cleaned. Unsupported filesystem operations fail closed; save a new copy instead.
+
+More → Document tools includes basic Markdown checks, folder text search, batch replacement previews, a safety center, templates and diagnostic export. Checks never edit text; templates create new documents; recovery/history inspection is read-only and exports new copies. Diagnostics contain version, platform, status flags and session error-category counts, never content, paths or keys, and are not uploaded.
 
 Search is case-sensitive literal disk search with relative-path and file-type filters, excluding the open document. Limits: 800 files, five directory levels, 32 MiB total, 2 MiB per file and 500 matching lines. Batch replacement is limited to 40 files and 256 KiB per file; previews expire after ten minutes and require explicit selection and confirmation. History failures, changed links or revision conflicts skip the affected file without automatic retries. Up to 20 custom templates (64 KiB each) support `{{title}}` and `{{date}}`.
 
 Save receipts reflect only the bytes written by that operation, so later external changes still require comparison rather than being acknowledged by the next autosave. Manual merges in reading mode also update recovery backups without requiring an initialized editor.
 
-Unreleased: saving conflicts display disk and editor versions side by side. Keeping edits pauses autosave; using the disk version updates only the editor and can be undone. Save Copy requires a new filename. Manual merges are applied to the editor first, then explicitly confirmed on the next save with disk revision revalidation. Deleted or unreadable disk files never replace the current buffer with empty text.
+saving conflicts display disk and editor versions side by side. Keeping edits pauses autosave; using the disk version updates only the editor and can be undone. Save Copy requires a new filename. Manual merges are applied to the editor first, then explicitly confirmed on the next save with disk revision revalidation. Deleted or unreadable disk files never replace the current buffer with empty text.
 
 AI settings use consistent cross-platform provider and model pickers in provider/endpoint, API key, then model order. Entering an endpoint and API key automatically discovers account models without requiring the key to be saved first; the draft key is used only for that request and is not written to preferences. Alibaba Cloud workspace endpoints are translated to their dedicated model-list API automatically. Connection diagnostics report endpoint, credential, model-list, and real model-request results separately. Successful model lists are cached for seven days and shown with a timestamp during temporary API failures. Before a DeepSeek key is saved, built-in candidates are shown without claiming account access. Custom OpenAI-compatible endpoints do not assume a default model: users choose a discovered model or enter the service's actual model ID. The reading view can generate a closable AI brief in place beneath the document actions, showing live progress before a one-sentence overview and three to five key points designed for a 5–10 second read; long documents are summarized by section and consolidated. The editor AI menu provides generate, edit, proofread, continue, translate, condense, expand, and custom workflows. Every workflow has a task-specific prompt; Continue and Expand optionally accept a target length, and Condense optionally accepts a retention ratio or target size. Leaving this field blank applies no limit. Translation supports the same 30 targets in both the interface and backend, each shown as its native label followed by a Chinese-language annotation. AI Edit streams generated text as it arrives and offers per-change acceptance or original-text retention before applying once; closing an active AI operation also cancels its network request.
 
@@ -93,6 +99,19 @@ The macOS build follows the computer's light/dark appearance automatically while
 The macOS installer image carries a metadata no-index marker. On launch, the installed app also verifies the installer layout and Bundle Identifier before safely ejecting a still-mounted official DMG, preventing its bundled copy from appearing as a second Quillite Markdown icon.
 
 Documents and folders opened through macOS system panels, Finder, or file associations are persisted as native security-scoped bookmarks. Recent, Favorites, and Explorer silently restore read and edit access after relaunch and refresh stale bookmarks automatically. A preselected system panel is needed only for legacy records or when an unsigned update changes the app identity.
+
+## Diagrams inside the editor
+
+Statistical chart editing preserves zero values and identifies invalid numeric fields by row, retaining the draft and last valid preview until corrected. Category/series renames synchronize legends and selection state; waterfall examples use consistent running totals. Saving renders the exact draft first and retains the original if validation fails or the document/draft changes during the check.
+
+Render Mermaid/ECharts diagrams directly in the editor. Selection, hover or keyboard focus exposes local Edit/Show source actions; double-click or Enter opens in-place editing. Pie and other supported diagrams prioritize title/category/value fields, while complex syntax retains source editing. Source toggles preserve text, copy retains Markdown, and deletion/changes are individually undoable. Cancel, unchanged saves and stale-document checks preserve source and drafts. More → Editor layout remembers rendered/source display, including editor-only mode. Render only mounted near-visible diagrams, capped at 64 diagrams and 20,000 characters each; documents over 300,000 characters and ambiguous quote/list containers retain source. Rendering failures show guidance and original source. File-save, installer and uninstaller logic remain unchanged.
+
+## What's new in 2.7.8
+
+- Render Mermaid / ECharts diagrams inside the editor and collapse source after insertion, with local editing, source controls, undo/redo and editor-only mode.
+- Preserve zero values, validate chart data, synchronize legends and render before saving; invalid or stale drafts never replace the original.
+- Explain Windows virtual-file drops and missing startup files. Add source-editing recovery for display-extension initialization failures while root-cause diagnosis continues.
+- Improve update-timeout guidance, download flush checks and opt-in diagnostics without weakening save, install or uninstall safety boundaries.
 
 ## What's new in 2.7.7
 
@@ -167,7 +186,7 @@ Equation validation uses the final output mode. Save and Ctrl/⌘+Enter share va
 
 Preview and saving also verify that the final Markdown parses as the same complete equation. If unescaped dollars inside an inline equation conflict with its outer delimiters, the draft is retained and submission is blocked. Choose Display output or wrap the full inline equation in `\(...\)` under Advanced. Equation content is never silently escaped or rewritten.
 
-Equation actions stay beside their equation: rendered equations show Edit/Show source on hover or focus, and support double-click or Enter editing. The duplicate top-right floating edit button is removed. Expanded source retains its Hide source action.
+Equation actions stay beside their equation: rendered equations show Edit/Show source text buttons on hover or focus, and support double-click or Enter editing. Expanded source retains its Hide source action.
 
 ## What's new in 2.6.0
 
@@ -347,7 +366,7 @@ Version 2.0 and later replace Electron with Go and Wails while retaining the exi
 - `packaging/`: Linux desktop integration and package metadata.
 - `scripts/`: repeatable project asset-maintenance scripts.
 
-New Markdown documents do not require a location prompt. On macOS they are always stored in the user's `Documents/Quillite Markdown` folder so application upgrades cannot overwrite them. Portable Windows and Linux builds retain the application-directory preference with a Documents fallback. Saving a new document under another name removes its auto-created draft and duplicate Recent entry. Local images referenced by absolute or relative paths are loaded securely through the Go backend for reliable previewing.
+New Markdown documents do not require a location prompt. On macOS they are always stored in the user's `Documents/Quillite Markdown` folder so application upgrades cannot overwrite them. Portable Windows and Linux builds retain the application-directory preference with a Documents fallback. The first manual save lets you choose a name and folder. Save As transfers draft identity and removes the duplicate Recent entry, but retains the original draft file. Local images referenced by absolute or relative paths are loaded securely through the Go backend for reliable previewing.
 
 ## Downloads
 

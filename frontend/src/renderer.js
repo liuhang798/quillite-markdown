@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import { createRuntimeDiagnostics } from './runtime-diagnostics.js';
 import DOMPurify from 'dompurify';
 import 'katex/dist/katex.min.css';
 import './body-typography.css';
@@ -8,8 +9,9 @@ import { cancelMermaidRendering, convertMermaidDiagramsToImages, refreshMermaidD
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
 import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory } from './diagram-templates.js';
 import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, layoutFlowchart, parseFlowchartSource, removeFlowchartEdge, removeFlowchartNode, serializeFlowchart } from './flowchart-designer.js';
-import { hasStructuredVisualEditor, parseStructuredDiagram, serializeStructuredDiagram, structuredDiagramDefinition } from './structured-diagram-editor.js';
-import { findEditableDiagramFenceAt, diagramReplacementMarkdown } from './diagram-editing.js';
+import { hasStructuredVisualEditor, parseStructuredDiagram, serializeStructuredDiagram, structuredDiagramDefinition, validateStructuredDiagram } from './structured-diagram-editor.js';
+import { validateDiagramRendering } from './diagram-validation.js';
+import { diagramReplacementMarkdown } from './diagram-editing.js';
 import { aiModelOptions } from './ai-model-options.js';
 import { exceedsAIInputLimit, protectEmbeddedImages, aiInputCharacterCount } from './ai-input.js';
 import { transformMarkdownImages } from './portable-images.js';
@@ -56,6 +58,7 @@ const EXPORT_FORMAT_DESCRIPTIONS = {
   mediawiki: 'exportDescriptionMediawiki', custom: 'exportDescriptionCustom', 'markdown-portable': 'exportDescriptionPortable'
 };
 const NEW_FILE_COOLDOWN_MS = 3000;
+const runtimeDiagnostics = createRuntimeDiagnostics(import.meta.url);
 let codeEditor;
 let embeddedImagePreview;
 let imagePreviewContext;
@@ -63,8 +66,14 @@ let editorFormulaPreview;
 let formulaPreviewContext;
 let setFormulaDisplayEffect;
 let editorFormulaField;
+let editorDiagramPreview;
+let diagramPreviewContext;
+let editorDiagramField;
+let setDiagramDisplayEffect;
+let refreshDiagramThemeEffect;
 let updateImagePreviewDirectory;
 let editorExtensions = [];
+let editorSourceFallback = false;
 let basicSetup;
 let Compartment;
 let StateEffect;
@@ -77,6 +86,7 @@ let keymap;
 let scrollPastEnd;
 let undo;
 let undoDepth;
+let isolateHistory;
 let closeSearchPanel;
 let openSearchPanel;
 let searchPanelOpen;
@@ -250,6 +260,7 @@ const state = {
   docWidth: normalizeDocWidth(localStorage.getItem('docWidth')),
   editorLayout: normalizeEditorLayout(localStorage.getItem('editorLayout')),
   formulaDisplay: localStorage.getItem('formulaDisplay') === 'source' ? 'source' : 'preview',
+  diagramDisplay: localStorage.getItem('diagramDisplay') === 'source' ? 'source' : 'preview',
   lastSplitLayout: localStorage.getItem('lastSplitLayout') === 'editor-left' ? 'editor-left' : 'preview-left',
   language: localStorage.getItem('language') === 'en' ? 'en' : 'zh-CN',
   spellcheckEnabled: localStorage.getItem('spellcheckEnabled') !== 'false',
@@ -354,7 +365,7 @@ function reportSilentError(error, source = 'frontend') {
     if (isKnownMacUpdateMigrationError(error)) return;
     if (isExpectedOperationalError(error, source)) return;
     const message = diagnosticErrorMessage(error);
-    const stack = error instanceof Error ? error.stack || '' : '';
+    const stack = runtimeDiagnostics.format(error) + '\n' + (error instanceof Error ? error.stack || '' : '');
     Promise.resolve(window.quilliteMarkdown?.reportErrorLog?.(source, message, stack)).catch(() => undefined);
   } catch {
     // 产品改进计划必须与主功能完全隔离，连错误上报自身的异常也静默忽略。
@@ -404,6 +415,7 @@ const translations = {
     formulaInlineMultiline: '行内公式不能包含换行，请选择“块级公式”或“编号公式”；源码已保留。',
     formulaDelimiterInvalid: '公式分隔符与内容冲突，未写入文档。请改用块级公式，或在高级源码中使用 \\(...\\) 包住完整行内公式；输入已保留。',
     formulaDisplay: '公式显示', formulaDisplayPreview: '公式排版', formulaDisplaySource: '公式源码',
+    diagramDisplay: '图表显示', diagramDisplayPreview: '显示图表', diagramDisplaySource: '图表源码',
     formulaVariableInvalid: '变量或函数名称请使用单个字母、LaTeX 符号或带下标的名称（如 x、\\theta、x_1），不要填写括号或运算式。复杂表达式请使用自定义公式。',
     formulaVariablesInvalid: '请填写 1–16 个逗号分隔的变量，不能有空项。',
     formulaSearchPlaceholder: '名称、学科或关键词', formulaSearchLabel: '搜索公式模板', formulaSearchClear: '清除',
@@ -454,7 +466,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 2.7.7', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 2.7.8', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -479,6 +491,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     formulaInlineMultiline: 'Inline equations cannot contain newlines. Choose Display or Numbered; your source has been preserved.',
     formulaDelimiterInvalid: 'Equation delimiters conflict with the content; nothing was written. Choose Display output or wrap the complete inline equation in \\(...\\) under Advanced. Your input is retained.',
     formulaDisplay: 'Equation display', formulaDisplayPreview: 'Rendered equations', formulaDisplaySource: 'Equation source',
+    diagramDisplay: 'Diagram display', diagramDisplayPreview: 'Rendered diagrams', diagramDisplaySource: 'Diagram source',
     formulaVariableInvalid: 'Use a single letter, LaTeX symbol or subscripted name (e.g. x, \\theta, x_1), without parentheses or operations. Use Custom formula for complex expressions.',
     formulaVariablesInvalid: 'Enter 1–16 comma-separated variables without empty entries.',
     formulaSearchPlaceholder: 'Name, subject or keyword', formulaSearchLabel: 'Search formula templates', formulaSearchClear: 'Clear',
@@ -529,7 +542,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 2.7.7', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 2.7.8', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -568,7 +581,14 @@ Object.assign(translations['zh-CN'], {
   canvasMindmapHint: '选择主题后添加子主题或同级主题；连接模式下先点父主题再点子主题；拖动空白处移动画布。',
   editDiagramVisually: '在画布中编辑图表',
   editThisDiagram: '编辑此图表',
+  editorInitializationFailed: '编辑器加载失败，文档内容已保留。请再次点击“编辑”重试。',
+  editorSourceRecovery: '编辑器显示扩展异常，已切换为源码编辑。本次运行暂不显示行内图片、公式和图表；正文、保存及撤回仍可使用。',
+  virtualFileDropUnsupported: '此拖放内容没有可用的本地文件路径。请先保存到本地后再拖入，图片也可以复制后粘贴。',
+  updateTimedOut: '更新下载超时，当前版本未替换。请检查网络后重试，或点击“官网下载”获取完整安装包。',
   diagramSourceChanged: '文档或图表内容已变化，请重新打开图表后编辑。',
+  diagramChecking: '正在检查…', diagramDraftChanged: '检查期间内容已变化，请再次保存。', diagramDataEmpty: '请至少保留一行有效数据。',
+  diagramDataError: '第 {row} 行「{field}」：{reason}。修正前保留上次有效预览。',
+  diagramNumberError: '请输入有效且有限的数字', diagramRangeError: '数字超出允许范围', diagramLabelError: '请输入名称', diagramDuplicateError: '分类名称不能重复',
   flowchartVisualSafeHint: '操作会自动生成兼容的图表源码',
   flowchartEditModeAria: '图表编辑方式',
   diagramVisualUnsupported: '当前源码包含循环、注释、元数据或其他高级配置，请继续使用源码模式，避免内容丢失。',
@@ -598,7 +618,14 @@ Object.assign(translations.en, {
   canvasMindmapHint: 'Select a topic to add a child or sibling; in Connect mode, click the parent then child; drag empty space to pan.',
   editDiagramVisually: 'Edit diagram on canvas',
   editThisDiagram: 'Edit this diagram',
+  editorInitializationFailed: 'The editor could not load. Your document is retained. Click Edit again to retry.',
+  editorSourceRecovery: 'A display extension failed. Source editing is available for this session; inline image, formula and diagram previews are paused. Text, saving and undo remain available.',
+  virtualFileDropUnsupported: 'This dropped item has no usable local file path. Save it locally before dropping it, or copy and paste the image.',
+  updateTimedOut: 'The update timed out; the current version was not replaced. Check your network and retry, or download the full installer from the official website.',
   diagramSourceChanged: 'The document or diagram has changed. Reopen the diagram to edit it.',
+  diagramChecking: 'Checking…', diagramDraftChanged: 'The draft changed during validation. Save again.', diagramDataEmpty: 'Keep at least one valid data row.',
+  diagramDataError: 'Row {row}, {field}: {reason}. The last valid preview is retained until corrected.',
+  diagramNumberError: 'enter a valid finite number', diagramRangeError: 'number is outside the allowed range', diagramLabelError: 'enter a name', diagramDuplicateError: 'category names must be unique',
   flowchartVisualSafeHint: 'Actions automatically generate compatible diagram source',
   flowchartEditModeAria: 'Diagram editing mode',
   diagramVisualUnsupported: 'This source contains loops, notes, metadata, or other advanced configuration. Keep using Source mode so no content is lost.',
@@ -814,7 +841,7 @@ const els = {
   editorResizer: $('#editorResizer'),
   searchInput: $('#searchInput'), searchCount: $('#searchCount'), dropOverlay: $('#dropOverlay'),
   moreMenu: $('#moreMenu'), accentMenu: $('#accentMenu'), recentContextMenu: $('#recentContextMenu'), editorClipboardMenu: $('#editorClipboardMenu'), spellcheckContextMenu: $('#spellcheckContextMenu'), spellingContextWord: $('#spellingContextWord'), spellingSuggestions: $('#spellingSuggestions'), spellingNoSuggestions: $('#spellingNoSuggestions'), personalDictionaryCount: $('#personalDictionaryCount'), toast: $('#toast'), imageUploadProgress: $('#imageUploadProgress'), imageUploadProgressTitle: $('#imageUploadProgressTitle'), imageUploadProgressDetail: $('#imageUploadProgressDetail'), imageUploadProgressPercent: $('#imageUploadProgressPercent'), imageUploadProgressBar: $('#imageUploadProgressBar'), editorView: $('#editorView'), fontScaleSlider: $('#fontScaleSlider'), fontScaleValue: $('#fontScaleValue'),
-  editor: $('#markdownEditor'), editFlowchartButton: $('#editFlowchartButton'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiToolbarButton: $('#aiToolbarButton'), aiToolbarMenu: $('#aiToolbarMenu'), documentHistoryButton: $('#documentHistoryButton'),
+  editor: $('#markdownEditor'), editorPreview: $('#editorPreviewContent'), editorFileName: $('#editorFileName'), editorSaveState: $('#editorSaveState'), aiToolbarButton: $('#aiToolbarButton'), aiToolbarMenu: $('#aiToolbarMenu'), documentHistoryButton: $('#documentHistoryButton'),
   editorPosition: $('#editorPosition'), editButton: $('#editButton'), editButtonLabel: $('#editButtonLabel'), previewLocateHint: $('#previewLocateHint'),
   exitEditButton: $('#exitEditButton'), codeLangMenu: $('#codeLangMenu'), textColorMenu: $('#textColorMenu'), moreFormatButton: $('#moreFormatButton'), moreFormatMenu: $('#moreFormatMenu'),
   saveButton: $('#saveButton'), backToTop: $('#backToTop'), firstRunLanguageDialog: $('#firstRunLanguageDialog'), recoveryDialog: $('#recoveryDialog'), recoveryFileName: $('#recoveryFileName'), recoveryUpdatedAt: $('#recoveryUpdatedAt'), unsavedCloseDialog: $('#unsavedCloseDialog'), aboutDialog: $('#aboutDialog'),
@@ -894,8 +921,9 @@ function loadEditorDependencies() {
     import('@codemirror/lang-markdown'),
     import('@lezer/highlight'),
     import('./embedded-image-preview.js'),
-    import('./editor-formula-preview.js')
-  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule]) => {
+    import('./editor-formula-preview.js'),
+    import('./editor-diagram-preview.js')
+  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule, diagramPreviewModule]) => {
     basicSetup = codemirrorModule.basicSetup;
     Compartment = stateModule.Compartment;
     StateEffect = stateModule.StateEffect;
@@ -908,6 +936,7 @@ function loadEditorDependencies() {
     scrollPastEnd = viewModule.scrollPastEnd;
     undo = commandsModule.undo;
     undoDepth = commandsModule.undoDepth;
+    isolateHistory = commandsModule.isolateHistory;
     closeSearchPanel = searchModule.closeSearchPanel;
     openSearchPanel = searchModule.openSearchPanel;
     searchPanelOpen = searchModule.searchPanelOpen;
@@ -924,9 +953,18 @@ function loadEditorDependencies() {
     setFormulaDisplayEffect = formulaPreviewModule.setFormulaDisplay;
     editorFormulaField = formulaPreviewModule.editorFormulaField;
     Object.assign(codeMirrorTranslations['zh-CN'], formulaPreviewModule.formulaPreviewPhrases);
+    editorDiagramPreview = diagramPreviewModule.editorDiagramPreview;
+    diagramPreviewContext = diagramPreviewModule.diagramPreviewContext;
+    editorDiagramField = diagramPreviewModule.editorDiagramField;
+    setDiagramDisplayEffect = diagramPreviewModule.setDiagramDisplay;
+    refreshDiagramThemeEffect = diagramPreviewModule.refreshDiagramTheme;
+    Object.assign(codeMirrorTranslations['zh-CN'], diagramPreviewModule.diagramPreviewPhrases);
     editorLanguage = new Compartment();
     markdownHighlightStyle = createMarkdownHighlightStyle();
     initializeSpellcheckExtension();
+  }).catch(error => {
+    editorDependenciesPromise = null;
+    throw error;
   });
   return editorDependenciesPromise;
 }
@@ -941,12 +979,18 @@ function isPlainTextFile(path) {
 
 function createEditorState(content = '', moveToStart = true) {
   const session = state.documentSession, path = state.currentFile?.path;
-  const language = isPlainTextFile(state.currentFile?.path)
+  const language = editorSourceFallback || isPlainTextFile(state.currentFile?.path)
     ? []
     : [markdown(), syntaxHighlighting(markdownHighlightStyle), embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
       editorFormulaPreview, formulaPreviewContext.of({ enabled: state.formulaDisplay !== 'source', sanitize: html => DOMPurify.sanitize(html),
         edit: (formula, view) => {
           if (codeEditor === view && state.editing && state.documentSession === session && state.currentFile?.path === path) openFormulaDialog(formula);
+        } }),
+      editorDiagramPreview, diagramPreviewContext.of({ enabled: state.editing && state.diagramDisplay !== 'source',
+        render: renderEditorDiagram, release: releaseEditorDiagram,
+        label: item => diagramTemplateById(item.templateId).name[diagramLocale()],
+        edit: (diagram, view) => {
+          if (codeEditor === view && state.editing && state.documentSession === session && state.currentFile?.path === path) openEditorDiagram(diagram);
         } })];
   return EditorState.create({
     doc: content,
@@ -1055,7 +1099,7 @@ async function loadSpellcheckDictionary(showFailure = false) {
 }
 
 function refreshSpellcheckDecorations(view = codeEditor, loadDictionary = true) {
-  if (!view || !spellcheckDecorationEffect) return;
+  if (!view || !spellcheckDecorationEffect || editorSourceFallback) return;
   if (state.spellcheckEnabled && !activeSpellchecker && loadDictionary) loadSpellcheckDictionary();
   view.dispatch({ effects: spellcheckDecorationEffect.of(spellcheckDecorations(view)) });
 }
@@ -1111,10 +1155,8 @@ function replaceEditorContent(content, moveToStart = false) {
   codeEditor.setState(createEditorState(content, moveToStart));
   suppressEditorChanges = false;
   updateUndoButton();
-  updateExistingFlowchartButton();
 }
 
-let activeFlowchartFence = null;
 let indexedFormulaDocument = null;
 let indexedFormulas = [];
 const previewFormulaContexts = new WeakMap();
@@ -1128,28 +1170,24 @@ function currentFormulaIndex() {
   return indexedFormulas;
 }
 
-function updateExistingFlowchartButton() {
-  if (!els.editFlowchartButton || !codeEditor || !state.editing) {
-    els.editFlowchartButton?.classList.add('hidden');
-    activeFlowchartFence = null;
-    return;
-  }
-  const selection = codeEditor.state.selection.main;
-  const source = codeEditor.state.doc.toString();
-  activeFlowchartFence = findEditableDiagramFenceAt(source, selection.head)
-    || findEditableDiagramFenceAt(source, selection.from);
-  els.editFlowchartButton.classList.toggle('hidden', !activeFlowchartFence);
-  if (activeFlowchartFence) {
-    const label = t('editThisDiagram');
-    els.editFlowchartButton.title = label;
-    els.editFlowchartButton.setAttribute('aria-label', label);
-    els.editFlowchartButton.querySelector('span').textContent = label;
-  }
+function openEditorDiagram(diagram) {
+  if (!state.editing || !codeEditor || codeEditor.state.doc.sliceString(diagram.from, diagram.to) !== diagram.original) return;
+  openDiagramDialog(diagram.templateId, diagram);
 }
 
-function scheduleExistingContentActions() {
-  clearTimeout(scheduleExistingContentActions.timer);
-  scheduleExistingContentActions.timer = setTimeout(updateExistingFlowchartButton, 220);
+async function renderEditorDiagram(container, item) {
+  const diagram = document.createElement('div'), isECharts = item.engine === 'echarts';
+  diagram.className = isECharts ? 'echarts-diagram' : 'mermaid-diagram';
+  diagram.dataset[isECharts ? 'echartsSource' : 'mermaidSource'] = encodeURIComponent(item.source);
+  container.replaceChildren(diagram);
+  if (isECharts) await renderEChartsDiagrams(container, { errorTitle: t('dataChartRenderError'), errorHint: t('dataChartRenderHint') });
+  else await renderMermaidDiagrams(container, { diagramLabel: t('mermaidDiagram'), errorTitle: t('mermaidRenderError'), errorHint: t('mermaidRenderHint') });
+  return diagram.dataset[isECharts ? 'echartsRendered' : 'mermaidRendered'] === 'true';
+}
+
+function releaseEditorDiagram(container) {
+  container.querySelectorAll('.cm-diagram-body').forEach(cancelMermaidRendering);
+  releaseEChartsDiagrams(container);
 }
 
 function focusCodeEditor() {
@@ -2238,6 +2276,7 @@ function insertGeneratedFormula() {
 }
 
 const diagramWizardState = {
+  saveRequest: null,
   category: 'all',
   templateId: 'flowchart',
   valuesByTemplate: new Map(),
@@ -2697,12 +2736,30 @@ function structuredInput(field, value, onChange) {
     if (field.min !== undefined) input.min = String(field.min);
     if (field.max !== undefined) input.max = String(field.max);
   }
-  input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => onChange(input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value));
+  if (input.type === 'number') input.step = 'any';
+  input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => onChange(input.type === 'checkbox' ? input.checked : input.value));
   return input;
 }
 
+function checkStructuredDiagramDraft(notify = false) {
+  if (flowchartDesignerState.mode !== 'visual' || diagramTemplateById(diagramWizardState.templateId).visualEditor !== 'structured' || !structuredDiagramState.model) return true;
+  const result = validateStructuredDiagram(diagramWizardState.templateId, structuredDiagramState.model);
+  const error = $('#structuredDiagramError');
+  const inputs = [...els.structuredDiagramRows.querySelectorAll('[data-field]')];
+  for (const input of inputs) input.removeAttribute('aria-invalid');
+  error.classList.toggle('hidden', result.valid);
+  if (result.valid) { error.textContent = ''; return true; }
+  const field = structuredDiagramState.definition.columns.find(field => field.key === result.field)?.label || '';
+  const reason = t(({ 'invalid-number': 'diagramNumberError', 'number-range': 'diagramRangeError', 'empty-label': 'diagramLabelError', 'duplicate-label': 'diagramDuplicateError' })[result.code] || 'diagramNumberError');
+  error.textContent = result.row === undefined ? t('diagramDataEmpty') : t('diagramDataError', { row: result.row + 1, field, reason });
+  const invalidInput = inputs.find(input => input.dataset.row === String(result.row) && input.dataset.field === result.field);
+  invalidInput?.setAttribute('aria-invalid', 'true');
+  if (notify) { showToast(error.textContent, 'warning'); invalidInput?.focus(); }
+  return false;
+}
+
 function syncStructuredDiagramSource() {
-  if (!structuredDiagramState.model) return;
+  if (!structuredDiagramState.model || !checkStructuredDiagramDraft()) return;
   const source = serializeStructuredDiagram(diagramWizardState.templateId, structuredDiagramState.model);
   els.diagramSource.value = source;
   structuredDiagramState.sourceSnapshot = source;
@@ -2741,10 +2798,13 @@ function renderStructuredDiagramEditor() {
     const tableRow = document.createElement('tr');
     definition.columns.forEach(field => {
       const cell = document.createElement('td');
-      cell.append(structuredInput(field, row[field.key], value => {
+      const input = structuredInput(field, row[field.key], value => {
         row[field.key] = value;
         syncStructuredDiagramSource();
-      }));
+      });
+      input.dataset.row = String(rowIndex); input.dataset.field = field.key;
+      input.setAttribute('aria-label', `${rowIndex + 1} · ${field.label}`);
+      cell.append(input);
       tableRow.append(cell);
     });
     const actionCell = document.createElement('td');
@@ -2760,6 +2820,7 @@ function renderStructuredDiagramEditor() {
     els.structuredDiagramRows.append(tableRow);
   });
   $('#addStructuredDiagramRow span').textContent = definition.add;
+  checkStructuredDiagramDraft();
 }
 
 function initialiseStructuredDiagramVisual(source, { notify = false } = {}) {
@@ -2776,6 +2837,7 @@ function initialiseStructuredDiagramVisual(source, { notify = false } = {}) {
 }
 
 function showFlowchartEditorMode(mode, { notify = false } = {}) {
+  if (mode === 'source' && !checkStructuredDiagramDraft(true)) return false;
   const template = diagramTemplateById(diagramWizardState.templateId);
   const visualRequested = mode === 'visual';
   const isFlowchart = isCanvasDiagram(template.id) && template.visualEditor === 'canvas';
@@ -3070,6 +3132,7 @@ function chooseDiagramTemplate(templateId) {
   const template = diagramTemplateById(templateId);
   if (!template) return;
   if (diagramWizardState.editRange && template.id !== diagramWizardState.editRange.templateId) return;
+  if (!checkStructuredDiagramDraft(true)) return;
   rememberDiagramSource();
   diagramWizardState.templateId = template.id;
   structuredDiagramState.model = null;
@@ -3088,6 +3151,7 @@ function chooseDiagramTemplate(templateId) {
 function chooseDiagramCategory(categoryId) {
   if (diagramWizardState.editRange) return;
   if (!DIAGRAM_CATEGORIES.some(category => category.id === categoryId)) return;
+  if (!checkStructuredDiagramDraft(true)) return;
   rememberDiagramSource();
   diagramWizardState.category = categoryId;
   const templates = diagramTemplatesForCategory(categoryId);
@@ -3104,15 +3168,17 @@ function chooseDiagramCategory(categoryId) {
 }
 
 function updateDiagramActionLabels() {
-  const key = diagramWizardState.editRange ? 'saveDiagramChanges' : 'insertDiagram';
+  const key = diagramWizardState.saveRequest ? 'diagramChecking' : diagramWizardState.editRange ? 'saveDiagramChanges' : 'insertDiagram';
   const normalButton = $('#insertDiagram');
   const fullscreenLabel = $('#insertDiagramFullscreen span');
   if (normalButton) normalButton.textContent = t(key);
   if (fullscreenLabel) fullscreenLabel.textContent = t(key);
+  for (const button of [normalButton, $('#insertDiagramFullscreen')]) if (button) button.disabled = Boolean(diagramWizardState.saveRequest);
 }
 
 function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart = null) {
   if (!state.currentFile || !codeEditor) return;
+  diagramWizardState.saveRequest = null;
   const template = diagramTemplateById(existingFlowchart?.templateId || preferredTemplateId);
   diagramWizardState.category = 'all';
   diagramWizardState.templateId = template.id;
@@ -3127,6 +3193,8 @@ function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart 
     language: existingFlowchart.language,
     engine: existingFlowchart.engine,
     original: existingFlowchart.original,
+    source: existingFlowchart.source,
+    editorDoc: codeEditor.state.doc,
     documentSession: state.documentSession
   } : null;
   if (existingFlowchart) diagramWizardState.valuesByTemplate.set(template.id, existingFlowchart.source);
@@ -3192,6 +3260,7 @@ function toggleDiagramFullscreen() {
 function closeDiagramDialog() {
   if (els.diagramDialog.classList.contains('hidden')) return;
   clearTimeout(diagramPreviewTimer);
+  diagramWizardState.saveRequest = null;
   setDiagramFullscreen(false);
   els.diagramDialog.classList.add('hidden');
   els.diagramDialog.classList.remove('editing-existing-flowchart');
@@ -3202,21 +3271,26 @@ function closeDiagramDialog() {
 }
 
 function replaceExistingFlowchart(range, source) {
-  if (!codeEditor || !range) return;
-  if (!state.editing || range.documentSession !== state.documentSession || codeEditor.state.doc.sliceString(range.from, range.to) !== range.original) {
+  if (!codeEditor || !range) return false;
+  if (!state.editing || range.documentSession !== state.documentSession || range.editorDoc && range.editorDoc !== codeEditor.state.doc || codeEditor.state.doc.sliceString(range.from, range.to) !== range.original) {
     showToast(t('diagramSourceChanged'), 'warning');
-    return;
+    return false;
   }
+  if (range.source !== undefined && source.trim() === range.source.trim()) return true;
   const markdown = diagramReplacementMarkdown(range, source);
   codeEditor.dispatch({
     changes: { from: range.from, to: range.to, insert: markdown },
+    annotations: isolateHistory.of('full'), userEvent: 'input.diagram',
     selection: { anchor: range.from + markdown.length },
     scrollIntoView: true
   });
   codeEditor.focus();
+  return true;
 }
 
 function insertGeneratedDiagram() {
+  if (diagramWizardState.saveRequest) return diagramWizardState.saveRequest.promise;
+  if (!checkStructuredDiagramDraft(true) || !state.editing || !codeEditor) return;
   const source = els.diagramSource.value.trim();
   const template = diagramTemplateById(diagramWizardState.templateId);
   if (!source) {
@@ -3232,14 +3306,33 @@ function insertGeneratedDiagram() {
       return;
     }
   }
-  const editRange = diagramWizardState.editRange;
-  closeDiagramDialog();
-  if (editRange) {
-    replaceExistingFlowchart(editRange, source);
-    return;
-  }
-  const markdownSource = `\n\n\`\`\`${template.engine === 'echarts' ? 'echarts' : 'mermaid'}\n${source}\n\`\`\`\n\n`;
-  replaceSelection(markdownSource, 13, source.length);
+  const request = { doc: codeEditor.state.doc, session: state.documentSession, templateId: diagramWizardState.templateId,
+    range: diagramWizardState.editRange, selection: codeEditor.state.selection,
+    draft: JSON.stringify(structuredDiagramState.model), mode: flowchartDesignerState.mode };
+  diagramWizardState.saveRequest = request;
+  updateDiagramActionLabels();
+  request.promise = validateDiagramRendering(source, template.engine || 'mermaid').then(validation => {
+    if (diagramWizardState.saveRequest !== request || els.diagramDialog.classList.contains('hidden')) return;
+    if (!state.editing || request.session !== state.documentSession || request.doc !== codeEditor?.state.doc) {
+      showToast(t('diagramSourceChanged'), 'warning'); return;
+    }
+    if (source !== els.diagramSource.value.trim() || request.templateId !== diagramWizardState.templateId || request.mode !== flowchartDesignerState.mode
+      || request.draft !== JSON.stringify(structuredDiagramState.model) || !request.selection.eq(codeEditor.state.selection)) {
+      showToast(t('diagramDraftChanged'), 'warning'); return;
+    }
+    if (!validation.valid) { showToast(`${t(template.engine === 'echarts' ? 'dataChartRenderError' : 'mermaidRenderError')}：${validation.error}`, 'warning'); return; }
+    if (request.range) {
+      if (replaceExistingFlowchart(request.range, source)) closeDiagramDialog();
+    } else {
+      const markdownSource = `\n\n\`\`\`${template.engine === 'echarts' ? 'echarts' : 'mermaid'}\n${source}\n\`\`\`\n\n`;
+      // A selection inside the fence reveals its source. Leave the caret on
+      // the following blank line so the newly inserted diagram stays rendered.
+      replaceSelection(markdownSource, markdownSource.length);
+      closeDiagramDialog();
+    }
+  }).catch(() => { if (diagramWizardState.saveRequest === request) showToast(t('diagramInvalid'), 'warning'); })
+    .finally(() => { if (diagramWizardState.saveRequest === request) { diagramWizardState.saveRequest = null; updateDiagramActionLabels(); } });
+  return request.promise;
 }
 
 function openTableDialog() {
@@ -3889,8 +3982,11 @@ async function handleEditorPaste(event) {
 async function initializeCodeEditor() {
   if (codeEditor) return codeEditor;
   if (editorInitializationPromise) return editorInitializationPromise;
+  let initializationStage = 'dependencies';
   editorInitializationPromise = (async () => {
+    editorSourceFallback = false;
     await loadEditorDependencies();
+    initializationStage = 'extensions';
     const saveKeymap = keymap.of([
     { key: 'Mod-s', run: () => { saveDocument(false); return true; } },
     { key: 'Mod-Shift-s', run: () => { saveDocument(true); return true; } },
@@ -3961,13 +4057,16 @@ async function initializeCodeEditor() {
     '.cm-searchMatch': { backgroundColor: '#eadc7a66', outline: '1px solid #c7ad42' },
     '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#e2a64d88' }
   });
+    const optionalDecorations = [spellcheckDecorationField, spellcheckViewPlugin, EditorView.decorations.from(spellcheckDecorationField)];
     editorExtensions = [
     basicSetup,
+    EditorView.exceptionSink.of(error => {
+      runtimeDiagnostics.capture(error, 'plugin', editorSourceFallback ? 'source-fallback' : 'normal');
+      reportSilentError(error, 'editor.plugin');
+    }),
     editorTheme,
     saveKeymap,
-    spellcheckDecorationField,
-    spellcheckViewPlugin,
-    EditorView.decorations.from(spellcheckDecorationField),
+    ...optionalDecorations,
     EditorView.lineWrapping,
     scrollPastEnd(),
     EditorView.updateListener.of(update => {
@@ -3988,25 +4087,47 @@ async function initializeCodeEditor() {
       }
       if (update.docChanged || update.selectionSet) {
         updateEditorPosition();
-        if (documentPerformanceProfile(update.state.doc.length).deferContentSync) scheduleExistingContentActions();
-        else updateExistingFlowchartButton();
         scrollPreviewToCursor();
         if (update.selectionSet) scheduleFormatPainterApply();
       }
       updateUndoButton(update.state);
     })
   ];
-    codeEditor = new EditorView({
-      state: createEditorState(''),
-      parent: els.editor
-    });
+    const mount = () => {
+      initializationStage = 'state';
+      const editorState = createEditorState('');
+      initializationStage = 'view';
+      return new EditorView({ state: editorState, parent: els.editor });
+    };
+    try {
+      codeEditor = mount();
+    } catch (error) {
+      runtimeDiagnostics.capture(error, initializationStage, 'normal');
+      if (!/Cannot read properties of undefined.*isEmpty/.test(String(error))) throw error;
+      // Contain the reported RangeSet/HeightMap failure without dropping text
+      // or persisting different display preferences. Keep normal save/undo.
+      reportSilentError(error, 'editor.initialize-decorations');
+      editorSourceFallback = true;
+      editorExtensions = editorExtensions.filter(extension => !optionalDecorations.includes(extension));
+      els.editor.replaceChildren();
+      codeEditor = mount();
+      showToast(t('editorSourceRecovery'), 'warning');
+    }
+    initializationStage = 'listeners';
     codeEditor.contentDOM.addEventListener('paste', handleEditorPaste);
     codeEditor.contentDOM.addEventListener('contextmenu', openEditorClipboardMenu);
     els.editor.addEventListener('pointerdown', () => {
       if (state.editing && !codeEditor.hasFocus) codeEditor.focus();
     }, true);
     return codeEditor;
-  })();
+  })().catch(error => {
+    runtimeDiagnostics.capture(error, initializationStage, editorSourceFallback ? 'source-fallback' : 'normal');
+    // A failed first mount must not permanently cache a rejected promise.
+    // The document remains in application state; only partial editor DOM is removed.
+    if (!codeEditor) els.editor.replaceChildren();
+    editorInitializationPromise = null;
+    throw error;
+  });
   return editorInitializationPromise;
 }
 
@@ -4057,6 +4178,7 @@ let diagramAppearanceRefreshFrame = 0;
 function refreshDiagramAppearance() {
   cancelAnimationFrame(diagramAppearanceRefreshFrame);
   diagramAppearanceRefreshFrame = requestAnimationFrame(async () => {
+    if (state.editing && codeEditor?.state.field(editorDiagramField, false)) codeEditor.dispatch({ effects: refreshDiagramThemeEffect.of(null) });
     const containers = [els.content, els.editorPreview, els.diagramPreview].filter(container => container?.isConnected);
     const themeKey = mermaidPreviewThemeKey();
     await Promise.all(containers.flatMap(container => [
@@ -4607,6 +4729,10 @@ function editorResizeDirection() {
 }
 
 function syncEditorLayoutOptions() {
+  document.querySelectorAll('#moreMenu button[data-diagram-display]').forEach(button => {
+    const active = button.dataset.diagramDisplay === state.diagramDisplay;
+    button.classList.toggle('active', active); button.setAttribute('aria-checked', String(active));
+  });
   document.querySelectorAll('#moreMenu button[data-formula-display]').forEach(button => {
     const active = button.dataset.formulaDisplay === state.formulaDisplay;
     button.classList.toggle('active', active);
@@ -4626,6 +4752,16 @@ function setEditorFormulaDisplay(mode) {
   localStorage.setItem('formulaDisplay', state.formulaDisplay);
   if (codeEditor?.state.field(editorFormulaField, false)) codeEditor.dispatch({ effects: setFormulaDisplayEffect.of(state.formulaDisplay) });
   syncEditorLayoutOptions();
+}
+
+function syncEditorDiagramDisplay() {
+  if (codeEditor?.state.field(editorDiagramField, false)) codeEditor.dispatch({ effects: setDiagramDisplayEffect.of(state.editing ? state.diagramDisplay : 'source') });
+}
+
+function setEditorDiagramDisplay(mode) {
+  state.diagramDisplay = mode === 'source' ? 'source' : 'preview';
+  localStorage.setItem('diagramDisplay', state.diagramDisplay);
+  syncEditorDiagramDisplay(); syncEditorLayoutOptions();
 }
 
 function setEditorLayout(layout, silent = false) {
@@ -6272,12 +6408,13 @@ async function toggleEditor(forceEditing) {
       } catch (error) {
         reportSilentError(error, 'editor.initialize');
         console.error('Unable to load the Markdown editor:', error);
-        showToast(t('previewError'), 'error');
+        showToast(t('editorInitializationFailed'), 'error');
         return;
       }
       if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
     }
     state.editing = nextEditing;
+    syncEditorDiagramDisplay();
     if (state.editing) {
       resetAIDocumentReviewSession();
       if (editorContent() !== state.currentFile.content) replaceEditorContent(state.currentFile.content, true);
@@ -6292,7 +6429,6 @@ async function toggleEditor(forceEditing) {
       els.editButtonLabel.textContent = t('preview');
       focusCodeEditor();
       updateEditorPosition();
-      updateExistingFlowchartButton();
       const performance = documentPerformanceProfile(codeEditor.state.doc.length, state.currentDocumentHasDiagrams);
       if (performance.level !== 'normal' && largeDocumentNoticeSession !== state.documentSession) {
         largeDocumentNoticeSession = state.documentSession;
@@ -6306,7 +6442,6 @@ async function toggleEditor(forceEditing) {
       els.documentView.classList.remove('hidden');
       els.editButton.classList.remove('active');
       els.editButtonLabel.textContent = t('edit');
-      updateExistingFlowchartButton();
       updatePaneResizerVisibility();
       $('.reader-pane').scrollTo({ top: 0 });
     }
@@ -7427,18 +7562,20 @@ async function openFile() {
 async function openFolder() {
   if (!maybeDiscardChanges()) return;
   const request = beginDocumentOpen();
-  const folder = await window.quilliteMarkdown.openFolder();
-  if (!folder || !canApplyDocumentOpen(request)) return;
-  state.root = folder.root;
-  state.explorerFiles = folder.files;
-  setSidebarMode('explorer');
-  if (folder.files[0]) {
-    try {
+  try {
+    const folder = await window.quilliteMarkdown.openFolder();
+    if (!folder || !canApplyDocumentOpen(request)) return;
+    state.root = folder.root;
+    state.explorerFiles = folder.files;
+    setSidebarMode('explorer');
+    if (folder.files[0]) {
       const doc = await window.quilliteMarkdown.readFile(folder.files[0].path);
       if (canApplyDocumentOpen(request)) displayDocument(doc);
-    } catch {
-      showToast(t('folderOpenFailed'), 'error');
     }
+  } catch (error) {
+    if (!canApplyDocumentOpen(request)) return;
+    reportSilentError(error, 'document.open-folder');
+    showToast(t(isMissingDocumentError(error) ? 'recentMissingTitle' : 'folderOpenFailed'), 'warning');
   }
 }
 
@@ -9466,9 +9603,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '2.7.7', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '2.7.8', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.7';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '2.7.8';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -9526,7 +9663,7 @@ function openUpdateDialog(info) {
   state.updateInfo = info;
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
-  $('#currentVersion').textContent = info.currentVersion || '2.7.7';
+  $('#currentVersion').textContent = info.currentVersion || '2.7.8';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -9882,7 +10019,23 @@ async function startDownloadAndUpdate() {
     $('#openUpdatePage').disabled = false;
     $('#updateLater').disabled = false;
     $('#updateSnooze').disabled = false;
-    showToast(t('updateFailed'), 'error');
+    showToast(t(/timeout|timed out|deadline exceeded/i.test(String(error)) ? 'updateTimedOut' : 'updateFailed'), 'error');
+  }
+}
+
+async function loadInitialDocument() {
+  const request = beginDocumentOpen();
+  try {
+    const initialFile = await window.quilliteMarkdown.getInitialFile();
+    if (!initialFile?.path || !canApplyDocumentOpen(request)) return;
+    displayDocument(initialFile);
+    const session = state.documentSession;
+    const mode = await window.quilliteMarkdown.getStartupMode();
+    if (session === state.documentSession && mode === 'edit') await toggleEditor(true);
+  } catch (error) {
+    if (!canApplyDocumentOpen(request)) return;
+    reportSilentError(error, 'document.open-initial');
+    showToast(t(isMissingDocumentError(error) ? 'recentMissingTitle' : 'openFailed'), 'warning');
   }
 }
 
@@ -9912,11 +10065,7 @@ async function initialize() {
   state.root = savedExplorerRoot || null;
   state.explorerFiles = [];
   setSidebarMode(state.sidebarMode === 'explorer' && !state.root ? 'recent' : state.sidebarMode);
-  const initialFile = await window.quilliteMarkdown.getInitialFile();
-  if (initialFile?.path) {
-    displayDocument(initialFile);
-    if (await window.quilliteMarkdown.getStartupMode() === 'edit') await toggleEditor(true);
-  }
+  await loadInitialDocument();
   restoreExplorerAfterFirstPaint(savedExplorerRoot);
   if (needsLanguageSelection) openFirstRunLanguageDialog();
   else {
@@ -10420,11 +10569,6 @@ els.diagramFullscreenButton.addEventListener('click', toggleDiagramFullscreen);
 $('#exitDiagramFullscreen').addEventListener('click', () => setDiagramFullscreen(false));
 $('#insertDiagramFullscreen').addEventListener('click', insertGeneratedDiagram);
 $('#insertDiagram').addEventListener('click', insertGeneratedDiagram);
-els.editFlowchartButton.addEventListener('pointerdown', event => event.stopPropagation());
-els.editFlowchartButton.addEventListener('click', () => {
-  updateExistingFlowchartButton();
-  if (activeFlowchartFence) openDiagramDialog(activeFlowchartFence.templateId, activeFlowchartFence);
-});
 $('#openDiagramGuide').addEventListener('click', () => {
   Promise.resolve(window.quilliteMarkdown.openExternal(DIAGRAM_GUIDE_URL)).catch(error => reportSilentError(error, 'diagram-guide.open'));
 });
@@ -10838,6 +10982,7 @@ els.moreMenu.addEventListener('click', event => {
   if (button?.dataset.docWidth) setDocumentWidth(button.dataset.docWidth);
   if (button?.dataset.editorLayout) setEditorLayout(button.dataset.editorLayout);
   if (button?.dataset.formulaDisplay) setEditorFormulaDisplay(button.dataset.formulaDisplay);
+  if (button?.dataset.diagramDisplay) setEditorDiagramDisplay(button.dataset.diagramDisplay);
   if (button.hasAttribute('data-spellcheck-toggle')) setSpellcheckEnabled(!state.spellcheckEnabled);
   if (button.dataset.spellcheckLanguage) setSpellcheckLanguage(button.dataset.spellcheckLanguage);
   if (button.hasAttribute('data-spellcheck-clear')) clearPersonalDictionary();
@@ -11145,6 +11290,10 @@ window.quilliteMarkdown.onFileDrop(paths => {
   if (state.editing && IMAGE_FILE_PATTERN.test(filePath)) importAndInsertImage(filePath);
   else if (/\.(md|markdown|mdown|mkd|txt)$/i.test(filePath)) loadFile(filePath);
   else showToast(t('dropUnsupported'), 'warning');
+}, () => {
+  dragDepth = 0;
+  els.dropOverlay.classList.add('hidden');
+  showToast(t('virtualFileDropUnsupported'), 'warning');
 });
 
 initializeFormatToolbarOverflow();

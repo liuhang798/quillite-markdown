@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestSendAppErrorLogContainsOnlyApprovedSoftwareFields(t *testing.T) {
@@ -186,6 +187,18 @@ func TestErrorLogRemovesLocalPaths(t *testing.T) {
 	log := buildSanitizedErrorLog("open", `failed at C:\Users\someone\secret\document.md and private-notes.md`, `/home/someone/private/document.md:12`)
 	if strings.Contains(log, "document.md") || strings.Contains(log, "private-notes.md") || strings.Contains(log, "someone") {
 		t.Fatalf("错误日志仍包含本地路径：%q", log)
+	}
+}
+
+func TestDiagnosticContextSurvivesSanitizingAndTruncationIsExplicit(t *testing.T) {
+	context := "[diagnostics-v1 asset=renderer-CBsIfnHh.js stage=view mode=normal]"
+	log := buildSanitizedErrorLog("editor.initialize", "failed", context+"\n"+strings.Repeat("异常堆栈", 1000))
+	if !strings.Contains(log, context) || !strings.HasSuffix(log, " [truncated]") || !utf8.ValidString(log) || len(log) > 4096 {
+		t.Fatalf("diagnostic context or truncation marker lost: %q", log)
+	}
+	short := buildSanitizedErrorLog("editor.initialize", "failed", context)
+	if strings.Contains(short, "[truncated]") {
+		t.Fatal("short logs must not be marked truncated")
 	}
 }
 

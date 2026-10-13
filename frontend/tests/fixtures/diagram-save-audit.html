@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>图表保存校验回归</title>
+<style>body{font:16px/1.6 system-ui;max-width:1000px;margin:30px auto}button{padding:10px}pre{white-space:pre-wrap}</style>
+<h1>图表保存校验回归</h1><button id="run">验证全部模板与无效配置</button><p id="status">就绪</p><pre id="results"></pre>
+<script type="module">
+import { DIAGRAM_TEMPLATES, diagramTemplateSource } from '/src/diagram-templates.js';
+import { validateDiagramRendering } from '/src/diagram-validation.js';
+const button=document.querySelector('#run'),status=document.querySelector('#status'),results=document.querySelector('#results');
+button.onclick=async()=>{
+  button.disabled=true;results.textContent='';let passed=0,failed=0;
+  const cases=DIAGRAM_TEMPLATES.flatMap(template=>['zh','en'].map(locale=>({id:`${template.id}/${locale}`,engine:template.engine||'mermaid',source:diagramTemplateSource(template,locale),valid:true})));
+  cases.push({id:'missing-axis',engine:'echarts',source:'{"series":[{"type":"bar","data":[1]}]}',valid:false},
+    {id:'null-series',engine:'echarts',source:'{"series":[null]}',valid:false},
+    {id:'unknown-series',engine:'echarts',source:'{"series":[{"type":"notAChart","data":[1]}]}',valid:false},
+    {id:'overflow',engine:'echarts',source:'{"series":[{"type":"pie","data":[1e999]}]}',valid:false},
+    {id:'bad-mermaid',engine:'mermaid',source:'flowchart LR\nA[unfinished',valid:false},
+    {id:'zero-pie',engine:'mermaid',source:'pie\n"Zero":0\n"Other":10',valid:true});
+  for(const item of cases){status.textContent=`验证 ${item.id}`;const result=await validateDiagramRendering(item.source,item.engine);const ok=result.valid===item.valid;ok?passed++:failed++;results.textContent+=`${ok?'PASS':'FAIL'} ${item.id}${ok?'':': '+result.error}\n`;}
+  status.textContent=`完成 ${passed}/${cases.length}，失败 ${failed}`;button.disabled=false;
+};
+</script></html>

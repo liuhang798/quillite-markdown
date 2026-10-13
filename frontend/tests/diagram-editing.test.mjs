@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
+import { isolateHistory } from '@codemirror/commands';
 import { readFileSync } from 'node:fs';
 import { DIAGRAM_TEMPLATES, diagramTemplateById, diagramTemplateSource } from '../src/diagram-templates.js';
 import { identifyDiagramTemplate, findEditableDiagramFenceAt, diagramReplacementMarkdown } from '../src/diagram-editing.js';
@@ -83,7 +84,7 @@ test('saving an existing diagram refuses stale sessions or changed source ranges
   const fn = renderer.slice(renderer.indexOf('function replaceExistingFlowchart('), renderer.indexOf('function insertGeneratedDiagram('));
   const state = { editing: true, documentSession: 1 };
   const calls = [];
-  const context = vm.createContext({ state, codeEditor: { state: { doc: { sliceString: () => 'original' } }, dispatch: value => calls.push(value), focus() {} }, diagramReplacementMarkdown, showToast() {}, t: x => x });
+  const context = vm.createContext({ state, codeEditor: { state: { doc: { sliceString: () => 'original' } }, dispatch: value => calls.push(value), focus() {} }, diagramReplacementMarkdown, isolateHistory, showToast() {}, t: x => x });
   vm.runInContext(fn, context);
   const range = { from: 0, to: 8, documentSession: 0, original: 'original', engine: 'echarts' };
   context.replaceExistingFlowchart(range, '{}');

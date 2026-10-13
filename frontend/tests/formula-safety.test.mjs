@@ -110,7 +110,7 @@ test('actual output-mode handler keeps the manually edited source rather than st
 });
 
 test('cursor-only changes reuse the index and document edits invalidate it', () => {
-  const source = renderer.slice(renderer.indexOf('function currentFormulaIndex()'), renderer.indexOf('\nfunction updateExistingFlowchartButton('));
+  const source = renderer.slice(renderer.indexOf('function currentFormulaIndex()'), renderer.indexOf('\nfunction openEditorDiagram('));
   let scans = 0;
   const context = { indexedFormulaDocument: null, indexedFormulas: [], codeEditor: { state: { doc: { toString: () => '$x$' } } }, scanMarkdownFormulas: () => { scans++; return []; } };
   vm.runInNewContext(source + '\nfor(let i=0;i<100;i++)currentFormulaIndex();', context);

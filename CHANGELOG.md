@@ -2,7 +2,25 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [Unreleased]
+## [2.7.8] - 2026-10-13
+
+### 简体中文
+
+- 插入图表后自动收起源码并显示图表，光标停在图表后的空行，可继续输入；保留“查看源码”和全局源码模式，不更改 Markdown 内容。
+- 补充可选故障日志的前端构建指纹、编辑器初始化阶段与源码降级状态，接入 CodeMirror 内部异常回调；超长日志明确标记截断并保留完整 UTF-8 字符。不采集正文、路径、密钥或操作轨迹，继续受产品改进开关控制，兼容现有官网日志接口。
+- 增强运行时错误恢复：Windows 拖放过滤无效条目，虚拟文件路径解析失败时提示先保存到本地；启动文档或文件夹失效时保留当前内容并提示，不再冒泡为未处理 Promise。编辑器显示扩展触发 `isEmpty` 初始化错误时，本次运行退回源码编辑，保留正文、保存与撤回，不修改显示偏好；其他加载失败允许重试。更新下载超时显示重试／官网下载指引，并检查下载文件落盘结果，不放宽冲突、校验或删除边界。
+- 修复统计图表编辑与保存：饼图保留零值行，空白、无效、非有限和超范围数值提示具体位置并保留草稿与上次有效预览；同步更新图例名称及选择状态，修正中英文瀑布图期末值与下降柱基线。保存前使用实际安全渲染校验，失败不替换原图；检查期间切换文档、修改草稿或关闭窗口均不提交过期结果。
+- 编辑器内默认显示 Mermaid／ECharts 图表，选中、悬停或键盘聚焦时就近显示“编辑图表／查看源码”，支持双击与 Enter 打开现有画布／数据编辑；移除右上角重复入口。源码展开／收起不改正文，复制保留 Markdown，删除及原位修改可单步撤销；未修改保存保留原文，过期编辑拒绝写入并保留弹框输入。
+- “更多 → 编辑布局”可切换并记忆图表显示／源码。仅编辑模式仍可看图；只绘制挂载且接近视口的图表，隐藏编辑器时取消并释放实例。错误或超限保留源码，不强行转换引用／列表或不完整围栏。最多 64 张图表、单图 2 万字符，超过 30 万字符的文档保留源码。不新增文件或目录删除操作。
+
+### English
+
+- Keep newly inserted diagrams rendered with source collapsed and the caret on the following blank line. Retain Show source and the global source mode without changing Markdown content.
+- Add opt-in error diagnostics for the frontend asset fingerprint, editor initialization stage and source-fallback mode, including CodeMirror's internal exception callback. Mark truncated logs explicitly without splitting UTF-8 characters. No document content, paths, credentials or activity history are added; retain the existing privacy switch and website API.
+- Improve runtime recovery: filter invalid Windows drop items and explain how to handle virtual files without disk paths. Missing startup documents/folders no longer become unhandled promises or replace current content. Recover from display-extension `isEmpty` initialization failures with session-only source editing, retaining text, save and undo without changing display preferences; other initialization failures can be retried. Provide actionable update-timeout guidance and check downloaded-file flush/close results without weakening conflict, integrity, or deletion safeguards.
+- Preserve zero-valued pie rows, reject blank/non-finite/out-of-range chart numbers with field-specific feedback, and retain drafts and the last valid preview. Synchronize renamed legend entries and selection state; correct waterfall totals and loss baselines in both languages. Validate saves through the actual safe renderer and reject failed or stale results after document/draft/dialog changes.
+- Render Mermaid/ECharts diagrams directly in the editor with local Edit/Show source actions on selection, hover or keyboard focus. Double-click or Enter opens the existing canvas/data editor; remove the detached floating action. Source toggles preserve text, copy retains Markdown, and deletion/in-place changes are individually undoable. No-op saves retain exact source; stale edits refuse writes and keep the dialog draft.
+- More → Editor layout remembers rendered/source diagram display, including editor-only mode. Render only mounted near-visible diagrams and cancel/dispose when the editor is hidden. Errors and limits retain source; ambiguous quote/list containers or incomplete fences are never forcibly converted. Limit to 64 diagrams and 20,000 characters per diagram; documents over 300,000 characters retain source. No new file/directory deletion operations.
 
 ## [2.7.7] - 2026-10-10
 
@@ -10,6 +28,7 @@ All notable changes to Quillite Markdown are documented here.
 
 - 修复行内公式含嵌套美元符号时弹窗预览正常、保存后被 Markdown 拆成错误公式的问题：模板、源码、可视化预览及按钮／快捷键保存共用实际分隔符解析校验；冲突时保留输入并提示块级或 `\(...\)`，不自动改写公式，无新增文件或目录删除操作。
 - 编辑页标题区与格式工具栏进一步紧凑化，并优先直接显示“公式”“图表”等高频功能；粗斜体与下划线改为和其他格式工具一致的紧凑图标，减少进入“更多格式”的次数。
+- 编辑器内公式操作恢复“修改公式／查看源码”文字按钮及原有悬浮样式。
 - 修复公式审计发现的三项问题：深度嵌套 Markdown 扫描超限或失败时保留源码编辑、不使用部分定位结果；合法正文和注释中的 `katex-error` 不再误判为语法错误；预览与保存统一按最终行内／块级／编号输出校验，快捷键不能绕过错误检查。不新增文件或目录删除操作。
 - 图片预览工具栏新增自定义宽高：宽度支持百分比或像素，高度可保持原比例自动计算或指定像素值，并可一键恢复原始尺寸。图片操作默认隐藏，鼠标悬停、键盘聚焦或触屏点击时以不挤压版面的浮层显示；修改使用标准 HTML 图片属性、单步可撤销，多图同排及阅读预览、样式 HTML、PDF 均保留尺寸，不修改或移动图片文件。
 - 修复插入较大的内嵌 Base64 图片后，图片编码被计入公式预览性能阈值、导致同一文档中的公式全部退回源码的问题；公式扫描会跳过图片编码，同时保持原文、公式位置和撤回历史不变。
@@ -30,6 +49,7 @@ All notable changes to Quillite Markdown are documented here.
 
 - Fix nested dollars passing inline equation preview but splitting into invalid formulas after saving. Template/source/visual previews and button/shortcut submission share actual Markdown delimiter validation. Conflicts retain the draft and guide users to Display or `\(...\)` without rewriting equations or adding file/directory deletion operations.
 - Make the editor header and formatting toolbar more compact, prioritize direct access to frequently used Formula and Diagram actions, and present Bold Italic and Underline as compact toolbar icons consistent with the other formatting tools.
+- Restore the rendered equation's Edit/Show source text buttons and original floating style.
 - Fix three equation-audit findings: excessive or failed Markdown scanning retains editable source without partial location results; legitimate `katex-error` text/comments are not syntax errors; preview and all save paths validate the final inline/display/numbered output, so keyboard shortcuts cannot bypass validation. No new file or directory deletion operations.
 - Add custom width and height controls to the image preview toolbar. Width accepts percent or pixels; height can preserve the original aspect ratio or use an explicit pixel value, with one-click reset. Image actions stay hidden until hover, keyboard focus or a touch tap, then appear as an overlay without reflow. Standard HTML image attributes keep edits undoable and preserve sizing in image rows, reading preview, styled HTML and PDF without modifying or moving image files.
 - Fix formulas falling back to source after a large embedded Base64 image pushed the document past the formula-preview performance threshold. Formula scanning now skips encoded image payloads while preserving the original document, exact formula offsets, and undo history.

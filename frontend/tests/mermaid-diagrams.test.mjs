@@ -98,10 +98,10 @@ test('editor offers one localized diagram builder with the full common Mermaid c
 });
 
 test('existing Mermaid flowcharts, state diagrams, and mindmaps reopen on the canvas and save in place', () => {
-  assert.match(index, /id="editFlowchartButton"/);
-  assert.match(index, /data-i18n="editThisDiagram"/);
-  assert.match(renderer, /findEditableDiagramFenceAt\(source, selection\.head\)/);
-  assert.match(renderer, /openDiagramDialog\(activeFlowchartFence\.templateId, activeFlowchartFence\)/);
+  assert.doesNotMatch(index, /id="editFlowchartButton"/);
+  assert.match(renderer, /Object\.assign\(codeMirrorTranslations\['zh-CN'\], diagramPreviewModule\.diagramPreviewPhrases\)/);
+  assert.match(renderer, /codeEditor\.state\.doc\.sliceString\(diagram\.from, diagram\.to\) !== diagram\.original/);
+  assert.match(renderer, /openDiagramDialog\(diagram\.templateId, diagram\)/);
   assert.match(renderer, /CANVAS_DIAGRAM_IDS = new Set\(\['flowchart', 'state', 'mindmap'\]\)/);
   assert.match(renderer, /function stateDiagramCanvasModel\(source\)/);
   assert.match(renderer, /function mindmapCanvasModel\(source\)/);
@@ -116,7 +116,7 @@ test('existing Mermaid flowcharts, state diagrams, and mindmaps reopen on the ca
   assert.match(renderer, /changes:\s*\{ from: range\.from, to: range\.to, insert: markdown \}/);
   assert.match(renderer, /saveDiagramChanges: '保存修改'/);
   assert.match(renderer, /saveDiagramChanges: 'Save changes'/);
-  assert.match(styles, /\.edit-flowchart-button\s*\{/);
+  assert.match(styles, /\.cm-diagram-card\s*\{/);
   assert.match(styles, /\.editing-existing-flowchart \.diagram-dialog-layout/);
 });
 

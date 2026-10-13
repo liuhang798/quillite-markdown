@@ -644,9 +644,25 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .preview-error { color: var(--muted); text-align: center; padding: 60px 20px; }
 #markdownEditor { position: relative; flex: 1; width: 100%; min-height: 0; overflow: hidden; background: transparent; user-select: text; }
 #markdownEditor .cm-editor { position: relative; z-index: 1; height: 100%; outline: none; pointer-events: auto; font-size: calc(15px * var(--font-scale)); }
-.edit-flowchart-button { position: absolute; z-index: 5; top: 11px; right: 25px; display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); border-radius: 9px; color: var(--accent-strong); background: color-mix(in srgb, var(--paper-strong) 94%, var(--accent-soft)); box-shadow: 0 5px 16px rgba(20, 28, 23, .11); font-size: 12px; font-weight: 700; cursor: pointer; }
-.edit-flowchart-button:hover, .edit-flowchart-button:focus-visible { border-color: var(--accent); outline: none; background: var(--accent-soft); box-shadow: 0 6px 20px rgba(20, 28, 23, .16); }
-.edit-flowchart-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.cm-diagram-card { position: relative; box-sizing: border-box; max-width: 100%; margin: 8px 4px 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); font: 12px/1.6 var(--app-font-family); }
+.cm-diagram-card:focus, .cm-diagram-card:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cm-diagram-card, .cm-diagram-card * { user-select: none; -webkit-user-select: none; }
+.structured-diagram-error { color: var(--danger, #b42318); margin: 8px 0; font-size: 13px; }
+.structured-diagram-table [aria-invalid="true"] { border-color: var(--danger, #b42318); }
+.cm-diagram-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 32px; }
+.cm-diagram-label { margin-right: auto; color: var(--muted); font-size: 11px; }
+.cm-diagram-tools button { padding: 4px 9px; min-height: 30px; border: 1px solid var(--line); border-radius: 6px; color: var(--accent-strong); background: var(--paper); font: 12px/1.5 var(--app-font-family); cursor: pointer; }
+.cm-diagram-card:not(.is-source-open) .cm-diagram-tools button { visibility: hidden; }
+.cm-diagram-card:hover .cm-diagram-tools button, .cm-diagram-card:focus-within .cm-diagram-tools button, .cm-diagram-card.is-selected .cm-diagram-tools button { visibility: visible; }
+.cm-diagram-tools button:hover, .cm-diagram-tools button:focus-visible { background: var(--accent-soft); border-color: var(--accent); }
+.cm-diagram-tools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cm-diagram-body { min-height: 80px; max-height: 420px; overflow: auto; }
+.cm-diagram-body > .mermaid-diagram { margin: 0; padding: 10px 0; border: 0; background: transparent; }
+.cm-diagram-body > .mermaid-diagram svg { width: 100%; min-width: 0; max-width: 100%; max-height: 370px; object-fit: contain; }
+.cm-diagram-body > .echarts-diagram { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.cm-diagram-card.is-source-open { margin-bottom: 0; padding: 5px 10px; }
+.cm-diagram-card.is-source-open .cm-diagram-body { display: none; }
+.cm-diagram-card.is-error .cm-diagram-body { display: block; min-height: 0; margin-top: 4px; color: var(--muted); }
 .editable-preview-formula { border-radius: 5px; cursor: pointer; transition: background .15s ease, box-shadow .15s ease; }
 .editable-preview-formula:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); }
 #markdownEditor .cm-content { cursor: text; user-select: text !important; pointer-events: auto; }

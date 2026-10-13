@@ -3,6 +3,7 @@ import * as Backend from '../wailsjs/go/main/App.js';
 import { rebaseMarkdownImages } from './portable-images.js';
 import { directoryFromDocumentPath } from './library-state.js';
 import { normalizeBodyTypography, readBodyTypography } from './body-typography.js';
+import { guardFileDropResolver } from './safe-file-drop.js';
 import {
   Environment,
   EventsOn,
@@ -214,12 +215,12 @@ window.quilliteMarkdown = {
   onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   onAIProgress: callback => desktopRuntime ? EventsOn('ai:progress', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.7', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.8', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   getWindowsInstallSafety: () => desktopRuntime
     ? Backend.GetWindowsInstallSafety()
-    : resolved({ applicable: false, safe: true, currentVersion: '2.7.7', downloadUrl: 'https://qm.ssssa.cn/#download' }),
+    : resolved({ applicable: false, safe: true, currentVersion: '2.7.8', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
@@ -227,14 +228,14 @@ window.quilliteMarkdown = {
           checked: true,
           available: true,
           currentVersion: '2.4.4',
-          latestVersion: '2.7.7',
-          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.7.7' : '轻阅 Markdown 2.7.7',
+          latestVersion: '2.7.8',
+          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.7.8' : '轻阅 Markdown 2.7.8',
           releaseNotes: localStorage.getItem('language') === 'en'
             ? 'Added visual table editing, rich paste, and spell checking\nAdded PicGo image hosting with upload progress\nAdded a 12-format Export Center and crisp A4 image pages'
             : '新增可视化表格、富文本粘贴与拼写检查\n新增 PicGo 图床和上传进度\n新增 12 种格式导出中心与 A4 高清图片分页',
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '2.7.7', latestVersion: '2.7.7' }),
+      : { checked: true, available: false, currentVersion: '2.7.8', latestVersion: '2.7.8' }),
   snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},
@@ -246,8 +247,9 @@ window.quilliteMarkdown = {
     window.addEventListener(browserConfirmCloseEvent, callback);
     return () => window.removeEventListener(browserConfirmCloseEvent, callback);
   },
-  onFileDrop: callback => {
+  onFileDrop: (callback, onUnavailable) => {
     if (window.runtime?.OnFileDrop) {
+      guardFileDropResolver(window.runtime, onUnavailable);
       window.runtime.OnFileDrop((_x, _y, paths) => callback(paths || []), false);
     }
   },

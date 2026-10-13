@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>编辑器异常恢复回归</title>
+<style>body{font:16px system-ui;margin:30px;color:#18372b}#editor{border:1px solid #8da;height:300px;margin-top:18px}.cm-editor{height:100%}pre{white-space:pre-wrap}button{padding:8px 16px}</style>
+<h1>编辑器异常恢复回归</h1><p id="status" role="status">正在验证…</p><pre id="notice"></pre>
+<div id="editor"></div><button id="undo">撤回</button><pre id="result"></pre>
+<script type="module">
+import { basicSetup } from 'codemirror';
+import { EditorState, StateField } from '@codemirror/state';
+import { EditorView, keymap, scrollPastEnd } from '@codemirror/view';
+import { undo } from '@codemirror/commands';
+import { createRuntimeDiagnostics } from '../../src/runtime-diagnostics.js';
+// Execute the application's exact initializer against real CodeMirror, with
+// one intentionally invalid optional decoration provider (the reported error).
+const renderer = await (await fetch('../../src/renderer.js')).text();
+const init = renderer.slice(renderer.indexOf('async function initializeCodeEditor()'), renderer.indexOf('function slugify('));
+const factory = new Function('basicSetup','EditorState','StateField','EditorView','keymap','scrollPastEnd','runtimeDiagnostics', `
+  let codeEditor=null, editorInitializationPromise=null, editorSourceFallback=false, editorExtensions=[];
+  const state={currentFile:{content:'# 原文完整保留\\n公式：$y=x$\\n结束'},editing:true};
+  const els={editor:document.querySelector('#editor')};
+  const spellcheckDecorationField=StateField.define({create:()=>undefined,update:value=>value});
+  const spellcheckViewPlugin=[];
+  const loadEditorDependencies=async()=>{};
+  const createEditorState=content=>EditorState.create({doc:content,extensions:editorExtensions});
+  const handleEditorPaste=()=>{},openEditorClipboardMenu=()=>{},updateUndoButton=()=>{},updateEditorPosition=()=>{},scrollPreviewToCursor=()=>{},scheduleFormatPainterApply=()=>{};
+  const t=key=>key,showToast=message=>document.querySelector('#notice').textContent=message;
+  const reportSilentError=error=>document.querySelector('#result').textContent=String(error);
+  const suppressEditorChanges=true;
+  ${init}
+  return async()=>{const view=await initializeCodeEditor(); view.setState(createEditorState(state.currentFile.content)); return {view,fallback:editorSourceFallback};};
+`)(basicSetup,EditorState,StateField,EditorView,keymap,scrollPastEnd,createRuntimeDiagnostics(import.meta.url));
+try {
+  const {view,fallback}=await factory();
+  const original=view.state.doc.toString();
+  view.dispatch({changes:{from:original.length,insert:'\n回归修改'}});
+  const undoWorked=undo(view)&&view.state.doc.toString()===original;
+  document.querySelector('#undo').onclick=()=>undo(view);
+  document.querySelector('#status').textContent=fallback&&undoWorked?'PASS：真实 isEmpty 故障已恢复，原文及撤回正常':'FAIL';
+  document.querySelector('#notice').textContent='显示扩展异常时退回源码编辑；下方可继续输入，正文不丢失。';
+} catch(error) {document.querySelector('#status').textContent='FAIL：'+String(error);}
+</script></html>

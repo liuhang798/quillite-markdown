@@ -350,7 +350,9 @@ function renderError(element, error, messages) {
 function renderDiagram(element, messages) {
   const source = decodeSource(element).trim();
   try {
-    const parsed = JSON.parse(source);
+    const validation = validateEChartsSource(source);
+    if (!validation.valid) throw new Error(validation.error);
+    const parsed = validation.option;
     const { option, height } = prepareOption(parsed);
     disposeDiagram(element);
     element.classList.remove('echarts-error');
@@ -358,6 +360,7 @@ function renderDiagram(element, messages) {
     element.replaceChildren();
     const chart = echarts.init(element, 'v5', { renderer: 'svg', devicePixelRatio: 1 });
     chart.setOption(option, { notMerge: true, lazyUpdate: false });
+    if (chart.getOption().series.length !== option.series.length) throw new Error('Unsupported chart series.');
     chartInstances.set(element, chart);
     element.dataset.echartsRendered = 'true';
     const observer = new ResizeObserver(entries => {
@@ -453,6 +456,13 @@ export function validateEChartsSource(source) {
     const parsed = JSON.parse(String(source || '').trim());
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.series) || !parsed.series.length) {
       throw new Error('Chart JSON must contain at least one series.');
+    }
+    if (parsed.series.some(series => !series || typeof series !== 'object' || Array.isArray(series) || typeof series.type !== 'string' || !series.type.trim())) throw new Error('Each chart series must have a valid type.');
+    const pending = [parsed];
+    while (pending.length) {
+      const value = pending.pop();
+      if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('Chart numbers must be finite.');
+      if (value && typeof value === 'object') for (const child of Object.values(value)) pending.push(child);
     }
     return { valid: true, option: parsed };
   } catch (error) {

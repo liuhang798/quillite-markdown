@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>编辑器图表回归</title>
+<link rel="stylesheet" href="../../src/styles.css">
+<style>body{display:block;padding:16px;overflow:auto}header{display:flex;gap:10px;align-items:center;margin-bottom:12px}#fixtureEditor{height:510px;max-width:1000px;border:1px solid #ddd}#fixtureEditor .cm-editor{height:100%}#fixtureEditor .cm-scroller{overflow:auto}.cm-content{padding:10px}#results{white-space:pre-wrap}button{padding:5px 12px}#source{width:100%;height:80px}</style></head>
+<body><header><button id="runAll">验证全部 37 个模板</button><button id="badChart">无效图表</button><button id="readOnly">只读图表</button><span id="status" role="status">就绪</span></header>
+<div id="fixtureEditor"></div><label>当前 Markdown<textarea id="source" readonly></textarea></label><pre id="results"></pre>
+<script type="module">
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { history } from '@codemirror/commands';
+import { DIAGRAM_TEMPLATES, diagramTemplateSource } from '../../src/diagram-templates.js';
+import { editorDiagramPreview, diagramPreviewContext, diagramPreviewPhrases } from '../../src/editor-diagram-preview.js';
+import { renderMermaidDiagrams, cancelMermaidRendering } from '../../src/mermaid-diagrams.js';
+import { renderEChartsDiagrams, releaseEChartsDiagrams } from '../../src/echarts-diagrams.js';
+const status=document.querySelector('#status'), source=document.querySelector('#source'), results=document.querySelector('#results');
+let view, completion=null;
+const context={
+  async render(container,item){
+    let valid=false;
+    try{
+      const node=document.createElement('div');node.className=item.engine==='echarts'?'echarts-diagram':'mermaid-diagram';
+      node.dataset[item.engine==='echarts'?'echartsSource':'mermaidSource']=encodeURIComponent(item.source);container.replaceChildren(node);
+      if(item.engine==='echarts')await renderEChartsDiagrams(container,{errorTitle:'图表失败',errorHint:'保留源码'});
+      else await renderMermaidDiagrams(container,{diagramLabel:'图表',errorTitle:'图表失败',errorHint:'保留源码'});
+      valid=node.dataset[item.engine==='echarts'?'echartsRendered':'mermaidRendered']==='true';
+      return valid;
+    }finally{completion?.(valid);completion=null;}
+  },
+  release(container){container.querySelectorAll('.cm-diagram-body').forEach(cancelMermaidRendering);releaseEChartsDiagrams(container);},
+  edit(item){status.textContent='编辑 '+item.templateId;}
+};
+function load(text,readOnly=false){
+  const state=EditorState.create({doc:text,extensions:[history(),editorDiagramPreview,diagramPreviewContext.of(context),EditorState.phrases.of(diagramPreviewPhrases),EditorState.readOnly.of(readOnly),
+    EditorView.updateListener.of(update=>{source.value=update.state.doc.toString();})]});
+  if(view)view.setState(state);else view=new EditorView({state,parent:document.querySelector('#fixtureEditor')});
+  source.value=view.state.doc.toString();
+}
+const fenced=(text,engine='mermaid')=>'```'+engine+'\n'+text+'\n```';
+load(fenced('pie showData\n title 编辑器内的饼图\n "文档": 45\n "项目": 25'));
+document.querySelector('#badChart').onclick=()=>load(fenced('futureDiagram\ninvalid'));
+document.querySelector('#readOnly').onclick=()=>load(fenced('pie\n"只读": 1'),true);
+document.querySelector('#runAll').onclick=async()=>{
+  const button=document.querySelector('#runAll');button.disabled=true;results.textContent='';let passed=0;
+  try{
+    for(const template of DIAGRAM_TEMPLATES){
+      status.textContent='正在验证 '+template.id;
+      const markdown=fenced(diagramTemplateSource(template,'zh'),template.engine||'mermaid');
+      const result=await new Promise(resolve=>{
+        const timer=setTimeout(()=>{completion=null;resolve(false);},15000);
+        completion=valid=>{clearTimeout(timer);resolve(valid);};load(markdown);
+      });
+      const valid=result&&view.state.doc.toString()===markdown;
+      if(valid)passed++;results.textContent+=(valid?'PASS ':'FAIL ')+template.id+'\n';
+    }
+    status.textContent=`完成：${passed}/${DIAGRAM_TEMPLATES.length}`;
+  }finally{button.disabled=false;}
+};
+</script></body></html>
