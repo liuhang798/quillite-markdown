@@ -1070,9 +1070,9 @@ test('PicGo Cloud uploads directly while local PicGo remains compatible and ever
   assert.match(renderer, /if \(!imageSettingsResponseCurrent\(revision\)\) return;[\s\S]*if \(selectedImageUploadMode\(\) === 'picgo'\) testPicGoConnection\(\{ automatic: true \}\)/);
   assert.match(renderer, /PICGO_DOWNLOAD_URL = 'https:\/\/picgo\.app\/'/);
   assert.match(renderer, /selectedImageUploadMode\(\) === 'picgo' && !state\.picGoConnectionReady[\s\S]*await testPicGoConnection\(\)/);
-  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath, target\)[\s\S]*uploadImageToPicGoCloud\(target\.path, localPath\)[\s\S]*uploadImageToPicGo\(target\.path, localPath\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true \}/);
+  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath, target\)[\s\S]*uploadImageToPicGoCloud\(target\.path, localPath, operationId\)[\s\S]*uploadImageToPicGo\(target\.path, localPath, operationId\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true \}/);
   assert.match(html, /id="imageUploadProgress"[\s\S]*id="imageUploadProgressPercent"[\s\S]*id="imageUploadProgressBar"/);
-  assert.match(renderer, /function beginImageUploadProgress\(\)[\s\S]*imageUploadPreparing[\s\S]*function updateImageUploadProgress\(progress\)[\s\S]*imageUploadFinalizing/);
+  assert.match(renderer, /function beginImageUploadProgress\(mode\)[\s\S]*imageUploadPreparing[\s\S]*function updateImageUploadProgress\(progress\)[\s\S]*imageUploadFinalizing/);
   assert.match(renderer, /finally \{[\s\S]*finishImageUploadProgress\(uploadRun, succeeded\)/);
   assert.match(renderer, /imageUploadingTitle: '正在上传图片'[^\n]*imageUploadFinalizing: '正在生成在线链接…'/);
   assert.match(renderer, /imageUploadingTitle: 'Uploading image'[^\n]*imageUploadFinalizing: 'Generating the online link…'/);

@@ -201,3 +201,7 @@ export function TestPicGoCloud():Promise<main.PicGoCloudStatus>;
 export function UploadImageToPicGo(arg1:string,arg2:string):Promise<string>;
 
 export function UploadImageToPicGoCloud(arg1:string,arg2:string):Promise<string>;
+
+export function UploadImageToPicGoCloudWithProgress(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function UploadImageToPicGoWithProgress(arg1:string,arg2:string,arg3:string):Promise<string>;

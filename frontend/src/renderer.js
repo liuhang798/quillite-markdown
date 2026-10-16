@@ -336,6 +336,8 @@ const state = {
   imageSettingsRevision: 0,
   imageSettingsMutation: '',
   imageUploadRun: 0,
+  imageUploadOperationId: '',
+  imageUploadProgressMode: 'local',
   imageInsertionTargets: new Set(),
   imageDialogTarget: null,
   feedbackImages: [],
@@ -4210,12 +4212,13 @@ async function saveImageUploadSettings() {
 
 async function uploadedOrLocalImagePath(localPath, target) {
 	if (!['picgo-cloud', 'picgo'].includes(target.mode)) return { path: localPath, uploaded: false, fallback: false };
-  const uploadRun = beginImageUploadProgress();
+  const uploadRun = beginImageUploadProgress(target.mode);
+  const operationId = state.imageUploadOperationId;
   let succeeded = false;
   try {
 		const uploadedPath = target.mode === 'picgo-cloud'
-			? await window.quilliteMarkdown.uploadImageToPicGoCloud(target.path, localPath)
-			: await window.quilliteMarkdown.uploadImageToPicGo(target.path, localPath);
+			? await window.quilliteMarkdown.uploadImageToPicGoCloud(target.path, localPath, operationId)
+			: await window.quilliteMarkdown.uploadImageToPicGo(target.path, localPath, operationId);
     succeeded = true;
     return { path: uploadedPath, uploaded: true, fallback: false };
   } catch (error) {
@@ -4226,8 +4229,10 @@ async function uploadedOrLocalImagePath(localPath, target) {
   }
 }
 
-function beginImageUploadProgress() {
+function beginImageUploadProgress(mode) {
   const run = ++state.imageUploadRun;
+  state.imageUploadOperationId = crypto.randomUUID();
+  state.imageUploadProgressMode = mode;
   clearTimeout(beginImageUploadProgress.hideTimer);
   els.imageUploadProgressTitle.textContent = t('imageUploadingTitle');
   els.imageUploadProgressDetail.textContent = t('imageUploadPreparing');
@@ -4239,7 +4244,7 @@ function beginImageUploadProgress() {
 }
 
 function updateImageUploadProgress(progress) {
-  if (els.imageUploadProgress.classList.contains('hidden')) return;
+  if (!state.imageUploadOperationId || progress?.operationId !== state.imageUploadOperationId || els.imageUploadProgress.classList.contains('hidden')) return;
   const phase = String(progress?.phase || 'uploading');
   const done = Math.max(0, Number(progress?.done) || 0);
   const total = Math.max(0, Number(progress?.total) || 0);
@@ -4258,11 +4263,12 @@ function updateImageUploadProgress(progress) {
     ? t('imageUploadComplete')
     : (finalizing
         ? t('imageUploadFinalizing')
-        : t(state.imageUploadMode === 'picgo-cloud' ? 'imageUploadingCloud' : 'imageUploadingLocalPicGo'));
+        : t(state.imageUploadProgressMode === 'picgo-cloud' ? 'imageUploadingCloud' : 'imageUploadingLocalPicGo'));
 }
 
 function finishImageUploadProgress(run, succeeded) {
   if (run !== state.imageUploadRun) return;
+  state.imageUploadOperationId = '';
   if (succeeded) {
     els.imageUploadProgress.classList.remove('is-indeterminate');
     els.imageUploadProgressPercent.textContent = '100%';
@@ -4349,15 +4355,16 @@ function releaseImageInsertion(target) {
 
 function imageInsertionCurrent(target, notify = false) {
   const current = imageInsertionTargetCurrent(target, codeEditor, state.documentSession, state.currentFile?.path, state.editing);
-  if (!current && notify && target?.session === state.documentSession && target.path === state.currentFile?.path && state.editing) showToast(t('imageInsertionChanged'), 'warning');
+  if (!current && notify && !target?.dismissed && target?.session === state.documentSession && target.path === state.currentFile?.path && state.editing) showToast(t('imageInsertionChanged'), 'warning');
   return current;
 }
 
 function cancelImageInsertions() {
-  for (const target of state.imageInsertionTargets) target.cancelled = true;
+  for (const target of state.imageInsertionTargets) { target.cancelled = true; target.dismissed = true; }
   state.imageInsertionTargets.clear();
   state.imageDialogTarget = null;
   state.imageUploadRun += 1;
+  state.imageUploadOperationId = '';
   els.imageUploadProgress.classList.add('hidden');
 }
 
@@ -4367,7 +4374,7 @@ function insertImageReference(imagePath, description, width = preferredImageWidt
   const content = editorContent();
   if (/^data:image\//i.test(imagePath) && new TextEncoder().encode(content).length + new TextEncoder().encode(markdown).length > 64 * 1024 * 1024) { showToast(t('portableTooLarge'), 'warning'); return false; }
   const selection = codeEditor.state.selection.main;
-  const ownsCaret = selection.from === target.from && selection.to === target.to && !document.body.classList.contains('dialog-open');
+  const ownsCaret = codeEditor.hasFocus && selection.from === target.from && selection.to === target.to && !document.body.classList.contains('dialog-open');
   const insertionState = codeEditor.state.update({selection: {anchor: target.from, head: target.to}}).state;
   const edit = replaceLiveSelections(insertionState, markdown);
   releaseImageInsertion(target);

@@ -26,6 +26,10 @@ You can close image settings or change your selection while a save or sign-in is
 
 While image selection, paste or upload is pending, insertion follows its original text location rather than a newly moved caret. Switching documents or leaving edit mode cancels pending insertions; changed selections are never overwritten. Captions and widths retain their original values, and image insertion is independently undoable.
 
+Image completion does not steal typing focus from Find/Replace fields. Cancelled operations remain silent after leaving and re-entering edit mode.
+
+Concurrent uploads have isolated progress identities: older requests cannot overwrite newer progress, and changing storage settings does not relabel an upload already in progress.
+
 Renaming keeps equations, diagrams, tables and footnotes editable in place without losing unsaved text or undo history. Footnote editing also follows the new file after Save As.
 
 Version history honors the latest selection: old responses cannot replace the preview after closing, reopening or switching documents. Restore stays disabled while loading or after failure. Restoring changes only the editor, supports undo, and writes to the document only when saved.

@@ -401,3 +401,11 @@ export function UploadImageToPicGo(arg1, arg2) {
 export function UploadImageToPicGoCloud(arg1, arg2) {
   return window['go']['main']['App']['UploadImageToPicGoCloud'](arg1, arg2);
 }
+
+export function UploadImageToPicGoCloudWithProgress(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadImageToPicGoCloudWithProgress'](arg1, arg2, arg3);
+}
+
+export function UploadImageToPicGoWithProgress(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadImageToPicGoWithProgress'](arg1, arg2, arg3);
+}

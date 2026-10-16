@@ -462,6 +462,13 @@ func TestUploadImageToPicGoUsesMultipartAndFallsBackOnlyAtTheFrontend(t *testing
 	if uploadedURL != "https://img.example.test/uploaded.png" {
 		t.Fatalf("unexpected uploaded URL: %q", uploadedURL)
 	}
+	trackedURL, err := app.UploadImageToPicGoWithProgress(documentPath, "assets/pasted.png", "synthetic-operation-1")
+	if err != nil || trackedURL != uploadedURL {
+		t.Fatalf("tracked upload changed transport: %q, %v", trackedURL, err)
+	}
+	if _, err := app.UploadImageToPicGoWithProgress(documentPath, filepath.Join(documentRoot, "outside.png"), "synthetic-operation-2"); err == nil {
+		t.Fatal("tracked uploads must retain the asset boundary")
+	}
 	if _, err := app.UploadImageToPicGo(documentPath, filepath.Join(documentRoot, "outside.png")); err == nil {
 		t.Fatal("an image outside the document assets folder must not be uploaded")
 	}

@@ -6,6 +6,10 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 为本机 PicGo 和 PicGo Cloud 上传进度增加独立请求标识，隔离旧请求、跨文档返回、完成后的迟到进度和延迟隐藏；服务说明使用本次上传的设置快照，保留原上传接口兼容性及本地附件回退。
+
+- 修复待插入图片返回时抢走查找／替换框焦点的问题；退出编辑后重新进入，已取消的图片请求不再弹出过期提醒，同时保留原选区被改写时的冲突提示。
+
 - 修复异步选图、粘贴和上传返回后图片跟随新光标或误用新弹窗说明、宽度的问题；映射原始插入位置，保护等待期间的编辑，切换文档或退出编辑后取消插入并忽略过期错误，支持独立撤回及表格／折叠区块内粘贴图片。
 
 - 修复图片设置保存、登录、退出及连接检查的异步竞态：关闭重开或修改选择后，旧响应不再误关窗口、改选模式或显示过期错误；保存与登录操作互斥并显示处理中状态。连接检测改为只读，避免迟到鉴权失败清除新登录凭据。
@@ -237,6 +241,10 @@ All notable changes to Quillite Markdown are documented here.
 - 日历标签、空白单元格和网格使用主题配色；新增搜索、表格和导入控件适配白天／黑夜。图表导出继续使用白纸配色，不将夜间浅色文字直接导出到白底。
 
 ### English
+
+- Added operation identities to local PicGo and PicGo Cloud progress, isolating older requests, document switches, late events after completion and delayed hiding. Provider labels use the upload's settings snapshot; existing upload APIs and local-asset fallback remain compatible.
+
+- Fixed pending images stealing focus from Find/Replace fields. Cancelled image requests stay silent after leaving and re-entering edit mode, while conflicting edits to the original selection still receive a warning.
 
 - Fixed pending image selection, paste and upload inserting at a newer caret or borrowing a reopened dialog's caption and width. Original locations track intervening edits without overwriting changed selections; document switches and leaving edit mode cancel insertion and stale errors. Added independent undo and image paste inside tables and collapsible blocks.
 
