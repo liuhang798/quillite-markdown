@@ -917,6 +917,16 @@ func (a *App) UploadImageToPicGoCloudWithProgress(currentFile, imagePath, operat
 }
 
 func (a *App) uploadImageToPicGoCloud(currentFile, imagePath, operationID string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client := picGoCloudHTTPClient(2 * time.Minute)
+	defer client.CloseIdleConnections()
+	return a.uploadImageToPicGoCloudWithClient(ctx, client, picGoCloudAPIBaseURL, currentFile, imagePath, operationID)
+}
+
+// Keep the complete upload path testable against an isolated HTTP service.
+// Production callers always supply the official API and bounded client above.
+func (a *App) uploadImageToPicGoCloudWithClient(ctx context.Context, client *http.Client, apiBase, currentFile, imagePath, operationID string) (string, error) {
 	reportProgress := imageUploadReporter(operationID, a.emitImageUploadProgress)
 	prefs, err := a.readPreferences()
 	if err != nil {
@@ -933,13 +943,9 @@ func (a *App) uploadImageToPicGoCloud(currentFile, imagePath, operationID string
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	client := picGoCloudHTTPClient(2 * time.Minute)
-	defer client.CloseIdleConnections()
 	total := int64(len(data))
 	reportProgress("preparing", 0, total)
-	uploadedURL, err := uploadImageToPicGoCloud(ctx, client, picGoCloudAPIBaseURL, token, name, data, contentType, func(done, total int64) {
+	uploadedURL, err := uploadImageToPicGoCloud(ctx, client, apiBase, token, name, data, contentType, func(done, total int64) {
 		reportProgress("uploading", done, total)
 	})
 	if err == nil {
@@ -947,10 +953,8 @@ func (a *App) uploadImageToPicGoCloud(currentFile, imagePath, operationID string
 	} else {
 		reportProgress("failed", 0, total)
 	}
-	var apiErr *picGoCloudAPIError
-	if errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized {
-		_ = a.writePicGoCloudToken("")
-	}
+	// Uploads own a credential snapshot, not the current login. A delayed 401
+	// must not clear a newer login; only explicit login/logout changes credentials.
 	return uploadedURL, err
 }
 

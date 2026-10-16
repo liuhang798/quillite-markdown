@@ -32,7 +32,7 @@ $playwrightRoot = Join-Path $env:RUNNER_TEMP 'quillite-playwright'
 Invoke-Checked 'playwright-install' 'npm.cmd' @('install','--prefix',$playwrightRoot,'--no-package-lock','--no-audit','--no-fund','playwright@1.62.1')
 $env:PLAYWRIGHT_MODULE = Join-Path $playwrightRoot 'node_modules/playwright'
 Invoke-Checked 'chromium-install' 'node' @((Join-Path $env:PLAYWRIGHT_MODULE 'cli.js'),'install','chromium')
-foreach ($case in @('browser-image-controls','browser-image-source','browser-image-fast-click','browser-image-storage-settings','browser-image-settings-async','browser-image-insertion-async','browser-image-transfer-async','browser-image-upload-progress','browser-mermaid-structured-controls')) {
+foreach ($case in @('browser-image-controls','browser-image-source','browser-image-fast-click','browser-image-storage-settings','browser-image-settings-async','browser-image-insertion-async','browser-image-transfer-async','browser-image-upload-progress','browser-image-upload-failures','browser-mermaid-structured-controls')) {
     $env:AUDIT_OUTPUT = Join-Path $evidence $case
     New-Item -ItemType Directory -Path $env:AUDIT_OUTPUT | Out-Null
     Invoke-Checked $case 'node' @("frontend/tests/$case.mjs")
