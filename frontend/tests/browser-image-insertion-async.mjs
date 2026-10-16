@@ -2,9 +2,11 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import {readFileSync} from 'node:fs';
 import {createServer} from 'vite';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
 const output=process.env.AUDIT_OUTPUT;if(!output)throw Error('AUDIT_OUTPUT required');
+const imageData='data:image/png;base64,'+readFileSync(new URL('../../build/appicon.png',import.meta.url)).toString('base64');
 const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error'});
 const cases=['move-caret','edit-before','edit-target','reopen-dialog','switch-document','reopen-document','late-error','picker-cancel','current-error'];
 let browser;const results=[];
@@ -16,12 +18,12 @@ try{
   const shot=suffix=>page.screenshot({path:`${output}/${id}-${suffix}.png`,animations:'disabled'});
   try{
    await page.goto(server.resolvedUrls.local[0]);await page.evaluate(()=>import('/src/main.js'));
-   await page.evaluate(()=>{
+   await page.evaluate(imageData=>{
     const doc=(path,content)=>({path,name:path,directory:'.',content,revision:'a'.repeat(64)});
     window.insertAudit={next:doc('A.md','ALPHA\n\nOMEGA'),calls:[]};Object.assign(window.quilliteMarkdown,{
-     openFile:async()=>({...insertAudit.next}),selectImage:path=>new Promise((resolve,reject)=>insertAudit.calls.push({path,resolve,reject})),
+     openFile:async()=>({...insertAudit.next}),selectImage:path=>new Promise((resolve,reject)=>insertAudit.calls.push({path,resolve,reject})),readImageData:async()=>imageData,
     });
-   });
+   },imageData);
    await page.locator('#openFileButton').click();await page.locator('#editButton').click();await page.locator(`[data-editor-presentation="${presentation}"]`).click();
    const editor=page.locator('#markdownEditor > .cm-editor'),content=editor.locator('> .cm-scroller > .cm-content');
    const read=()=>editor.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const{undoDepth}=await import('/node_modules/@codemirror/commands/dist/index.js');const view=EditorView.findFromDOM(el);return{doc:view.state.doc.toString(),undo:undoDepth(view.state)};});
@@ -45,6 +47,7 @@ try{
     const markup='<img src="assets/synthetic.png" alt="Original caption" width="50%">';
     const expected=name==='edit-before'?'PREFIX ALPHA\n\nOMEGA'+markup:'ALPHA'+markup+'\n\nOMEGA';
     assert.equal(after.doc,expected,'Insertion must use the original mapped range and captured caption/width');
+    if(presentation==='live')await page.waitForFunction(()=>[...document.querySelectorAll('#markdownEditor img')].some(img=>img.complete&&img.naturalWidth>0));
     if(name==='reopen-dialog'){
      assert.equal(await page.locator('#imageDialog').isVisible(),true);assert.equal(await page.locator('#imageAltInput').inputValue(),'Later caption');assert.equal(await page.locator('#imageUrl').evaluate(el=>el===document.activeElement),true,'Old completion must not steal focus from a newer dialog');await page.locator('#cancelImage').click();
     }

@@ -3,10 +3,12 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import {readFileSync} from 'node:fs';
 import {createServer} from 'vite';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
 const output=process.env.AUDIT_OUTPUT;if(!output)throw Error('AUDIT_OUTPUT required');
 const imagePath=fileURLToPath(new URL('../../build/appicon.png',import.meta.url));
+const imageData='data:image/png;base64,'+readFileSync(imagePath).toString('base64');
 const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error'});
 let browser;const results=[];
 const cases=(process.env.AUDIT_CASES||'paste-caret,paste-prefix,paste-switch,paste-error,paste-upload,paste-upload-switch,paste-upload-fallback,paste-concurrent,paste-details,paste-table').split(',');
@@ -15,7 +17,7 @@ try{
  for(const name of cases){
   const context=await browser.newContext({viewport:{width:1500,height:1100},permissions:['clipboard-read','clipboard-write']}),page=await context.newPage(),errors=[];
   page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
-  await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.hostname!=='127.0.0.1')return r.abort();if(u.pathname==='/synthetic-image.png'||u.pathname.startsWith('/assets/'))return r.fulfill({path:imagePath,contentType:'image/png'});return r.continue();});
+  await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.href==='https://example.test/uploaded.png')return r.fulfill({path:imagePath,contentType:'image/png'});if(u.hostname!=='127.0.0.1')return r.abort();if(u.pathname==='/synthetic-image.png'||u.pathname.startsWith('/assets/'))return r.fulfill({path:imagePath,contentType:'image/png'});return r.continue();});
   const app=page.frameLocator('iframe'),editor=app.locator('#markdownEditor > .cm-editor'),content=editor.locator('> .cm-scroller > .cm-content');
   const shot=suffix=>page.screenshot({path:`${output}/${name}-${suffix}.png`,animations:'disabled'});
   try{
@@ -23,14 +25,14 @@ try{
    const frame=page.frames().find(f=>{try{return new URL(f.url()).pathname==='/';}catch{return false;}});
    await frame.evaluate(()=>{window.transferEvents=[];for(const type of ['dragenter','dragover','drop'])document.addEventListener(type,e=>{if(type==='dragover'&&transferEvents.some(x=>x.type===type))return;transferEvents.push({type,types:[...e.dataTransfer.types],files:[...e.dataTransfer.files].map(f=>f.name),target:e.target.className});},true);});
    const source=name==='paste-details'?'<details open>\n<summary>Summary</summary>\n\nALPHA\n\n</details>\n\nOMEGA':name==='paste-table'?'| Name |\n| --- |\n| ALPHA |\n\nOMEGA':'ALPHA\n\nOMEGA';
-   await frame.evaluate(source=>{
+   await frame.evaluate(({source,imageData})=>{
     const doc=(path,body)=>({path,name:path,directory:'.',content:body,revision:'a'.repeat(64)});window.transferAudit={next:doc('A.md',source),calls:[]};
     const pending=(kind,path,input)=>new Promise((resolve,reject)=>transferAudit.calls.push({kind,path,input,resolve,reject}));
-    Object.assign(window.quilliteMarkdown,{openFile:async()=>({...transferAudit.next}),pathForFile:f=>f.name==='audit.png'?'C:/synthetic/audit.png':'',
+    Object.assign(window.quilliteMarkdown,{openFile:async()=>({...transferAudit.next}),pathForFile:f=>f.name==='audit.png'?'C:/synthetic/audit.png':'',readImageData:async()=>imageData,
      importImage:(path,input)=>pending('asset',path,input),savePastedImage:(path,input)=>pending('asset',path,input),
      setImageUploadSettings:async input=>({mode:input.mode,serverUrl:input.serverUrl}),testPicGo:async()=>({connected:true}),uploadImageToPicGo:(path,input)=>pending('upload',path,input),
     });
-   },source);
+   },{source,imageData});
    await app.locator('#openFileButton').click();await app.locator('#editButton').click();
    if(name.includes('upload')){
     await app.locator('#moreButton').click();await app.locator('[data-action="image-upload-settings"]').click();await app.locator('[name="imageUploadMode"][value="picgo"]').check();await app.locator('#picGoInstalledNext').click();await app.locator('#saveImageUploadSettings').click();await app.locator('#imageUploadSettingsDialog').waitFor({state:'hidden'});await app.locator('#closeToast').click();
@@ -63,6 +65,7 @@ try{
    }else{
     const expectedPath=name.includes('upload')&&name!=='paste-upload-fallback'?'https://example.test/uploaded.png':'assets/first.png';
     assert.ok(actual.includes(expectedPath),'Image must be inserted');
+    await frame.waitForFunction(()=>[...document.querySelectorAll('#markdownEditor img')].some(img=>img.complete&&img.naturalWidth>0));await shot('03-image-loaded');
     if(name==='paste-prefix')assert.ok(actual.startsWith('PREFIX ALPHA\n\nOMEGA!['));
     else if(name==='paste-concurrent')assert.match(actual,/ALPHA!\[[^\]]*\]\(assets\/first.png\)\n\nOMEGA!\[[^\]]*\]\(assets\/second.png\)/);
     else if(name==='paste-details')assert.match(actual,/ALPHA!\[[^\]]*\]\(assets\/first.png\)\n\n<\/details>/);
