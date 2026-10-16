@@ -511,6 +511,49 @@ func TestPicGoCloudCredentialsStayOutOfPreferencesAndPKCEIsValid(t *testing.T) {
 	}
 }
 
+func TestPicGoCloudDelayedUnauthorizedCheckPreservesNewLogin(t *testing.T) {
+	app := testApp(t)
+	if err := app.writePicGoCloudToken("old-synthetic-token"); err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer old-synthetic-token" {
+			t.Error("the request must use its original credential snapshot")
+		}
+		close(started)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		http.Error(w, `{"message":"expired"}`, http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := app.checkPicGoCloudConnection(ctx, server.Client(), server.URL)
+		result <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("connection check did not start")
+	}
+	if err := app.writePicGoCloudToken("new-synthetic-token"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-result; err == nil {
+		t.Fatal("the expired request must still report failure")
+	}
+	if token := app.readPicGoCloudToken(); token != "new-synthetic-token" {
+		t.Fatal("a delayed connection failure cleared the newer login")
+	}
+}
+
 func TestPicGoCloudStatusAndDirectUploadUseOfficialPresignFlow(t *testing.T) {
 	const token = "direct-cloud-token"
 	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")

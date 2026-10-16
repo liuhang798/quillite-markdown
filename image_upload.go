@@ -460,17 +460,17 @@ func picGoCloudStatus(ctx context.Context, client *http.Client, apiBase, token s
 }
 
 func (a *App) TestPicGoCloud() (PicGoCloudStatus, error) {
-	token := a.readPicGoCloudToken()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	client := picGoCloudHTTPClient(15 * time.Second)
 	defer client.CloseIdleConnections()
-	status, err := picGoCloudStatus(ctx, client, picGoCloudAPIBaseURL, token)
-	var apiErr *picGoCloudAPIError
-	if errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized {
-		_ = a.writePicGoCloudToken("")
-	}
-	return status, err
+	return a.checkPicGoCloudConnection(ctx, client, picGoCloudAPIBaseURL)
+}
+
+func (a *App) checkPicGoCloudConnection(ctx context.Context, client *http.Client, apiBase string) (PicGoCloudStatus, error) {
+	// A slow check may finish after a new login. Connection checks are read-only:
+	// only an explicit login/logout may replace or clear the stored credential.
+	return picGoCloudStatus(ctx, client, apiBase, a.readPicGoCloudToken())
 }
 
 func randomBase64URL(byteCount int) (string, error) {

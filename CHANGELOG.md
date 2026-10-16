@@ -6,6 +6,8 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复图片设置保存、登录、退出及连接检查的异步竞态：关闭重开或修改选择后，旧响应不再误关窗口、改选模式或显示过期错误；保存与登录操作互斥并显示处理中状态。连接检测改为只读，避免迟到鉴权失败清除新登录凭据。
+
 - 修复本地 assets、内嵌 Base64 和 PicGo Cloud 模式保存图片设置失败时没有可见提示的问题；四种模式共用错误提示区，保留当前选择并支持重试，重新打开或切换模式后清除旧提示。
 
 - 补齐流程图和状态图新增节点后的同步聚焦，防止搜索输入意外改写节点名称；新增三类画布实际拖动、键盘、缩放、结构编辑和保存撤回回归。
@@ -233,6 +235,8 @@ All notable changes to Quillite Markdown are documented here.
 - 日历标签、空白单元格和网格使用主题配色；新增搜索、表格和导入控件适配白天／黑夜。图表导出继续使用白纸配色，不将夜间浅色文字直接导出到白底。
 
 ### English
+
+- Fixed async races in image settings saves, sign-in, sign-out, and connection checks. Late responses cannot close reopened dialogs, replace newer choices, or show obsolete errors. Settings and credential writes are serialized with a working indicator. Connection checks are read-only so stale authorization failures cannot clear newer credentials.
 
 - Show image-settings save failures in a shared status area for all four storage modes, including local assets, embedded Base64 and PicGo Cloud. Preserve the selection for retry and clear obsolete feedback when reopening or changing modes.
 

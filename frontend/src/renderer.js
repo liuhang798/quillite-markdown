@@ -330,6 +330,10 @@ const state = {
   picGoSetupStep: 1,
   picGoConnectionReady: false,
   picGoDetectionRun: 0,
+  picGoCloudDetectionRun: 0,
+  picGoCloudChecking: false,
+  imageSettingsRevision: 0,
+  imageSettingsMutation: '',
   imageUploadRun: 0,
   feedbackImages: [],
   feedbackSystemInfo: null,
@@ -444,6 +448,7 @@ window.addEventListener('unhandledrejection', event => reportSilentError(event.r
 
 const translations = {
   'zh-CN': {
+    imageSettingsWorking: '处理中…',
     recoveryReview: '恢复草稿', recoveryLater: '稍后处理', recoveryAvailable: '发现旧草稿，已保留独立备份。可点击顶部“恢复草稿”查看。',
     recoverySafeDescription: '上次未保存的内容已保留为独立备份。请先保存当前编辑，再恢复草稿；也可稍后处理，或在“更多 → 文档工具 → 文档安全”另存恢复副本。',
     recoverySaveFirst: '请先保存当前文档的修改，再恢复旧草稿。两份内容均保持不变。', recoveryChanged: '当前文档已变化，未应用恢复内容。请保存后重新恢复。',
@@ -533,6 +538,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     resizeSidebar: '拖动调整文档库宽度', resizeToc: '拖动调整目录宽度', resizeEditor: '拖动调整预览宽度'
   },
   en: {
+    imageSettingsWorking: 'Working…',
     recoveryReview: 'Recover draft', recoveryLater: 'Later', recoveryAvailable: 'An older draft was preserved separately. Use Recover draft in the toolbar to review it.',
     recoverySafeDescription: 'Previous unsaved edits are preserved separately. Save current edits before restoring, handle this later, or save a recovery copy under More → Document tools → Safety.',
     recoverySaveFirst: 'Save your current edits before restoring the older draft. Both remain unchanged.', recoveryChanged: 'The current document changed. Recovery was not applied. Save it and try again.',
@@ -3937,6 +3943,33 @@ function currentImageUploadSettingsInput() {
   };
 }
 
+// A dialog opening and every draft edit have separate response ownership.
+// Persisted preferences still accept a completed write, but its old UI must not.
+function imageSettingsResponseCurrent(revision) {
+  return revision === state.imageSettingsRevision && !els.imageUploadSettingsDialog.classList.contains('hidden');
+}
+
+function invalidateImageSettingsResponses() {
+  state.imageSettingsRevision += 1;
+  state.picGoDetectionRun += 1;
+  state.picGoCloudDetectionRun += 1;
+  state.picGoCloudChecking = false;
+}
+
+function beginImageSettingsMutation(kind) {
+  if (state.imageSettingsMutation || els.imageUploadSettingsDialog.classList.contains('hidden')) return null;
+  state.imageSettingsMutation = kind;
+  state.picGoCloudDetectionRun += 1;
+  state.picGoCloudChecking = false;
+  updatePicGoSettingsAvailability();
+  return state.imageSettingsRevision;
+}
+
+function finishImageSettingsMutation() {
+  state.imageSettingsMutation = '';
+  updatePicGoSettingsAvailability();
+}
+
 function setPicGoWizardStep(step) {
   const normalizedStep = Math.max(1, Math.min(3, Number(step) || 1));
   state.picGoSetupStep = normalizedStep;
@@ -3950,8 +3983,9 @@ function setPicGoWizardStep(step) {
   });
   const saveButton = $('#saveImageUploadSettings');
   const readyToEnable = selectedImageUploadMode() === 'picgo' && state.picGoConnectionReady;
-  saveButton.dataset.i18n = readyToEnable ? 'enablePicGo' : 'saveSettings';
-  saveButton.textContent = t(readyToEnable ? 'enablePicGo' : 'saveSettings');
+  const label = state.imageSettingsMutation ? 'imageSettingsWorking' : readyToEnable ? 'enablePicGo' : 'saveSettings';
+  saveButton.dataset.i18n = label;
+  saveButton.textContent = t(label);
 }
 
 function updatePicGoSettingsAvailability() {
@@ -3962,7 +3996,11 @@ function updatePicGoSettingsAvailability() {
 	els.picGoSetupWizard.classList.toggle('hidden', !localPicGoEnabled);
 	els.localAssetsSummary.classList.toggle('hidden', mode !== 'local');
   $('#embeddedImagesSummary').classList.toggle('hidden', mode !== 'embedded');
-	$('#saveImageUploadSettings').disabled = (cloudEnabled && !state.picGoCloudConnectionReady) || (localPicGoEnabled && !state.picGoConnectionReady);
+  const busy = Boolean(state.imageSettingsMutation);
+	$('#saveImageUploadSettings').disabled = busy || (cloudEnabled && !state.picGoCloudConnectionReady) || (localPicGoEnabled && !state.picGoConnectionReady);
+	$('#loginPicGoCloud').disabled = busy;
+	$('#logoutPicGoCloud').disabled = busy;
+	$('#testPicGoCloud').disabled = busy || state.picGoCloudChecking;
 	$('#testPicGo').disabled = !localPicGoEnabled;
   setPicGoWizardStep(state.picGoSetupStep);
 }
@@ -3999,59 +4037,80 @@ function setPicGoTestStatus(message = '', kind = '') {
 }
 
 async function testPicGoCloudConnection({ quiet = false } = {}) {
-	const button = $('#testPicGoCloud');
-	button.disabled = true;
+  if (state.imageSettingsMutation || selectedImageUploadMode() !== 'picgo-cloud' || els.imageUploadSettingsDialog.classList.contains('hidden')) return false;
+  const revision = state.imageSettingsRevision, run = ++state.picGoCloudDetectionRun;
+  const current = () => imageSettingsResponseCurrent(revision) && run === state.picGoCloudDetectionRun;
+  state.picGoCloudChecking = true;
+  state.picGoCloudConnectionReady = false;
+  updatePicGoSettingsAvailability();
 	if (!quiet) setPicGoCloudStatus(t('picGoCloudChecking'));
 	try {
 		const status = await window.quilliteMarkdown.testPicGoCloud();
+    if (!current()) return false;
+    if (!status?.connected) throw new Error('PicGo Cloud is not connected');
 		applyPicGoCloudStatus(status);
 		setPicGoCloudStatus(t('picGoCloudConnected'), 'success');
 		return true;
 	} catch (error) {
+    if (!current()) return false;
 		console.warn('PicGo Cloud connection test failed', error);
 		state.picGoCloudConnectionReady = false;
-		state.picGoCloudHasToken = false;
 		applyPicGoCloudStatus({ connected: false });
 		setPicGoCloudStatus(t('picGoCloudConnectionFailed'), 'error');
 		return false;
 	} finally {
-		button.disabled = false;
+    if (current()) {
+      state.picGoCloudChecking = false;
+      updatePicGoSettingsAvailability();
+    }
 	}
 }
 
 async function loginPicGoCloud() {
-	const button = $('#loginPicGoCloud');
-	button.disabled = true;
+  const revision = beginImageSettingsMutation('login');
+  if (revision === null) return;
 	setPicGoCloudStatus(t('picGoCloudSigningIn'));
 	try {
 		const status = await window.quilliteMarkdown.loginPicGoCloud();
 		state.picGoCloudHasToken = true;
-		applyPicGoCloudStatus(status);
-		setPicGoCloudStatus(t('picGoCloudConnected'), 'success');
+    if (imageSettingsResponseCurrent(revision)) {
+      applyPicGoCloudStatus(status);
+      setPicGoCloudStatus(t('picGoCloudConnected'), 'success');
+    } else {
+      applyPicGoCloudStatus({ connected: false });
+    }
 	} catch (error) {
 		console.warn('PicGo Cloud sign-in failed', error);
-		setPicGoCloudStatus(t('picGoCloudLoginFailed'), 'error');
+    if (imageSettingsResponseCurrent(revision)) setPicGoCloudStatus(t('picGoCloudLoginFailed'), 'error');
 	} finally {
-		button.disabled = false;
+    finishImageSettingsMutation();
 	}
 }
 
 async function logoutPicGoCloud() {
+  const revision = beginImageSettingsMutation('logout');
+  if (revision === null) return;
 	try {
 		const settings = await window.quilliteMarkdown.logoutPicGoCloud();
 		applyImageUploadSettings(settings);
 		state.picGoCloudConnectionReady = false;
 		applyPicGoCloudStatus({ connected: false });
-		document.querySelector(`input[name="imageUploadMode"][value="${state.imageUploadMode}"]`).checked = true;
-		updatePicGoSettingsAvailability();
-		setPicGoCloudStatus(t('picGoCloudLoggedOut'), 'success');
+    if (imageSettingsResponseCurrent(revision)) {
+      document.querySelector(`input[name="imageUploadMode"][value="${state.imageUploadMode}"]`).checked = true;
+      updatePicGoSettingsAvailability();
+      setPicGoCloudStatus(t('picGoCloudLoggedOut'), 'success');
+    }
 	} catch (error) {
 		console.warn('Unable to sign out of PicGo Cloud', error);
-		setPicGoCloudStatus(t('imageUploadSettingsSaveFailed'), 'error');
+    if (imageSettingsResponseCurrent(revision)) setPicGoCloudStatus(t('imageUploadSettingsSaveFailed'), 'error');
+  } finally {
+    finishImageSettingsMutation();
 	}
 }
 
 function openImageUploadSettings() {
+  invalidateImageSettingsResponses();
+  const revision = state.imageSettingsRevision;
   if (!els.imageDialog.classList.contains('hidden')) closeImageDialog();
   setImageUploadSettingsStatus();
   document.querySelector(`input[name="imageUploadMode"][value="${state.imageUploadMode}"]`).checked = true;
@@ -4070,15 +4129,16 @@ function openImageUploadSettings() {
   els.imageUploadSettingsDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
   requestAnimationFrame(() => {
+    if (!imageSettingsResponseCurrent(revision)) return;
     document.querySelector('input[name="imageUploadMode"]:checked')?.focus();
-    if (state.imageUploadMode === 'picgo') testPicGoConnection({ automatic: true });
-		if (state.imageUploadMode === 'picgo-cloud' && state.picGoCloudHasToken) testPicGoCloudConnection({ quiet: true });
+    if (selectedImageUploadMode() === 'picgo') testPicGoConnection({ automatic: true });
+		if (selectedImageUploadMode() === 'picgo-cloud' && state.picGoCloudHasToken) testPicGoCloudConnection({ quiet: true });
   });
 }
 
 function closeImageUploadSettings() {
   if (els.imageUploadSettingsDialog.classList.contains('hidden')) return;
-  state.picGoDetectionRun += 1;
+  invalidateImageSettingsResponses();
   els.imageUploadSettingsDialog.classList.add('hidden');
   document.body.classList.remove('dialog-open');
   $('#moreButton').focus();
@@ -4114,7 +4174,7 @@ async function testPicGoConnection() {
 }
 
 async function saveImageUploadSettings() {
-  const button = $('#saveImageUploadSettings');
+  if (state.imageSettingsMutation || els.imageUploadSettingsDialog.classList.contains('hidden')) return;
   setImageUploadSettingsStatus();
 	if (selectedImageUploadMode() === 'picgo-cloud' && !state.picGoCloudConnectionReady) {
 		if (!state.picGoCloudHasToken) await loginPicGoCloud();
@@ -4125,17 +4185,21 @@ async function saveImageUploadSettings() {
     await testPicGoConnection();
     return;
   }
-  button.disabled = true;
+  const input = currentImageUploadSettingsInput();
+  const revision = beginImageSettingsMutation('save');
+  if (revision === null) return;
   try {
-    const settings = await window.quilliteMarkdown.setImageUploadSettings(currentImageUploadSettingsInput());
+    const settings = await window.quilliteMarkdown.setImageUploadSettings(input);
     applyImageUploadSettings(settings);
-    closeImageUploadSettings();
-    showToast(t('imageUploadSettingsSaved'), 'success');
+    if (imageSettingsResponseCurrent(revision)) {
+      closeImageUploadSettings();
+      showToast(t('imageUploadSettingsSaved'), 'success');
+    }
   } catch (error) {
     console.warn('Unable to save image upload settings', error);
-    setImageUploadSettingsStatus(t('imageUploadSettingsSaveFailed'));
+    if (imageSettingsResponseCurrent(revision)) setImageUploadSettingsStatus(t('imageUploadSettingsSaveFailed'));
   } finally {
-    button.disabled = false;
+    finishImageSettingsMutation();
   }
 }
 
@@ -11102,7 +11166,9 @@ $('#picGoSetupBack').addEventListener('click', () => {
 });
 document.querySelectorAll('input[name="imageUploadMode"]').forEach(input => input.addEventListener('change', () => {
   setImageUploadSettingsStatus();
-  state.picGoDetectionRun += 1;
+  invalidateImageSettingsResponses();
+  state.picGoCloudConnectionReady = false;
+  applyPicGoCloudStatus({ connected: false });
   state.picGoConnectionReady = false;
   setPicGoWizardStep(1);
   updatePicGoSettingsAvailability();
@@ -11112,7 +11178,8 @@ document.querySelectorAll('input[name="imageUploadMode"]').forEach(input => inpu
 }));
 [els.picGoServerURL, els.picGoSecret, els.clearPicGoSecret].forEach(input => input.addEventListener('input', () => {
   if (selectedImageUploadMode() !== 'picgo') return;
-  state.picGoDetectionRun += 1;
+  invalidateImageSettingsResponses();
+  setImageUploadSettingsStatus();
   state.picGoConnectionReady = false;
   setPicGoWizardStep(2);
   setPicGoTestStatus();

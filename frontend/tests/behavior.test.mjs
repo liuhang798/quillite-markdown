@@ -1067,7 +1067,7 @@ test('PicGo Cloud uploads directly while local PicGo remains compatible and ever
   assert.match(mainSource, /uploadImageToPicGo:[\s\S]*Backend\.UploadImageToPicGo/);
   assert.match(mainSource, /onImageUploadProgress:[\s\S]*EventsOn\('image-upload:progress'/);
   assert.match(renderer, /function setPicGoWizardStep\(step\)[\s\S]*picGoConnectionReady/);
-  assert.match(renderer, /if \(state\.imageUploadMode === 'picgo'\) testPicGoConnection\(\{ automatic: true \}\)/);
+  assert.match(renderer, /if \(!imageSettingsResponseCurrent\(revision\)\) return;[\s\S]*if \(selectedImageUploadMode\(\) === 'picgo'\) testPicGoConnection\(\{ automatic: true \}\)/);
   assert.match(renderer, /PICGO_DOWNLOAD_URL = 'https:\/\/picgo\.app\/'/);
   assert.match(renderer, /selectedImageUploadMode\(\) === 'picgo' && !state\.picGoConnectionReady[\s\S]*await testPicGoConnection\(\)/);
   assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath\)[\s\S]*uploadImageToPicGoCloud\(state\.currentFile\.path, localPath\)[\s\S]*uploadImageToPicGo\(state\.currentFile\.path, localPath\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true \}/);

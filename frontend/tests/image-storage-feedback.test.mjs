@@ -8,7 +8,8 @@ const section=(begin,end)=>source.slice(source.indexOf(begin),source.indexOf(end
 function setup(mode){
  const classes=new Set(['hidden']),status={textContent:'',classList:{toggle:(key,on)=>on?classes.add(key):classes.delete(key)}},button={disabled:false};
  const calls=[],settings={mode,serverUrl:'http://127.0.0.1:36677',secret:'',clearSecret:false};let fail=true,closed=0;
- const context=vm.createContext({state:{picGoConnectionReady:true,picGoCloudConnectionReady:true},$:id=>id==='#imageUploadSettingsStatus'?status:button,
+ const context=vm.createContext({state:{picGoConnectionReady:true,picGoCloudConnectionReady:true},els:{imageUploadSettingsDialog:{classList:{contains:()=>false}}},$:id=>id==='#imageUploadSettingsStatus'?status:button,
+  beginImageSettingsMutation:()=>0,finishImageSettingsMutation:()=>{button.disabled=false;},imageSettingsResponseCurrent:()=>true,
   selectedImageUploadMode:()=>mode,currentImageUploadSettingsInput:()=>settings,t:x=>x,console:{warn(){}},
   window:{quilliteMarkdown:{setImageUploadSettings:async input=>{calls.push(input);if(fail)throw Error('Synthetic');return{mode};}}},
   applyImageUploadSettings:x=>calls.push({applied:x}),closeImageUploadSettings:()=>{closed++;},showToast(){},
