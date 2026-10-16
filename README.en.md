@@ -24,6 +24,8 @@ All four image-storage modes show save failures, preserve your selection for ret
 
 You can close image settings or change your selection while a save or sign-in is pending. Late responses do not close a reopened dialog or replace newer choices. Settings writes and sign-in operations are serialized, and connection checks never delete credentials.
 
+While image selection, paste or upload is pending, insertion follows its original text location rather than a newly moved caret. Switching documents or leaving edit mode cancels pending insertions; changed selections are never overwritten. Captions and widths retain their original values, and image insertion is independently undoable.
+
 Renaming keeps equations, diagrams, tables and footnotes editable in place without losing unsaved text or undo history. Footnote editing also follows the new file after Save As.
 
 Version history honors the latest selection: old responses cannot replace the preview after closing, reopening or switching documents. Restore stays disabled while loading or after failure. Restoring changes only the editor, supports undo, and writes to the document only when saved.

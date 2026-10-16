@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>Isolated image transfer audit</title>
+<style>html,body{margin:0;height:100%}header{height:60px;display:flex;gap:20px;align-items:center;padding:0 20px}header img{width:44px;height:44px}iframe{display:block;border:0;width:100%;height:calc(100% - 60px)}</style>
+<header><button id="copyImage">Copy synthetic clipboard image</button><img id="dragImage" alt="Drag synthetic image" draggable="true" src="/synthetic-image.png"><output id="status">Preparing fixture</output></header>
+<iframe title="Isolated app" src="/"></iframe>
+<script type="module">
+const blob=await(await fetch('/synthetic-image.png')).blob();
+document.querySelector('#status').textContent='Fixture ready';
+document.querySelector('#copyImage').onclick=async()=>{await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);document.querySelector('#status').textContent='Image copied';};
+document.querySelector('#dragImage').ondragstart=event=>{event.dataTransfer.items.add(new File([blob],'audit.png',{type:'image/png'}));event.dataTransfer.effectAllowed='copy';window.dragAudit={types:[...event.dataTransfer.types],files:[...event.dataTransfer.files].map(f=>f.name)};};
+</script></html>

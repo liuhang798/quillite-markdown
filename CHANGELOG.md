@@ -6,6 +6,8 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复异步选图、粘贴和上传返回后图片跟随新光标或误用新弹窗说明、宽度的问题；映射原始插入位置，保护等待期间的编辑，切换文档或退出编辑后取消插入并忽略过期错误，支持独立撤回及表格／折叠区块内粘贴图片。
+
 - 修复图片设置保存、登录、退出及连接检查的异步竞态：关闭重开或修改选择后，旧响应不再误关窗口、改选模式或显示过期错误；保存与登录操作互斥并显示处理中状态。连接检测改为只读，避免迟到鉴权失败清除新登录凭据。
 
 - 修复本地 assets、内嵌 Base64 和 PicGo Cloud 模式保存图片设置失败时没有可见提示的问题；四种模式共用错误提示区，保留当前选择并支持重试，重新打开或切换模式后清除旧提示。
@@ -235,6 +237,8 @@ All notable changes to Quillite Markdown are documented here.
 - 日历标签、空白单元格和网格使用主题配色；新增搜索、表格和导入控件适配白天／黑夜。图表导出继续使用白纸配色，不将夜间浅色文字直接导出到白底。
 
 ### English
+
+- Fixed pending image selection, paste and upload inserting at a newer caret or borrowing a reopened dialog's caption and width. Original locations track intervening edits without overwriting changed selections; document switches and leaving edit mode cancel insertion and stale errors. Added independent undo and image paste inside tables and collapsible blocks.
 
 - Fixed async races in image settings saves, sign-in, sign-out, and connection checks. Late responses cannot close reopened dialogs, replace newer choices, or show obsolete errors. Settings and credential writes are serialized with a working indicator. Connection checks are read-only so stale authorization failures cannot clear newer credentials.
 

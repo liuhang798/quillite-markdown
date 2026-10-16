@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { tableWhitespace, tableRenderSource } from './markdown-parser.js';
 import { isFileDrag } from './file-drag.js';
+import { createImageInsertionTarget, imageInsertionTargetCurrent, mapImageInsertionTargets } from './image-insertion-target.js';
 import { fitEditorSplit, normalizeEditorPreviewWidth } from './editor-split-layout.js';
 import { inlineFormatEdit, formatSelectionEdits, textColorEdit } from './inline-format-toggle.js';
 import { selectionHistory, withSelectionHistory } from './selection-history.js';
@@ -335,6 +336,8 @@ const state = {
   imageSettingsRevision: 0,
   imageSettingsMutation: '',
   imageUploadRun: 0,
+  imageInsertionTargets: new Set(),
+  imageDialogTarget: null,
   feedbackImages: [],
   feedbackSystemInfo: null,
   saving: false,
@@ -448,6 +451,7 @@ window.addEventListener('unhandledrejection', event => reportSilentError(event.r
 
 const translations = {
   'zh-CN': {
+    imageInsertionChanged: '原插入位置已修改，未插入图片，请重新选择位置后插入。',
     imageSettingsWorking: '处理中…',
     recoveryReview: '恢复草稿', recoveryLater: '稍后处理', recoveryAvailable: '发现旧草稿，已保留独立备份。可点击顶部“恢复草稿”查看。',
     recoverySafeDescription: '上次未保存的内容已保留为独立备份。请先保存当前编辑，再恢复草稿；也可稍后处理，或在“更多 → 文档工具 → 文档安全”另存恢复副本。',
@@ -538,6 +542,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     resizeSidebar: '拖动调整文档库宽度', resizeToc: '拖动调整目录宽度', resizeEditor: '拖动调整预览宽度'
   },
   en: {
+    imageInsertionChanged: 'The original insertion location changed. Choose a location and insert the image again.',
     imageSettingsWorking: 'Working…',
     recoveryReview: 'Recover draft', recoveryLater: 'Later', recoveryAvailable: 'An older draft was preserved separately. Use Recover draft in the toolbar to review it.',
     recoverySafeDescription: 'Previous unsaved edits are preserved separately. Save current edits before restoring, handle this later, or save a recovery copy under More → Document tools → Safety.',
@@ -4203,14 +4208,14 @@ async function saveImageUploadSettings() {
   }
 }
 
-async function uploadedOrLocalImagePath(localPath) {
-	if (!['picgo-cloud', 'picgo'].includes(state.imageUploadMode)) return { path: localPath, uploaded: false, fallback: false };
+async function uploadedOrLocalImagePath(localPath, target) {
+	if (!['picgo-cloud', 'picgo'].includes(target.mode)) return { path: localPath, uploaded: false, fallback: false };
   const uploadRun = beginImageUploadProgress();
   let succeeded = false;
   try {
-		const uploadedPath = state.imageUploadMode === 'picgo-cloud'
-			? await window.quilliteMarkdown.uploadImageToPicGoCloud(state.currentFile.path, localPath)
-			: await window.quilliteMarkdown.uploadImageToPicGo(state.currentFile.path, localPath);
+		const uploadedPath = target.mode === 'picgo-cloud'
+			? await window.quilliteMarkdown.uploadImageToPicGoCloud(target.path, localPath)
+			: await window.quilliteMarkdown.uploadImageToPicGo(target.path, localPath);
     succeeded = true;
     return { path: uploadedPath, uploaded: true, fallback: false };
   } catch (error) {
@@ -4277,7 +4282,9 @@ function showImportedImageResult(result) {
 }
 
 function openImageDialog() {
-  if (!state.currentFile) return;
+  if (!state.currentFile || !state.editing || !codeEditor || codeEditor.state.readOnly) return;
+  releaseImageInsertion(state.imageDialogTarget);
+  state.imageDialogTarget = captureImageInsertion();
   els.imageUrl.value = '';
   els.imageWidth.value = String(preferredImageWidth());
   updateImageWidthLabel();
@@ -4290,17 +4297,12 @@ function openImageDialog() {
 }
 
 function closeImageDialog() {
+  releaseImageInsertion(state.imageDialogTarget);
+  state.imageDialogTarget = null;
   if (els.imageDialog.classList.contains('hidden')) return;
   els.imageDialog.classList.add('hidden');
   document.body.classList.remove('dialog-open');
   focusCodeEditor();
-}
-
-function selectedImageAlt() {
-  if (codeEditor && !codeEditor.state.selection.main.empty) {
-    return codeEditor.state.doc.sliceString(codeEditor.state.selection.main.from, codeEditor.state.selection.main.to).replaceAll('[', '\\[').replaceAll(']', '\\]');
-  }
-  return '';
 }
 
 function insertImage() {
@@ -4330,43 +4332,86 @@ function imageMarkdown(imagePath, description, width = preferredImageWidth()) {
   return `![${markdownDescription}](${markdownPath})`;
 }
 
-function insertImageReference(imagePath, description, width = preferredImageWidth()) {
+function captureImageInsertion(view = codeEditor) {
+  if (!state.editing || !state.currentFile?.path || !codeEditor || codeEditor.state.readOnly) return null;
+  const owner = resolveEditableOwner(view);
+  if (!owner || owner.view !== codeEditor) return null;
+  const target = createImageInsertionTarget(codeEditor, state.documentSession, state.currentFile.path, owner);
+  target.width = preferredImageWidth();
+  target.mode = state.imageUploadMode;
+  state.imageInsertionTargets.add(target);
+  return target;
+}
+
+function releaseImageInsertion(target) {
+  if (target) state.imageInsertionTargets.delete(target);
+}
+
+function imageInsertionCurrent(target, notify = false) {
+  const current = imageInsertionTargetCurrent(target, codeEditor, state.documentSession, state.currentFile?.path, state.editing);
+  if (!current && notify && target?.session === state.documentSession && target.path === state.currentFile?.path && state.editing) showToast(t('imageInsertionChanged'), 'warning');
+  return current;
+}
+
+function cancelImageInsertions() {
+  for (const target of state.imageInsertionTargets) target.cancelled = true;
+  state.imageInsertionTargets.clear();
+  state.imageDialogTarget = null;
+  state.imageUploadRun += 1;
+  els.imageUploadProgress.classList.add('hidden');
+}
+
+function insertImageReference(imagePath, description, width = preferredImageWidth(), target = null) {
+  if (!imageInsertionCurrent(target, true)) return false;
   const markdown = imageMarkdown(imagePath, description, width);
-  const document = editorContent();
-  if (/^data:image\//i.test(imagePath) && new TextEncoder().encode(document).length + new TextEncoder().encode(markdown).length > 64 * 1024 * 1024) { showToast(t('portableTooLarge'), 'warning'); return false; }
-  replaceSelection(markdown, markdown.length, 0);
+  const content = editorContent();
+  if (/^data:image\//i.test(imagePath) && new TextEncoder().encode(content).length + new TextEncoder().encode(markdown).length > 64 * 1024 * 1024) { showToast(t('portableTooLarge'), 'warning'); return false; }
+  const selection = codeEditor.state.selection.main;
+  const ownsCaret = selection.from === target.from && selection.to === target.to && !document.body.classList.contains('dialog-open');
+  const insertionState = codeEditor.state.update({selection: {anchor: target.from, head: target.to}}).state;
+  const edit = replaceLiveSelections(insertionState, markdown);
+  releaseImageInsertion(target);
+  codeEditor.dispatch({changes: edit.changes, ...(ownsCaret ? {selection: edit.selection} : {}),
+    annotations: isolateHistory.of('full'), userEvent: 'input.image', scrollIntoView: ownsCaret});
+  if (ownsCaret) codeEditor.focus();
   return true;
 }
 
 async function insertLocalImage() {
-  if (!state.currentFile) return;
-  const session = state.documentSession, path = state.currentFile.path;
+  const target = state.imageDialogTarget;
+  if (!imageInsertionCurrent(target, true)) return;
+  const description = els.imageAltInput.value.trim() || target.selected || t('imageAlt');
+  target.width = updateImageWidthLabel();
+  state.imageDialogTarget = null; // Transfer the bookmark to the pending file operation.
+  closeImageDialog();
   try {
-    const imagePath = await window.quilliteMarkdown.selectImage(path);
+    const imagePath = await window.quilliteMarkdown.selectImage(target.path);
     if (!imagePath) return;
-    if (session !== state.documentSession || path !== state.currentFile?.path || !state.editing) return;
-    const result = await uploadedOrLocalImagePath(imagePath);
-    if (session !== state.documentSession || path !== state.currentFile?.path || !state.editing) return;
-    const selected = els.imageAltInput.value.trim() || selectedImageAlt() || t('imageAlt');
-    if (!insertImageReference(result.path, selected, updateImageWidthLabel())) return;
+    if (!imageInsertionCurrent(target, true)) return;
+    const result = await uploadedOrLocalImagePath(imagePath, target);
+    if (!insertImageReference(result.path, description, target.width, target)) return;
     showImportedImageResult(result);
   } catch (error) {
+    if (!imageInsertionCurrent(target)) return;
     reportSilentError(error, 'image.select');
     console.error(error);
     showToast(String(error).includes('IMAGE_EMBED_TYPE') ? t('imageEmbedType') : t('imageSelectFailed'), 'error');
+  } finally {
+    releaseImageInsertion(target);
   }
 }
 
 function insertImageFromUrl() {
-  if (!state.currentFile) return;
+  const target = state.imageDialogTarget;
+  if (!imageInsertionCurrent(target, true)) return;
   const url = els.imageUrl.value.trim();
   if (!/^https?:\/\/\S+$/i.test(url)) {
     showToast(t('imageUrlInvalid'), 'warning');
     els.imageUrl.focus();
     return;
   }
-  const selected = els.imageAltInput.value.trim() || selectedImageAlt() || t('imageAlt');
-  insertImageReference(url, selected, updateImageWidthLabel());
+  const selected = els.imageAltInput.value.trim() || target.selected || t('imageAlt');
+  if (!insertImageReference(url, selected, updateImageWidthLabel(), target)) return;
   closeImageDialog();
 }
 
@@ -4374,23 +4419,26 @@ function imageDescriptionFromName(name) {
   return String(name || '').replace(/\.[^.]+$/, '').trim() || t('imageAlt');
 }
 
-async function importAndInsertImage(sourcePath, description = '') {
+async function importAndInsertImage(sourcePath, description = '', view = codeEditor) {
   if (!state.editing || !state.currentFile?.path || !sourcePath) return false;
-  const session = state.documentSession, path = state.currentFile.path;
+  const target = captureImageInsertion(view);
+  if (!target) return false;
   try {
-    const imagePath = await window.quilliteMarkdown.importImage(path, sourcePath);
+    const imagePath = await window.quilliteMarkdown.importImage(target.path, sourcePath);
     if (!imagePath) return false;
-    if (session !== state.documentSession || path !== state.currentFile?.path || !state.editing) return false;
-    const result = await uploadedOrLocalImagePath(imagePath);
-    if (session !== state.documentSession || path !== state.currentFile?.path || !state.editing) return false;
-    if (!insertImageReference(result.path, description || imageDescriptionFromName(sourcePath.split(/[\\/]/).pop()))) return false;
+    if (!imageInsertionCurrent(target, true)) return false;
+    const result = await uploadedOrLocalImagePath(imagePath, target);
+    if (!insertImageReference(result.path, description || imageDescriptionFromName(sourcePath.split(/[\\/]/).pop()), target.width, target)) return false;
     showImportedImageResult(result);
     return true;
   } catch (error) {
+    if (!imageInsertionCurrent(target)) return false;
     reportSilentError(error, 'image.import');
     console.error(error);
     showToast(String(error).includes('IMAGE_EMBED_TYPE') ? t('imageEmbedType') : t('imageSelectFailed'), 'error');
     return false;
+  } finally {
+    releaseImageInsertion(target);
   }
 }
 
@@ -4412,7 +4460,7 @@ async function handleEditorPaste(event) {
   if (!destination) return;
   const pasteView = destination.view;
   if (destination.plainText && pasteView.state.selection.ranges.length === 1) return;
-  const session = state.documentSession, path = state.currentFile.path;
+  const path = state.currentFile.path;
   const item = [...(event.clipboardData?.items || [])].find(candidate => candidate.kind === 'file' && /^image\//i.test(candidate.type));
   const file = item?.getAsFile();
   const html = event.clipboardData?.getData('text/html') || '';
@@ -4472,23 +4520,27 @@ async function handleEditorPaste(event) {
       userEvent: 'input.paste', annotations: isolateHistory.of('full'), scrollIntoView: true });
     return;
   }
-  if (!file || pasteView !== codeEditor) return;
+  if (!file || destination.literalField) return;
   event.preventDefault();
+  const target = captureImageInsertion(pasteView);
+  if (!target) return;
   try {
     const sourcePath = window.quilliteMarkdown.pathForFile(file);
     const imagePath = sourcePath
       ? await window.quilliteMarkdown.importImage(path, sourcePath)
       : await window.quilliteMarkdown.savePastedImage(path, await fileAsDataURL(file));
     if (!imagePath) throw new Error('Pasted image returned no asset path');
-    if (session !== state.documentSession || path !== state.currentFile?.path || !state.editing) return;
-    const result = await uploadedOrLocalImagePath(imagePath);
-    if (session !== state.documentSession || path !== state.currentFile?.path || !state.editing) return;
-    if (!insertImageReference(result.path, imageDescriptionFromName(file.name))) return;
+    if (!imageInsertionCurrent(target, true)) return;
+    const result = await uploadedOrLocalImagePath(imagePath, target);
+    if (!insertImageReference(result.path, imageDescriptionFromName(file.name), target.width, target)) return;
     showImportedImageResult(result);
   } catch (error) {
+    if (!imageInsertionCurrent(target)) return;
     reportSilentError(error, 'image.paste');
     console.error(error);
     showToast(String(error).includes('IMAGE_EMBED_TYPE') ? t('imageEmbedType') : t('imagePasteFailed'), 'error');
+  } finally {
+    releaseImageInsertion(target);
   }
 }
 
@@ -4585,6 +4637,7 @@ async function initializeCodeEditor() {
     EditorView.lineWrapping,
     scrollPastEnd(),
     EditorView.updateListener.of(update => {
+      mapImageInsertionTargets(state.imageInsertionTargets, update);
       if (update.docChanged && !suppressEditorChanges && state.currentFile) {
         const performance = documentPerformanceProfile(update.state.doc.length, state.currentDocumentHasDiagrams);
         if (performance.deferContentSync) {
@@ -6541,6 +6594,8 @@ function syncDocumentAccessControls() {
 
 function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
+  closeImageDialog();
+  cancelImageInsertions();
   closeFormulaDialog(false);
   indexedFormulaDocument = null;
   indexedFormulas = [];
@@ -6590,6 +6645,8 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  closeImageDialog();
+  cancelImageInsertions();
   closeFormulaDialog(false);
   indexedFormulaDocument = null;
   indexedFormulas = [];
@@ -6960,6 +7017,7 @@ async function toggleEditor(forceEditing) {
       if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
     }
     state.editing = nextEditing;
+    if (!nextEditing) { closeImageDialog(); cancelImageInsertions(); }
     syncEditorLayoutOptions();
     syncEditorDiagramDisplay();
     if (state.editing) {
@@ -11139,7 +11197,7 @@ $('#linkDialog').addEventListener('keydown', event => {
 $('#closeImageDialog').addEventListener('click', closeImageDialog);
 $('#cancelImage').addEventListener('click', closeImageDialog);
 $('#confirmImage').addEventListener('click', insertImageFromUrl);
-$('#pickLocalImage').addEventListener('click', () => { closeImageDialog(); insertLocalImage(); });
+$('#pickLocalImage').addEventListener('click', insertLocalImage);
 $('#openImageUploadSettings').addEventListener('click', openImageUploadSettings);
 $('#closeImageUploadSettings').addEventListener('click', closeImageUploadSettings);
 $('#cancelImageUploadSettings').addEventListener('click', closeImageUploadSettings);

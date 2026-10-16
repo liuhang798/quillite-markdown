@@ -15,7 +15,7 @@ function Invoke-Checked([string]$Name, [string]$Command, [string[]]$Arguments) {
     Write-Host "PASS $Name"
 }
 @{Commit=$env:GITHUB_SHA;Runner=$env:RUNNER_OS;Environment=$env:RUNNER_ENVIRONMENT;Started=[DateTimeOffset]::UtcNow.ToString('o');Scope='Tests only; no release; native IME not covered'} | ConvertTo-Json | Out-File (Join-Path $evidence 'run.json') -Encoding utf8
-Invoke-Checked 'source-before' 'node' @('--input-type=module','-e',"import {liveSourceFingerprint} from './scripts/live-source-fingerprint.mjs';const h=await liveSourceFingerprint();console.log(h);if(h!=='5d47b53cb33845096f6e52f9fda94baa5fd72e7f1e7682c043218921f063c0e6')throw Error('Source fingerprint mismatch');")
+Invoke-Checked 'source-before' 'node' @('--input-type=module','-e',"import {liveSourceFingerprint} from './scripts/live-source-fingerprint.mjs';const h=await liveSourceFingerprint();console.log(h);if(h!=='f73835e375d33d3aacdec6fb4c37e446e613a92c6e059264ed7c79cff4aedd20')throw Error('Source fingerprint mismatch');")
 Push-Location frontend
 try {
     Invoke-Checked 'npm-ci' 'npm.cmd' @('ci')
@@ -32,7 +32,7 @@ $playwrightRoot = Join-Path $env:RUNNER_TEMP 'quillite-playwright'
 Invoke-Checked 'playwright-install' 'npm.cmd' @('install','--prefix',$playwrightRoot,'--no-package-lock','--no-audit','--no-fund','playwright@1.62.1')
 $env:PLAYWRIGHT_MODULE = Join-Path $playwrightRoot 'node_modules/playwright'
 Invoke-Checked 'chromium-install' 'node' @((Join-Path $env:PLAYWRIGHT_MODULE 'cli.js'),'install','chromium')
-foreach ($case in @('browser-image-controls','browser-image-source','browser-image-fast-click','browser-image-storage-settings','browser-image-settings-async','browser-mermaid-structured-controls')) {
+foreach ($case in @('browser-image-controls','browser-image-source','browser-image-fast-click','browser-image-storage-settings','browser-image-settings-async','browser-image-insertion-async','browser-image-transfer-async','browser-mermaid-structured-controls')) {
     $env:AUDIT_OUTPUT = Join-Path $evidence $case
     New-Item -ItemType Directory -Path $env:AUDIT_OUTPUT | Out-Null
     Invoke-Checked $case 'node' @("frontend/tests/$case.mjs")
@@ -69,5 +69,5 @@ if ($marker -ne 'QUILLITE_PAYLOAD' -or $core -le 0 -or $launcher -le 0) { throw 
 if ($bytes[$launcher] -ne 77 -or $bytes[$launcher+1] -ne 90) { throw 'Invalid core executable header' }
 $file=Get-Item -LiteralPath $installer
 @{Name=$file.Name;Bytes=$file.Length;Modified=$file.LastWriteTimeUtc.ToString('o');SHA256=(Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash;CoreBytes=$core;LauncherBytes=$launcher;Marker=$marker;Commit=$env:GITHUB_SHA} | ConvertTo-Json | Out-File (Join-Path $evidence 'installer.json') -Encoding utf8
-Invoke-Checked 'source-after' 'node' @('--input-type=module','-e',"import {liveSourceFingerprint} from './scripts/live-source-fingerprint.mjs';const h=await liveSourceFingerprint();console.log(h);if(h!=='5d47b53cb33845096f6e52f9fda94baa5fd72e7f1e7682c043218921f063c0e6')throw Error('Build changed source');")
+Invoke-Checked 'source-after' 'node' @('--input-type=module','-e',"import {liveSourceFingerprint} from './scripts/live-source-fingerprint.mjs';const h=await liveSourceFingerprint();console.log(h);if(h!=='f73835e375d33d3aacdec6fb4c37e446e613a92c6e059264ed7c79cff4aedd20')throw Error('Build changed source');")
 Write-Host 'PASS: independent Windows gates and full installer packaging; no release performed.'

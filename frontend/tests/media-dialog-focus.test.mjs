@@ -10,7 +10,7 @@ function fixture(extra={}) {
  return {context,queued,events,input,get active(){return active;}};
 }
 test('image dialog focuses its visible URL immediately and leaves later caption focus alone',()=>{
- const f=fixture({state:{currentFile:{}},preferredImageWidth:()=>100,updateImageWidthLabel(){},
+ const f=fixture({state:{currentFile:{},editing:true},preferredImageWidth:()=>100,updateImageWidthLabel(){},releaseImageInsertion(){},captureImageInsertion:()=>({}),
   codeEditor:{state:{selection:{main:{from:0,to:3}},doc:{sliceString:()=> 'alt'}}},
   document:{body:{classList:{add(){}}}}});
  f.context.els={imageUrl:f.input('url'),imageWidth:{},imageAltInput:f.input('alt'),imageDialog:{classList:{remove(){f.events.push('visible');}}}};
