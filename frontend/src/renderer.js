@@ -3985,6 +3985,13 @@ function applyPicGoCloudStatus(status) {
 	updatePicGoSettingsAvailability();
 }
 
+function setImageUploadSettingsStatus(message = '') {
+  const status = $('#imageUploadSettingsStatus');
+  status.textContent = message;
+  status.classList.toggle('hidden', !message);
+  status.classList.toggle('error', Boolean(message));
+}
+
 function setPicGoTestStatus(message = '', kind = '') {
   els.picGoTestStatus.textContent = message;
   els.picGoTestStatus.classList.toggle('success', kind === 'success');
@@ -4046,6 +4053,7 @@ async function logoutPicGoCloud() {
 
 function openImageUploadSettings() {
   if (!els.imageDialog.classList.contains('hidden')) closeImageDialog();
+  setImageUploadSettingsStatus();
   document.querySelector(`input[name="imageUploadMode"][value="${state.imageUploadMode}"]`).checked = true;
   els.picGoServerURL.value = state.picGoServerURL;
   els.picGoSecret.value = '';
@@ -4107,6 +4115,7 @@ async function testPicGoConnection() {
 
 async function saveImageUploadSettings() {
   const button = $('#saveImageUploadSettings');
+  setImageUploadSettingsStatus();
 	if (selectedImageUploadMode() === 'picgo-cloud' && !state.picGoCloudConnectionReady) {
 		if (!state.picGoCloudHasToken) await loginPicGoCloud();
 		else await testPicGoCloudConnection();
@@ -4124,7 +4133,7 @@ async function saveImageUploadSettings() {
     showToast(t('imageUploadSettingsSaved'), 'success');
   } catch (error) {
     console.warn('Unable to save image upload settings', error);
-    setPicGoTestStatus(t('imageUploadSettingsSaveFailed'), 'error');
+    setImageUploadSettingsStatus(t('imageUploadSettingsSaveFailed'));
   } finally {
     button.disabled = false;
   }
@@ -11092,6 +11101,7 @@ $('#picGoSetupBack').addEventListener('click', () => {
   updatePicGoSettingsAvailability();
 });
 document.querySelectorAll('input[name="imageUploadMode"]').forEach(input => input.addEventListener('change', () => {
+  setImageUploadSettingsStatus();
   state.picGoDetectionRun += 1;
   state.picGoConnectionReady = false;
   setPicGoWizardStep(1);

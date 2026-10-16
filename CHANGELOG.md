@@ -6,6 +6,8 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复本地 assets、内嵌 Base64 和 PicGo Cloud 模式保存图片设置失败时没有可见提示的问题；四种模式共用错误提示区，保留当前选择并支持重试，重新打开或切换模式后清除旧提示。
+
 - 补齐流程图和状态图新增节点后的同步聚焦，防止搜索输入意外改写节点名称；新增三类画布实际拖动、键盘、缩放、结构编辑和保存撤回回归。
 
 - 修复插入图片、图表新增数据行和思维导图新增节点后延迟聚焦抢走其他输入框光标的问题，避免快速切换字段时文字写入错误位置。
@@ -231,6 +233,8 @@ All notable changes to Quillite Markdown are documented here.
 - 日历标签、空白单元格和网格使用主题配色；新增搜索、表格和导入控件适配白天／黑夜。图表导出继续使用白纸配色，不将夜间浅色文字直接导出到白底。
 
 ### English
+
+- Show image-settings save failures in a shared status area for all four storage modes, including local assets, embedded Base64 and PicGo Cloud. Preserve the selection for retry and clear obsolete feedback when reopening or changing modes.
 
 - Extended immediate node focus to flowcharts and state diagrams so typing into search cannot rename a node; added isolated canvas drag, keyboard, zoom, structure and save/undo regression.
 

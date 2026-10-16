@@ -20,6 +20,8 @@
   </p>
 </div>
 
+All four image-storage modes show save failures, preserve your selection for retry, and leave the current document unchanged.
+
 Renaming keeps equations, diagrams, tables and footnotes editable in place without losing unsaved text or undo history. Footnote editing also follows the new file after Save As.
 
 Version history honors the latest selection: old responses cannot replace the preview after closing, reopening or switching documents. Restore stays disabled while loading or after failure. Restoring changes only the editor, supports undo, and writes to the document only when saved.
