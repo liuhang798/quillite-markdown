@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const renderer=readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
-const toastFunctions=renderer.slice(renderer.indexOf('function hideToast('),renderer.indexOf('function updateAccentSelection('));
+const toastFunctions=renderer.slice(renderer.indexOf('let toastPlacement;'),renderer.indexOf('function updateAccentSelection('));
 const closeFunction=renderer.slice(renderer.indexOf('function closeDiagramDialog('),renderer.indexOf('function replaceExistingFlowchart('));
 const element=()=>{const classes=new Set();return{dataset:{},style:{setProperty(){}},setAttribute(){},classList:{add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)}};};
 function fixture(){
- const toast=element(),dialog=element(),nodes=new Map();let timer;
+ const toast=element(),dialog=element(),nodes=new Map(),placement={starts:0,stops:0,start(){this.starts++;},stop(){this.stops++;}};let timer;
  const context=vm.createContext({els:{toast,diagramDialog:dialog},diagramWizardState:{saveRequest:{},editRange:{}},diagramPreviewTimer:0,
-  document:{body:element()},setDiagramFullscreen(){},updateDiagramActionLabels(){},focusCodeEditor(){},
+  document:{body:element()},createToastPlacement:()=>placement,setDiagramFullscreen(){},updateDiagramActionLabels(){},focusCodeEditor(){},
   $:selector=>{if(!nodes.has(selector))nodes.set(selector,element());return nodes.get(selector);},t:x=>x,
   clearTimeout(){},setTimeout:fn=>{timer=fn;return 1;}});
  vm.runInContext(toastFunctions+closeFunction,context);
- return{context,toast,dialog,expire:()=>timer()};
+ return{context,toast,dialog,placement,expire:()=>timer()};
 }
 test('closing a diagram clears only its owned obsolete validation toast',()=>{
  for(const scenario of ['own','paste','newer','same-text-unowned','other-owner']){
@@ -29,7 +29,8 @@ test('closing a diagram clears only its owned obsolete validation toast',()=>{
 test('toast expiry and manual dismissal release ownership before the next toast',()=>{
  for(const method of ['expire','manual']){
   const f=fixture(),c=f.context;c.showToast('invalid','warning',undefined,c.diagramWizardState);
-  if(method==='expire')f.expire();else c.hideToast();assert.equal(c.showToast.owner,null);
+  assert.equal(f.placement.starts,1);
+  if(method==='expire')f.expire();else c.hideToast();assert.equal(c.showToast.owner,null);assert.equal(f.placement.stops,1);
   c.showToast('new warning','warning');c.closeDiagramDialog();assert.equal(f.toast.classList.contains('hidden'),false);
  }
 });

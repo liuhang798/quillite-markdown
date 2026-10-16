@@ -6,6 +6,8 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复通知遮挡查找／替换输入框和按钮的问题；根据底部编辑面板实测位置避让，窗口调整及查找开关后同步更新，通知隐藏后释放位置监听，不修改正文或撤回历史。
+
 - 修复 PicGo Cloud 普通／分片上传的迟到 401 响应清空新登录的问题。上传不再修改凭据；失败仍保留本地附件并回退，禁止自动重试，补充四个上传阶段与登录切换的隔离 HTTP 回归。
 
 - 为本机 PicGo 和 PicGo Cloud 上传进度增加独立请求标识，隔离旧请求、跨文档返回、完成后的迟到进度和延迟隐藏；服务说明使用本次上传的设置快照，保留原上传接口兼容性及本地附件回退。
@@ -243,6 +245,8 @@ All notable changes to Quillite Markdown are documented here.
 - 日历标签、空白单元格和网格使用主题配色；新增搜索、表格和导入控件适配白天／黑夜。图表导出继续使用白纸配色，不将夜间浅色文字直接导出到白底。
 
 ### English
+
+- Keep notifications clear of Find/Replace fields and buttons using the measured bottom editor panel bounds. Placement follows resizing and search toggles, releases observers when hidden, and leaves document content and undo history unchanged.
 
 - Prevent delayed 401 responses from ordinary or multipart PicGo Cloud uploads from clearing a newer login. Uploads no longer mutate credentials; failed uploads retain local assets and fall back without automatic retries, with isolated HTTP regression coverage across four stages and login changes.
 

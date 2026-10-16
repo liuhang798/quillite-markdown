@@ -28,6 +28,8 @@ While image selection, paste or upload is pending, insertion follows its origina
 
 Image completion does not steal typing focus from Find/Replace fields. Cancelled operations remain silent after leaving and re-entering edit mode.
 
+Editor notifications stay clear of the bottom Find/Replace panel and adapt when the window is resized. Closing search restores the usual position without changing text, caret or undo history.
+
 Concurrent uploads have isolated progress identities: older requests cannot overwrite newer progress, and changing storage settings does not relabel an upload already in progress.
 
 Failed PicGo Cloud uploads, including delayed authentication errors, never clear a newer login. Images fall back to the saved local asset without automatic retries; you can explicitly sign in again and insert another image.

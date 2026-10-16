@@ -3,6 +3,7 @@ import { tableWhitespace, tableRenderSource } from './markdown-parser.js';
 import { isFileDrag } from './file-drag.js';
 import { createImageInsertionTarget, imageInsertionTargetCurrent, mapImageInsertionTargets } from './image-insertion-target.js';
 import { fitEditorSplit, normalizeEditorPreviewWidth } from './editor-split-layout.js';
+import { createToastPlacement } from './toast-placement.js';
 import { inlineFormatEdit, formatSelectionEdits, textColorEdit } from './inline-format-toggle.js';
 import { selectionHistory, withSelectionHistory } from './selection-history.js';
 import { findMarkdownLinkAt, linkEdit, footnoteEdit, validLinkDestination } from './link-editing.js';
@@ -4666,6 +4667,7 @@ async function initializeCodeEditor() {
         if (update.selectionSet) scheduleFormatPainterApply();
       }
       updateUndoButton(update.state);
+      toastPlacement?.schedule();
     })
   ];
     const mount = () => {
@@ -4712,10 +4714,13 @@ function slugify(text, index) {
   return `${text.toLowerCase().replace(/<[^>]*>/g, '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'section'}-${index}`;
 }
 
+let toastPlacement;
+
 function hideToast() {
   clearTimeout(showToast.timer);
   showToast.owner = null;
   els.toast.classList.add('hidden');
+  toastPlacement?.stop();
 }
 
 function showToast(message, kind = 'info', duration, owner = null) {
@@ -4734,6 +4739,8 @@ function showToast(message, kind = 'info', duration, owner = null) {
   void progress.offsetWidth;
   progress.style.animation = '';
   els.toast.classList.remove('hidden');
+  toastPlacement ||= createToastPlacement({ toast: els.toast, editor: els.editor });
+  toastPlacement.start();
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(hideToast, visibleFor);
   showToast.resumeDelay = Math.min(1800, Math.max(1200, Math.round(visibleFor * .3)));
