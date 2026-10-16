@@ -130,6 +130,10 @@ export function GetStartupMode() {
   return window['go']['main']['App']['GetStartupMode']();
 }
 
+export function GetStartupRecoverySnapshot() {
+  return window['go']['main']['App']['GetStartupRecoverySnapshot']();
+}
+
 export function GetWindowsInstallSafety() {
   return window['go']['main']['App']['GetWindowsInstallSafety']();
 }
@@ -148,6 +152,10 @@ export function ListDocumentVersions(arg1) {
 
 export function ListFolder(arg1) {
   return window['go']['main']['App']['ListFolder'](arg1);
+}
+
+export function ListRecoveryArchives() {
+  return window['go']['main']['App']['ListRecoveryArchives']();
 }
 
 export function LoginPicGoCloud() {
@@ -212,6 +220,10 @@ export function ReadImageData(arg1, arg2) {
 
 export function ReadPortableImage(arg1, arg2) {
   return window['go']['main']['App']['ReadPortableImage'](arg1, arg2);
+}
+
+export function ReadRecoveryArchive(arg1) {
+  return window['go']['main']['App']['ReadRecoveryArchive'](arg1);
 }
 
 export function RemoveFavorite(arg1) {

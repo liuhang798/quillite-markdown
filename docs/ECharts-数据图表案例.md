@@ -1,6 +1,6 @@
 # ECharts 数据图表完整案例
 
-本文档包含轻阅 Markdown 内置的全部 15 类离线数据图表。直接使用轻阅 Markdown 打开本文件，即可查看每个案例的真实渲染效果；进入编辑模式可修改 JSON 数据并实时预览。
+本文档包含轻阅 Markdown 内置的全部 19 类离线数据图表。直接使用轻阅 Markdown 打开本文件，即可查看每个案例的真实渲染效果；常用图表支持数据表格与 Excel／CSV／TSV 粘贴，也可以修改 JSON 源码。
 
 > 使用入口：编辑模式 → 更多格式 → 图表生成器 → 数据分析。
 
@@ -243,6 +243,275 @@
     "sizeRange": [18, 58], "rotationRange": [0, 0],
     "data": [{ "name": "Markdown", "value": 100 }, { "name": "本地优先", "value": 82 }, { "name": "实时预览", "value": 76 }, { "name": "轻量", "value": 70 }, { "name": "开源", "value": 66 }, { "name": "学科公式", "value": 58 }, { "name": "图表", "value": 54 }, { "name": "Word 导出", "value": 46 }, { "name": "PDF", "value": 42 }, { "name": "跨平台", "value": 38 }]
   }]
+}
+```
+
+## 16. 直方图
+
+展示样本分布：输入原始样本并设置分箱数；区间左闭右开，最后一箱含最大值。
+
+```echarts
+{
+  "__quillite": {
+    "dataEditor": "histogram",
+    "samples": [
+      12,
+      15,
+      18,
+      18,
+      21,
+      24,
+      25,
+      28,
+      31,
+      36,
+      42,
+      48
+    ],
+    "bins": 6
+  },
+  "title": {
+    "text": "阅读时长分布",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "axis"
+  },
+  "xAxis": {
+    "type": "category",
+    "name": "阅读时长（分钟）",
+    "nameLocation": "middle",
+    "nameGap": 32,
+    "data": [
+      "[12, 18)",
+      "[18, 24)",
+      "[24, 30)",
+      "[30, 36)",
+      "[36, 42)",
+      "[42, 48]"
+    ]
+  },
+  "yAxis": {
+    "type": "value",
+    "minInterval": 1,
+    "name": "频数"
+  },
+  "series": [
+    {
+      "type": "bar",
+      "barCategoryGap": "0%",
+      "data": [
+        2,
+        3,
+        3,
+        1,
+        1,
+        2
+      ]
+    }
+  ]
+}
+```
+
+## 17. 百分比堆叠图
+
+填写非负原始数值，按分类归一为 100%；合计为零时显示为零。
+
+```echarts
+{
+  "__quillite": {
+    "dataEditor": "percent",
+    "rawColumns": [
+      [
+        40,
+        20,
+        30
+      ],
+      [
+        20,
+        40,
+        10
+      ],
+      [
+        40,
+        40,
+        60
+      ]
+    ]
+  },
+  "title": {
+    "text": "分类构成比例",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "axis"
+  },
+  "legend": {
+    "top": 30
+  },
+  "xAxis": {
+    "type": "category",
+    "data": [
+      "一月",
+      "二月",
+      "三月"
+    ]
+  },
+  "yAxis": {
+    "type": "value",
+    "min": 0,
+    "max": 100,
+    "axisLabel": {
+      "formatter": "{value}%"
+    }
+  },
+  "series": [
+    {
+      "name": "系列 1",
+      "type": "bar",
+      "stack": "percent",
+      "data": [
+        40,
+        20,
+        30.000000000000004
+      ]
+    },
+    {
+      "name": "系列 2",
+      "type": "bar",
+      "stack": "percent",
+      "data": [
+        20,
+        40,
+        10
+      ]
+    },
+    {
+      "name": "系列 3",
+      "type": "bar",
+      "stack": "percent",
+      "data": [
+        40,
+        40,
+        60.00000000000001
+      ]
+    }
+  ]
+}
+```
+
+## 18. 横向排名图
+
+适合长名称；按数值从高到低填入各行，第一行显示在顶部。
+
+```echarts
+{
+  "title": {
+    "text": "阅读排名",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "axis"
+  },
+  "xAxis": {
+    "type": "value"
+  },
+  "yAxis": {
+    "type": "category",
+    "inverse": true,
+    "data": [
+      "技术文档与操作指南",
+      "项目方案与学习笔记",
+      "会议纪要"
+    ]
+  },
+  "series": [
+    {
+      "name": "阅读次数",
+      "type": "bar",
+      "data": [
+        120,
+        86,
+        42
+      ]
+    }
+  ]
+}
+```
+
+## 19. 日历热力图
+
+按日期展示非负数值；日期不可重复，范围不超过 366 天。
+
+```echarts
+{
+  "__quillite": {
+    "height": 360
+  },
+  "title": {
+    "text": "每日活跃记录",
+    "left": "center"
+  },
+  "tooltip": {
+    "trigger": "item"
+  },
+  "visualMap": {
+    "min": 0,
+    "max": 10,
+    "orient": "horizontal",
+    "left": "center",
+    "bottom": 8
+  },
+  "calendar": {
+    "top": 85,
+    "left": 55,
+    "right": 35,
+    "cellSize": [
+      "auto",
+      24
+    ],
+    "range": [
+      "2026-01-01",
+      "2026-03-31"
+    ],
+    "yearLabel": {
+      "show": false
+    },
+    "dayLabel": {
+      "nameMap": "cn"
+    },
+    "monthLabel": {
+      "nameMap": "cn"
+    }
+  },
+  "series": [
+    {
+      "type": "heatmap",
+      "coordinateSystem": "calendar",
+      "data": [
+        [
+          "2026-01-01",
+          3
+        ],
+        [
+          "2026-01-12",
+          7
+        ],
+        [
+          "2026-02-02",
+          10
+        ],
+        [
+          "2026-02-20",
+          5
+        ],
+        [
+          "2026-03-31",
+          8
+        ]
+      ]
+    }
+  ]
 }
 ```
 

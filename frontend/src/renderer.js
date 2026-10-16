@@ -1,17 +1,30 @@
 import { marked } from 'marked';
+import { tableWhitespace, tableRenderSource } from './markdown-parser.js';
+import { isFileDrag } from './file-drag.js';
+import { fitEditorSplit, normalizeEditorPreviewWidth } from './editor-split-layout.js';
+import { inlineFormatEdit, formatSelectionEdits, textColorEdit } from './inline-format-toggle.js';
+import { selectionHistory, withSelectionHistory } from './selection-history.js';
+import { findMarkdownLinkAt, linkEdit, footnoteEdit, validLinkDestination } from './link-editing.js';
+import { footnoteContextIsCurrent, footnoteBodyEdit } from './footnote-editing.js';
+import { renderPreparedFootnotes } from './footnote-rendering.js';
+import { insertHtmlBlock } from './html-block-editing.js';
+import { selectedLineFormat, selectedBlockFormat, selectedInlineFormats, selectedFormatColor, paintColorEdit, PAINTER_WRAPPERS } from './editor-formatting.js';
 import { createRuntimeDiagnostics } from './runtime-diagnostics.js';
 import DOMPurify from 'dompurify';
 import 'katex/dist/katex.min.css';
 import './body-typography.css';
+import './editor-live-preview.css';
 import { applyBodyTypography, normalizeBodyTypography, readBodyTypography, bodyStyleFor, typographyForStyle } from './body-typography.js';
 import hljs from 'highlight.js/lib/common';
 import { cancelMermaidRendering, convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
-import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory } from './diagram-templates.js';
-import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, layoutFlowchart, parseFlowchartSource, removeFlowchartEdge, removeFlowchartNode, serializeFlowchart } from './flowchart-designer.js';
+import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory, searchDiagramTemplates } from './diagram-templates.js';
+import { addTableSeries, parsePastedTable, parseTableChart } from './chart-data-editor.js';
+import { appendTemplateNewBadge } from './template-additions.js';
+import { FLOWCHART_SHAPES, addFlowchartEdge, addFlowchartNode, flowchartNodeSize, layoutFlowchart, parseFlowchartSource, removeFlowchartEdge, removeFlowchartNode, removeMindmapSelection, serializeFlowchart } from './flowchart-designer.js';
 import { hasStructuredVisualEditor, parseStructuredDiagram, serializeStructuredDiagram, structuredDiagramDefinition, validateStructuredDiagram } from './structured-diagram-editor.js';
 import { validateDiagramRendering } from './diagram-validation.js';
-import { diagramReplacementMarkdown } from './diagram-editing.js';
+import { projectedDiagramReplacement, diagramDisplayName } from './diagram-editing.js';
 import { aiModelOptions } from './ai-model-options.js';
 import { exceedsAIInputLimit, protectEmbeddedImages, aiInputCharacterCount } from './ai-input.js';
 import { transformMarkdownImages } from './portable-images.js';
@@ -20,17 +33,19 @@ import { deleteAIModelCache, readAIModelCache, writeAIModelCache } from './ai-mo
 import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearanceStorage, resolveMacColorMode, temporaryMacColorModeAfterToggle } from './appearance.js';
 import { previewWheelZoomDirection } from './font-wheel-zoom.js';
 import { clampFontScale, readFontScaleStorage, recommendedFontScale } from './font-scaling.js';
-import { escapeMarkdownText, highlightExtension, nextFootnoteNumber, prepareFootnotes, renderFootnoteSection } from './markdown-formats.js';
+import { escapeMarkdownText, highlightExtension, prepareFootnotes } from './markdown-formats.js';
 import { buildFormulaExpression, buildFormulaMarkdown, FORMULA_DISCIPLINES, FORMULA_GROUP_LABELS, formulaInlineHasNewline, formulaPreviewExpression, formulaTemplateById, searchFormulaTemplates, formulaValues, parseFormulaMarkdown, resolveFormulaOutput } from './formula-templates.js';
 import { applyFormulaInlineLayout, formulaInlineLayout } from './formula-templates.js';
-import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas } from './formula-editing.js';
+import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas, tableFormulaConstraint } from './formula-editing.js';
 import { mathExtensions, renderLatexResult, collectFormulaRendering, formulaMarkdownMatches } from './math-rendering.js';
 import { formulaFallbackSource } from './formula-export.js';
-import { FORMULA_STRUCTURES } from './formula-visual-policy.js';
+import { FORMULA_STRUCTURES, hasFormulaPlaceholders } from './formula-visual-policy.js';
 import { scanMarkdownBlockStartLines } from './preview-line-map.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
-import { createTableModel, findMarkdownTableAt, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
+import { createTableModel, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, serializeTableReplacement, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
+import { resolveEditableTable, findEditableTableAt, tableInsertion } from './table-editing.js';
+import {parseTableClipboardTSV,TABLE_CLIPBOARD_LIMIT} from './table-clipboard.js';
 import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from './rich-clipboard.js';
 import { hasOverlappingReviewSuggestions, locateAIReviewSuggestions } from './ai-review.js';
 import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-text-diff.js';
@@ -61,6 +76,18 @@ const NEW_FILE_COOLDOWN_MS = 3000;
 const runtimeDiagnostics = createRuntimeDiagnostics(import.meta.url);
 let codeEditor;
 let embeddedImagePreview;
+let editorLivePreview;
+let livePreviewContext;
+let buildLivePlan;
+let liveFormatSelection;
+let resolveEditableOwner;
+let resolveEditorPasteTarget;
+let pasteEditableTableGrid;
+let canPasteEditableTableGrid;
+let replaceLiveSelections;
+let liveAIReplacement;
+let editorPresentation;
+let markdownLanguage;
 let imagePreviewContext;
 let editorFormulaPreview;
 let formulaPreviewContext;
@@ -85,6 +112,7 @@ let ViewPlugin;
 let keymap;
 let scrollPastEnd;
 let undo;
+let redo;
 let undoDepth;
 let isolateHistory;
 let closeSearchPanel;
@@ -153,6 +181,8 @@ let aiReviewStartedAt = 0;
 let documentVersions = [];
 let selectedDocumentVersion = null;
 let documentHistorySession = 0;
+let documentHistoryRequest = 0;
+let documentVersionRequest = 0;
 let currentAISettings = null;
 let aiSettingsEditingKey = false;
 let aiModelLoadRequest = 0;
@@ -243,7 +273,10 @@ function fontFamilyCSS(value) {
 const state = {
   currentFile: null,
   documentSession: 0,
+  linkEditContext: null,
+  footnoteEditContext: null,
   documentOpenRequest: 0,
+  explorerRequest: 0,
   root: null,
   files: [],
   explorerFiles: [],
@@ -259,6 +292,7 @@ const state = {
   bodyTypography: readBodyTypography(localStorage),
   docWidth: normalizeDocWidth(localStorage.getItem('docWidth')),
   editorLayout: normalizeEditorLayout(localStorage.getItem('editorLayout')),
+  editorPresentation: localStorage.getItem('editorPresentation') === 'source' ? 'source' : 'live',
   formulaDisplay: localStorage.getItem('formulaDisplay') === 'source' ? 'source' : 'preview',
   diagramDisplay: localStorage.getItem('diagramDisplay') === 'source' ? 'source' : 'preview',
   lastSplitLayout: localStorage.getItem('lastSplitLayout') === 'editor-left' ? 'editor-left' : 'preview-left',
@@ -278,7 +312,7 @@ const state = {
   tocAvailable: false,
   tocPanelCollapsed: localStorage.getItem('tocPanelCollapsed') === 'true',
   compactTocOpen: false,
-  editorPreviewWidth: Number(localStorage.getItem('editorPreviewWidth') || 47),
+  editorPreviewWidth: normalizeEditorPreviewWidth(localStorage.getItem('editorPreviewWidth') || 47),
   searchMatches: [],
   searchIndex: 0,
   editing: false,
@@ -310,6 +344,7 @@ const state = {
 };
 
 let pendingRecoverySnapshot = null;
+let recoveryRestoreRequest = 0;
 let lastRecoveryContent = '';
 let lastRecoveryContext = '';
 let largeDocumentNoticeSession = -1;
@@ -409,15 +444,27 @@ window.addEventListener('unhandledrejection', event => reportSilentError(event.r
 
 const translations = {
   'zh-CN': {
+    recoveryReview: '恢复草稿', recoveryLater: '稍后处理', recoveryAvailable: '发现旧草稿，已保留独立备份。可点击顶部“恢复草稿”查看。',
+    recoverySafeDescription: '上次未保存的内容已保留为独立备份。请先保存当前编辑，再恢复草稿；也可稍后处理，或在“更多 → 文档工具 → 文档安全”另存恢复副本。',
+    recoverySaveFirst: '请先保存当前文档的修改，再恢复旧草稿。两份内容均保持不变。', recoveryChanged: '当前文档已变化，未应用恢复内容。请保存后重新恢复。',
+    recoveryCancel: '取消恢复', recoveryRestoring: '正在读取草稿…',
+    tablePasteLimit: '粘贴超出表格容量（扩展最多 20 行、12 列，内容最多 500,000 字符），原内容未改变。',
+    tablePasteShape: '无法按单元格粘贴：请使用列数一致、无合并单元格、图片或表格外正文的文字表格。原内容未改变。',
+    recoveryRestoredCopy: '原文件无法读取，已恢复为独立新草稿。首次保存时请选择名称和位置，原文件保持不变。',
     formulaEditStale: '文档或公式内容已变化。未写入任何修改，请关闭后重新打开公式。',
     formulaReplaceDraftConfirm: '重新生成公式会替换手动编辑的源码，是否继续？',
     formulaSyntaxError: '公式无法解析，请检查下方提示与源码；未写入文档。',
+    formulaIncomplete: '请填写公式中的空位（可按 Tab 切换），填写完整后即可插入。',
+    formulaMatrixPosition: '请先点击矩阵中的一个单元格，再增删行列；公式未改动。',
     formulaInlineMultiline: '行内公式不能包含换行，请选择“块级公式”或“编号公式”；源码已保留。',
+    formulaTableInline: '表格单元格仅支持单行的行内公式。请选择“行内公式”；需要放大时可使用“大号”。草稿已保留。',
+    formulaTablePipe: '表格内不能使用未转义的竖线 |；公式中请使用 \\vert 或 \\lVert、\\rVert。草稿已保留。',
     formulaDelimiterInvalid: '公式分隔符与内容冲突，未写入文档。请改用块级公式，或在高级源码中使用 \\(...\\) 包住完整行内公式；输入已保留。',
     formulaDisplay: '公式显示', formulaDisplayPreview: '公式排版', formulaDisplaySource: '公式源码',
     diagramDisplay: '图表显示', diagramDisplayPreview: '显示图表', diagramDisplaySource: '图表源码',
     formulaVariableInvalid: '变量或函数名称请使用单个字母、LaTeX 符号或带下标的名称（如 x、\\theta、x_1），不要填写括号或运算式。复杂表达式请使用自定义公式。',
     formulaVariablesInvalid: '请填写 1–16 个逗号分隔的变量，不能有空项。',
+    formulaMatrixInvalid: '矩阵单元格不能为空或含外层分行／分列指令；3×3 矩阵每行须为 3 项，以逗号分隔。括号、分组或嵌套矩阵内的逗号会保留；请补全括号，复杂结构可用自定义公式。',
     formulaSearchPlaceholder: '名称、学科或关键词', formulaSearchLabel: '搜索公式模板', formulaSearchClear: '清除',
     formulaVisualTitle: '可视化编辑', formulaStructureToolbar: '公式结构工具栏', formulaParameters: '模板参数', formulaAdvanced: '高级：查看／修改源码',
     formulaInlineLayout: '行内排版', formulaLayoutNormal: '常规排版', formulaLayoutLarge: '大号排版', formulaLayoutHint: '仅改变当前行内公式的排版，展开分数和求和符号，不改为独立一行。',
@@ -449,6 +496,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器', largeDocumentOptimized: '已启用大文档优化：预览将延迟刷新，并暂停全文拼写扫描',
     recoveryLabel: '异常恢复', recoveryTitle: '发现未保存的编辑内容', recoveryDescription: '轻阅在上次异常结束前保存了一份恢复副本。你可以继续编辑，或放弃副本并以磁盘文件为准。', recoveryDocument: '恢复文档', recoverySavedAt: '快照时间', recoveryDiscard: '放弃恢复内容', recoveryRestore: '恢复并继续编辑', recoveryFailed: '无法读取恢复内容，磁盘文件未受影响', recoveryRestored: '已恢复上次未保存的编辑内容', unsavedCloseLabel: '文档更改', unsavedTitle: '尚未保存', unsavedCloseDescription: '文档中的更改尚未保存。是否在退出前保存？', save: '保存', dontSave: '不保存', savingDocument: '正在保存…',
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
+    liveEditing: '即时渲染', sourceEditing: '源码', editorPresentationLabel: '编辑显示方式', liveEditingHint: '直接点击文字、表格单元格或代码编辑；查看语法请切换源码',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
     toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', openCompactToc: '展开本页目录', closeCompactToc: '收起本页目录', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
     exportHTML: '导出 HTML', htmlExported: 'HTML 网页已导出', htmlExportFailed: 'HTML 导出失败', exportFileInUse: '导出文件正被其他程序占用，请关闭该文件后重试，或选择其他文件名', exportDocumentTooLarge: '渲染后的文档超过 96 MiB 导出上限。请压缩大图片或拆分文档后重试', exportSourceDocumentTooLarge: '源文档超过 64 MiB 导出上限。请拆分文档后重试', exportImageResourceFailed: '部分图片无法读取，已停止导出，避免生成缺失内容的图片。请检查原图片后重试',
@@ -485,15 +533,27 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     resizeSidebar: '拖动调整文档库宽度', resizeToc: '拖动调整目录宽度', resizeEditor: '拖动调整预览宽度'
   },
   en: {
+    recoveryReview: 'Recover draft', recoveryLater: 'Later', recoveryAvailable: 'An older draft was preserved separately. Use Recover draft in the toolbar to review it.',
+    recoverySafeDescription: 'Previous unsaved edits are preserved separately. Save current edits before restoring, handle this later, or save a recovery copy under More → Document tools → Safety.',
+    recoverySaveFirst: 'Save your current edits before restoring the older draft. Both remain unchanged.', recoveryChanged: 'The current document changed. Recovery was not applied. Save it and try again.',
+    recoveryCancel: 'Cancel recovery', recoveryRestoring: 'Reading draft…',
+    tablePasteLimit: 'Paste exceeds table capacity (growth up to 20 rows, 12 columns; 500,000 characters). Existing content is unchanged.',
+    tablePasteShape: 'Cannot paste this grid. Use a text table with consistent columns, no merged cells, media or outside prose. Existing content is unchanged.',
+    recoveryRestoredCopy: 'The source could not be read. Recovered into a separate new draft; choose a name and location when saving. The original is unchanged.',
     formulaEditStale: 'The document or formula changed. Nothing was written. Close and reopen the formula.',
     formulaReplaceDraftConfirm: 'Regenerating replaces the formula source you edited. Continue?',
     formulaSyntaxError: 'Unable to parse the equation. Check the message and source; nothing was written.',
+    formulaIncomplete: 'Fill in the equation placeholders (Tab moves between them) before inserting.',
+    formulaMatrixPosition: 'Click inside a matrix cell before adding or removing rows or columns. The equation was not changed.',
     formulaInlineMultiline: 'Inline equations cannot contain newlines. Choose Display or Numbered; your source has been preserved.',
+    formulaTableInline: 'Table cells require a single-line Inline equation. Choose Inline and use Large for larger notation. Your draft is preserved.',
+    formulaTablePipe: 'Unescaped | splits a table cell. Use \\vert or \\lVert and \\rVert in equations. Your draft is preserved.',
     formulaDelimiterInvalid: 'Equation delimiters conflict with the content; nothing was written. Choose Display output or wrap the complete inline equation in \\(...\\) under Advanced. Your input is retained.',
     formulaDisplay: 'Equation display', formulaDisplayPreview: 'Rendered equations', formulaDisplaySource: 'Equation source',
     diagramDisplay: 'Diagram display', diagramDisplayPreview: 'Rendered diagrams', diagramDisplaySource: 'Diagram source',
     formulaVariableInvalid: 'Use a single letter, LaTeX symbol or subscripted name (e.g. x, \\theta, x_1), without parentheses or operations. Use Custom formula for complex expressions.',
     formulaVariablesInvalid: 'Enter 1–16 comma-separated variables without empty entries.',
+    formulaMatrixInvalid: 'Matrix cells must be nonempty and cannot contain outer row/column commands. Each 3×3 row needs 3 comma-separated entries. Commas inside balanced parentheses, groups or nested matrices are preserved. Use Custom formula for other structures.',
     formulaSearchPlaceholder: 'Name, subject or keyword', formulaSearchLabel: 'Search formula templates', formulaSearchClear: 'Clear',
     formulaVisualTitle: 'Visual editing', formulaStructureToolbar: 'Equation structure toolbar', formulaParameters: 'Template parameters', formulaAdvanced: 'Advanced: view/edit source',
     formulaInlineLayout: 'Inline layout', formulaLayoutNormal: 'Normal layout', formulaLayoutLarge: 'Large layout', formulaLayoutHint: 'Expand fractions and sum symbols in this inline equation only, without moving it to a separate line.',
@@ -525,6 +585,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     untitledDocument: 'Untitled document', saved: 'Saved', unsaved: 'Unsaved', autoSaved: 'Autosaved', saveAs: 'Save As', exitEdit: 'Exit editing', markdownEditorAria: 'Markdown editor', largeDocumentOptimized: 'Large-document mode enabled: preview updates are deferred and full-document spell scans are paused',
     recoveryLabel: 'CRASH RECOVERY', recoveryTitle: 'Unsaved edits were found', recoveryDescription: 'Quillite saved a recovery copy before the previous session ended unexpectedly. Continue editing it, or discard it and keep the version on disk.', recoveryDocument: 'Document', recoverySavedAt: 'Snapshot', recoveryDiscard: 'Discard recovery copy', recoveryRestore: 'Restore & Continue', recoveryFailed: 'The recovery copy could not be read. The file on disk was not changed.', recoveryRestored: 'Unsaved edits from the previous session were restored', unsavedCloseLabel: 'DOCUMENT CHANGES', unsavedTitle: 'Unsaved changes', unsavedCloseDescription: 'This document has unsaved changes. Save them before quitting?', save: 'Save', dontSave: "Don't Save", savingDocument: 'Saving…',
     codeLang: 'Select a language', codeNoLang: 'No language (plain text)',
+    liveEditing: 'Live editing', sourceEditing: 'Source', editorPresentationLabel: 'Editor display', liveEditingHint: 'Click text, table cells or code to edit in place. Switch to Source to edit syntax.',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> Save　 <kbd>Ctrl</kbd> + <kbd>E</kbd> Preview', backToTop: 'Back to top', backToTopAria: 'Back to document top',
     toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', openCompactToc: 'Open table of contents', closeCompactToc: 'Close table of contents', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
     exportHTML: 'Export HTML', htmlExported: 'HTML page exported', htmlExportFailed: 'HTML export failed', exportFileInUse: 'The export file is open in another app. Close it and try again, or choose a different file name.', exportDocumentTooLarge: 'The rendered document exceeds the 96 MiB export limit. Compress large images or split the document and try again.', exportSourceDocumentTooLarge: 'The source document exceeds the 64 MiB export limit. Split the document and try again.', exportImageResourceFailed: 'Some images could not be read. Export was stopped to avoid creating an incomplete image. Check the source images and try again.',
@@ -579,6 +640,12 @@ Object.assign(translations['zh-CN'], {
   canvasMindmapConnect: '设为子主题',
   canvasStateHint: '拖动状态调整位置；连接模式下依次点击起始状态和目标状态；拖动空白处移动画布。',
   canvasMindmapHint: '选择主题后添加子主题或同级主题；连接模式下先点父主题再点子主题；拖动空白处移动画布。',
+  canvasMindmapPromote: '移至根主题',
+  canvasMindmapDeleteHint: '保留根主题；删除主题后，其子主题上移到原父主题。',
+  canvasKeyboardHint: '键盘：方向键切换，Enter 选择／连接，F2 编辑，Shift+方向键移动，Alt+方向键平移，Delete 删除。',
+  canvasEdgeAria: '连线：{from} → {to}{label}',
+  canvasStateAria: '可编辑状态图画布',
+  canvasMindmapAria: '可编辑思维导图画布',
   editDiagramVisually: '在画布中编辑图表',
   editThisDiagram: '编辑此图表',
   editorInitializationFailed: '编辑器加载失败，文档内容已保留。请再次点击“编辑”重试。',
@@ -586,7 +653,14 @@ Object.assign(translations['zh-CN'], {
   virtualFileDropUnsupported: '此拖放内容没有可用的本地文件路径。请先保存到本地后再拖入，图片也可以复制后粘贴。',
   updateTimedOut: '更新下载超时，当前版本未替换。请检查网络后重试，或点击“官网下载”获取完整安装包。',
   diagramSourceChanged: '文档或图表内容已变化，请重新打开图表后编辑。',
+  tableSourceChanged: '文档或表格内容已变化，请关闭并重新打开表格后编辑。当前输入仍保留在此窗口。',
   diagramChecking: '正在检查…', diagramDraftChanged: '检查期间内容已变化，请再次保存。', diagramDataEmpty: '请至少保留一行有效数据。',
+  diagramSearch: '搜索名称、用途或图表类型', diagramSearchEmpty: '没有匹配的图表',
+  diagramPaste: '粘贴表格数据', diagramPasteHint: '按数据表的列顺序粘贴 Excel / TSV / CSV 数据（最多 2000 行）；应用后替换当前数据行，不修改原文档，点击保存才生效。',
+  diagramPasteHeader: '第一行是标题', diagramPasteApply: '应用到表格', diagramPasteInvalid: '数据未应用：请检查列数、数字、日期及必填字段。原数据已保留。',
+  diagramAddSeries: '添加系列', diagramRemoveSeries: '删除末尾系列', diagramRemoveSeriesConfirm: '确认删除末尾系列及其数据？尚未保存到文档。', diagramSeriesNameError: '多个系列的名称必须非空且不重复',
+  diagramDateError: '请输入不重复的有效日期 YYYY-MM-DD', diagramDateRange: '日历日期跨度不能超过 366 天', diagramBinsError: '分箱数必须是 1–100 的整数，样本数值范围必须有效', diagramLimitError: '最多 2000 行数据、12 个系列',
+  diagramEntityError: '请检查标识、字段类型或关系；标识仅用字母、数字和下划线，且不能以数字开头', diagramEntityMissing: '请先添加对应的类／实体行',
   diagramDataError: '第 {row} 行「{field}」：{reason}。修正前保留上次有效预览。',
   diagramNumberError: '请输入有效且有限的数字', diagramRangeError: '数字超出允许范围', diagramLabelError: '请输入名称', diagramDuplicateError: '分类名称不能重复',
   flowchartVisualSafeHint: '操作会自动生成兼容的图表源码',
@@ -616,6 +690,12 @@ Object.assign(translations.en, {
   canvasMindmapConnect: 'Set as child',
   canvasStateHint: 'Drag states to move them; in Connect mode, click the source then target state; drag empty space to pan.',
   canvasMindmapHint: 'Select a topic to add a child or sibling; in Connect mode, click the parent then child; drag empty space to pan.',
+  canvasMindmapPromote: 'Move to root',
+  canvasMindmapDeleteHint: 'Keep the root. Deleting a topic moves its children to its parent.',
+  canvasKeyboardHint: 'Keyboard: arrows navigate, Enter selects/connects, F2 edits, Shift+arrows move, Alt+arrows pan, Delete removes.',
+  canvasEdgeAria: 'Connection: {from} → {to}{label}',
+  canvasStateAria: 'Editable state diagram canvas',
+  canvasMindmapAria: 'Editable mind map canvas',
   editDiagramVisually: 'Edit diagram on canvas',
   editThisDiagram: 'Edit this diagram',
   editorInitializationFailed: 'The editor could not load. Your document is retained. Click Edit again to retry.',
@@ -623,7 +703,14 @@ Object.assign(translations.en, {
   virtualFileDropUnsupported: 'This dropped item has no usable local file path. Save it locally before dropping it, or copy and paste the image.',
   updateTimedOut: 'The update timed out; the current version was not replaced. Check your network and retry, or download the full installer from the official website.',
   diagramSourceChanged: 'The document or diagram has changed. Reopen the diagram to edit it.',
+  tableSourceChanged: 'The document or table has changed. Close and reopen the table to edit it. Your input is still kept in this dialog.',
   diagramChecking: 'Checking…', diagramDraftChanged: 'The draft changed during validation. Save again.', diagramDataEmpty: 'Keep at least one valid data row.',
+  diagramSearch: 'Search name, purpose or chart type', diagramSearchEmpty: 'No matching diagrams',
+  diagramPaste: 'Paste table data', diagramPasteHint: 'Paste Excel / TSV / CSV in the table column order (up to 2000 rows). Apply replaces draft rows only; the document changes when you save.',
+  diagramPasteHeader: 'First row contains headers', diagramPasteApply: 'Apply to table', diagramPasteInvalid: 'Data was not applied. Check columns, numbers, dates and required fields. Original data is retained.',
+  diagramAddSeries: 'Add series', diagramRemoveSeries: 'Remove last series', diagramRemoveSeriesConfirm: 'Remove the last series and its data from this draft?', diagramSeriesNameError: 'Series names must be nonempty and unique',
+  diagramDateError: 'enter a unique valid date YYYY-MM-DD', diagramDateRange: 'Calendar dates may span at most 366 days', diagramBinsError: 'Bins must be an integer from 1 to 100, with a valid numeric sample range', diagramLimitError: 'Up to 2000 rows and 12 series',
+  diagramEntityError: 'check identifiers, field types and relations; identifiers use letters, numbers and underscores, not starting with a number', diagramEntityMissing: 'add the corresponding class / entity row first',
   diagramDataError: 'Row {row}, {field}: {reason}. The last valid preview is retained until corrected.',
   diagramNumberError: 'enter a valid finite number', diagramRangeError: 'number is outside the allowed range', diagramLabelError: 'enter a name', diagramDuplicateError: 'category names must be unique',
   flowchartVisualSafeHint: 'Actions automatically generate compatible diagram source',
@@ -692,6 +779,7 @@ Object.assign(translations.en, {
 
 Object.assign(translations['zh-CN'], {
   aiDiffFilterLabel: '筛选修改', aiDiffFilterAll: '全部', aiDiffFilterAccepted: '已接受', aiDiffFilterPending: '保留原文', aiDiffLoadMore: '显示更多修改', aiLocateOriginal: '定位原文', aiAcceptParagraph: '接受本段修改',
+  documentHistoryLoading: '正在读取历史版本…', documentHistoryLoadingHint: '读取完成后才能恢复；你可以选择其他版本或取消。',
   aiChunkProcessing: '正在处理第 {chunk}/{total} 段', aiChunkRetrying: '第 {chunk}/{total} 段失败，正在自动重试',
   aiPrivacyCheckTitle: '发送前隐私检查', aiPrivacySendSummary: '{provider} · {model} · {count} 个字符', aiPrivacyNone: '未发现常见敏感信息。发送前仍建议确认文档内容。', aiPrivacyFound: '发现 {count} 项可能的敏感信息，已选择脱敏 {selected} 项。取消选择后将发送原值。', aiPrivacyRedact: '发送时脱敏', aiPrivacyTypeApiKey: '密钥', aiPrivacyTypeEmail: '邮箱', aiPrivacyTypeIdNumber: '身份证号', aiPrivacyTypePhone: '手机号', aiPrivacyTypeBankCard: '银行卡号',
   documentHistory: '历史版本', documentHistoryLabel: '本地版本历史', documentHistoryTitle: '文档历史版本', documentHistoryIntro: '保存前的文档版本会安全保留在本机，可查看差异并恢复为可编辑内容。', documentHistoryVersions: '历史记录', documentHistorySelectTitle: '选择一个历史版本', documentHistorySelectHint: '右侧将显示历史内容与当前文档的差异。', documentHistoryEmpty: '暂时没有历史版本', documentHistoryRestore: '恢复此版本', documentHistoryRestored: '历史版本已恢复到编辑器，保存后才会写入原文件', documentHistoryLoadFailed: '无法读取文档历史版本', documentHistoryChanged: '当前文档已经切换，无法恢复此版本', documentHistoryCurrent: '当前文档', documentHistoryOlder: '历史版本', documentHistoryDifference: '与当前文档相比：增加 {added} 行，删除 {removed} 行', documentHistorySize: '{size} KB',
@@ -710,6 +798,7 @@ Object.assign(translations['zh-CN'], {
 
 Object.assign(translations.en, {
   aiDiffFilterLabel: 'Filter changes', aiDiffFilterAll: 'All', aiDiffFilterAccepted: 'Accepted', aiDiffFilterPending: 'Keep original', aiDiffLoadMore: 'Show more changes', aiLocateOriginal: 'Locate original', aiAcceptParagraph: 'Accept this paragraph',
+  documentHistoryLoading: 'Loading version history…', documentHistoryLoadingHint: 'Restore becomes available after loading. You can select another version or cancel.',
   aiChunkProcessing: 'Processing section {chunk} of {total}', aiChunkRetrying: 'Section {chunk} of {total} failed; retrying automatically',
   aiPrivacyCheckTitle: 'Privacy check before sending', aiPrivacySendSummary: '{provider} · {model} · {count} characters', aiPrivacyNone: 'No common sensitive data was detected. Review the content before sending.', aiPrivacyFound: '{count} potentially sensitive items found; {selected} will be redacted. Clear an item to send its original value.', aiPrivacyRedact: 'Redact when sending', aiPrivacyTypeApiKey: 'API key', aiPrivacyTypeEmail: 'Email', aiPrivacyTypeIdNumber: 'ID number', aiPrivacyTypePhone: 'Phone', aiPrivacyTypeBankCard: 'Bank card',
   documentHistory: 'Version history', documentHistoryLabel: 'LOCAL VERSION HISTORY', documentHistoryTitle: 'Document version history', documentHistoryIntro: 'Versions from before each save are kept locally so you can compare and restore them as editable content.', documentHistoryVersions: 'Versions', documentHistorySelectTitle: 'Select a version', documentHistorySelectHint: 'Its content and difference from the current document will appear here.', documentHistoryEmpty: 'No earlier versions yet', documentHistoryRestore: 'Restore this version', documentHistoryRestored: 'The version was restored in the editor. Save to write it to the document.', documentHistoryLoadFailed: 'Unable to load document history', documentHistoryChanged: 'The active document changed, so this version cannot be restored', documentHistoryCurrent: 'Current document', documentHistoryOlder: 'Earlier version', documentHistoryDifference: 'Compared with the current document: {added} lines added, {removed} removed', documentHistorySize: '{size} KB',
@@ -757,6 +846,33 @@ Object.assign(translations.en, { saveRecordsWarning: 'The new file was saved, bu
 Object.assign(translations['zh-CN'], { renameKeepFormat: '这里只修改文件名，不能切换 Markdown／纯文本类型；请保留原文件扩展名。' });
 Object.assign(translations.en, { renameKeepFormat: 'Renaming cannot switch between Markdown and plain text. Keep the original file extension.' });
 
+Object.assign(translations['zh-CN'], {
+  footnoteEditor: '编辑脚注', footnoteEditorHint: '修改正文会同步所有相同编号的引用；删除引用不会删除脚注内容。',
+  footnoteIdentifier: '脚注标识（保留不变）', footnoteContent: '脚注内容（支持 Markdown）', footnoteApply: '应用脚注',
+  footnoteStale: '文档已变化，请关闭后重新选择脚注，当前内容未被覆盖。',
+  linkEditor: '编辑链接', linkEditorHint: '填写链接文字和地址；在已有链接中按 Ctrl+K 可再次编辑。',
+  linkLabel: '链接文字（支持 Markdown）', linkDestination: '链接地址', linkTooltipTitle: '提示文字（可选）',
+  linkDestinationHint: '支持 http://、https://、文档相对路径和 #章节锚点。', linkApply: '应用链接',
+  linkInvalid: '请填写单行链接文字和有效地址，不支持脚本或其他协议。', linkStale: '文档已变化，请关闭后重新选择链接，当前内容未被覆盖。',
+  linkReferenceHint: '这是引用式链接：修改地址或提示文字会影响所有使用同一引用的链接。',
+  autolinkDestinationHint: '填写完整的 http:// 或 https:// 地址，地址本身将显示为链接文字。',
+  autolinkInvalid: '请填写有效的完整 http:// 或 https:// 地址。',
+  newReferenceHint: '引用定义会添加到文档末尾，自动避开已有名称，不影响后面的正文。'
+});
+Object.assign(translations.en, {
+  footnoteEditor: 'Edit footnote', footnoteEditorHint: 'Changes update every reference to this note. Removing a reference does not delete its content.',
+  footnoteIdentifier: 'Footnote identifier (unchanged)', footnoteContent: 'Footnote content (Markdown supported)', footnoteApply: 'Apply footnote',
+  footnoteStale: 'The document changed. Close and select the note again; current content was not overwritten.',
+  linkEditor: 'Edit link', linkEditorHint: 'Enter link text and destination. Press Ctrl+K inside an existing link to edit it again.',
+  linkLabel: 'Link text (Markdown supported)', linkDestination: 'Link destination', linkTooltipTitle: 'Tooltip (optional)',
+  linkDestinationHint: 'Supports http://, https://, relative document paths and #section anchors.', linkApply: 'Apply link',
+  linkInvalid: 'Enter single-line link text and a valid destination. Scripts and other protocols are not supported.', linkStale: 'The document changed. Close and select the link again; current content was not overwritten.',
+  linkReferenceHint: 'Reference link: changing the destination or tooltip affects all links using this reference.',
+  autolinkDestinationHint: 'Enter a complete http:// or https:// address. The address itself is displayed as the link text.',
+  autolinkInvalid: 'Enter a valid, complete http:// or https:// address.',
+  newReferenceHint: 'The definition is appended to the document with a unique name, preserving the following text.'
+});
+
 function t(key, values = {}) {
   let template = translations[state.language]?.[key] ?? translations['zh-CN'][key] ?? key;
   if (document.documentElement.dataset.platform === 'darwin') template = template.replaceAll('Ctrl', '⌘');
@@ -791,7 +907,7 @@ function applyStaticTranslations() {
   updateDiagramFullscreenButton();
   updateDiagramActionLabels();
   if (structuredDiagramState?.model && flowchartDesignerState?.mode === 'visual') {
-    structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale());
+    structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale(), structuredDiagramState.model);
     renderStructuredDiagramEditor();
   }
 }
@@ -922,9 +1038,10 @@ function loadEditorDependencies() {
     import('@lezer/highlight'),
     import('./embedded-image-preview.js'),
     import('./editor-formula-preview.js'),
-    import('./editor-diagram-preview.js')
-  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule, diagramPreviewModule]) => {
-    basicSetup = codemirrorModule.basicSetup;
+    import('./editor-diagram-preview.js'),
+    import('./editor-live-preview.js')
+  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule, diagramPreviewModule, livePreviewModule]) => {
+    basicSetup = [...codemirrorModule.basicSetup.filter(extension => extension !== viewModule.highlightActiveLine()), livePreviewModule.stableActiveLine];
     Compartment = stateModule.Compartment;
     StateEffect = stateModule.StateEffect;
     StateField = stateModule.StateField;
@@ -935,6 +1052,7 @@ function loadEditorDependencies() {
     keymap = viewModule.keymap;
     scrollPastEnd = viewModule.scrollPastEnd;
     undo = commandsModule.undo;
+    redo = commandsModule.redo;
     undoDepth = commandsModule.undoDepth;
     isolateHistory = commandsModule.isolateHistory;
     closeSearchPanel = searchModule.closeSearchPanel;
@@ -943,6 +1061,21 @@ function loadEditorDependencies() {
     HighlightStyle = languageModule.HighlightStyle;
     syntaxHighlighting = languageModule.syntaxHighlighting;
     markdown = markdownModule.markdown;
+    markdownLanguage = markdownModule.markdownLanguage;
+    editorPresentation = new Compartment();
+    editorLivePreview = livePreviewModule.editorLivePreview;
+    livePreviewContext = livePreviewModule.livePreviewContext;
+    buildLivePlan = livePreviewModule.buildLivePlan;
+    liveFormatSelection = livePreviewModule.liveFormatSelection;
+    resolveEditableOwner = livePreviewModule.resolveEditableOwner;
+    spellcheckDecorationField = livePreviewModule.spellingDecorations;
+    spellcheckDecorationEffect = livePreviewModule.setSpellingDecorations;
+    resolveEditorPasteTarget = livePreviewModule.resolveEditorPasteTarget;
+    pasteEditableTableGrid = livePreviewModule.pasteEditableTableGrid;
+    canPasteEditableTableGrid = livePreviewModule.canPasteEditableTableGrid;
+    replaceLiveSelections = livePreviewModule.replaceLiveSelections;
+    liveAIReplacement = livePreviewModule.liveAIReplacement;
+    Object.assign(codeMirrorTranslations['zh-CN'], livePreviewModule.livePreviewPhrases);
     tags = highlightModule.tags;
     embeddedImagePreview = imagePreviewModule.embeddedImagePreview;
     imagePreviewContext = imagePreviewModule.imagePreviewContext;
@@ -977,25 +1110,49 @@ function isPlainTextFile(path) {
   return /\.txt$/i.test(path || '');
 }
 
-function createEditorState(content = '', moveToStart = true) {
+function editorPresentationExtensions() {
+  if (state.editorPresentation === 'source' || editorSourceFallback || isPlainTextFile(state.currentFile?.path)) return [];
   const session = state.documentSession, path = state.currentFile?.path;
-  const language = editorSourceFallback || isPlainTextFile(state.currentFile?.path)
-    ? []
-    : [markdown(), syntaxHighlighting(markdownHighlightStyle), embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
+  const mediaExtensions = [embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
       editorFormulaPreview, formulaPreviewContext.of({ enabled: state.formulaDisplay !== 'source', sanitize: html => DOMPurify.sanitize(html),
         edit: (formula, view) => {
-          if (codeEditor === view && state.editing && state.documentSession === session && state.currentFile?.path === path) openFormulaDialog(formula);
+          const owner = resolveEditableOwner(view, formula, true);
+          if (owner && codeEditor === owner.view && state.editing && state.documentSession === session && state.currentFile?.path === path) openFormulaDialog({ ...formula, from: owner.from, to: owner.to, projectionPrefix:owner.projectionPrefix, continuationPrefix:owner.projectionPrefix+(formula.continuationPrefix||'') });
         } }),
       editorDiagramPreview, diagramPreviewContext.of({ enabled: state.editing && state.diagramDisplay !== 'source',
         render: renderEditorDiagram, release: releaseEditorDiagram,
-        label: item => diagramTemplateById(item.templateId).name[diagramLocale()],
+        label: item => diagramDisplayName(item.source, item.engine, diagramLocale()),
         edit: (diagram, view) => {
-          if (codeEditor === view && state.editing && state.documentSession === session && state.currentFile?.path === path) openEditorDiagram(diagram);
+          const owner = resolveEditableOwner(view, diagram, true);
+          if (owner && codeEditor === owner.view && state.editing && state.documentSession === session && state.currentFile?.path === path) openEditorDiagram({ ...diagram, from: owner.from, to: owner.to, projectionPrefix:owner.projectionPrefix+(diagram.projectionPrefix||''), projectionPrefixes:diagram.projectionPrefixes?.map((prefix,i)=>i?owner.projectionPrefix+prefix:prefix), original:owner.view.state.sliceDoc(owner.from,owner.to) });
         } })];
+  return [...mediaExtensions, editorLivePreview, livePreviewContext.of({
+        nestedExtensions: mediaExtensions,
+        nestedEffects: [setFormulaDisplayEffect, setDiagramDisplayEffect, refreshDiagramThemeEffect, updateImagePreviewDirectory],
+        render: (source, item) => item.kind === 'code' ? DOMPurify.sanitize(`<pre><code>${hljs.getLanguage(item.language) ? hljs.highlight(item.text, { language: item.language }).value : escapeHtml(item.text)}</code></pre>`, { ALLOWED_TAGS: ['pre', 'code', 'span'], ALLOWED_ATTR: ['class'] }) : DOMPurify.sanitize(marked.parse(source, { gfm: true, breaks: true }), {
+          ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'p', 'br', 'hr', 'div', 'span', 'strong', 'em', 'del', 's', 'u', 'sub', 'sup', 'mark', 'kbd', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
+          ALLOWED_ATTR: ['align', 'colspan', 'rowspan', 'title'],
+        }),
+        editTable: (table, view) => {
+          const existing = resolveEditableTable(view, table);
+          if (!existing || codeEditor !== existing.editor || !state.editing || state.documentSession !== session || state.currentFile?.path !== path) return;
+          openTableDialog(existing);
+        },
+        editFootnote: (note, view) => {
+          const owner = resolveEditableOwner(view,note);
+          if(owner && codeEditor===owner.view && state.editing && state.documentSession===session && state.currentFile?.path===path)
+            openFootnoteDialog({...note,from:owner.from,to:owner.to});
+        },
+      })];
+}
+
+function createEditorState(content = '', moveToStart = true) {
+  const language = editorSourceFallback || isPlainTextFile(state.currentFile?.path)
+    ? [] : [markdown({ base: markdownLanguage, extensions: [tableWhitespace] }), syntaxHighlighting(markdownHighlightStyle)];
   return EditorState.create({
     doc: content,
     selection: { anchor: moveToStart ? 0 : content.length },
-    extensions: [...editorExtensions, ...language, editorLanguage.of(editorLanguageExtension())]
+    extensions: [...editorExtensions, ...language, editorPresentation.of(editorPresentationExtensions()), editorLanguage.of(editorLanguageExtension())]
   });
 }
 
@@ -1011,18 +1168,7 @@ function resolvedSpellcheckLanguage() {
 }
 
 function initializeSpellcheckExtension() {
-  if (spellcheckDecorationField) return;
-  spellcheckDecorationEffect = StateEffect.define();
-  spellcheckDecorationField = StateField.define({
-    create: () => Decoration.none,
-    update(decorations, transaction) {
-      let next = decorations.map(transaction.changes);
-      for (const effect of transaction.effects) {
-        if (effect.is(spellcheckDecorationEffect)) next = effect.value;
-      }
-      return next;
-    }
-  });
+  if (spellcheckViewPlugin) return;
   spellcheckViewPlugin = ViewPlugin.fromClass(class {
     constructor(view) {
       this.view = view;
@@ -1126,8 +1272,9 @@ function setSpellcheckEnabled(enabled) {
   state.spellcheckEnabled = Boolean(enabled);
   localStorage.setItem('spellcheckEnabled', String(state.spellcheckEnabled));
   syncSpellcheckOptions();
+  // A cached dictionary returns immediately; rebuild marks on both transitions.
+  refreshSpellcheckDecorations(codeEditor, false);
   if (state.spellcheckEnabled) loadSpellcheckDictionary(true);
-  else refreshSpellcheckDecorations(codeEditor, false);
 }
 
 function setSpellcheckLanguage(language) {
@@ -1155,6 +1302,7 @@ function replaceEditorContent(content, moveToStart = false) {
   codeEditor.setState(createEditorState(content, moveToStart));
   suppressEditorChanges = false;
   updateUndoButton();
+  syncEditorLayoutOptions();
 }
 
 let indexedFormulaDocument = null;
@@ -1191,19 +1339,28 @@ function releaseEditorDiagram(container) {
 }
 
 function focusCodeEditor() {
-  if (!codeEditor) return;
+  if (!codeEditor || !state.editing) return;
+  const editor = codeEditor, session = state.documentSession, previousFocus = document.activeElement;
+  // A newer click/dialog/document owns focus; never let an old layout callback
+  // pull it back into the editor (or dereference an editor that was replaced).
+  const canReturn = () => codeEditor === editor && state.editing && state.documentSession === session
+    && document.hasFocus()
+    && !document.body.classList.contains('dialog-open')
+    && [previousFocus, document.body, editor.contentDOM].includes(document.activeElement);
   requestAnimationFrame(() => {
-    codeEditor.requestMeasure();
-    requestAnimationFrame(() => codeEditor.focus());
+    if (!canReturn()) return;
+    editor.requestMeasure();
+    requestAnimationFrame(() => { if (canReturn()) editor.focus(); });
   });
 }
 
-function replaceSelection(insert, selectFrom = 0, selectLength = 0) {
+function replaceSelection(insert, selectFrom = 0, selectLength = 0, preserveFormatOnEnter = false) {
   if (!codeEditor || !state.editing) return false;
   const selection = codeEditor.state.selection.main;
   codeEditor.dispatch({
     changes: { from: selection.from, to: selection.to, insert },
     selection: { anchor: selection.from + selectFrom, head: selection.from + selectFrom + selectLength },
+    effects: preserveFormatOnEnter && !selection.empty ? liveFormatSelection.of(selection.from + insert.length) : [],
     scrollIntoView: true
   });
   codeEditor.focus();
@@ -1211,68 +1368,37 @@ function replaceSelection(insert, selectFrom = 0, selectLength = 0) {
 }
 
 function wrapSelection(before, after, placeholder) {
-  const selection = codeEditor?.state.selection.main;
-  if (!selection || !state.editing) return false;
-  const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || placeholder;
-  return replaceSelection(`${before}${selected}${after}`, before.length, selected.length);
+  if (!codeEditor || codeEditor.state.readOnly || !state.editing) return false;
+  const { formatEnds, ...edit } = formatSelectionEdits(codeEditor.state,
+    (source, from, to) => inlineFormatEdit(source, from, to, before, after, placeholder,
+      {rendered: state.editorPresentation === 'live' && !editorSourceFallback}));
+  codeEditor.dispatch({
+    ...edit,
+    annotations: isolateHistory.of('full'),
+    effects: liveFormatSelection.of(formatEnds),
+    scrollIntoView: true
+  });
+  codeEditor.focus();
+  return true;
 }
 
 // 只允许工具栏内置色名，避免把任意样式写入文档。再次选择颜色时会替换
 // 现有颜色标记；“默认颜色”则移除紧贴选区的颜色标记。
 function applyTextColor(color) {
-  if (!codeEditor || !state.editing || !TEXT_COLOR_VALUES.has(color)) return false;
-  const selection = codeEditor.state.selection.main;
-  const source = codeEditor.state.doc.toString();
-  const selected = source.slice(selection.from, selection.to);
-  const fullWrapper = selected.match(/^<span data-md-color="([^"]+)">([\s\S]*)<\/span>$/);
-
-  if (fullWrapper && TEXT_COLOR_VALUES.has(fullWrapper[1])) {
-    const inner = fullWrapper[2];
-    const open = color === 'default' ? '' : `<span data-md-color="${color}">`;
-    const insert = color === 'default' ? inner : `${open}${inner}</span>`;
-    return replaceSelection(insert, open.length, inner.length);
-  }
-
-  const before = source.slice(Math.max(0, selection.from - 64), selection.from);
-  const openMatch = before.match(/<span data-md-color="([^"]+)">$/);
-  const close = '</span>';
-  if (openMatch && TEXT_COLOR_VALUES.has(openMatch[1]) && source.slice(selection.to).startsWith(close)) {
-    const open = color === 'default' ? '' : `<span data-md-color="${color}">`;
-    const insert = color === 'default' ? selected : `${open}${selected}${close}`;
-    const from = selection.from - openMatch[0].length;
-    codeEditor.dispatch({
-      changes: { from, to: selection.to + close.length, insert },
-      selection: { anchor: from + open.length, head: from + open.length + selected.length },
-      scrollIntoView: true
-    });
-    codeEditor.focus();
-    return true;
-  }
-
-  if (color === 'default' && !selected) return false;
-  const text = selected || t('coloredText');
-  const open = `<span data-md-color="${color}">`;
-  return replaceSelection(`${open}${text}${close}`, open.length, text.length);
+  if (!codeEditor || codeEditor.state.readOnly || !state.editing || !TEXT_COLOR_VALUES.has(color)) return false;
+  const { formatEnds, ...edit } = formatSelectionEdits(codeEditor.state,
+    (source, from, to) => textColorEdit(source, from, to, color, t('coloredText')));
+  if (edit.changes.empty) return false;
+  codeEditor.dispatch({ ...edit, effects: liveFormatSelection.of(formatEnds), annotations: isolateHistory.of('full'), scrollIntoView: true });
+  codeEditor.focus();
+  return true;
 }
 
 function formatSelectedLines(kind, headingPrefix = '') {
-  if (!codeEditor || !state.editing) return false;
-  const selection = codeEditor.state.selection.main;
-  const first = codeEditor.state.doc.lineAt(selection.from);
-  const last = codeEditor.state.doc.lineAt(selection.to);
-  const original = codeEditor.state.doc.sliceString(first.from, last.to);
-  const lines = original.split('\n');
-  const formatted = lines.map((line, index) => {
-    if (kind === 'heading') return `${headingPrefix}${line.replace(/^#{1,6}\s+/, '')}`;
-    if (kind === 'quote') return `> ${line}`;
-    if (kind === 'unordered-list') return `- ${line.replace(/^[-*+]\s+/, '')}`;
-    if (kind === 'ordered-list') return `${index + 1}. ${line.replace(/^\d+[.)]\s+/, '')}`;
-    if (kind === 'task-list') return `- [ ] ${line.replace(/^[-*+]\s+(?:\[[ xX]\]\s+)?/, '')}`;
-    return line;
-  }).join('\n');
+  if (!codeEditor || !state.editing || codeEditor.state.readOnly) return false;
   codeEditor.dispatch({
-    changes: { from: first.from, to: last.to, insert: formatted },
-    selection: { anchor: first.from, head: first.from + formatted.length },
+    ...selectedLineFormat(codeEditor.state, kind, headingPrefix),
+    annotations: isolateHistory.of('full'),
     scrollIntoView: true
   });
   codeEditor.focus();
@@ -1282,33 +1408,16 @@ function formatSelectedLines(kind, headingPrefix = '') {
 let copiedFormat = null; // { inline: ['bold','italic',...], block: 'heading2' | 'quote' | null }
 let copiedFormatSource = null; // 复制格式时的源选区 { from, to }
 let formatPainterApplyTimer = null; // 选区稳定后自动应用格式的定时器
+let formatPainterModifiers = false;
+let formatPainterPointerDown = false;
 
 function analyzeFormat(selectionFrom, selectionTo) {
   const doc = codeEditor.state.doc;
   const format = { inline: [], block: null };
-  // 检查行内标记（包裹在选区两侧）
-  const before = doc.sliceString(Math.max(0, selectionFrom - 3), selectionFrom);
-  const after = doc.sliceString(selectionTo, Math.min(doc.length, selectionTo + 3));
-  const inlineChecks = [
-    { open: '**', close: '**', name: 'bold' },
-    { open: '*', close: '*', name: 'italic' },
-    { open: '~~', close: '~~', name: 'strikethrough' },
-    { open: '==', close: '==', name: 'highlight' },
-    { open: '`', close: '`', name: 'inline-code' }
-  ];
-  for (const check of inlineChecks) {
-    if (before.endsWith(check.open) && after.startsWith(check.close)) format.inline.push(check.name);
-  }
-  // bold 匹配时移除重复的 italic（* 也会匹配 ** 尾部）
-  if (format.inline.includes('bold')) format.inline = format.inline.filter(name => name !== 'italic');
-  // 检查块级格式（选区首行）
-  const first = doc.lineAt(selectionFrom);
-  const lineText = first.text;
-  const headingMatch = lineText.match(/^(#{1,6})\s+/);
-  if (headingMatch) format.block = `heading${headingMatch[1].length}`;
-  else if (/^>\s+/.test(lineText)) format.block = 'quote';
-  else if (/^[-*+]\s+/.test(lineText)) format.block = 'unordered-list';
-  else if (/^\d+[.)]\s+/.test(lineText)) format.block = 'ordered-list';
+  const source = doc.toString(), plan = buildLivePlan(source);
+  format.inline = selectedInlineFormats(plan, selectionFrom, selectionTo);
+  format.color = selectedFormatColor(source, plan, selectionFrom, selectionTo);
+  format.block = selectedBlockFormat(codeEditor.state, selectionFrom);
   return format;
 }
 
@@ -1320,12 +1429,12 @@ function copyFormatFromSelection() {
     return false;
   }
   const format = analyzeFormat(selection.from, selection.to);
-  if (!format.inline.length && !format.block) {
+  if (!format.inline.length && !format.block && !format.color) {
     showToast(t('formatNeedSelection'), 'warning');
     return false;
   }
   copiedFormat = format;
-  copiedFormatSource = { from: selection.from, to: selection.to };
+  copiedFormatSource = { from: selection.from, to: selection.to, doc: codeEditor.state.doc, session: state.documentSession };
   const button = $('#formatPainterButton');
   if (button) {
     button.classList.add('active');
@@ -1338,7 +1447,7 @@ function copyFormatFromSelection() {
 function scheduleFormatPainterApply() {
   clearTimeout(formatPainterApplyTimer);
   formatPainterApplyTimer = setTimeout(() => {
-    if (!copiedFormat || !codeEditor || !state.editing) return;
+    if (!copiedFormat || !codeEditor || !state.editing || formatPainterModifiers || formatPainterPointerDown) return;
     const selection = codeEditor.state.selection.main;
     // 仅在新选区与源选区不同且非空时自动应用
     if (selection.from === selection.to) return;
@@ -1348,39 +1457,73 @@ function scheduleFormatPainterApply() {
 }
 
 function applyCopiedFormat() {
-  if (!copiedFormat || !codeEditor || !state.editing) return false;
-  const selection = codeEditor.state.selection.main;
-  if (selection.from === selection.to) return false;
-  let selectionChanged = false;
-  // 先应用行内格式（基于当前选区），再应用块级格式（formatSelectedLines 会重新读取选区）
+  if (!copiedFormat || !codeEditor || !state.editing || codeEditor.state.readOnly) return false;
+  if (copiedFormatSource?.doc !== codeEditor.state.doc || copiedFormatSource?.session !== state.documentSession) {
+    clearCopiedFormat();
+    return false;
+  }
+  if (codeEditor.state.selection.ranges.every(range => range.empty)) return false;
+  let working = codeEditor.state, changes = working.changes([]);
+  let formatEnds = working.selection.ranges.map(() => null);
+  const append = ({ formatEnds: newEnds, ...spec }) => {
+    const transaction = working.update(spec);
+    changes = changes.compose(transaction.changes);
+    formatEnds = formatEnds.map(end => end === null ? null : transaction.changes.mapPos(end, 1));
+    if (newEnds) formatEnds = newEnds.map((end, i) => end === null ? formatEnds[i] : Math.max(end, formatEnds[i] ?? end));
+    working = transaction.state;
+  };
+  // Plan both inline and block changes privately; commit one undoable action.
+  if (copiedFormat.color) {
+    const plan = buildLivePlan(working.doc.toString());
+    append(formatSelectionEdits(working, (source, from, to) => {
+      if (from === to || selectedFormatColor(source, plan, from, to) === copiedFormat.color) return null;
+      const edit = paintColorEdit(source, from, to, copiedFormat.color);
+      return edit ? { ...edit.changes, ...edit.selection } : null;
+    }));
+  }
   if (copiedFormat.inline.length) {
-    const current = codeEditor.state.selection.main;
-    let insert = codeEditor.state.doc.sliceString(current.from, current.to);
-    for (const name of copiedFormat.inline) {
-      const open = { bold: '**', italic: '*', strikethrough: '~~', highlight: '==', 'inline-code': '`' }[name];
-      if (open) insert = `${open}${insert}${open}`;
-    }
-    codeEditor.dispatch({
-      changes: { from: current.from, to: current.to, insert },
-      selection: { anchor: current.from, head: current.from + insert.length },
-      scrollIntoView: true
-    });
-    selectionChanged = true;
+    const plan = buildLivePlan(working.doc.toString());
+    append(formatSelectionEdits(working, (source, from, to) => {
+      if (from === to) return null;
+      const existing = selectedInlineFormats(plan, from, to), text = source.slice(from, to);
+      let insert = text;
+      for (const name of copiedFormat.inline) {
+        const pair = PAINTER_WRAPPERS[name];
+        if (pair && !existing.includes(name)) insert = `${pair[0]}${insert}${pair[1]}`;
+      }
+      return insert === text ? null : { from, to, insert, anchor: from, head: from + insert.length };
+    }));
   }
   // 块级格式
   if (copiedFormat.block) {
     if (copiedFormat.block.startsWith('heading')) {
       const prefix = '#'.repeat(Number(copiedFormat.block.slice(7))) + ' ';
-      selectionChanged = formatSelectedLines('heading', prefix) || selectionChanged;
-    } else if (['quote', 'unordered-list', 'ordered-list'].includes(copiedFormat.block)) {
-      selectionChanged = formatSelectedLines(copiedFormat.block) || selectionChanged;
+      append(selectedLineFormat(working, 'heading', prefix));
+    } else if (['quote', 'unordered-list', 'ordered-list', 'task-list'].includes(copiedFormat.block)) {
+      append(selectedLineFormat(working, copiedFormat.block, '', { ensureQuote: true }));
     }
+    formatEnds = working.selection.ranges.map(range => range.empty ? null : range.to);
   }
+  const selectionChanged = !working.doc.eq(codeEditor.state.doc);
   if (selectionChanged) {
+    const plan = buildLivePlan(working.doc.toString());
+    formatEnds = formatEnds.map((end, index) => {
+      if (end === null) return null;
+      // Preserve any already-existing outer formatting too, not only wrappers
+      // added by this brush. Never jump across an adjacent opening delimiter.
+      let next;
+      while ((next = plan.hides.find(hide => hide.from === end && plan.marks.some(mark =>
+        mark.to === hide.to && mark.from <= working.selection.ranges[index].from)))) end = next.to;
+      return end;
+    });
+  }
+  clearCopiedFormat();
+  if (selectionChanged) {
+    codeEditor.dispatch({ changes, selection: working.selection, annotations: isolateHistory.of('full'),
+      effects: liveFormatSelection.of(formatEnds), scrollIntoView: true });
     codeEditor.focus();
     showToast(t('formatApplied'), 'success');
   }
-  clearCopiedFormat();
   return selectionChanged;
 }
 
@@ -1393,6 +1536,83 @@ function clearCopiedFormat() {
     button.classList.remove('active');
     button.setAttribute('aria-pressed', 'false');
   }
+}
+
+function openFootnoteDialog(note) {
+  if(!codeEditor || codeEditor.state.readOnly || !state.editing || !state.currentFile)return false;
+  const editor=codeEditor, doc=editor.state.doc, parsed=prepareFootnotes(doc.toString());
+  const reference=parsed.references.find(ref=>ref.from===note.from&&ref.to===note.to&&ref.label===note.label);
+  const definition=reference&&parsed.definitions.get(reference.label);
+  if(!definition)return false;
+  editor.dispatch({selection:{anchor:reference.from,head:reference.to}});
+  state.footnoteEditContext={editor,doc,session:state.documentSession,definition};
+  $('#footnoteLabel').value=definition.label;$('#footnoteBody').value=definition.text;$('#footnoteError').textContent='';
+  $('#footnoteDialog').showModal();document.body.classList.add('dialog-open');$('#footnoteBody').focus();return true;
+}
+function closeFootnoteDialog() {
+  const context=state.footnoteEditContext;$('#footnoteDialog').close();state.footnoteEditContext=null;
+  document.body.classList.remove('dialog-open');
+  if(context?.editor===codeEditor&&context.session===state.documentSession&&state.editing)codeEditor.focus();
+}
+function saveFootnoteDialog() {
+  const context=state.footnoteEditContext;
+  if(!footnoteContextIsCurrent(context,{editor:codeEditor,session:state.documentSession,editing:state.editing})){
+    $('#footnoteError').textContent=t('footnoteStale');return false;
+  }
+  const edit=footnoteBodyEdit(context.definition,$('#footnoteBody').value);
+  if(edit){
+    const changes=codeEditor.state.changes(edit);
+    codeEditor.dispatch({changes,selection:codeEditor.state.selection.map(changes),annotations:isolateHistory.of('full'),userEvent:'input.footnote'});
+  }
+  closeFootnoteDialog();return true;
+}
+
+function openLinkDialog(mode = 'inline') {
+  if (!codeEditor || codeEditor.state.readOnly || !state.editing || !state.currentFile) return false;
+  const editor = codeEditor, doc = editor.state.doc, selection = editor.state.selection.main;
+  const existing = findMarkdownLinkAt(doc.toString(), selection.from, selection.to);
+  mode = existing?.kind ?? mode;
+  state.linkEditContext = { editor, doc, session: state.documentSession, range: { from: selection.from, to: selection.to }, existing, mode };
+  $('#linkLabel').value = existing?.label ?? doc.sliceString(selection.from, selection.to);
+  $('#linkDestination').value = existing?.url ?? 'https://';
+  if (!existing && mode === 'autolink' && /^https?:\/\//i.test($('#linkLabel').value.trim())) $('#linkDestination').value = $('#linkLabel').value.trim();
+  $('#linkTitle').value = existing?.title ?? '';
+  $('#linkLabel').closest('label').hidden = mode === 'autolink';
+  $('#linkTitle').closest('label').hidden = mode === 'autolink';
+  $('#linkEditorHint').textContent = t(mode === 'autolink' ? 'autolinkDestinationHint' : 'linkEditorHint');
+  $('#linkDestinationHint').textContent = t(mode === 'autolink' ? 'autolinkDestinationHint' : mode === 'reference' && !existing ? 'newReferenceHint' : 'linkDestinationHint');
+  $('#linkReferenceHint').hidden = existing?.kind !== 'reference';
+  $('#linkError').textContent = '';
+  $('#linkDialog').showModal();
+  document.body.classList.add('dialog-open');
+  const field = mode === 'autolink' || $('#linkLabel').value ? $('#linkDestination') : $('#linkLabel');
+  field.focus(); field.select();
+  return true;
+}
+
+function closeLinkDialog() {
+  const context = state.linkEditContext;
+  $('#linkDialog').close();
+  state.linkEditContext = null;
+  document.body.classList.remove('dialog-open');
+  if (context?.editor === codeEditor && context.session === state.documentSession && state.editing) codeEditor.focus();
+}
+
+function saveLinkDialog() {
+  const context = state.linkEditContext;
+  if (!context || context.editor !== codeEditor || context.doc !== codeEditor.state.doc || context.session !== state.documentSession || codeEditor.state.readOnly || !state.editing) {
+    $('#linkError').textContent = t('linkStale'); return false;
+  }
+  const values = { label: $('#linkLabel').value, url: $('#linkDestination').value, title: $('#linkTitle').value };
+  const edit = linkEdit(context.doc.toString(), context.range, values, context.existing, context.mode, t('referenceName'));
+  if (!edit) {
+    $('#linkError').textContent = t(context.mode === 'autolink' ? 'autolinkInvalid' : 'linkInvalid');
+    (context.mode !== 'autolink' && validLinkDestination(values.url) ? $('#linkLabel') : $('#linkDestination')).focus();
+    return false;
+  }
+  if (!Array.isArray(edit.changes) || edit.changes.length) codeEditor.dispatch({ ...edit, annotations: isolateHistory.of('full'), scrollIntoView: true });
+  closeLinkDialog();
+  return true;
 }
 
 function runFormatCommand(command) {
@@ -1415,7 +1635,7 @@ function runFormatCommand(command) {
   }
   if (command === 'keyboard-key') return wrapSelection('<kbd>', '</kbd>', state.language === 'en' ? 'Key' : '按键');
   if (command === 'comment') return wrapSelection('<!-- ', ' -->', state.language === 'en' ? 'comment' : '注释');
-  if (command === 'autolink') return wrapSelection('<', '>', 'https://example.com');
+  if (command === 'autolink') return openLinkDialog('autolink');
   if (command === 'escape') {
     const selection = codeEditor.state.selection.main;
     const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || '*';
@@ -1424,37 +1644,29 @@ function runFormatCommand(command) {
   }
   if (command === 'html-block') {
     const selection = codeEditor.state.selection.main;
-    const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || (state.language === 'en' ? 'Content' : '内容');
-    return replaceSelection(`<div>\n${selected}\n</div>`, 6, selected.length);
+    codeEditor.dispatch({ ...insertHtmlBlock(codeEditor.state.doc.toString(), selection.from, selection.to, 'div', state.language === 'en' ? 'Content' : '内容'), annotations: isolateHistory.of('full') });
+    codeEditor.focus(); return true;
   }
-  if (command === 'link') {
-    const selection = codeEditor.state.selection.main;
-    const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || (state.language === 'en' ? 'link text' : '链接文字');
-    const prefix = `[${selected}](`;
-    return replaceSelection(`${prefix}https://)`, prefix.length, 8);
-  }
+  if (command === 'link') return openLinkDialog();
   if (command === 'inline-code') return wrapSelection('`', '`', 'code');
   if (command === 'code-block') { openCodeLangMenu(); return true; }
   if (command === 'horizontal-rule') return replaceSelection('\n\n---\n\n', 5, 0);
   if (command === 'hard-break') return replaceSelection('  \n', 3, 0);
   if (command === 'footnote') {
     const selection = codeEditor.state.selection.main;
-    const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || t('footnoteText');
-    const number = nextFootnoteNumber(codeEditor.state.doc.toString());
-    const reference = `[^${number}]`;
-    return replaceSelection(`${reference}\n\n${reference}: ${selected}`, 0, reference.length);
+    const existing=prepareFootnotes(codeEditor.state.doc.toString()).references.find(ref=>selection.from>=ref.from&&selection.to<=ref.to);
+    if(existing)return openFootnoteDialog(existing);
+    codeEditor.dispatch({ ...footnoteEdit(codeEditor.state.doc.toString(), selection.from, selection.to, t('footnoteText')),
+      annotations: isolateHistory.of('full'), scrollIntoView: true });
+    codeEditor.focus(); return true;
   }
   if (command === 'reference-link') {
-    const selection = codeEditor.state.selection.main;
-    const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || (state.language === 'en' ? 'link text' : '链接文字');
-    const name = t('referenceName');
-    return replaceSelection(`[${selected}][${name}]\n\n[${name}]: https://`, 1, selected.length);
+    return openLinkDialog('reference');
   }
   if (command === 'collapsible') {
     const selection = codeEditor.state.selection.main;
-    const selected = codeEditor.state.doc.sliceString(selection.from, selection.to) || (state.language === 'en' ? 'Content' : '折叠内容');
-    const summary = t('collapsibleTitle');
-    return replaceSelection(`<details>\n<summary>${summary}</summary>\n\n${selected}\n\n</details>`, 19, summary.length);
+    codeEditor.dispatch({ ...insertHtmlBlock(codeEditor.state.doc.toString(), selection.from, selection.to, 'details', state.language === 'en' ? 'Section content' : '折叠内容', t('collapsibleTitle')), annotations: isolateHistory.of('full') });
+    codeEditor.focus(); return true;
   }
   if (['quote', 'unordered-list', 'ordered-list', 'task-list'].includes(command)) return formatSelectedLines(command);
   if (command === 'table') { openTableDialog(); return true; }
@@ -1862,7 +2074,10 @@ function renderFormulaStructureToolbar() {
     const button = document.createElement('button'); button.type = 'button';
     button.textContent = t(`formulaStructure_${command}`); button.disabled = true;
     button.onpointerdown = event => event.preventDefault();
-    button.onclick = () => formulaVisualEditor?.command(command);
+    button.onclick = () => {
+      if (formulaVisualEditor?.command(command) === false) $('#formulaVisualStatus').textContent = t('formulaMatrixPosition');
+      else $('#formulaVisualStatus').textContent = t('formulaVisualHint');
+    };
     toolbar.append(button);
   }
 }
@@ -1881,18 +2096,23 @@ function selectedFormulaDetails() {
   if (!raw) return { source: '', templateId: 'equation', mode: 'inline', equationNumber: '1', editRange: null };
   let mode = 'inline';
   let source = raw;
+  let delimited = false;
   if (/^\$\$(?:.|\n)*\$\$$/.test(raw)) {
+    delimited = true;
     mode = 'block';
     source = raw.slice(2, -2).trim();
   }
   else if (/^\$(?:.|\n)*\$$/.test(raw)) {
+    delimited = true;
     mode = 'inline';
     source = raw.slice(1, -1).trim();
   } else if (/^\\\[(?:.|\n)*\\\]$/.test(raw)) {
+    delimited = true;
     mode = 'block';
     source = raw.slice(2, -2).trim();
   }
   else if (/^\\\((?:.|\n)*\\\)$/.test(raw)) {
+    delimited = true;
     mode = 'inline';
     source = raw.slice(2, -2).trim();
   }
@@ -1900,7 +2120,9 @@ function selectedFormulaDetails() {
   if (numbered) mode = 'numbered';
   source = source.replace(/\s+\\tag\{[^{}]*\}\s*$/, '').trim();
   const chemistry = source.match(/^\\ce\{([\s\S]*)\}$/);
-  const details = { source, templateId: 'custom', mode, equationNumber: numbered?.[1] || '1', editRange: { from: selection.from, to: selection.to } };
+  // Plain selected TeX is an insertion/conversion, not an unchanged existing
+  // formula. Only actual delimiters may use the no-op preservation path.
+  const details = { source, templateId: 'custom', mode, equationNumber: numbered?.[1] || '1', editRange: delimited ? { from: selection.from, to: selection.to } : null };
   if (chemistry) return { ...details, source: chemistry[1].trim(), templateId: 'chem-custom' };
   return details;
 }
@@ -1961,6 +2183,7 @@ function renderFormulaTemplateList() {
     button.setAttribute('aria-pressed', String(template.id === formulaWizardState.templateId));
     const name = document.createElement('span');
     name.textContent = template.name[locale];
+    appendTemplateNewBadge(name, 'formulas', template.id, locale);
     const kind = document.createElement('code');
     kind.textContent = template.kind === 'chemistry' ? 'ce' : 'fx';
     button.append(name, kind);
@@ -2024,7 +2247,7 @@ function updateFormulaPreview() {
   } catch (error) {
     els.formulaMarkdownSource.value = '';
     if (typeof syncFormulaVisualEditor === 'function') syncFormulaVisualEditor();
-    els.formulaPreview.textContent = t(error.message === 'FORMULA_VARIABLES_INVALID' ? 'formulaVariablesInvalid' : 'formulaVariableInvalid');
+    els.formulaPreview.textContent = t(error.message === 'FORMULA_MATRIX_INVALID' ? 'formulaMatrixInvalid' : error.message === 'FORMULA_VARIABLES_INVALID' ? 'formulaVariablesInvalid' : 'formulaVariableInvalid');
     $('#insertFormula').disabled = true;
     return;
   }
@@ -2053,6 +2276,11 @@ function updateFormulaPreview() {
 }
 
 function renderFormulaPreview(expression, displayMode, markdown = els.formulaMarkdownSource.value) {
+  if (hasFormulaPlaceholders(expression)) {
+    els.formulaPreview.textContent = t('formulaIncomplete');
+    $('#insertFormula').disabled = true;
+    return;
+  }
   if (!formulaMarkdownMatches(markdown, expression, displayMode)) {
     els.formulaPreview.textContent = t('formulaDelimiterInvalid');
     $('#insertFormula').disabled = true;
@@ -2061,6 +2289,8 @@ function renderFormulaPreview(expression, displayMode, markdown = els.formulaMar
   const result = renderLatexResult(expression, displayMode);
   els.formulaPreview.innerHTML = DOMPurify.sanitize(result.html);
   $('#insertFormula').disabled = !expression || !result.valid;
+  // Validation feedback belongs to this dialog, not to later valid content.
+  if (expression && result.valid && showToast.owner === formulaWizardState) hideToast();
   if (!result.valid) {
     const message = document.createElement('p');
     message.className = 'formula-validation-message';
@@ -2075,7 +2305,10 @@ function updateFormulaPreviewFromMarkdown(syncVisual = true) {
   const { expression, displayMode } = parseFormulaMarkdown(els.formulaMarkdownSource.value);
   const delimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(els.formulaMarkdownSource.value.trim());
   if (delimited) {
-    formulaWizardState.mode = displayMode ? /\s*\\tag\{[^{}]*\}\s*$/.test(expression) ? 'numbered' : 'block' : 'inline';
+    const numbered = displayMode && expression.match(/\s*\\tag\{([^{}]*)\}\s*$/);
+    formulaWizardState.mode = displayMode ? numbered ? 'numbered' : 'block' : 'inline';
+    // Reflect manually authored tags without normalizing or rewriting the source.
+    if (numbered) $('#formulaNumber').value = numbered[1];
     $('#formulaNumberField').classList.toggle('hidden', formulaWizardState.mode !== 'numbered');
   }
   formulaWizardState.inlineLayout = formulaInlineLayout(expression).layout;
@@ -2095,6 +2328,16 @@ function updateFormulaPreviewFromMarkdown(syncVisual = true) {
   renderFormulaPreview(output.expression, output.displayMode, output.markdown);
 }
 
+function scheduleFormulaFocus(resolveTarget) {
+  const context = formulaWizardState.context, origin = document.activeElement;
+  requestAnimationFrame(() => {
+    // A delayed initial focus must not steal a later click or keyboard focus.
+    if (context !== formulaWizardState.context || els.formulaDialog.classList.contains('hidden')
+      || document.activeElement !== origin) return;
+    resolveTarget()?.focus();
+  });
+}
+
 function chooseFormulaTemplate(templateId) {
   const template = formulaTemplateById(templateId);
   if (!template) return;
@@ -2105,9 +2348,7 @@ function chooseFormulaTemplate(templateId) {
   renderFormulaTemplateList();
   renderFormulaFields();
   els.formulaBuilderPanel.scrollTop = 0;
-  requestAnimationFrame(() => {
-    if (!els.formulaDialog.classList.contains('hidden')) els.formulaFields.querySelector('input, textarea')?.focus();
-  });
+  scheduleFormulaFocus(() => els.formulaFields.querySelector('input, textarea'));
 }
 
 function chooseFormulaDiscipline(discipline) {
@@ -2134,7 +2375,7 @@ function chooseFormulaMode(mode) {
   if (mode === 'inline') {
     const expression = parseFormulaMarkdown(els.formulaMarkdownSource.value).expression;
     if (formulaInlineHasNewline(expression)) {
-      showToast(t('formulaInlineMultiline'), 'warning');
+      showToast(t('formulaInlineMultiline'), 'warning', undefined, formulaWizardState);
       return; // Keep both the original mode and exact source, including comments.
     }
   }
@@ -2153,9 +2394,13 @@ function chooseFormulaInlineLayout(layout) {
   if (formulaWizardState.mode !== 'inline' || !['normal', 'large'].includes(layout)) return;
   const parsed = parseFormulaMarkdown(els.formulaMarkdownSource.value);
   if (formulaInlineHasNewline(parsed.expression)) {
-    showToast(t('formulaInlineMultiline'), 'warning');
+    showToast(t('formulaInlineMultiline'), 'warning', undefined, formulaWizardState);
     return;
   }
+  // Clicking the active layout is not a source edit. Keep template fields
+  // editable without a replace-draft confirmation; preserve explicit style
+  // declarations and their whitespace when the requested layout is unchanged.
+  if (formulaInlineLayout(parsed.expression).layout === layout) return;
   // Explicit user action only; saving without edits retains the original bytes.
   const expression = applyFormulaInlineLayout(parsed.expression, layout);
   els.formulaMarkdownSource.value = buildFormulaMarkdown('inline', expression);
@@ -2206,13 +2451,12 @@ function openFormulaDialog(existingFormula = null) {
     .map(element => ({ element, inert: element.inert }));
   formulaInertElements.forEach(({ element }) => { element.inert = true; });
   document.body.classList.add('dialog-open');
-  requestAnimationFrame(() => {
-    if (!els.formulaDialog.classList.contains('hidden')) els.formulaTemplateList.querySelector('.active')?.focus();
-  });
+  scheduleFormulaFocus(() => els.formulaTemplateList.querySelector('.active'));
 }
 
 function closeFormulaDialog(focusEditor = true) {
   if (els.formulaDialog.classList.contains('hidden')) return;
+  if (showToast.owner === formulaWizardState) hideToast();
   els.formulaDialog.classList.add('hidden');
   ++formulaVisualRequest;
   formulaVisualEditor?.blur();
@@ -2226,7 +2470,7 @@ function closeFormulaDialog(focusEditor = true) {
 function insertGeneratedFormula() {
   const markdownSource = els.formulaMarkdownSource.value.trim();
   if (!markdownSource) {
-    showToast(t('formulaInvalid'), 'warning');
+    showToast(t('formulaInvalid'), 'warning', undefined, formulaWizardState);
     els.formulaMarkdownSource.focus();
     return;
   }
@@ -2243,24 +2487,26 @@ function insertGeneratedFormula() {
   let output;
   try { output = resolveFormulaOutput(markdownSource, formulaWizardState.mode, $('#formulaNumber').value); }
   catch (error) {
-    showToast(t(error.message === 'FORMULA_INLINE_MULTILINE' ? 'formulaInlineMultiline' : 'formulaInvalid'), 'warning');
+    showToast(t(error.message === 'FORMULA_INLINE_MULTILINE' ? 'formulaInlineMultiline' : 'formulaInvalid'), 'warning', undefined, formulaWizardState);
     return;
   }
   if (!output.displayMode && formulaInlineHasNewline(output.expression)) {
-    showToast(t('formulaInlineMultiline'), 'warning');
+    showToast(t('formulaInlineMultiline'), 'warning', undefined, formulaWizardState);
     return;
   }
   if (!output.expression || !renderLatexResult(output.expression, output.displayMode).valid) {
-    showToast(t('formulaInvalid'), 'warning');
+    showToast(t('formulaInvalid'), 'warning', undefined, formulaWizardState);
     return;
   }
   if (!formulaMarkdownMatches(output.markdown, output.expression, output.displayMode)) {
-    showToast(t('formulaDelimiterInvalid'), 'warning');
+    showToast(t('formulaDelimiterInvalid'), 'warning', undefined, formulaWizardState);
     return;
   }
   const source = codeEditor.state.doc.toString();
   const normalizedMarkdown = output.markdown;
   const range = editRange || context.selection;
+  const tableConstraint = tableFormulaConstraint(source, range, output);
+  if (tableConstraint) { showToast(t(tableConstraint), 'warning'); return; }
   const replacement = editRange ? formulaReplacement(source, editRange, normalizedMarkdown, formulaWizardState.initialMarkdown)
     : formulaInsertion(source, range.from, range.to, normalizedMarkdown);
   closeFormulaDialog();
@@ -2376,8 +2622,9 @@ function mindmapCanvasModel(source) {
   const edges = [];
   const levelStack = [];
   parsed.model.rows.forEach((row, index) => {
-    const level = index === 0 ? 0 : Math.max(1, Math.min(5, Number(row.level) || 1));
-    const node = { id: `M${index + 1}`, label: row.label, shape: index === 0 ? 'circle' : 'round', mindmapRoot: index === 0, x: 0, y: 0 };
+    const level = index === 0 ? 0 : Math.max(1, Math.min(parsed.model.rows.length, Math.floor(Number(row.level) || 1)));
+    const shape = row.syntax ? ({ circle: 'circle', square: 'process', round: 'round', default: 'round' })[row.syntax.shape] : index === 0 ? 'circle' : 'round';
+    const node = { id: `M${index + 1}`, label: row.label, shape, mindmapSyntax: row.syntax, mindmapRoot: index === 0, x: 0, y: 0 };
     nodes.push(node);
     if (index > 0) {
       let parentLevel = level - 1;
@@ -2429,8 +2676,8 @@ function serializeMindmapCanvas(model) {
     const node = nodeMap.get(nodeId);
     if (!node) return;
     visited.add(nodeId);
-    rows.push({ level, label: node.label });
-    (outgoing.get(nodeId) || []).forEach(childId => visit(childId, Math.min(5, level + 1)));
+    rows.push({ level, label: node.label, syntax: node.mindmapSyntax });
+    (outgoing.get(nodeId) || []).forEach(childId => visit(childId, level + 1));
   };
   visit(root.id, 0);
   model.nodes.filter(node => !visited.has(node.id)).forEach(node => visit(node.id, 1));
@@ -2447,15 +2694,6 @@ function flowchartSVGElement(name, attributes = {}) {
   const element = document.createElementNS(FLOWCHART_SVG_NS, name);
   Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, String(value)));
   return element;
-}
-
-function flowchartNodeSize(node) {
-  if (node.diagramNodeType === 'state') return node.stateToken === '[*]' ? { width: 52, height: 52 } : { width: 132, height: 48 };
-  if (node.mindmapRoot) return { width: 184, height: 76 };
-  if (node.shape === 'decision') return { width: 176, height: 94 };
-  if (node.shape === 'circle') return { width: 86, height: 86 };
-  if (node.shape === 'terminal') return { width: 164, height: 64 };
-  return { width: 164, height: 68 };
 }
 
 function flowchartBoundaryPoint(node, towardNode) {
@@ -2546,7 +2784,13 @@ function configureCanvasToolbar() {
   connectButton.title = t(type === 'mindmap' ? 'canvasMindmapConnect' : 'flowchartConnectHint');
   els.flowchartDirection.closest('label').classList.toggle('hidden', type === 'mindmap');
   els.flowchartNodeShape.closest('label').classList.toggle('hidden', type !== 'flowchart');
-  els.flowchartCanvasViewport.querySelector('.flowchart-canvas-hint').textContent = t(type === 'state' ? 'canvasStateHint' : type === 'mindmap' ? 'canvasMindmapHint' : 'flowchartCanvasHint');
+  // Standard state transitions and mindmap branches do not serialize line
+  // styles. Only expose choices the current canvas can save and reopen.
+  els.flowchartEdgeStyle.closest('label').classList.toggle('hidden', type !== 'flowchart');
+  const canvasLabel = type === 'state' ? 'canvasStateAria' : type === 'mindmap' ? 'canvasMindmapAria' : 'flowchartCanvasAria';
+  els.flowchartCanvas.dataset.i18nAriaLabel = canvasLabel;
+  els.flowchartCanvas.setAttribute('aria-label', t(canvasLabel));
+  els.flowchartCanvasViewport.querySelector('.flowchart-canvas-hint').textContent = `${t(type === 'state' ? 'canvasStateHint' : type === 'mindmap' ? 'canvasMindmapHint' : 'flowchartCanvasHint')} ${t('canvasKeyboardHint')}`;
 }
 
 function renderFlowchartProperties() {
@@ -2562,7 +2806,13 @@ function renderFlowchartProperties() {
   els.flowchartSelectionHint.textContent = selectedNodes
     ? t('flowchartMultiSelected', { count: selectedNodes })
     : t('flowchartNothingSelected');
-  $('#flowchartDeleteSelection').disabled = !node && !edge && !selectedNodes;
+  const root = mindmap && (model.nodes.find(item => item.mindmapRoot) || model.nodes[0]);
+  const deleteButton = $('#flowchartDeleteSelection');
+  deleteButton.disabled = mindmap
+    ? !(node && node.id !== root?.id || edge && edge.from !== root?.id || selectedNodes && selection.ids.some(id => id !== root?.id))
+    : !node && !edge && !selectedNodes;
+  deleteButton.querySelector('span').textContent = t(mindmap && edge ? 'canvasMindmapPromote' : 'flowchartDeleteSelection');
+  deleteButton.title = t(mindmap ? (edge ? 'canvasMindmapPromote' : 'canvasMindmapDeleteHint') : 'flowchartDeleteSelection');
   $('#flowchartSelectAll').classList.toggle('active', Boolean(model?.nodes.length) && selectedNodes === model.nodes.length);
   if (node) {
     els.flowchartNodeLabel.value = node.label;
@@ -2590,6 +2840,8 @@ function renderFlowchartProperties() {
 function renderFlowchartCanvas() {
   const model = flowchartDesignerState.model;
   if (!model) return;
+  const focused = els.flowchartCanvas.contains(document.activeElement) ? document.activeElement : null;
+  const focusedNode = focused?.dataset.flowchartNode, focusedEdge = focused?.dataset.flowchartEdge;
   configureCanvasToolbar();
   els.flowchartDirection.value = model.direction;
   els.flowchartEdgeLayer.replaceChildren();
@@ -2602,7 +2854,8 @@ function renderFlowchartCanvas() {
     const start = flowchartBoundaryPoint(from, to);
     const end = flowchartBoundaryPoint(to, from);
     const stateEdge = model.canvasType === 'state';
-    const group = flowchartSVGElement('g', { class: `flowchart-edge${stateEdge ? ' state-edge' : ''}${flowchartDesignerState.selection?.type === 'edge' && flowchartDesignerState.selection.id === edge.id ? ' selected' : ''}`, 'data-flowchart-edge': edge.id });
+    const edgeSelected = flowchartDesignerState.selection?.type === 'edge' && flowchartDesignerState.selection.id === edge.id;
+    const group = flowchartSVGElement('g', { class: `flowchart-edge${stateEdge ? ' state-edge' : ''}${edgeSelected ? ' selected' : ''}`, 'data-flowchart-edge': edge.id, tabindex: '0', role: 'button', 'aria-pressed': String(edgeSelected), 'aria-label': t('canvasEdgeAria', { from: from.label, to: to.label, label: edge.label ? `: ${edge.label}` : '' }) });
     const path = flowchartSVGElement('path', { class: `flowchart-edge-path${edge.style === 'dashed' ? ' is-dashed' : ''}${edge.style === 'thick' ? ' is-thick' : ''}`, d: `M${start.x},${start.y} L${end.x},${end.y}` });
     if (edge.style !== 'line') path.setAttribute('marker-end', stateEdge ? 'url(#flowchartArrowSmall)' : 'url(#flowchartArrow)');
     const hit = flowchartSVGElement('path', { class: 'flowchart-edge-hit', d: `M${start.x},${start.y} L${end.x},${end.y}` });
@@ -2627,12 +2880,78 @@ function renderFlowchartCanvas() {
       ? flowchartDesignerState.selection.id === node.id
       : flowchartDesignerState.selection?.type === 'nodes' && flowchartDesignerState.selection.ids.includes(node.id);
     const origin = flowchartDesignerState.connectFrom === node.id;
-    const group = flowchartSVGElement('g', { class: `flowchart-node${node.diagramNodeType === 'state' ? ' state-node' : ''}${node.stateToken === '[*]' ? ' state-terminal-node' : ''}${selected ? ' selected' : ''}${origin ? ' connect-origin' : ''}`, 'data-flowchart-node': node.id, tabindex: '0', 'aria-label': node.label });
+    const group = flowchartSVGElement('g', { class: `flowchart-node${node.diagramNodeType === 'state' ? ' state-node' : ''}${node.stateToken === '[*]' ? ' state-terminal-node' : ''}${selected ? ' selected' : ''}${origin ? ' connect-origin' : ''}`, 'data-flowchart-node': node.id, tabindex: '0', role: 'button', 'aria-pressed': String(Boolean(selected)), 'aria-label': node.label });
     renderFlowchartNodeShape(group, node);
     els.flowchartNodeLayer.append(group);
   }
   renderFlowchartProperties();
   applyFlowchartZoom();
+  if (focusedNode || focusedEdge) focusFlowchartElement(focusedNode ? 'node' : 'edge', focusedNode || focusedEdge);
+}
+
+function focusFlowchartElement(type, id) {
+  const attribute = type === 'node' ? 'flowchartNode' : 'flowchartEdge';
+  const element = [...els.flowchartCanvas.querySelectorAll(type === 'node' ? '[data-flowchart-node]' : '[data-flowchart-edge]')].find(item => item.dataset[attribute] === id);
+  if (!element) { els.flowchartCanvas.focus({ preventScroll: true }); return; }
+  element.focus({ preventScroll: true });
+  // Keyboard focus must reveal off-screen items without scrolling the dialog.
+  const bounds = element.getBBox(), box = flowchartViewBox(), margin = 16;
+  const dx = bounds.x < box.x + margin ? bounds.x - box.x - margin : bounds.x + bounds.width > box.x + box.width - margin ? bounds.x + bounds.width - box.x - box.width + margin : 0;
+  const dy = bounds.y < box.y + margin ? bounds.y - box.y - margin : bounds.y + bounds.height > box.y + box.height - margin ? bounds.y + bounds.height - box.y - box.height + margin : 0;
+  flowchartDesignerState.panX -= dx;
+  flowchartDesignerState.panY -= dy;
+  if (dx || dy) applyFlowchartZoom();
+}
+
+function handleFlowchartKeydown(event) {
+  if (event.isComposing || !flowchartDesignerState.model) return;
+  const target = event.target.closest('[data-flowchart-node], [data-flowchart-edge]');
+  const nodeId = target?.dataset.flowchartNode, edgeId = target?.dataset.flowchartEdge;
+  const type = nodeId ? 'node' : edgeId ? 'edge' : '', id = nodeId || edgeId;
+  const consume = () => { event.preventDefault(); event.stopPropagation(); };
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { consume(); selectAllFlowchartNodes(); return; }
+  if (event.ctrlKey || event.metaKey) return;
+  if (event.key === 'Escape' && flowchartDesignerState.connecting) {
+    consume(); flowchartDesignerState.connecting = false; flowchartDesignerState.connectFrom = ''; renderFlowchartCanvas(); return;
+  }
+  const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+  if (arrow && event.altKey) {
+    consume(); flowchartDesignerState.panX -= arrow[0] * 40; flowchartDesignerState.panY -= arrow[1] * 40; applyFlowchartZoom(); return;
+  }
+  if (arrow && event.shiftKey) {
+    const selection = flowchartDesignerState.selection;
+    const ids = selection?.type === 'nodes' && (!nodeId || selection.ids.includes(nodeId)) ? selection.ids : nodeId ? [nodeId] : [];
+    if (!ids.length) return;
+    consume();
+    flowchartDesignerState.model = { ...flowchartDesignerState.model, nodes: flowchartDesignerState.model.nodes.map(node => ids.includes(node.id) ? { ...node, x: node.x + arrow[0] * 10, y: node.y + arrow[1] * 10 } : node) };
+    renderFlowchartCanvas(); return;
+  }
+  if (arrow || event.key === 'Home' || event.key === 'End') {
+    consume();
+    const model = flowchartDesignerState.model;
+    const items = [...model.nodes.map(node => ({ type: 'node', id: node.id })), ...(flowchartDesignerState.connecting ? [] : model.edges.map(edge => ({ type: 'edge', id: edge.id })))];
+    if (!items.length) return;
+    const current = items.findIndex(item => item.type === type && item.id === id);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : current < 0 ? 0 : (current + (arrow[0] || arrow[1]) + items.length) % items.length;
+    focusFlowchartElement(items[next].type, items[next].id); return;
+  }
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    const selection = flowchartDesignerState.selection;
+    if (!id && !selection) return;
+    consume();
+    if (id && !(selection?.type === 'nodes' && nodeId && selection.ids.includes(nodeId))) flowchartDesignerState.selection = { type, id };
+    deleteSelectedFlowchartElement(); return;
+  }
+  if (!id) return;
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'F2') {
+    consume();
+    if (event.key !== 'F2' && nodeId) handleFlowchartNodeClick(nodeId);
+    else { flowchartDesignerState.connecting = false; flowchartDesignerState.connectFrom = ''; setFlowchartSelection(type, id); }
+    if (event.key === 'F2') {
+      const input = nodeId ? els.flowchartNodeLabel : flowchartDesignerState.model.canvasType !== 'mindmap' ? els.flowchartEdgeLabel : null;
+      if (input && !input.disabled) { input.focus(); input.select(); }
+    }
+  }
 }
 
 const FLOWCHART_ZOOM_MIN = .5;
@@ -2704,7 +3023,7 @@ function initialiseFlowchartVisual(source, { notify = false } = {}) {
   if (flowchartDesignerState.model && source === flowchartDesignerState.sourceSnapshot) return true;
   const parsed = parseCanvasDiagramSource(diagramWizardState.templateId, source);
   if (!parsed.valid) {
-    if (notify) showToast(t(diagramWizardState.templateId === 'flowchart' ? 'flowchartVisualUnsupported' : 'diagramVisualUnsupported'), 'warning');
+    if (notify) showToast(t(diagramWizardState.templateId === 'flowchart' ? 'flowchartVisualUnsupported' : 'diagramVisualUnsupported'), 'warning', undefined, diagramWizardState);
     return false;
   }
   flowchartDesignerState.model = parsed.model;
@@ -2744,14 +3063,15 @@ function structuredInput(field, value, onChange) {
 function checkStructuredDiagramDraft(notify = false) {
   if (flowchartDesignerState.mode !== 'visual' || diagramTemplateById(diagramWizardState.templateId).visualEditor !== 'structured' || !structuredDiagramState.model) return true;
   const result = validateStructuredDiagram(diagramWizardState.templateId, structuredDiagramState.model);
+  updateDiagramActionLabels(result.valid);
   const error = $('#structuredDiagramError');
   const inputs = [...els.structuredDiagramRows.querySelectorAll('[data-field]')];
   for (const input of inputs) input.removeAttribute('aria-invalid');
   error.classList.toggle('hidden', result.valid);
   if (result.valid) { error.textContent = ''; return true; }
   const field = structuredDiagramState.definition.columns.find(field => field.key === result.field)?.label || '';
-  const reason = t(({ 'invalid-number': 'diagramNumberError', 'number-range': 'diagramRangeError', 'empty-label': 'diagramLabelError', 'duplicate-label': 'diagramDuplicateError' })[result.code] || 'diagramNumberError');
-  error.textContent = result.row === undefined ? t('diagramDataEmpty') : t('diagramDataError', { row: result.row + 1, field, reason });
+  const reason = t(({ 'series-name': 'diagramSeriesNameError', 'empty-rows': 'diagramDataEmpty', 'invalid-number': 'diagramNumberError', 'number-range': 'diagramRangeError', 'empty-label': 'diagramLabelError', 'duplicate-label': 'diagramDuplicateError', 'invalid-date': 'diagramDateError', 'date-range': 'diagramDateRange', 'bin-range': 'diagramBinsError', 'data-limit': 'diagramLimitError', 'invalid-entity': 'diagramEntityError', 'missing-entity': 'diagramEntityMissing' })[result.code] || 'diagramNumberError');
+  error.textContent = result.row === undefined ? reason : t('diagramDataError', { row: result.row + 1, field, reason });
   const invalidInput = inputs.find(input => input.dataset.row === String(result.row) && input.dataset.field === result.field);
   invalidInput?.setAttribute('aria-invalid', 'true');
   if (notify) { showToast(error.textContent, 'warning'); invalidInput?.focus(); }
@@ -2767,10 +3087,25 @@ function syncStructuredDiagramSource() {
   scheduleDiagramPreview();
 }
 
+function refreshStructuredDiagramColumnLabels() {
+  const definition = structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale(), structuredDiagramState.model);
+  definition.columns.forEach((field, index) => {
+    const heading = els.structuredDiagramHead.children[index];
+    if (heading) heading.textContent = field.label;
+  });
+  for (const input of els.structuredDiagramRows.querySelectorAll('[data-field]')) {
+    const field = definition.columns.find(field => field.key === input.dataset.field);
+    if (field) input.setAttribute('aria-label', `${Number(input.dataset.row) + 1} · ${field.label}`);
+  }
+}
+
 function renderStructuredDiagramEditor() {
   const model = structuredDiagramState.model;
-  const definition = structuredDiagramState.definition;
+  const definition = structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale(), model);
   if (!model || !definition) return;
+  $('#diagramSeriesActions').classList.toggle('hidden', !definition.seriesEditable && !['bar-chart', 'line-chart'].includes(diagramWizardState.templateId));
+  $('#removeDiagramSeries').disabled = !model.tableChart || model.series.length <= 1;
+  $('#addDiagramSeries').disabled = Boolean(model.series?.length >= 12);
   els.structuredDiagramSettings.replaceChildren();
   definition.settings.forEach(field => {
     const label = document.createElement('label');
@@ -2778,6 +3113,9 @@ function renderStructuredDiagramEditor() {
     caption.textContent = field.label;
     label.append(caption, structuredInput(field, model.settings[field.key], value => {
       model.settings[field.key] = value;
+      if (field.key.startsWith('name') && model.tableChart) {
+        refreshStructuredDiagramColumnLabels();
+      }
       syncStructuredDiagramSource();
     }));
     els.structuredDiagramSettings.append(label);
@@ -2800,8 +3138,13 @@ function renderStructuredDiagramEditor() {
       const cell = document.createElement('td');
       const input = structuredInput(field, row[field.key], value => {
         row[field.key] = value;
+        if (model.entityDiagram && field.key === 'kind') renderStructuredDiagramEditor();
         syncStructuredDiagramSource();
       });
+      if (model.entityDiagram) {
+        const allowed = row.kind === 'entity' ? ['kind', 'owner'] : row.kind === 'member' ? ['kind', 'owner', 'name', 'dataType', 'modifier'] : ['kind', 'owner', 'target', 'relation', 'label', 'left', 'right'];
+        input.disabled = !allowed.includes(field.key);
+      }
       input.dataset.row = String(rowIndex); input.dataset.field = field.key;
       input.setAttribute('aria-label', `${rowIndex + 1} · ${field.label}`);
       cell.append(input);
@@ -2827,11 +3170,11 @@ function initialiseStructuredDiagramVisual(source, { notify = false } = {}) {
   if (structuredDiagramState.model && source === structuredDiagramState.sourceSnapshot) return true;
   const parsed = parseStructuredDiagram(diagramWizardState.templateId, source);
   if (!parsed.valid) {
-    if (notify) showToast(t('diagramVisualUnsupported'), 'warning');
+    if (notify) showToast(t('diagramVisualUnsupported'), 'warning', undefined, diagramWizardState);
     return false;
   }
   structuredDiagramState.model = parsed.model;
-  structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale());
+  structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale(), parsed.model);
   structuredDiagramState.sourceSnapshot = source;
   return true;
 }
@@ -2856,6 +3199,7 @@ function showFlowchartEditorMode(mode, { notify = false } = {}) {
   if (visualRequested && isFlowchart) renderFlowchartCanvas();
   else if (visualRequested && isStructured) { renderStructuredDiagramEditor(); scheduleDiagramPreview(true); }
   else scheduleDiagramPreview(true);
+  updateDiagramActionLabels();
   return true;
 }
 
@@ -2887,6 +3231,7 @@ function updateSelectedFlowchartNode(changes) {
 function updateSelectedFlowchartEdge(changes) {
   const selection = flowchartDesignerState.selection;
   if (selection?.type !== 'edge') return;
+  if (flowchartDesignerState.model.canvasType && flowchartDesignerState.model.canvasType !== 'flowchart' && 'style' in changes) return;
   flowchartDesignerState.model = {
     ...flowchartDesignerState.model,
     edges: flowchartDesignerState.model.edges.map(edge => edge.id === selection.id ? { ...edge, ...changes } : edge)
@@ -2898,7 +3243,9 @@ function updateSelectedFlowchartEdge(changes) {
 function deleteSelectedFlowchartElement() {
   const selection = flowchartDesignerState.selection;
   if (!selection || !flowchartDesignerState.model) return;
-  if (selection.type === 'nodes') {
+  if (flowchartDesignerState.model.canvasType === 'mindmap') {
+    flowchartDesignerState.model = removeMindmapSelection(flowchartDesignerState.model, selection);
+  } else if (selection.type === 'nodes') {
     const selectedIds = new Set(selection.ids);
     flowchartDesignerState.model = {
       ...flowchartDesignerState.model,
@@ -2942,7 +3289,9 @@ function addFlowchartNodeAt(shape, position = null) {
     flowchartDesignerState.selection = { type: 'node', id: result.node.id };
     syncFlowchartSource();
     renderFlowchartCanvas();
-    requestAnimationFrame(() => { els.flowchartNodeLabel.focus(); els.flowchartNodeLabel.select(); });
+    // The property field is already rendered. Do not steal a later user selection.
+    els.flowchartNodeLabel.focus();
+    els.flowchartNodeLabel.select();
     return;
   }
   if (type === 'state' && shape === 'terminal') {
@@ -2981,10 +3330,10 @@ function addFlowchartNodeAt(shape, position = null) {
   flowchartDesignerState.selection = { type: 'node', id: result.node.id };
   syncFlowchartSource();
   renderFlowchartCanvas();
-  requestAnimationFrame(() => {
-    els.flowchartNodeLabel.focus();
-    els.flowchartNodeLabel.select();
-  });
+  // The canvas properties are attached synchronously, just like mindmap nodes.
+  // A later frame must not redirect typing away from a newly selected field.
+  els.flowchartNodeLabel.focus();
+  els.flowchartNodeLabel.select();
 }
 
 function flowchartCanvasPoint(event) {
@@ -3056,7 +3405,11 @@ function renderDiagramCategoryTabs() {
 function renderDiagramTemplateList() {
   const locale = diagramLocale();
   els.diagramTemplateList.replaceChildren();
-  for (const template of diagramTemplatesForCategory(diagramWizardState.category)) {
+  const matches = searchDiagramTemplates(diagramWizardState.category, $('#diagramSearch').value);
+  if (!matches.length) {
+    const empty = document.createElement('p'); empty.className = 'diagram-search-empty'; empty.textContent = t('diagramSearchEmpty'); els.diagramTemplateList.append(empty);
+  }
+  for (const template of matches) {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.diagramTemplate = template.id;
@@ -3064,6 +3417,7 @@ function renderDiagramTemplateList() {
     button.setAttribute('aria-pressed', String(template.id === diagramWizardState.templateId));
     const label = document.createElement('span');
     label.textContent = template.name[locale];
+    appendTemplateNewBadge(label, 'diagrams', template.id, locale);
     const kind = document.createElement('code');
     kind.textContent = template.engine === 'echarts' ? 'ECharts' : 'Mermaid';
     button.append(label);
@@ -3119,7 +3473,9 @@ async function updateDiagramPreview() {
 function renderDiagramBuilder() {
   const locale = diagramLocale();
   const template = diagramTemplateById(diagramWizardState.templateId);
-  $('#diagramTemplateName').textContent = template.name[locale];
+  $('#diagramTemplateName').textContent = diagramWizardState.editRange
+    ? diagramDisplayName(diagramWizardState.valuesByTemplate.get(template.id) ?? diagramWizardState.editRange.source, template.engine || 'mermaid', locale)
+    : template.name[locale];
   $('#diagramTemplateDescription').textContent = template.description[locale];
   els.diagramBuilderPanel.querySelector('.formula-builder-heading > code').textContent = template.engine === 'echarts' ? 'ECharts' : 'Mermaid';
   els.diagramSource.value = diagramWizardState.valuesByTemplate.get(template.id) ?? diagramTemplateSource(template, locale);
@@ -3167,17 +3523,23 @@ function chooseDiagramCategory(categoryId) {
   els.diagramBuilderPanel.scrollTop = 0;
 }
 
-function updateDiagramActionLabels() {
+function updateDiagramActionLabels(draftValid) {
   const key = diagramWizardState.saveRequest ? 'diagramChecking' : diagramWizardState.editRange ? 'saveDiagramChanges' : 'insertDiagram';
   const normalButton = $('#insertDiagram');
   const fullscreenLabel = $('#insertDiagramFullscreen span');
   if (normalButton) normalButton.textContent = t(key);
   if (fullscreenLabel) fullscreenLabel.textContent = t(key);
-  for (const button of [normalButton, $('#insertDiagramFullscreen')]) if (button) button.disabled = Boolean(diagramWizardState.saveRequest);
+  const structuredVisual = flowchartDesignerState.mode === 'visual'
+    && diagramTemplateById(diagramWizardState.templateId).visualEditor === 'structured' && structuredDiagramState.model;
+  const invalidDraft = structuredVisual && !(draftValid ?? validateStructuredDiagram(diagramWizardState.templateId, structuredDiagramState.model).valid);
+  for (const button of [normalButton, $('#insertDiagramFullscreen')]) if (button) button.disabled = Boolean(diagramWizardState.saveRequest || invalidDraft);
 }
 
 function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart = null) {
   if (!state.currentFile || !codeEditor) return;
+  $('#diagramSearch').value = '';
+  $('#diagramPasteText').value = '';
+  $('#diagramPastePanel').open = false;
   diagramWizardState.saveRequest = null;
   const template = diagramTemplateById(existingFlowchart?.templateId || preferredTemplateId);
   diagramWizardState.category = 'all';
@@ -3187,6 +3549,8 @@ function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart 
     from: existingFlowchart.from,
     to: existingFlowchart.to,
     indent: existingFlowchart.indent,
+    projectionPrefix: existingFlowchart.projectionPrefix,
+    projectionPrefixes: existingFlowchart.projectionPrefixes,
     marker: existingFlowchart.marker,
     lineEnding: existingFlowchart.lineEnding,
     templateId: template.id,
@@ -3221,9 +3585,20 @@ function openDiagramDialog(preferredTemplateId = 'flowchart', existingFlowchart 
   els.diagramDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
   requestAnimationFrame(() => {
+    if (els.diagramDialog.classList.contains('hidden')) return;
     applyFlowchartZoom();
-    els.diagramTemplateList.querySelector('.active')?.focus();
+    focusDiagramDialogControl(Boolean(existingFlowchart));
   });
+}
+
+function focusDiagramDialogControl(existing) {
+  if (els.diagramDialog.classList.contains('hidden')) return;
+  // Existing-chart mode hides the template sidebar; source-only templates
+  // also hide the visual/source mode switch, regardless of its saved state.
+  const sourceVisible = els.flowchartModeBar.classList.contains('hidden') || flowchartDesignerState.mode === 'source';
+  const target = existing ? (sourceVisible ? els.diagramSource : $('#flowchartVisualMode'))
+    : els.diagramTemplateList.querySelector('.active');
+  (target || $('#closeDiagramDialog')).focus();
 }
 
 function updateDiagramFullscreenButton() {
@@ -3243,13 +3618,15 @@ function updateDiagramFullscreenButton() {
 
 function setDiagramFullscreen(fullscreen) {
   if (!els?.diagramDialog) return;
+  const previousFocus = document.activeElement;
   const available = isCanvasDiagram() && flowchartDesignerState.mode === 'visual';
   const enabled = Boolean(fullscreen) && available;
   els.diagramDialog.classList.toggle('diagram-fullscreen', enabled);
   updateDiagramFullscreenButton();
   requestAnimationFrame(() => {
+    if (els.diagramDialog.classList.contains('hidden') || els.diagramDialog.classList.contains('diagram-fullscreen') !== enabled) return;
     applyFlowchartZoom();
-    if (enabled) $('#exitDiagramFullscreen').focus();
+    if (enabled && (document.activeElement === previousFocus || document.activeElement === document.body)) $('#exitDiagramFullscreen').focus();
   });
 }
 
@@ -3259,6 +3636,9 @@ function toggleDiagramFullscreen() {
 
 function closeDiagramDialog() {
   if (els.diagramDialog.classList.contains('hidden')) return;
+  // Dismiss only this dialog's obsolete validation warning. A newer warning
+  // from saving, recovery or another operation must remain visible.
+  if (showToast.owner === diagramWizardState || showToast.owner === 'diagram-paste') hideToast();
   clearTimeout(diagramPreviewTimer);
   diagramWizardState.saveRequest = null;
   setDiagramFullscreen(false);
@@ -3277,11 +3657,13 @@ function replaceExistingFlowchart(range, source) {
     return false;
   }
   if (range.source !== undefined && source.trim() === range.source.trim()) return true;
-  const markdown = diagramReplacementMarkdown(range, source);
+  const markdown = projectedDiagramReplacement(range, source);
   codeEditor.dispatch({
     changes: { from: range.from, to: range.to, insert: markdown },
     annotations: isolateHistory.of('full'), userEvent: 'input.diagram',
-    selection: { anchor: range.from + markdown.length },
+    // Keep the edited chart selected with the head at its visible beginning.
+    // A caret at the end of a long source can scroll below the collapsed card.
+    selection: { anchor: range.from + markdown.length, head: range.from },
     scrollIntoView: true
   });
   codeEditor.focus();
@@ -3294,14 +3676,14 @@ function insertGeneratedDiagram() {
   const source = els.diagramSource.value.trim();
   const template = diagramTemplateById(diagramWizardState.templateId);
   if (!source) {
-    showToast(t('diagramInvalid'), 'warning');
+    showToast(t('diagramInvalid'), 'warning', undefined, diagramWizardState);
     els.diagramSource.focus();
     return;
   }
   if (template.engine === 'echarts') {
     const validation = validateEChartsSource(source);
     if (!validation.valid) {
-      showToast(`${t('dataChartRenderError')}：${validation.error}`, 'warning');
+      showToast(`${t('dataChartRenderError')}：${validation.error}`, 'warning', undefined, diagramWizardState);
       els.diagramSource.focus();
       return;
     }
@@ -3320,7 +3702,7 @@ function insertGeneratedDiagram() {
       || request.draft !== JSON.stringify(structuredDiagramState.model) || !request.selection.eq(codeEditor.state.selection)) {
       showToast(t('diagramDraftChanged'), 'warning'); return;
     }
-    if (!validation.valid) { showToast(`${t(template.engine === 'echarts' ? 'dataChartRenderError' : 'mermaidRenderError')}：${validation.error}`, 'warning'); return; }
+    if (!validation.valid) { showToast(`${t(template.engine === 'echarts' ? 'dataChartRenderError' : 'mermaidRenderError')}：${validation.error}`, 'warning', undefined, diagramWizardState); return; }
     if (request.range) {
       if (replaceExistingFlowchart(request.range, source)) closeDiagramDialog();
     } else {
@@ -3330,19 +3712,21 @@ function insertGeneratedDiagram() {
       replaceSelection(markdownSource, markdownSource.length);
       closeDiagramDialog();
     }
-  }).catch(() => { if (diagramWizardState.saveRequest === request) showToast(t('diagramInvalid'), 'warning'); })
+  }).catch(() => { if (diagramWizardState.saveRequest === request) showToast(t('diagramInvalid'), 'warning', undefined, diagramWizardState); })
     .finally(() => { if (diagramWizardState.saveRequest === request) { diagramWizardState.saveRequest = null; updateDiagramActionLabels(); } });
   return request.promise;
 }
 
-function openTableDialog() {
-  if (!state.currentFile || !codeEditor) return;
+function openTableDialog(existing = null) {
+  if (!state.currentFile || !codeEditor || codeEditor.state.readOnly) return;
   const source = codeEditor.state.doc.toString();
   const selection = codeEditor.state.selection.main;
-  const existing = findMarkdownTableAt(source, selection.head) || findMarkdownTableAt(source, selection.from);
+  existing ||= findEditableTableAt(source, selection.head) || findEditableTableAt(source, selection.from);
   tableDesignerState = {
+    editor: codeEditor, documentSession: state.documentSession, path: state.currentFile.path, source,
+    insertionRange: {from:selection.from,to:selection.to},
     model: existing?.model || createTableModel(3, 3, index => t('columnNumber', { number: index + 1 })),
-    range: existing ? { from: existing.from, to: existing.to } : null
+    range: existing ? { from: existing.from, to: existing.to, prefix:existing.prefix, trailingNewline:existing.trailingNewline } : null
   };
   $('#tableDialogTitle').textContent = t(existing ? 'editTable' : 'visualTableEditor');
   $('#confirmTable').textContent = t(existing ? 'saveTable' : 'insertTableAction');
@@ -3488,7 +3872,9 @@ function renderTableDesigner(focusCell = null) {
   table.append(body);
   els.tableDesignerGrid.replaceChildren(table);
   if (focusCell) {
-    requestAnimationFrame(() => els.tableDesignerGrid.querySelector(`[data-table-cell-row="${focusCell.row}"][data-table-cell-column="${focusCell.column}"]`)?.focus());
+    // The visible grid is already attached. A delayed focus can steal a newer
+    // cell selection (or focus a reopened dialog) and redirect the next input.
+    els.tableDesignerGrid.querySelector(`[data-table-cell-row="${focusCell.row}"][data-table-cell-column="${focusCell.column}"]`)?.focus();
   }
 }
 
@@ -3507,25 +3893,25 @@ function clearTableDesignerDropTargets() {
 
 function saveVisualTable() {
   if (!tableDesignerState || !codeEditor) return;
+  if (!state.editing || codeEditor.state.readOnly || tableDesignerState.editor !== codeEditor || tableDesignerState.documentSession !== state.documentSession
+    || tableDesignerState.path !== state.currentFile?.path || tableDesignerState.source !== codeEditor.state.doc.toString()) {
+    showToast(t('tableSourceChanged'), 'warning'); return;
+  }
   const markdown = serializeMarkdownTable(tableDesignerState.model);
   if (tableDesignerState.range) {
     const { from, to } = tableDesignerState.range;
+    const replacement = serializeTableReplacement(tableDesignerState.model,tableDesignerState.range);
+    if (codeEditor.state.sliceDoc(from,to)===replacement) { closeTableDialog(); return; }
     codeEditor.dispatch({
-      changes: { from, to, insert: `${markdown}\n` },
-      selection: { anchor: from, head: from + markdown.length },
+      changes: { from, to, insert: replacement },
+      selection: { anchor: from, head: from + replacement.length - 1 },
       scrollIntoView: true
     });
   } else {
-    const selection = codeEditor.state.selection.main;
-    const source = codeEditor.state.doc.toString();
-    const prefix = selection.from > 0 && source[selection.from - 1] !== '\n' ? '\n\n' : '';
-    const suffix = selection.to < source.length && source[selection.to] !== '\n' ? '\n\n' : '\n';
-    const insert = `${prefix}${markdown}${suffix}`;
-    codeEditor.dispatch({
-      changes: { from: selection.from, to: selection.to, insert },
-      selection: { anchor: selection.from + prefix.length, head: selection.from + prefix.length + markdown.length },
-      scrollIntoView: true
-    });
+    const {from,to}=tableDesignerState.insertionRange;
+    const edit=tableInsertion(tableDesignerState.source,from,to,markdown);
+    if(!edit)return;
+    codeEditor.dispatch({...edit,annotations:isolateHistory.of('full'),scrollIntoView:true});
   }
   closeTableDialog();
 }
@@ -3826,7 +4212,8 @@ function openImageDialog() {
   els.imageAltInput.value = codeEditor.state.doc.sliceString(selection.from, selection.to) || '';
   els.imageDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
-  requestAnimationFrame(() => els.imageUrl.focus());
+  // Focus before returning control, so a later click on the caption stays put.
+  els.imageUrl.focus();
 }
 
 function closeImageDialog() {
@@ -3944,22 +4331,75 @@ function fileAsDataURL(file) {
 }
 
 async function handleEditorPaste(event) {
-  if (!state.editing || !state.currentFile?.path) return;
+  // Capture once, using the actual editable field (including nested prose).
+  // Literal code/summary fields retain CodeMirror's native plain-text paste.
+  if (event.defaultPrevented || !state.editing || !state.currentFile?.path || !codeEditor || codeEditor.state.readOnly
+    || !event.target?.closest?.('.cm-content')) return;
+  const destination = resolveEditorPasteTarget(codeEditor, event.target);
+  if (!destination) return;
+  const pasteView = destination.view;
+  if (destination.plainText && pasteView.state.selection.ranges.length === 1) return;
   const session = state.documentSession, path = state.currentFile.path;
   const item = [...(event.clipboardData?.items || [])].find(candidate => candidate.kind === 'file' && /^image\//i.test(candidate.type));
   const file = item?.getAsFile();
   const html = event.clipboardData?.getData('text/html') || '';
   const plainText = event.clipboardData?.getData('text/plain') || '';
-  if (html && hasRichClipboardHTML(html) && (!file || plainText.trim())) {
+  if(!file && state.editorPresentation==='live' && canPasteEditableTableGrid(pasteView)) {
+    try {
+      let grid=null;
+      if (/<table\b/i.test(html)) {
+        if(html.length>TABLE_CLIPBOARD_LIMIT)throw new Error('table-paste-limit');
+        // Grid conversion handles text only. Reject unsupported media/controls
+        // before sanitizing so they cannot silently turn into empty cells.
+        if(/<(?:img|video|audio|svg|math|iframe|object|input|textarea|select)\b/i.test(html))throw new Error('table-paste-shape');
+        const clean=DOMPurify.sanitize(html,{ALLOWED_TAGS:['table','thead','tbody','tfoot','tr','td','th','p','br','strong','b','em','i','u','del','s','code','a','sub','sup','span'],ALLOWED_ATTR:['href','colspan','rowspan','data-md-color']});
+        const parsed=new DOMParser().parseFromString(clean,'text/html'),tables=parsed.querySelectorAll('table');
+        if(tables.length!==1)throw new Error('table-paste-shape');
+        const table=tables[0];table.remove();
+        if(parsed.body.textContent.trim())throw new Error('table-paste-shape');
+        grid=[...table.rows].map(row=>[...row.cells].map(cell=>{
+          if(cell.colSpan!==1||cell.rowSpan!==1)throw new Error('table-paste-shape');
+          return htmlToMarkdown(cell.innerHTML).replace(/\r\n?|\n/g,'<br>');
+        }));
+      } else grid=parseTableClipboardTSV(plainText);
+      if(grid && pasteEditableTableGrid(pasteView,grid)){
+        event.preventDefault();
+        // A retry succeeded; do not leave the preceding rejection beside the new cells.
+        if(showToast.owner === 'table-paste')hideToast();
+        return;
+      }
+    }catch(error){
+      event.preventDefault();showToast(t(error.message==='table-paste-limit'?'tablePasteLimit':'tablePasteShape'),'warning',undefined,'table-paste');return;
+    }
+  }
+  // A projected literal field has no enclosing fence/summary in its local
+  // document. Do not infer rich-text policy by parsing that bare body.
+  if (destination.literalField && !file) {
+    const text = plainText || (html ? markdownToPlainText(htmlToMarkdown(html)) : '');
+    if (text) {
+      event.preventDefault();
+      pasteView.dispatch({ ...pasteView.state.replaceSelection(text), userEvent: 'input.paste',
+        annotations: isolateHistory.of('full'), scrollIntoView: true });
+    }
+    return;
+  }
+  if ((!destination.plainText || pasteView.state.selection.ranges.length > 1) && html && hasRichClipboardHTML(html) && (!file || plainText.trim())) {
     const markdownSource = htmlToMarkdown(html);
     if (markdownSource) {
       event.preventDefault();
-      replaceSelection(markdownSource, markdownSource.length, 0);
+      pasteView.dispatch({ ...(pasteView.state.selection.ranges.length > 1 ? replaceLiveSelections(pasteView.state, markdownSource, plainText || markdownToPlainText(markdownSource)) : pasteView.state.replaceSelection(markdownSource)),
+        userEvent: 'input.paste', annotations: isolateHistory.of('full'), scrollIntoView: true });
       showToast(t('richPasteConverted'), 'success', 2400);
       return;
     }
   }
-  if (!file) return;
+  if (plainText && pasteView.state.selection.ranges.length > 1 && !file) {
+    event.preventDefault();
+    pasteView.dispatch({ ...replaceLiveSelections(pasteView.state, plainText),
+      userEvent: 'input.paste', annotations: isolateHistory.of('full'), scrollIntoView: true });
+    return;
+  }
+  if (!file || pasteView !== codeEditor) return;
   event.preventDefault();
   try {
     const sourcePath = window.quilliteMarkdown.pathForFile(file);
@@ -3988,6 +4428,7 @@ async function initializeCodeEditor() {
     await loadEditorDependencies();
     initializationStage = 'extensions';
     const saveKeymap = keymap.of([
+    { key: 'Mod-Shift-z', run: view => redo(view), preventDefault: true },
     { key: 'Mod-s', run: () => { saveDocument(false); return true; } },
     { key: 'Mod-Shift-s', run: () => { saveDocument(true); return true; } },
     { key: 'Mod-e', run: () => { toggleEditor(false); return true; }, stopPropagation: true },
@@ -4060,6 +4501,7 @@ async function initializeCodeEditor() {
     const optionalDecorations = [spellcheckDecorationField, spellcheckViewPlugin, EditorView.decorations.from(spellcheckDecorationField)];
     editorExtensions = [
     basicSetup,
+    selectionHistory,
     EditorView.exceptionSink.of(error => {
       runtimeDiagnostics.capture(error, 'plugin', editorSourceFallback ? 'source-fallback' : 'normal');
       reportSilentError(error, 'editor.plugin');
@@ -4097,7 +4539,8 @@ async function initializeCodeEditor() {
       initializationStage = 'state';
       const editorState = createEditorState('');
       initializationStage = 'view';
-      return new EditorView({ state: editorState, parent: els.editor });
+      return new EditorView({ state: editorState, parent: els.editor,
+        dispatchTransactions(transactions, view) { view.update(withSelectionHistory(transactions)); } });
     };
     try {
       codeEditor = mount();
@@ -4114,9 +4557,10 @@ async function initializeCodeEditor() {
       showToast(t('editorSourceRecovery'), 'warning');
     }
     initializationStage = 'listeners';
-    codeEditor.contentDOM.addEventListener('paste', handleEditorPaste);
+    codeEditor.contentDOM.addEventListener('paste', handleEditorPaste, true);
     codeEditor.contentDOM.addEventListener('contextmenu', openEditorClipboardMenu);
-    els.editor.addEventListener('pointerdown', () => {
+    els.editor.addEventListener('pointerdown', event => {
+      if (event.target.closest('.cm-live-inner')) return;
       if (state.editing && !codeEditor.hasFocus) codeEditor.focus();
     }, true);
     return codeEditor;
@@ -4137,10 +4581,12 @@ function slugify(text, index) {
 
 function hideToast() {
   clearTimeout(showToast.timer);
+  showToast.owner = null;
   els.toast.classList.add('hidden');
 }
 
-function showToast(message, kind = 'info', duration) {
+function showToast(message, kind = 'info', duration, owner = null) {
+  showToast.owner = owner;
   const normalizedKind = ['success', 'info', 'warning', 'error'].includes(kind) ? kind : 'info';
   const durations = { success: 3200, info: 3600, warning: 5600, error: 8000 };
   const visibleFor = Number.isFinite(duration) ? Math.max(1600, duration) : durations[normalizedKind];
@@ -4307,8 +4753,12 @@ function closeSpellcheckContextMenu() {
 }
 
 function spellingRangeAtCoordinates(event) {
-  const position = codeEditor?.posAtCoords({ x: event.clientX, y: event.clientY });
-  if (position === null || position === undefined) return null;
+  const inner = EditorView.findFromDOM(event.target) || codeEditor;
+  const local = inner?.posAtCoords({ x: event.clientX, y: event.clientY });
+  if (local === null || local === undefined) return null;
+  const owner = resolveEditableOwner(inner, {from:local,to:local});
+  if (!owner || owner.view !== codeEditor) return null;
+  const position = owner.from;
   const line = codeEditor.state.doc.lineAt(position);
   const words = /[A-Za-z]+(?:['’][A-Za-z]+)*(?:-[A-Za-z]+)*/g;
   let match;
@@ -4729,6 +5179,13 @@ function editorResizeDirection() {
 }
 
 function syncEditorLayoutOptions() {
+  document.querySelectorAll('[data-editor-presentation]').forEach(button => {
+    const sourceOnly = editorSourceFallback || isPlainTextFile(state.currentFile?.path);
+    const active = button.dataset.editorPresentation === (sourceOnly ? 'source' : state.editorPresentation);
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = sourceOnly;
+  });
   document.querySelectorAll('#moreMenu button[data-diagram-display]').forEach(button => {
     const active = button.dataset.diagramDisplay === state.diagramDisplay;
     button.classList.toggle('active', active); button.setAttribute('aria-checked', String(active));
@@ -4747,10 +5204,22 @@ function syncEditorLayoutOptions() {
   if (current) current.textContent = t(editorLayoutLabel());
 }
 
+function setEditorPresentation(mode) {
+  if (codeEditor?.composing) return;
+  state.editorPresentation = mode === 'source' ? 'source' : 'live';
+  localStorage.setItem('editorPresentation', state.editorPresentation);
+  if (codeEditor && editorPresentation) {
+    codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
+    codeEditor.focus();
+  }
+  syncEditorLayoutOptions();
+}
+
 function setEditorFormulaDisplay(mode) {
   state.formulaDisplay = mode === 'source' ? 'source' : 'preview';
   localStorage.setItem('formulaDisplay', state.formulaDisplay);
   if (codeEditor?.state.field(editorFormulaField, false)) codeEditor.dispatch({ effects: setFormulaDisplayEffect.of(state.formulaDisplay) });
+  if (codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
   syncEditorLayoutOptions();
 }
 
@@ -4762,6 +5231,7 @@ function setEditorDiagramDisplay(mode) {
   state.diagramDisplay = mode === 'source' ? 'source' : 'preview';
   localStorage.setItem('diagramDisplay', state.diagramDisplay);
   syncEditorDiagramDisplay(); syncEditorLayoutOptions();
+  if (codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
 }
 
 function setEditorLayout(layout, silent = false) {
@@ -4781,6 +5251,7 @@ function setEditorLayout(layout, silent = false) {
   codeEditor?.requestMeasure();
   scheduleFormatToolbarLayout();
   if (!silent) showToast(t('editorLayoutChanged', { layout: t(editorLayoutLabel()) }));
+  schedulePaneWidthRefresh();
 }
 
 function syncDocumentWidthOptions() {
@@ -5000,12 +5471,15 @@ async function refreshExplorer() {
     await openFolder();
     return;
   }
+  const root = state.root;
+  const request = ++state.explorerRequest;
   try {
-    const previousMode = state.sidebarMode;
-    const folder = await window.quilliteMarkdown.listFolder(state.root);
+    const folder = await window.quilliteMarkdown.listFolder(root);
+    if (request !== state.explorerRequest || state.root !== root) return;
     state.explorerFiles = folder?.files || [];
-    setSidebarMode(previousMode);
+    if (state.sidebarMode === 'explorer') setSidebarMode('explorer');
   } catch (error) {
+    if (request !== state.explorerRequest || state.root !== root) return;
     reportSilentError(error, 'folder.refresh');
     console.error(error);
     showToast(t('folderOpenFailed'), 'error');
@@ -5014,20 +5488,21 @@ async function refreshExplorer() {
 
 function restoreExplorerAfterFirstPaint(savedRoot) {
   if (!savedRoot) return;
+  const request = ++state.explorerRequest;
   requestAnimationFrame(() => requestAnimationFrame(async () => {
-    if (state.root !== savedRoot) return;
+    if (request !== state.explorerRequest || state.root !== savedRoot) return;
     try {
       const folder = await window.quilliteMarkdown.listFolder(savedRoot);
-      if (state.root !== savedRoot) return;
+      if (request !== state.explorerRequest || state.root !== savedRoot) return;
       state.root = folder?.root || savedRoot;
       state.explorerFiles = folder?.files || [];
       if (state.sidebarMode === 'explorer') setSidebarMode('explorer');
     } catch (error) {
-      console.warn('Unable to restore resource explorer folder', error);
-      if (state.root === savedRoot) {
+      if (request === state.explorerRequest && state.root === savedRoot) {
+        console.warn('Unable to restore resource explorer folder', error);
         state.root = null;
         state.explorerFiles = [];
-        setSidebarMode('recent');
+        setSidebarMode(state.sidebarMode === 'explorer' ? 'recent' : state.sidebarMode);
       }
     }
   }));
@@ -5833,11 +6308,9 @@ function renderMarkdownTo(container, doc, content) {
   const reusableMermaid = reusableMermaidDiagrams(container, mermaidThemeKey);
   const reusableECharts = reusableEChartsDiagrams(container, mermaidThemeKey);
   const tableLayouts = findMarkdownTables(content);
-  const prepared = prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(content)));
+  const prepared = prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(tableRenderSource(content))));
   const renderedMath = collectFormulaRendering(() => {
-    let html = marked.parse(prepared.markdown);
-    html += renderFootnoteSection(prepared.notes, text => marked.parseInline(text), t('footnotes'));
-    return html;
+    return renderPreparedFootnotes(prepared, marked, t('footnotes'));
   });
   let html = renderedMath.html;
   html = DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel', 'data-md-color'] });
@@ -6414,6 +6887,7 @@ async function toggleEditor(forceEditing) {
       if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
     }
     state.editing = nextEditing;
+    syncEditorLayoutOptions();
     syncEditorDiagramDisplay();
     if (state.editing) {
       resetAIDocumentReviewSession();
@@ -6510,6 +6984,8 @@ async function confirmRenameDocument() {
     const content = state.editing ? editorContent() : state.currentFile.content;
     state.currentFile = { ...renamed, content };
     state.documentSession++;
+    // Rebind identity-bound actions without replacing the editor or its history.
+    if (codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
     const renamedSession = state.documentSession;
     els.editorFileName.textContent = renamed.name;
     updateWindowTitle();
@@ -6713,6 +7189,8 @@ async function saveDocument(saveAs = false, options = {}) {
     if (saved.directory !== originalDirectory && codeEditor && typeof updateImagePreviewDirectory !== 'undefined' && updateImagePreviewDirectory) {
       codeEditor.dispatch({ effects: updateImagePreviewDirectory.of(saved.directory || '') });
     }
+    // Rebind nested media callbacks and future image sessions to the saved path.
+    if (saved.path !== originalPath && codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
     if (typeof documentHasDiagrams === 'function') state.currentDocumentHasDiagrams = documentHasDiagrams(currentContent);
     syncDocumentAccessControls();
     addRecentDocument(saved);
@@ -7409,6 +7887,7 @@ async function performExportCenter() {
   if (state.exportInProgress) return;
   setExportInProgress(true);
   let options;
+  let portableIsCurrent;
   let completed = false;
   els.exportCenterStatus.textContent = t('exporting');
   try {
@@ -7429,9 +7908,14 @@ async function performExportCenter() {
     else if (['png', 'jpeg'].includes(options.format)) output = await exportDocumentImage(options.format, options);
     else if (options.format === 'markdown-portable') {
       const doc = state.currentFile;
+      const session = state.documentSession;
+      const isCurrent = () => state.documentSession === session && state.currentFile?.path === doc.path;
+      portableIsCurrent = isCurrent;
       const snapshot = state.editing ? editorContent() : doc.content;
       const portable = await transformMarkdownImages(snapshot, ref => window.quilliteMarkdown.readPortableImage(ref, doc.directory), { portable: true });
+      if (!isCurrent()) return;
       output = await window.quilliteMarkdown.exportPortableMarkdown(doc.path, portable);
+      if (!isCurrent()) return;
       if (!output) return; // Native picker cancelled: keep export options and document intact.
     }
     else output = await window.quilliteMarkdown.exportWithPandoc({
@@ -7451,6 +7935,7 @@ async function performExportCenter() {
     else if (output && !['docx', 'html', 'html-plain', 'pdf'].includes(options.format)) showToast(t('exportSucceeded'), 'success');
     completed = true;
   } catch (error) {
+    if (portableIsCurrent && !portableIsCurrent()) return;
     if (String(error?.message || error).includes('EXPORT_IMAGE_TOO_TALL')) showToast(t('imageExportTooTall'), 'warning');
     else if (/PORTABLE_|IMAGE_EMBED_TYPE|DOCUMENT_COPY_EXISTS/.test(String(error?.message || error))) showToast(authoringError(error), 'warning', 7200);
     else if (String(error?.message || error).includes('EXPORT_IMAGE_BLANK')) showToast(t('imageExportBlank'), 'warning');
@@ -7562,9 +8047,10 @@ async function openFile() {
 async function openFolder() {
   if (!maybeDiscardChanges()) return;
   const request = beginDocumentOpen();
+  const explorerRequest = ++state.explorerRequest;
   try {
     const folder = await window.quilliteMarkdown.openFolder();
-    if (!folder || !canApplyDocumentOpen(request)) return;
+    if (!folder || explorerRequest !== state.explorerRequest || !canApplyDocumentOpen(request)) return;
     state.root = folder.root;
     state.explorerFiles = folder.files;
     setSidebarMode('explorer');
@@ -7573,7 +8059,7 @@ async function openFolder() {
       if (canApplyDocumentOpen(request)) displayDocument(doc);
     }
   } catch (error) {
-    if (!canApplyDocumentOpen(request)) return;
+    if (explorerRequest !== state.explorerRequest || !canApplyDocumentOpen(request)) return;
     reportSilentError(error, 'document.open-folder');
     showToast(t(isMissingDocumentError(error) ? 'recentMissingTitle' : 'folderOpenFailed'), 'warning');
   }
@@ -7733,7 +8219,8 @@ function readerSidePanelLayout() {
   const sidebarVisible = paneParticipates(els.sidebar, els.sidebar.classList.contains('collapsed'));
   const tocVisible = !isCompactTocLayout() && paneParticipates(els.tocPanel, state.editing || els.tocPanel.classList.contains('hidden') || els.tocPanel.classList.contains('collapsed'));
   const dividerWidth = visibleElementWidth(els.sidebarResizer) + visibleElementWidth(els.tocResizer);
-  const availableWidth = Math.max(0, els.appShell.clientWidth - dividerWidth - 240);
+  const contentMinimum = state.editing ? (state.editorLayout === 'editor-only' ? 360 : 547) : 240;
+  const availableWidth = Math.max(0, els.appShell.clientWidth - dividerWidth - contentMinimum);
   return { sidebarVisible, tocVisible, availableWidth };
 }
 
@@ -7871,6 +8358,7 @@ function initializePaneResizers() {
     paneResizeObserver = new ResizeObserver(schedulePaneWidthRefresh);
     paneResizeObserver.observe(els.appShell);
     paneResizeObserver.observe(els.sidebar);
+    paneResizeObserver.observe(els.editorView);
   } else {
     window.addEventListener('resize', schedulePaneWidthRefresh);
   }
@@ -7931,7 +8419,8 @@ function initializePaneResizers() {
       if (event.button !== 0 || editorHandle.classList.contains('hidden')) return;
       event.preventDefault();
       const startX = event.clientX;
-      const startPercent = state.editorPreviewWidth;
+      const startPercent = currentEditorPreviewPercent();
+      const preferredPercent = state.editorPreviewWidth;
       let changed = false;
       editorHandle.setPointerCapture?.(event.pointerId);
       editorHandle.classList.add('active');
@@ -7939,9 +8428,9 @@ function initializePaneResizers() {
       const move = moveEvent => {
         const total = els.editorView?.clientWidth || 1;
         const deltaPercent = ((moveEvent.clientX - startX) / total) * 100 * editorResizeDirection();
-        const previousPercent = state.editorPreviewWidth;
-        setEditorPreviewWidth(startPercent + deltaPercent);
-        if (state.editorPreviewWidth !== previousPercent) changed = true;
+        setEditorPreviewWidth(startPercent + deltaPercent, true);
+        changed = Math.abs(currentEditorPreviewPercent() - startPercent) > .0001;
+        if (!changed) setEditorPreviewWidth(preferredPercent);
       };
       const finish = () => {
         editorHandle.classList.remove('active');
@@ -7959,17 +8448,30 @@ function initializePaneResizers() {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       const change = (event.key === 'ArrowRight' ? 2 : -2) * editorResizeDirection();
-      setEditorPreviewWidth(state.editorPreviewWidth + change);
+      setEditorPreviewWidth(currentEditorPreviewPercent() + change, true);
       localStorage.setItem('editorPreviewWidth', String(state.editorPreviewWidth));
     });
   }
 }
 
-function setEditorPreviewWidth(percent) {
-  // 最小保留 12% 预览宽度，同时给编辑器保留最小可用空间。
-  const max = Math.max(12, 100 - 8);
-  state.editorPreviewWidth = Math.max(12, Math.min(max, Math.round(percent)));
-  document.documentElement.style.setProperty('--editor-preview-width', `${state.editorPreviewWidth}%`);
+function editorSplitBounds(percent = state.editorPreviewWidth) {
+  return fitEditorSplit(percent, els.editorView?.clientWidth || 0, visibleElementWidth(els.editorResizer));
+}
+
+function currentEditorPreviewPercent() {
+  return editorSplitBounds().percent;
+}
+
+function setEditorPreviewWidth(percent, userResize = false) {
+  const fitted = editorSplitBounds(percent);
+  const effectiveChanged = Math.abs(fitted.percent - currentEditorPreviewPercent()) > .0001;
+  // Window/layout changes constrain presentation only. A user gesture stores
+  // the visible result so the next drag/key starts from the actual divider.
+  state.editorPreviewWidth = normalizeEditorPreviewWidth(userResize ? (effectiveChanged ? fitted.percent : state.editorPreviewWidth) : percent);
+  document.documentElement.style.setProperty('--editor-preview-width', `${fitted.percent}%`);
+  els.editorResizer?.setAttribute('aria-valuemin', String(fitted.minimum));
+  els.editorResizer?.setAttribute('aria-valuemax', String(fitted.maximum));
+  els.editorResizer?.setAttribute('aria-valuenow', String(fitted.percent));
 }
 
 function openAbout() {
@@ -9209,9 +9711,12 @@ function replaceWithAIResult() {
   const insertAt = insertMode && Number.isInteger(from) && from >= 0 && from <= documentLength ? from : documentLength;
   const changeFrom = insertMode ? insertAt : from;
   const changeTo = insertMode ? insertAt : to;
+  const edit = state.editorPresentation === 'live' && !editorSourceFallback
+    ? liveAIReplacement(codeEditor.state, changeFrom, changeTo, replacement)
+    : {changes:{from:changeFrom,to:changeTo,insert:replacement},selection:{anchor:changeFrom+replacement.length}};
   codeEditor.dispatch({
-    changes: { from: changeFrom, to: changeTo, insert: replacement },
-    selection: { anchor: changeFrom + replacement.length },
+    ...edit,
+    annotations: isolateHistory.of('full'),
     scrollIntoView: true,
     userEvent: 'input.ai'
   });
@@ -9396,11 +9901,14 @@ function aiReviewErrorMessage(error) {
 
 async function openAIDocumentReview() {
   if (!codeEditor || !state.editing) return;
+  const requestedSession = state.documentSession;
+  const requestedEditor = codeEditor;
   try {
     currentAISettings = await window.quilliteMarkdown.getAISettings();
   } catch {
     currentAISettings = { provider: 'deepseek', hasApiKey: false };
   }
+  if (state.documentSession !== requestedSession || codeEditor !== requestedEditor || !state.editing) return;
   if (!currentAISettings?.hasApiKey) {
     pendingAIDocumentReview = true;
     await openAISettings({ required: true });
@@ -9554,8 +10062,18 @@ function applySelectedAIReviewSuggestions() {
     els.aiReviewStatus.textContent = t('aiReviewOverlap');
     return;
   }
+  const changes = selected.flatMap(suggestion => state.editorPresentation === 'live' && !editorSourceFallback
+    ? liveAIReplacement(codeEditor.state, suggestion.start, suggestion.end, suggestion.replacement).changes
+    : { from: suggestion.start, to: suggestion.end, insert: suggestion.replacement });
+  // Block protection can split a replacement into several source edits.
+  // Recheck the actual edits, not only the AI's original suggestion spans.
+  if (hasOverlappingReviewSuggestions(changes.map(change => ({start:change.from,end:change.to ?? change.from})))) {
+    els.aiReviewStatus.textContent = t('aiReviewOverlap');
+    return;
+  }
   codeEditor.dispatch({
-    changes: selected.map(suggestion => ({ from: suggestion.start, to: suggestion.end, insert: suggestion.replacement })),
+    changes,
+    annotations: isolateHistory.of('full'),
     scrollIntoView: true,
     userEvent: 'input.ai-review'
   });
@@ -9745,10 +10263,20 @@ async function completeFirstRunLanguage(language) {
   }
 }
 
-function closeRecoveryDialog() {
+function closeRecoveryDialog(clearPending = false) {
   els.recoveryDialog.classList.add('hidden');
-  pendingRecoverySnapshot = null;
+  if (clearPending) pendingRecoverySnapshot = null;
+  $('#reviewRecovery').classList.toggle('hidden', !pendingRecoverySnapshot);
   document.body.classList.remove('dialog-open');
+}
+
+function reviewRecoverySnapshot() {
+  if (!pendingRecoverySnapshot) return;
+  els.recoveryDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  requestAnimationFrame(() => {
+    if (!els.recoveryDialog.classList.contains('hidden')) $('#restoreRecovery').focus();
+  });
 }
 
 function recoveryTimestamp(value) {
@@ -9761,15 +10289,14 @@ function recoveryTimestamp(value) {
 
 async function offerRecoverySnapshot() {
   try {
-    const snapshot = await window.quilliteMarkdown.getRecoverySnapshot();
+    const snapshot = await window.quilliteMarkdown.getStartupRecoverySnapshot();
     if (!snapshot?.path || typeof snapshot.content !== 'string') return false;
     pendingRecoverySnapshot = snapshot;
     els.recoveryFileName.textContent = snapshot.name || snapshot.path;
     els.recoveryFileName.title = snapshot.path;
     els.recoveryUpdatedAt.textContent = recoveryTimestamp(snapshot.updatedAt);
-    els.recoveryDialog.classList.remove('hidden');
-    document.body.classList.add('dialog-open');
-    requestAnimationFrame(() => $('#restoreRecovery').focus());
+    $('#reviewRecovery').classList.remove('hidden');
+    showToast(t('recoveryAvailable'), 'info', 6200);
     return true;
   } catch (error) {
     reportSilentError(error, 'document.recovery-load');
@@ -9779,40 +10306,60 @@ async function offerRecoverySnapshot() {
 }
 
 async function discardRecoverySnapshot() {
-  const button = $('#discardRecovery');
-  button.disabled = true;
-  try {
-    await clearRecoverySnapshot();
-    closeRecoveryDialog();
-  } finally {
-    button.disabled = false;
+  // "Later" must not clear the active document's newer backup or the archive.
+  recoveryRestoreRequest++;
+  setRecoveryBusy(false);
+  closeRecoveryDialog();
+  if (state.editing) focusCodeEditor();
+  else $('#reviewRecovery').focus();
+}
+
+function setRecoveryBusy(busy) {
+  $('#restoreRecovery').disabled = busy;
+  $('#reviewRecovery').disabled = busy;
+  els.recoveryDialog.setAttribute('aria-busy', String(busy));
+  for (const [id, key] of [['discardRecovery', busy ? 'recoveryCancel' : 'recoveryLater'], ['restoreRecovery', busy ? 'recoveryRestoring' : 'recoveryRestore']]) {
+    const button = $(`#${id}`);
+    button.dataset.i18n = key;
+    button.textContent = t(key);
   }
+  // The action that had focus becomes disabled; leave a usable cancel target.
+  if (busy) $('#discardRecovery').focus();
 }
 
 async function restoreRecoverySnapshot() {
   const snapshot = pendingRecoverySnapshot;
   if (!snapshot) return;
-  const buttons = [$('#discardRecovery'), $('#restoreRecovery')];
-  buttons.forEach(button => { button.disabled = true; });
-  const requestedSession = state.documentSession;
+  if (state.dirty) { showToast(t('recoverySaveFirst'), 'warning'); return; }
+  const operation = ++recoveryRestoreRequest;
+  const cancelled = () => operation !== recoveryRestoreRequest;
+  const request = beginDocumentOpen();
+  const stillCurrent = () => request.id === state.documentOpenRequest
+    && request.session === state.documentSession && request.content === state.currentFile?.content && !state.dirty;
+  setRecoveryBusy(true);
   try {
     let diskDocument;
+    let recoveredAsDraft = false;
     try {
       diskDocument = await window.quilliteMarkdown.readFile(snapshot.path);
     } catch {
-      if (requestedSession !== state.documentSession) return;
+      if (cancelled()) return;
+      if (!stillCurrent()) { showToast(t('recoveryChanged'), 'warning'); return; }
       // Recover a missing/unreadable source into a separate draft; do not
       // recreate or overwrite the old source path.
       diskDocument = await window.quilliteMarkdown.newFile();
+      recoveredAsDraft = true;
     }
-    if (requestedSession !== state.documentSession) return;
+    if (cancelled()) return;
+    if (!stillCurrent()) { showToast(t('recoveryChanged'), 'warning'); return; }
     if (!diskDocument?.path) throw new Error('Unable to create a recovery document');
+    if (recoveredAsDraft && (!diskDocument.draft || sameDocumentPath(diskDocument.path, snapshot.path))) throw new Error('Recovery requires a separate new draft');
     const savedContent = String(diskDocument.content || '');
     // Old snapshots have no revision: fail closed instead of adopting today's
     // disk revision and silently authorizing an overwrite after recovery.
     const knownRevision = /^[a-f0-9]{64}$/i.test(snapshot.baseRevision || '');
-    const needsComparison = Boolean(snapshot.conflict) || !knownRevision
-      || snapshot.baseRevision !== diskDocument.revision;
+    const needsComparison = !recoveredAsDraft && (Boolean(snapshot.conflict) || !knownRevision
+      || snapshot.baseRevision !== diskDocument.revision);
     const recoveredDocument = {
       ...diskDocument,
       content: snapshot.content,
@@ -9828,27 +10375,33 @@ async function restoreRecoverySnapshot() {
     }
     state.savedContent = savedContent;
     setDirty(needsComparison || snapshot.content !== savedContent);
+    // The recovery is now applied. Do not offer cancellation during editor
+    // mounting as it cannot undo an already committed document replacement.
+    // Keep the entry pending until mounting succeeds, so failure can be retried.
+    closeRecoveryDialog();
     await toggleEditor(true);
-    if (recoveredSession !== state.documentSession) return;
+    if (cancelled() || recoveredSession !== state.documentSession) return;
     if (!state.editing) throw new Error('Unable to open the recovered document for editing');
-    state.currentFile.content = snapshot.content;
-    if (editorContent() !== snapshot.content) replaceEditorContent(snapshot.content, false);
-    setDirty(needsComparison || snapshot.content !== savedContent);
+    // Editor mounting can yield; never replace text typed during that await.
+    setDirty(needsComparison || state.currentFile.content !== savedContent);
     lastRecoveryContent = snapshot.content;
     lastRecoveryContext = '';
-    closeRecoveryDialog();
-    showToast(t('recoveryRestored'), 'success');
+    closeRecoveryDialog(true);
+    showToast(t(recoveredAsDraft ? 'recoveryRestoredCopy' : 'recoveryRestored'), 'success');
     scheduleRecoverySnapshot();
     if (needsComparison) await openDocumentConflict();
   } catch (error) {
+    if (cancelled()) return;
     reportSilentError(error, 'document.recovery-restore');
     showToast(t('recoveryFailed'), 'error');
   } finally {
-    buttons.forEach(button => { button.disabled = false; });
+    if (!cancelled()) setRecoveryBusy(false);
   }
 }
 
 function closeDocumentHistory(restoreFocus = true) {
+  documentHistoryRequest++;
+  documentVersionRequest++;
   if (els.documentHistoryDialog.classList.contains('hidden')) return;
   els.documentHistoryDialog.classList.add('hidden');
   documentVersions = [];
@@ -9871,6 +10424,8 @@ function documentHistoryEmpty(titleKey = 'documentHistorySelectTitle', hintKey =
 }
 
 function renderDocumentVersionList() {
+  const focusedId = els.documentHistoryList.contains(document.activeElement)
+    ? document.activeElement?.dataset.documentVersionId : null;
   els.documentHistoryList.replaceChildren();
   if (!documentVersions.length) {
     const empty = document.createElement('p');
@@ -9884,12 +10439,14 @@ function renderDocumentVersionList() {
     button.type = 'button';
     button.dataset.documentVersionId = version.id;
     button.className = selectedDocumentVersion?.id === version.id ? 'active' : '';
+    button.setAttribute('aria-pressed', String(selectedDocumentVersion?.id === version.id));
     const time = document.createElement('strong');
     const size = document.createElement('small');
     time.textContent = recoveryTimestamp(version.createdAt);
     size.textContent = t('documentHistorySize', { size: Math.max(0.1, Number(version.size || 0) / 1024).toFixed(1) });
     button.append(time, size);
     els.documentHistoryList.append(button);
+    if (version.id === focusedId && document.hasFocus()) button.focus({ preventScroll: true });
   });
 }
 
@@ -9917,45 +10474,73 @@ function renderDocumentVersionPreview(version) {
 }
 
 async function selectDocumentVersion(id) {
+  const historyRequest = documentHistoryRequest;
+  const versionRequest = ++documentVersionRequest;
   const requestedSession = documentHistorySession;
   const requestedPath = state.currentFile?.path;
+  const current = () => historyRequest === documentHistoryRequest && versionRequest === documentVersionRequest
+    && requestedSession === state.documentSession && sameDocumentPath(requestedPath, state.currentFile?.path)
+    && !els.documentHistoryDialog.classList.contains('hidden');
+  selectedDocumentVersion = null;
+  els.restoreDocumentHistory.disabled = true;
+  documentHistoryEmpty('documentHistoryLoading', 'documentHistoryLoadingHint');
+  for (const button of els.documentHistoryList.querySelectorAll('[data-document-version-id]')) {
+    const active = button.dataset.documentVersionId === id;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
   els.documentHistoryStatus.textContent = '';
   try {
     const version = await window.quilliteMarkdown.getDocumentVersion(requestedPath, id);
-    if (requestedSession !== state.documentSession || !sameDocumentPath(requestedPath, state.currentFile?.path)) return;
+    if (!current()) return;
+    if (!version || version.id !== id || !sameDocumentPath(version.path, requestedPath) || typeof version.content !== 'string') throw new Error(t('documentHistoryLoadFailed'));
     selectedDocumentVersion = version;
     renderDocumentVersionList();
     renderDocumentVersionPreview(version);
     els.restoreDocumentHistory.disabled = false;
   } catch (error) {
+    if (!current()) return;
+    selectedDocumentVersion = null;
+    els.restoreDocumentHistory.disabled = true;
+    documentHistoryEmpty('documentHistoryLoadFailed', 'documentHistorySelectHint');
     els.documentHistoryStatus.textContent = `${t('documentHistoryLoadFailed')}: ${aiErrorMessage(error)}`;
   }
 }
 
 async function openDocumentHistory() {
   if (!codeEditor || !state.editing || !state.currentFile?.path) return;
+  const request = ++documentHistoryRequest;
+  documentVersionRequest++;
   documentHistorySession = state.documentSession;
+  const requestedSession = state.documentSession, requestedPath = state.currentFile.path;
+  const current = () => request === documentHistoryRequest && requestedSession === state.documentSession
+    && sameDocumentPath(requestedPath, state.currentFile?.path) && !els.documentHistoryDialog.classList.contains('hidden');
+  documentVersions = [];
+  els.documentHistoryList.replaceChildren();
   selectedDocumentVersion = null;
   els.restoreDocumentHistory.disabled = true;
   els.documentHistoryStatus.textContent = '';
-  documentHistoryEmpty();
+  documentHistoryEmpty('documentHistoryLoading', 'documentHistoryLoadingHint');
   els.documentHistoryDialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
   try {
-    documentVersions = await window.quilliteMarkdown.listDocumentVersions(state.currentFile.path) || [];
-    if (documentHistorySession !== state.documentSession) return closeDocumentHistory();
+    const versions = await window.quilliteMarkdown.listDocumentVersions(requestedPath) || [];
+    if (!current()) return;
+    documentVersions = versions;
     renderDocumentVersionList();
     if (documentVersions.length) await selectDocumentVersion(documentVersions[0].id);
     else documentHistoryEmpty('documentHistoryEmpty', 'documentHistorySelectHint');
   } catch (error) {
+    if (!current()) return;
     els.documentHistoryStatus.textContent = `${t('documentHistoryLoadFailed')}: ${aiErrorMessage(error)}`;
     documentVersions = [];
     renderDocumentVersionList();
+    documentHistoryEmpty('documentHistoryLoadFailed', 'documentHistorySelectHint');
   }
 }
 
 function restoreSelectedDocumentVersion() {
-  if (!codeEditor || !selectedDocumentVersion) return;
+  if (!codeEditor || !selectedDocumentVersion || els.restoreDocumentHistory.disabled || els.documentHistoryDialog.classList.contains('hidden')) return;
   if (documentHistorySession !== state.documentSession || !sameDocumentPath(selectedDocumentVersion.path, state.currentFile?.path)) {
     els.documentHistoryStatus.textContent = t('documentHistoryChanged');
     return;
@@ -10023,15 +10608,15 @@ async function startDownloadAndUpdate() {
   }
 }
 
-async function loadInitialDocument() {
-  const request = beginDocumentOpen();
+async function loadInitialDocument(request) {
   try {
+    if (!canApplyDocumentOpen(request)) return;
     const initialFile = await window.quilliteMarkdown.getInitialFile();
     if (!initialFile?.path || !canApplyDocumentOpen(request)) return;
     displayDocument(initialFile);
     const session = state.documentSession;
     const mode = await window.quilliteMarkdown.getStartupMode();
-    if (session === state.documentSession && mode === 'edit') await toggleEditor(true);
+    if (request.id === state.documentOpenRequest && session === state.documentSession && mode === 'edit') await toggleEditor(true);
   } catch (error) {
     if (!canApplyDocumentOpen(request)) return;
     reportSilentError(error, 'document.open-initial');
@@ -10040,6 +10625,10 @@ async function loadInitialDocument() {
 }
 
 async function initialize() {
+  // Reserve startup's place before any async settings work. A click while
+  // preferences load must supersede startup, never the other way around.
+  const initialRequest = beginDocumentOpen();
+  const initialExplorerRequest = state.explorerRequest;
   setAccentTheme(state.accentTheme);
   if (!initializeMacSystemColorMode()) setColorMode(state.colorMode);
   setFontScale(state.fontScale, true, state.fontScaleMode);
@@ -10060,13 +10649,21 @@ async function initialize() {
   }
   const needsLanguageSelection = await window.quilliteMarkdown.needsLanguageSelection();
   setLanguage(prefs.language || state.language, true, !needsLanguageSelection);
+  const openedDuringStartup = [...state.recentFiles];
+  const pinnedDuringStartup = [...state.pinnedRecentFiles];
   applyLibraryPreferences(prefs);
+  applyRecentPartition(partitionRecentFiles(
+    [...openedDuringStartup, ...state.recentFiles],
+    [...pinnedDuringStartup, ...state.pinnedRecentFiles],
+  ));
   const savedExplorerRoot = String(prefs.explorerRoot || '').trim();
-  state.root = savedExplorerRoot || null;
-  state.explorerFiles = [];
+  if (initialExplorerRequest === state.explorerRequest) {
+    state.root = savedExplorerRoot || null;
+    state.explorerFiles = [];
+  }
   setSidebarMode(state.sidebarMode === 'explorer' && !state.root ? 'recent' : state.sidebarMode);
-  await loadInitialDocument();
-  restoreExplorerAfterFirstPaint(savedExplorerRoot);
+  await loadInitialDocument(initialRequest);
+  if (initialExplorerRequest === state.explorerRequest) restoreExplorerAfterFirstPaint(savedExplorerRoot);
   if (needsLanguageSelection) openFirstRunLanguageDialog();
   else {
     await offerRecoverySnapshot();
@@ -10077,6 +10674,7 @@ async function initialize() {
 $('#newFileButton').addEventListener('click', newFile);
 $('#closeToast').addEventListener('click', hideToast);
 $('#discardRecovery').addEventListener('click', discardRecoverySnapshot);
+$('#reviewRecovery').addEventListener('click', reviewRecoverySnapshot);
 $('#restoreRecovery').addEventListener('click', restoreRecoverySnapshot);
 $('#closeTypography').addEventListener('click', closeTypographySettings);
 $('#cancelTypography').addEventListener('click', closeTypographySettings);
@@ -10444,6 +11042,27 @@ document.addEventListener('pointerup', () => {
 els.tableDialog.addEventListener('click', event => {
   if (event.target === els.tableDialog) closeTableDialog();
 });
+$('#cancelFootnote').addEventListener('click',closeFootnoteDialog);
+$('#footnoteForm').addEventListener('submit',event=>{event.preventDefault();saveFootnoteDialog();});
+$('#footnoteDialog').addEventListener('cancel',event=>{event.preventDefault();closeFootnoteDialog();});
+$('#footnoteDialog').addEventListener('keydown',event=>{
+  if(event.key!=='Tab')return;
+  const controls=[...$('#footnoteDialog').querySelectorAll('button,input,textarea')].filter(el=>!el.disabled&&el.getClientRects().length);
+  const first=controls[0],last=controls.at(-1);
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+});
+$('#closeLinkDialog').addEventListener('click', closeLinkDialog);
+$('#cancelLink').addEventListener('click', closeLinkDialog);
+$('#linkForm').addEventListener('submit', event => { event.preventDefault(); saveLinkDialog(); });
+$('#linkDialog').addEventListener('cancel', event => { event.preventDefault(); closeLinkDialog(); });
+$('#linkDialog').addEventListener('keydown', event => {
+  if (event.key !== 'Tab') return;
+  const controls = [...$('#linkDialog').querySelectorAll('button, input')].filter(element => !element.disabled && element.getClientRects().length);
+  const first = controls[0], last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+});
 $('#closeImageDialog').addEventListener('click', closeImageDialog);
 $('#cancelImage').addEventListener('click', closeImageDialog);
 $('#confirmImage').addEventListener('click', insertImageFromUrl);
@@ -10575,6 +11194,10 @@ $('#openDiagramGuide').addEventListener('click', () => {
 els.diagramDialog.addEventListener('click', event => {
   if (event.target === els.diagramDialog) closeDiagramDialog();
 });
+$('#diagramSearch').addEventListener('input', renderDiagramTemplateList);
+$('#diagramSearch').addEventListener('keydown', event => {
+  if (event.key === 'Escape' && event.currentTarget.value) { event.stopPropagation(); event.currentTarget.value = ''; renderDiagramTemplateList(); }
+});
 els.diagramCategoryTabs.addEventListener('click', event => {
   const button = event.target.closest('[data-diagram-category]');
   if (button) chooseDiagramCategory(button.dataset.diagramCategory);
@@ -10595,12 +11218,46 @@ els.diagramSource.addEventListener('keydown', event => {
 });
 $('#flowchartVisualMode').addEventListener('click', () => showFlowchartEditorMode('visual', { notify: true }));
 $('#flowchartSourceMode').addEventListener('click', () => showFlowchartEditorMode('source'));
+$('#applyDiagramPaste').addEventListener('click', () => {
+  if (!structuredDiagramState.model) return;
+  try {
+    const draft = JSON.parse(JSON.stringify(structuredDiagramState.model));
+    draft.rows = parsePastedTable($('#diagramPasteText').value, structuredDiagramState.definition.columns, $('#diagramPasteHeader').checked);
+    if (diagramWizardState.templateId === 'doughnut-chart') {
+      const oldRows = structuredDiagramState.model.rows;
+      draft.rows = draft.rows.map(row => ({ ...row, originalItem: oldRows.find(old => old.label === row.label)?.originalItem }));
+    }
+    if (!validateStructuredDiagram(diagramWizardState.templateId, draft).valid) throw new Error('invalid-table');
+    structuredDiagramState.model = draft;
+    renderStructuredDiagramEditor(); syncStructuredDiagramSource();
+    $('#diagramPasteText').value = ''; $('#diagramPastePanel').open = false;
+    if (showToast.owner === 'diagram-paste') hideToast();
+  } catch { showToast(t('diagramPasteInvalid'), 'warning', undefined, 'diagram-paste'); }
+});
+$('#addDiagramSeries').addEventListener('click', () => {
+  if (!checkStructuredDiagramDraft(true) || !structuredDiagramState.model) return;
+  try {
+    let model = structuredDiagramState.model;
+    if (!model.tableChart) model = parseTableChart(diagramWizardState.templateId, els.diagramSource.value);
+    if (!addTableSeries(model, diagramLocale())) return;
+    structuredDiagramState.model = model; renderStructuredDiagramEditor(); syncStructuredDiagramSource();
+  } catch { showToast(t('diagramVisualUnsupported'), 'warning'); }
+});
+$('#removeDiagramSeries').addEventListener('click', () => {
+  const model = structuredDiagramState.model;
+  if (!model?.tableChart || model.series.length <= 1 || !window.confirm(t('diagramRemoveSeriesConfirm'))) return;
+  const index = model.series.length - 1;
+  model.series.pop(); delete model.settings[`name${index}`]; model.rows.forEach(row => { delete row[`s${index}`]; });
+  renderStructuredDiagramEditor(); syncStructuredDiagramSource();
+});
 $('#addStructuredDiagramRow').addEventListener('click', () => {
   if (!structuredDiagramState.model || !structuredDiagramState.definition) return;
+  if (structuredDiagramState.model.rows.length >= 2000) { showToast(t('diagramLimitError'), 'warning'); return; }
   structuredDiagramState.model.rows.push({ ...structuredDiagramState.definition.empty });
   renderStructuredDiagramEditor();
   syncStructuredDiagramSource();
-  requestAnimationFrame(() => els.structuredDiagramRows.lastElementChild?.querySelector('input, select')?.focus());
+  // Rows are attached synchronously; a deferred focus can target a reopened dialog.
+  els.structuredDiagramRows.lastElementChild?.querySelector('input, select')?.focus();
 });
 els.structuredDiagramRows.addEventListener('click', event => {
   const remove = event.target.closest('[data-structured-remove]');
@@ -10761,19 +11418,10 @@ els.flowchartCanvas.addEventListener('dblclick', event => {
   const point = flowchartCanvasPoint(event);
   addFlowchartNodeAt('process', { x: point.x, y: point.y });
 });
-els.flowchartCanvas.addEventListener('keydown', event => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
-    event.preventDefault();
-    selectAllFlowchartNodes();
-  } else if ((event.key === 'Delete' || event.key === 'Backspace') && flowchartDesignerState.selection) {
-    event.preventDefault();
-    deleteSelectedFlowchartElement();
-  } else if (event.key === 'Escape' && flowchartDesignerState.connecting) {
-    event.preventDefault();
-    flowchartDesignerState.connecting = false;
-    flowchartDesignerState.connectFrom = '';
-    renderFlowchartCanvas();
-  }
+els.flowchartCanvas.addEventListener('keydown', handleFlowchartKeydown);
+els.flowchartCanvas.addEventListener('focusin', event => {
+  const nodeId = event.target.dataset.flowchartNode, edgeId = event.target.dataset.flowchartEdge;
+  if (nodeId || edgeId) focusFlowchartElement(nodeId ? 'node' : 'edge', nodeId || edgeId);
 });
 $('#headingSelect').addEventListener('change', event => {
   formatSelectedLines('heading', event.target.value);
@@ -10844,6 +11492,31 @@ $('#formatPainterButton').addEventListener('click', () => {
     copyFormatFromSelection();
   }
 });
+
+// Do not apply a brush while the user is still extending a selection (e.g.
+// holding Ctrl/Command for several Ctrl+D steps, or pausing during a drag).
+document.addEventListener('keydown', event => {
+  formatPainterModifiers = event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
+}, true);
+document.addEventListener('pointercancel', () => {
+  formatPainterPointerDown = false; clearTimeout(formatPainterApplyTimer);
+}, true);
+document.addEventListener('keyup', event => {
+  const wasHeld = formatPainterModifiers;
+  formatPainterModifiers = event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
+  if (copiedFormat && wasHeld && !formatPainterModifiers) scheduleFormatPainterApply();
+}, true);
+document.addEventListener('pointerdown', event => {
+  formatPainterPointerDown = Boolean(copiedFormat && event.target.closest?.('#markdownEditor'));
+}, true);
+document.addEventListener('pointerup', () => {
+  const wasDown = formatPainterPointerDown; formatPainterPointerDown = false;
+  if (copiedFormat && wasDown) scheduleFormatPainterApply();
+}, true);
+window.addEventListener('blur', () => {
+  formatPainterModifiers = false; formatPainterPointerDown = false;
+  clearTimeout(formatPainterApplyTimer);
+});
 $('#conflictKeep').addEventListener('click', () => { closeDocumentConflict(); showToast(t('conflictKeepHint'), 'info'); });
 $('#conflictDisk').addEventListener('click', useConflictDisk);
 $('#conflictMerge').addEventListener('click', startConflictMerge);
@@ -10875,6 +11548,11 @@ document.addEventListener('keydown', event => {
     showToast(t('formatCleared'));
   }
 });
+document.querySelectorAll('[data-editor-presentation]').forEach(button => {
+  button.addEventListener('mousedown', event => event.preventDefault());
+  button.addEventListener('click', () => setEditorPresentation(button.dataset.editorPresentation));
+});
+
 els.exitEditButton.addEventListener('click', () => {
   if (state.editing) toggleEditor(false);
 });
@@ -10922,10 +11600,9 @@ const documentTools = createDocumentTools({
   checkAnchors: content => {
     // Use the same sanitised Markdown pipeline and DOM heading order as preview.
     // A detached template does not fetch image URLs or execute document HTML.
-    const prepared = prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(content)));
+    const prepared = prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(tableRenderSource(content))));
     const template = document.createElement('template');
-    template.innerHTML = DOMPurify.sanitize(marked.parse(prepared.markdown)
-      + renderFootnoteSection(prepared.notes, text => marked.parseInline(text), t('footnotes')),
+    template.innerHTML = DOMPurify.sanitize(renderPreparedFootnotes(prepared, marked, t('footnotes')),
     { ADD_ATTR: ['target', 'rel', 'data-md-color'] });
     collectDocumentHeadings(template.content);
     return new Set([...template.content.querySelectorAll('[id]')].map(el => el.id));
@@ -11205,6 +11882,18 @@ els.editorPreview.addEventListener('dblclick', event => {
 
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented) return;
+  if (!els.recoveryDialog.classList.contains('hidden')) {
+    if (event.key === 'Escape') { event.preventDefault(); void discardRecoverySnapshot(); }
+    else if (event.key === 'Tab') {
+      const controls = [...els.recoveryDialog.querySelectorAll('button:not(:disabled)')];
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!els.recoveryDialog.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); first?.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    } else if ((event.ctrlKey || event.metaKey) && /^[noespf+=0-]$/i.test(event.key)) event.preventDefault();
+    return;
+  }
+  // Native dialog traps focus; do not route typing/shortcuts to the background document.
+  if ($('#linkDialog').open || $('#footnoteDialog').open) return;
   if (!els.formulaDialog.classList.contains('hidden')) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); $('#formulaSearch').focus(); }
     else if (event.key === 'Escape') { event.preventDefault(); closeFormulaDialog(); }
@@ -11263,10 +11952,12 @@ document.addEventListener('keydown', event => {
 
 const IMAGE_FILE_PATTERN = /\.(png|jpe?g|gif|webp|svg|bmp)$/i;
 let dragDepth = 0;
-document.addEventListener('dragenter', event => { event.preventDefault(); dragDepth++; els.dropOverlay.classList.remove('hidden'); });
-document.addEventListener('dragover', event => event.preventDefault());
-document.addEventListener('dragleave', event => { event.preventDefault(); dragDepth--; if (dragDepth <= 0) { dragDepth = 0; els.dropOverlay.classList.add('hidden'); } });
+document.addEventListener('dragenter', event => { if (!isFileDrag(event)) return; event.preventDefault(); dragDepth++; els.dropOverlay.classList.remove('hidden'); });
+document.addEventListener('dragover', event => { if (isFileDrag(event)) event.preventDefault(); });
+document.addEventListener('dragleave', event => { if (!isFileDrag(event)) return; event.preventDefault(); dragDepth--; if (dragDepth <= 0) { dragDepth = 0; els.dropOverlay.classList.add('hidden'); } });
+document.addEventListener('dragend', () => { dragDepth = 0; els.dropOverlay.classList.add('hidden'); });
 document.addEventListener('drop', async event => {
+  if (!isFileDrag(event)) return;
   event.preventDefault();
   dragDepth = 0;
   els.dropOverlay.classList.add('hidden');

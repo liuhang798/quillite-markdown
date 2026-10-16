@@ -77,7 +77,11 @@ func decodeRecoverySnapshot(path string, fileSize int64) (RecoverySnapshot, erro
 		return RecoverySnapshot{}, err
 	}
 	defer file.Close()
-	reader := bufio.NewReaderSize(file, maxRecoveryMetadataSize+1)
+	return decodeRecoverySnapshotReader(file, fileSize)
+}
+
+func decodeRecoverySnapshotReader(input io.Reader, fileSize int64) (RecoverySnapshot, error) {
+	reader := bufio.NewReaderSize(input, maxRecoveryMetadataSize+1)
 	prefix, peekErr := reader.Peek(len(recoverySnapshotMagic))
 	if peekErr == nil && string(prefix) == recoverySnapshotMagic {
 		_, _ = reader.Discard(len(recoverySnapshotMagic))
@@ -153,6 +157,9 @@ func (a *App) SaveRecoverySnapshot(input RecoverySnapshotInput) error {
 	if err != nil {
 		return err
 	}
+	if err := a.captureStartupRecoveryLocked(); err != nil {
+		return err
+	}
 	return writeFileAtomically(a.recoverySnapshotPath(), data)
 }
 
@@ -198,6 +205,9 @@ func (a *App) GetRecoverySnapshot() (*RecoverySnapshot, error) {
 func (a *App) ClearRecoverySnapshot() error {
 	a.recoveryMu.Lock()
 	defer a.recoveryMu.Unlock()
+	if err := a.captureStartupRecoveryLocked(); err != nil {
+		return err
+	}
 	if err := os.Remove(a.recoverySnapshotPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

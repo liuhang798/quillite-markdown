@@ -1,3 +1,4 @@
+import { ADDITIONAL_CHART_TEMPLATES } from './additional-chart-templates.js';
 const name = (zh, en) => ({ zh, en });
 const chartSource = option => JSON.stringify(option, null, 2);
 
@@ -67,7 +68,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'class', category: 'software', name: name('类图', 'Class diagram'),
+    id: 'class', category: 'software', visualEditor: 'structured', name: name('类图', 'Class diagram'),
     description: name('类属性、方法和面向对象关系。', 'Class properties, methods, and object-oriented relationships.'),
     source: {
       zh: `classDiagram\n    class Document {\n        +String path\n        +String content\n        +open()\n        +save()\n    }\n    class Editor {\n        +renderPreview()\n        +exportWord()\n    }\n    Document "1" --> "1" Editor : 在编辑器中打开`,
@@ -75,7 +76,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'er', category: 'software', name: name('实体关系图', 'ER diagram'),
+    id: 'er', category: 'software', visualEditor: 'structured', name: name('实体关系图', 'ER diagram'),
     description: name('数据库表结构、字段和一对多关系。', 'Database entities, fields, and cardinality.'),
     source: {
       zh: `erDiagram\n    USER ||--o{ DOCUMENT : creates\n    DOCUMENT ||--o{ REVISION : contains\n    USER {\n        string id PK\n        string name\n    }\n    DOCUMENT {\n        string id PK\n        string title\n        string path\n    }\n    REVISION {\n        string id PK\n        datetime saved_at\n    }`,
@@ -195,7 +196,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'stacked-bar-chart', category: 'data', engine: 'echarts', name: name('堆叠柱状图', 'Stacked bar chart'),
+    id: 'stacked-bar-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('堆叠柱状图', 'Stacked bar chart'),
     description: name('同时比较总量和各组成部分。', 'Compare totals and their composition at the same time.'),
     source: {
       zh: chartSource({ title: { text: '导出类型分布', left: 'center' }, tooltip: { trigger: 'axis' }, legend: { top: 30 }, xAxis: { type: 'category', data: ['一季度', '二季度', '三季度', '四季度'] }, yAxis: { type: 'value' }, series: [{ name: 'Word', type: 'bar', stack: 'total', data: [32, 41, 48, 53] }, { name: 'PDF', type: 'bar', stack: 'total', data: [24, 30, 39, 45] }, { name: 'HTML', type: 'bar', stack: 'total', data: [12, 18, 21, 27] }] }),
@@ -203,7 +204,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'area-chart', category: 'data', engine: 'echarts', name: name('面积图', 'Area chart'),
+    id: 'area-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('面积图', 'Area chart'),
     description: name('突出趋势变化和累计规模。', 'Emphasize trend changes and cumulative magnitude.'),
     source: {
       zh: chartSource({ title: { text: '累计阅读量', left: 'center' }, tooltip: { trigger: 'axis' }, xAxis: { type: 'category', boundaryGap: false, data: ['一月', '二月', '三月', '四月', '五月', '六月'] }, yAxis: { type: 'value', name: '篇次' }, series: [{ name: '阅读量', type: 'line', smooth: true, areaStyle: {}, data: [120, 182, 251, 334, 442, 581] }] }),
@@ -211,7 +212,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'scatter-chart', category: 'data', engine: 'echarts', name: name('散点图', 'Scatter plot'),
+    id: 'scatter-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('散点图', 'Scatter plot'),
     description: name('观察两个连续变量之间的相关性和离群点。', 'Inspect correlation and outliers between two continuous variables.'),
     source: {
       zh: chartSource({ title: { text: '文档长度与阅读时长', left: 'center' }, tooltip: { trigger: 'item' }, grid: { left: 62, right: 76, top: 62, bottom: 58, containLabel: true }, xAxis: { type: 'value', name: '字数（千字）', nameLocation: 'middle', nameGap: 30 }, yAxis: { type: 'value', name: '阅读时长（分钟）', nameLocation: 'middle', nameGap: 38 }, series: [{ name: '文档', type: 'scatter', symbolSize: 15, data: [[1.2, 4], [2.4, 7], [3.1, 9], [4.8, 16], [5.4, 14], [7.2, 23], [8.5, 28]] }] }),
@@ -219,7 +220,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'diverging-bar-chart', category: 'data', engine: 'echarts', name: name('正反向对比图', 'Diverging bar chart'),
+    id: 'diverging-bar-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('正反向对比图', 'Diverging bar chart'),
     description: name('从中心线向左右比较两组相反或对立指标。', 'Compare opposing values extending left and right from a shared baseline.'),
     source: {
       zh: chartSource({ title: { text: '功能满意与不满意对比', left: 'center' }, tooltip: { trigger: 'axis' }, legend: { top: 30 }, grid: { left: 92, right: 76, top: 72, bottom: 56, containLabel: true }, xAxis: { type: 'value', min: -100, max: 100, name: '比例（%）', nameLocation: 'middle', nameGap: 30 }, yAxis: { type: 'category', data: ['阅读体验', '编辑体验', '导出功能', '主题外观'] }, series: [{ name: '不满意', type: 'bar', stack: 'compare', data: [-18, -24, -31, -12] }, { name: '满意', type: 'bar', stack: 'compare', data: [78, 72, 64, 85] }] }),
@@ -227,7 +228,7 @@ export const DIAGRAM_TEMPLATES = [
     }
   },
   {
-    id: 'combo-chart', category: 'data', engine: 'echarts', name: name('组合图（柱状＋折线）', 'Combo chart (bar + line)'),
+    id: 'combo-chart', category: 'data', engine: 'echarts', visualEditor: 'structured', name: name('组合图（柱状＋折线）', 'Combo chart (bar + line)'),
     description: name('使用双坐标轴同时展示规模和变化率。', 'Use dual axes to show magnitude and rate together.'),
     source: {
       zh: chartSource({ title: { text: '下载量与增长率', left: 'center' }, tooltip: { trigger: 'axis' }, legend: { top: 30 }, xAxis: { type: 'category', data: ['一月', '二月', '三月', '四月', '五月', '六月'] }, yAxis: [{ type: 'value', name: '下载量' }, { type: 'value', name: '增长率（%）' }], series: [{ name: '下载量', type: 'bar', data: [320, 410, 520, 610, 780, 920] }, { name: '增长率', type: 'line', yAxisIndex: 1, data: [8, 12, 15, 11, 19, 18] }] }),
@@ -305,8 +306,18 @@ export const DIAGRAM_TEMPLATES = [
       zh: `mindmap\n  root((轻阅 Markdown))\n    阅读\n      实时预览\n      目录定位\n      收藏文档\n    编辑\n      语法高亮\n      自动保存\n      学科公式\n    导出\n      Word\n      PDF\n      HTML`,
       en: `mindmap\n  root((Quillite Markdown))\n    Read\n      Live preview\n      Outline navigation\n      Favorites\n    Edit\n      Syntax highlighting\n      Autosave\n      Academic formulas\n    Export\n      Word\n      PDF\n      HTML`
     }
-  }
+  },
+  ...ADDITIONAL_CHART_TEMPLATES
 ];
+
+export function searchDiagramTemplates(category, query = '') {
+  const terms = String(query).normalize('NFKC').toLowerCase().trim().split(/\s+/u).filter(Boolean);
+  return diagramTemplatesForCategory(category).filter(template => {
+    const group = DIAGRAM_CATEGORIES.find(item => item.id === template.category);
+    const text = [template.id, template.engine || 'mermaid', ...Object.values(template.name), ...Object.values(template.description), ...Object.values(group?.name || {})].join(' ').normalize('NFKC').toLowerCase();
+    return terms.every(term => text.includes(term));
+  });
+}
 
 export function diagramTemplatesForCategory(category) {
   return category === 'all' ? DIAGRAM_TEMPLATES : DIAGRAM_TEMPLATES.filter(template => template.category === category);
@@ -322,7 +333,7 @@ export function diagramTemplateById(id) {
   return DIAGRAM_TEMPLATES.find(template => template.id === id) || DIAGRAM_TEMPLATES[0];
 }
 
-export function diagramTemplateSource(template, locale = 'zh') {
+export function diagramTemplateSource(template, locale = 'zh', date = new Date().toISOString().slice(0, 10)) {
   const source = template?.source?.[locale] || template?.source?.zh || '';
-  return source.replaceAll('{{date}}', new Date().toISOString().slice(0, 10));
+  return source.replaceAll('{{date}}', date);
 }

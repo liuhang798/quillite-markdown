@@ -1,0 +1,36 @@
+// User-authorized fresh headless context; synthetic input only.
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {createServer} from 'vite';
+const{chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error'});
+let browser,page;
+try{
+ await server.listen();browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE||undefined});page=await browser.newPage({viewport:{width:1500,height:1100}});page.setDefaultTimeout(10000);
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(server.resolvedUrls.local[0]+'tests/fixtures/multiline-edit-audit.html');const app=page.frameLocator('iframe');await app.locator('#newFileButton').click();await app.locator('#hideLivePreviewButton').click();const editor=app.locator('#markdownEditor > .cm-editor'),content=editor.locator('> .cm-scroller > .cm-content');
+ const read=()=>editor.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const s=EditorView.findFromDOM(el).state;return{doc:s.doc.toString(),ranges:s.selection.ranges.map(r=>[r.anchor,r.head])};});
+ const shot=async name=>{if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/${name}.png`});};
+ const reset=async doc=>{await app.locator('[data-editor-presentation="source"]').click();await content.focus();await page.keyboard.press('Control+a');await page.keyboard.insertText(doc);await page.keyboard.press('Control+Home');await app.locator('[data-editor-presentation="live"]').click();await page.waitForTimeout(100);};
+ const selectCarets=async(target)=>{await target.waitFor();const points=await target.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const v=EditorView.findFromDOM(el);return [...v.state.doc.toString().matchAll(/omega/g)].map(m=>{const r=v.coordsAtPos(m.index+5);return{x:r.left+.2,y:(r.top+r.bottom)/2};});});assert.equal(points.length,2);await page.mouse.click(points[0].x,points[0].y);await page.keyboard.down('Control');await page.mouse.click(points[1].x,points[1].y);await page.keyboard.up('Control');};
+ const cases=[['code','```text\nalpha omega\nbeta omega\n```','\n'],['quote-code','> ```text\n> alpha omega\n> beta omega\n> ```','\n> '],['comment','<!-- alpha omega beta omega -->','\n'],['summary','<details open>\n<summary>alpha omega beta omega</summary>\n\nBody\n\n</details>',' '],['prose','<details open>\n<summary>Title</summary>\n\nalpha omega\nbeta omega\n\n</details>','\n'],['table','| Head |\n| --- |\n| alpha omega beta omega |',' '],['footnote','Note[^n]\n\n[^n]: alpha omega\n    beta omega','\n    ']];
+ cases.push(['list-code','- ```text\n  alpha omega\n  beta omega\n  ```','\n  '],['nested-quote-code','> > ```text\n> > alpha omega\n> > beta omega\n> > ```','\n> > ']);
+ if(!process.env.AUDIT_FORMAT_ONLY)for(const[kind,body,newline]of cases)for(const action of ['Enter','paste']){
+  const doc='Before\n\n'+body+'\n\nAfter',name=`${kind}-${action}`;
+  if(action==='paste'){const clip=page.getByLabel('隔离纯文本');await clip.fill('X\nY|Z');await clip.focus();await page.keyboard.press('Control+a');await page.keyboard.press('Control+c');await page.waitForTimeout(200);}
+  await reset(doc);const inner=editor.locator('.cm-live-inner').filter({hasText:'alpha omega'}).last();await selectCarets(inner);await shot(name+'-01-carets');assert.equal((await read()).ranges.length,2);
+  await page.keyboard.press(action==='Enter'?'Enter':'Control+v');await page.waitForTimeout(120);const after=await read();await shot(name+'-02-input');const insert=action==='Enter'?newline:'X'+newline+(kind==='table'?'Y\\|Z':'Y|Z');const expected=doc.replaceAll('omega','omega'+insert);console.log(name,JSON.stringify({after,expected}));
+  if(!process.env.AUDIT_BASELINE){assert.equal(after.doc,expected);assert.equal(after.ranges.length,2);await page.waitForTimeout(600);await page.keyboard.insertText('Q');const follow=await read();await shot(name+'-03-follow-up');
+   // The literal comment starts with one space; native Enter continues that
+   // indentation and consumes the existing space immediately after each caret.
+   const expectedFollow=kind==='comment'&&action==='Enter'?doc.replaceAll('omega ','omega\n Q'):doc.replaceAll('omega','omega'+insert+'Q');
+   assert.equal(follow.doc,expectedFollow);await page.keyboard.press('Control+z');assert.equal((await read()).doc,expected);await page.keyboard.press('Control+z');assert.equal((await read()).doc,doc);await page.keyboard.press('Control+y');assert.equal((await read()).doc,expected);}
+ }
+ if(!process.env.AUDIT_FIELDS_ONLY)for(const[kind,wrap]of [['root',text=>text],['details',text=>'<details open>\n<summary>Title</summary>\n\n'+text+'\n\n</details>'],['footnote',text=>'Note[^n]\n\n[^n]: '+text.replaceAll('\n','\n    ')]])for(const[format,open,close]of [['strong','**','**'],['strike','~~','~~'],['highlight','==','=='],['color','<span data-md-color="spectrum-3-red">','</span>'],['link','[','](https://example.com)']]){
+  const text=open+'alpha omega'+close+'\n'+open+'beta omega'+close,doc='Before\n\n'+wrap(text)+'\n\nAfter',name=`format-${kind}-${format}`;await reset(doc);const target=kind==='root'?editor:editor.locator('.cm-live-inner').filter({hasText:'alpha omega'}).last();await selectCarets(target);await shot(name+'-01-carets');await page.keyboard.press('Enter');await page.waitForTimeout(120);const after=await read();await shot(name+'-02-newline');const broken=text.split('\n').map(line=>line+'\n').join('\n'),expected='Before\n\n'+wrap(broken)+'\n\nAfter';console.log(name,JSON.stringify({after,expected}));
+  if(!process.env.AUDIT_BASELINE){assert.equal(after.doc,expected);await page.waitForTimeout(600);await page.keyboard.insertText('PLAIN');const follow=await read();await shot(name+'-03-plain');assert.equal(follow.doc,'Before\n\n'+wrap(text.split('\n').map(line=>line+'\nPLAIN').join('\n'))+'\n\nAfter');
+   const visible=await editor.evaluate(el=>{const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),result=[];let node;while((node=walker.nextNode()))if(node.textContent.includes('PLAIN')&&node.parentElement.closest('.cm-line')){const parent=node.parentElement;result.push({formatted:!!parent.closest('.cm-live-strong,.cm-live-em,.cm-live-strike,.cm-live-highlight,.cm-live-color,.cm-live-link'),weight:getComputedStyle(parent).fontWeight,color:getComputedStyle(parent).color});}return result;});console.log(name+' plain-style',JSON.stringify(visible));assert.equal(visible.length,2);assert.ok(visible.every(item=>!item.formatted&&Number(item.weight)<600));
+   await page.keyboard.press('Control+z');assert.equal((await read()).doc,expected);await page.keyboard.press('Control+z');assert.equal((await read()).doc,doc);}
+ }
+ assert.deepEqual(errors,[]);console.log('PASS: multiline fields and formatted multi-caret boundaries');
+}catch(e){if(page&&process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/failure.png`});throw e;}finally{await browser?.close();await server.close();}

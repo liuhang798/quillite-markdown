@@ -1,0 +1,47 @@
+name: Isolated Windows audit (no release)
+
+on:
+  push:
+    branches: [codex/windows-isolated-audit-20261016]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isolated-windows-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Full tests, clean installer, lifecycle and launcher checks
+        shell: pwsh
+        run: ./scripts/ci-windows-isolated.ps1
+      - name: Upload test evidence (not a release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-isolated-evidence-${{ github.sha }}
+          path: audit-evidence/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload verified installer candidate (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-isolated-candidate-${{ github.sha }}
+          path: build/bin/quillite-markdown-*-windows-amd64.exe
+          retention-days: 7
+          if-no-files-found: error

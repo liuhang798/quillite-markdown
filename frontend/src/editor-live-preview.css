@@ -1,0 +1,110 @@
+.editor-presentation-switch { display: inline-flex; flex-shrink: 0; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel, #f5f8f6); }
+.editor-presentation-switch button { border: 0; border-radius: 5px; padding: 4px 8px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
+.editor-presentation-switch button.active { background: var(--accent-soft); color: var(--accent-strong); }
+.editor-presentation-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor-presentation-switch button:disabled { opacity: .5; cursor: default; }
+.cm-editor.cm-live-preview .cm-content { font-family: var(--body-font-family); }
+.cm-editor.cm-live-preview .cm-line { line-height: 1.8; }
+.cm-editor.cm-live-preview .cm-live-heading { color: var(--text); font-weight: 650; line-height: 1.5; padding-top: .2em; padding-bottom: .2em; }
+.cm-editor.cm-live-preview .cm-live-h1 { font-size: 1.85em; }
+.cm-editor.cm-live-preview .cm-live-h2 { font-size: 1.5em; }
+.cm-editor.cm-live-preview .cm-live-h3 { font-size: 1.3em; }
+.cm-editor.cm-live-preview .cm-live-h4 { font-size: 1.15em; }
+.cm-editor.cm-live-preview .cm-live-h5, .cm-editor.cm-live-preview .cm-live-h6 { font-size: 1em; }
+.cm-editor.cm-live-preview .cm-live-heading > span { color: inherit; font-size: inherit; font-weight: inherit; }
+.cm-editor.cm-live-preview .cm-live-strong { font-weight: 700; }
+.cm-editor.cm-live-preview .cm-live-strong, .cm-editor.cm-live-preview .cm-live-em { color: var(--text); }
+.cm-editor.cm-live-preview .cm-live-strong > span, .cm-editor.cm-live-preview .cm-live-em > span { color: inherit; }
+.cm-editor.cm-live-preview .cm-formula-render.is-inline:not(.is-source-open) { font-size: inherit; color: inherit; }
+.cm-editor.cm-live-preview .cm-live-em { font-style: italic; }
+.cm-editor.cm-live-preview .cm-live-strike { text-decoration: line-through; }
+.cm-editor.cm-live-preview .cm-live-u { text-decoration: underline; text-underline-offset: .2em; }
+.cm-editor.cm-live-preview .cm-live-sup { font-size: .8em; vertical-align: super; }
+.cm-editor.cm-live-preview .cm-live-sub { font-size: .8em; vertical-align: sub; }
+.cm-editor.cm-live-preview .cm-live-mark, .cm-editor.cm-live-preview .cm-live-highlight { background: #f6d85f70; border-radius: 2px; color: var(--text); }
+.cm-editor.cm-live-preview .cm-live-link { color: var(--accent-strong); text-decoration: underline; text-underline-offset: .18em; }
+.cm-editor.cm-live-preview .cm-live-footnote { display: inline; font-size: .75em; vertical-align: super; line-height: 0; }
+.cm-live-footnote button { font: inherit; line-height: 1; color: var(--accent-strong); background: transparent; border: 0; padding: 0 2px; cursor: pointer; text-decoration: none; }
+.cm-live-footnote button:hover { text-decoration: underline; }
+.cm-editor .cm-live-footnote-definition { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.cm-live-footnote-definition > .cm-live-footnote-number { color: var(--accent-strong); font-size: .85em; min-width: 1.5em; text-align: right; padding-top: .2em; }
+.cm-live-footnote-definition > .cm-live-block-content { flex: 1; min-width: 0; }
+.cm-live-footnote button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.cm-editor.cm-live-preview .cm-live-color span { color: inherit; }
+.cm-editor.cm-live-preview .cm-live-kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-family: monospace; font-size: .9em; }
+.cm-editor.cm-live-preview .cm-live-quote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--muted); background: var(--accent-soft); }
+.cm-editor.cm-live-preview .cm-live-code-line { background: var(--panel, #f5f8f6); }
+.cm-editor.cm-live-preview .cm-live-code, .cm-editor.cm-live-preview .cm-live-inline-code { font-family: Consolas, 'SFMono-Regular', monospace; font-size: .92em; }
+.cm-editor.cm-live-preview .cm-live-inline-code { background: var(--accent-soft); border-radius: 4px; padding: 1px 3px; }
+.cm-editor.cm-live-preview .cm-live-code-language { color: var(--muted); font-size: .8em; }
+/* Exposed diagram source is code, not a styled quote/list descendant. Preserve
+   syntax colors, but never inherit prose emphasis or hide its outer markers. */
+.cm-editor.cm-live-preview .cm-diagram-source-line { border: 0; padding-left: 0; background: var(--panel, #f5f8f6); color: var(--text); }
+.cm-editor.cm-live-preview .cm-diagram-source-line,
+.cm-editor.cm-live-preview .cm-diagram-source-line span { font-family: 'Cascadia Code', Consolas, 'SFMono-Regular', monospace; font-weight: 400; font-style: normal; font-size: inherit; text-decoration: none; }
+.cm-editor.cm-live-preview .cm-diagram-source-line.cm-activeLine { background: var(--accent-soft); }
+.cm-live-widget { color: var(--text); }
+.cm-live-source-notice { padding: 6px 12px 14px; border-left: 2px solid var(--accent); color: var(--muted); background: var(--accent-soft); font: 12px/1.6 system-ui; }
+.cm-live-widget:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-live-bullet { display: inline-block; min-width: .6em; text-align: center; color: var(--accent-strong); cursor: text; }
+.cm-live-task input { accent-color: var(--accent); width: 14px; height: 14px; margin: 0 3px; vertical-align: middle; cursor: pointer; }
+.cm-live-rule { padding: 12px 0; cursor: text; }
+.cm-live-rule hr { margin: 0; border: 0; border-top: 1px solid var(--line); }
+/* Block decorations must include all vertical spacing in their measured box.
+   Vertical margins are invisible to CodeMirror's height map and shift clicks. */
+.cm-live-table, .cm-live-html { position: relative; padding: 8px 0; max-width: 100%; cursor: text; }
+.cm-live-table { contain: inline-size; }
+.cm-live-block-content { overflow-x: auto; }
+.cm-live-block-content table { width: 100%; border-collapse: collapse; font-size: .95em; }
+.cm-live-block-content td, .cm-live-block-content th { border: 1px solid var(--line); padding: 7px 12px; min-width: 70px; }
+.cm-live-block-content th { font-weight: 600; background: var(--accent-soft); text-align: left; }
+.cm-live-block-content [align='center'] { text-align: center; }
+.cm-live-block-content [align='right'] { text-align: right; }
+.cm-live-block-content [align='left'] { text-align: left; }
+.cm-live-block-content p { margin: .4em 0; }
+.cm-live-details, .cm-live-html-content, .cm-live-comment { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.cm-live-details-header { display: flex; align-items: start; gap: 12px; }
+.cm-live-details-title { flex: 1; min-width: 0; font-weight: 600; color: var(--accent-strong); }
+.cm-live-details-header > button { flex: none; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; cursor: pointer; font: 11px/1.4 system-ui; }
+.cm-live-details-body { padding-top: 10px; }
+.cm-live-details-body[hidden] { display: none; }
+.cm-live-comment small { color: var(--muted); font-size: 11px; }
+.cm-live-comment { background: var(--accent-soft); }
+.cm-live-source-return { height: 0; overflow: hidden; }
+.cm-live-source-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 12px; background: var(--bg); color: var(--muted); font: 12px/1.5 system-ui; border-bottom: 1px solid var(--line); }
+.cm-live-source-panel[hidden] { display: none; }
+.cm-live-source-panel button { flex: none; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 4px 10px; font: inherit; cursor: pointer; }
+.cm-live-source-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-live-code.cm-live-widget { padding: 20px 16px; border-radius: 7px; background: var(--panel, #f5f8f6); }
+.cm-live-code .cm-live-block-content pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, 'SFMono-Regular', monospace; }
+.cm-live-toc { display: grid; gap: 4px; padding: 20px 16px; border-left: 3px solid var(--accent); }
+.cm-live-toc button { border: 0; background: none; text-align: left; color: var(--accent-strong); font: inherit; cursor: pointer; }
+.cm-live-toc button:hover { text-decoration: underline; }
+.cm-live-table-edit { position: absolute; right: 4px; top: 4px; opacity: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; cursor: pointer; font: inherit; font-size: 11px; }
+.cm-live-table:hover .cm-live-table-edit, .cm-live-table:focus-within .cm-live-table-edit { opacity: 1; }
+@media (hover: none) { .cm-live-table-edit { opacity: 1; } }
+.cm-live-editable-block .cm-live-block-content table { table-layout: fixed; }
+.cm-live-editable-block .cm-live-block-content td,
+.cm-live-editable-block .cm-live-block-content th { padding: 7px 12px; vertical-align: top; }
+.cm-editor .cm-live-inner.cm-editor { height: auto; min-height: 0; border: 0; border-radius: 0; background: transparent; font: inherit; outline: none; }
+.cm-editor .cm-live-inner .cm-scroller { overflow: visible; font: inherit; line-height: inherit; }
+/* Each inner editor is a stacking context. Lift the active image
+   owner above sibling cells and block actions while its popup is visible. */
+:is(#markdownEditor, .cm-editor) .cm-live-inner:has(.cm-embedded-image.is-image-row:not(.is-source-open):not(.is-tools-offscreen):is(:hover, :focus-within)) { z-index: 3; }
+.cm-editor .cm-live-inner .cm-content { padding: 0; min-height: 1.8em; font: inherit; caret-color: var(--accent-strong); }
+.cm-editor .cm-live-inner .cm-line { padding: 0; }
+.cm-editor .cm-live-inner .cm-gutters { display: none; }
+.cm-editor.cm-live-preview.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.cm-editor.cm-live-preview > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.cm-editor .cm-live-inner .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.cm-editor.cm-live-measured-selection > .cm-scroller > .cm-selectionLayer .cm-selectionBackground { visibility: hidden; }
+.cm-editor > .cm-scroller > .cm-live-selection-layer .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.cm-editor > .cm-scroller > .cm-live-selection-layer { pointer-events: none; }
+.cm-editor.cm-live-measured-selection > .cm-scroller > .cm-content::selection,
+.cm-editor.cm-live-measured-selection > .cm-scroller > .cm-content *::selection { background: transparent !important; }
+.cm-live-editable-block td:focus-within, .cm-live-editable-block th:focus-within { outline: 1px solid var(--accent); outline-offset: -1px; }
+.cm-live-block-actions { position: absolute; right: 4px; top: -25px; display: flex; gap: 4px; opacity: 0; pointer-events: none; z-index: 2; }
+.cm-live-editable-block { position: relative; }
+.cm-live-block-actions button { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; cursor: pointer; font: 11px/1.4 system-ui; }
+.cm-live-editable-block:hover > .cm-live-block-actions, .cm-live-editable-block:focus-within > .cm-live-block-actions { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .cm-live-block-actions { opacity: 1; pointer-events: auto; } }

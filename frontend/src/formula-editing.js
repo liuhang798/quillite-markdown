@@ -1,6 +1,7 @@
 import { Marked } from 'marked';
 import { mathExtensions } from './math-rendering.js';
 import { sourceLines } from './source-lines.js';
+import { findMarkdownTableAt } from './table-designer.js';
 
 // Share preview's lexer. Unmappable/transformed runs are never editable.
 const lexer = new Marked({ gfm: true, breaks: false, extensions: mathExtensions });
@@ -187,20 +188,35 @@ export function matchPreviewFormulas(formulas, previews, allowOrdered = true) {
   return previews.map(item => counts.get(key(item)) === 1 ? byKey.get(key(item)) || null : null);
 }
 
+// Dialog commits target the main document, bypassing a cell editor's input
+// filter. Never turn a valid GFM cell into extra rows/columns on submission.
+// Keep the draft intact and explain the Markdown constraint instead of
+// escaping LaTeX blindly (which could change its mathematical meaning).
+export function tableFormulaConstraint(source, range, output) {
+  const table = findMarkdownTableAt(source, range.from);
+  if (!table || range.from < table.tableFrom || range.from > table.tableTo
+    || (range.from <= table.tableFrom && range.to >= table.tableTo)) return null;
+  if (output.displayMode || /[\r\n]/.test(output.markdown)) return 'formulaTableInline';
+  for (const match of output.markdown.matchAll(/(\\*)\|/g)) {
+    if (!(match[1].length % 2)) return 'formulaTablePipe';
+  }
+  return null;
+}
+
 export function formulaReplacement(markdown, range, value, initialValue = null) {
   if (value === initialValue) return range.raw;
-  if (range.mode === 'inline' && /^(\$\$|\\\[)/.test(value.trim())) return formulaInsertion(markdown, range.from, range.to, value);
+  if (range.mode === 'inline' && /^(\$\$|\\\[)/.test(value.trim())) return formulaInsertion(markdown, range.from, range.to, value, range.projectionPrefix || null);
   const eol = range.raw.includes('\r\n') ? '\r\n' : '\n';
   return value.replace(/\r\n?/g, '\n').split('\n').join(eol + (range.continuationPrefix || ''));
 }
 
-export function formulaInsertion(source, from, to, value) {
+export function formulaInsertion(source, from, to, value, projectionPrefix = null) {
   if (!/^(\$\$|\\\[)/.test(value.trim())) return value;
   const before = source.slice(source.lastIndexOf('\n', from - 1) + 1, from);
   const quote = before.match(/^(?: {0,3}>[ \t]?)+/)?.[0] || '';
   const remainder = before.slice(quote.length);
   const list = remainder.match(/^(\s*)(?:[-+*]|\d+[.)])[ \t]+/);
-  const prefix = quote + (list ? ' '.repeat(list[0].length) : remainder.match(/^[ \t]*/)?.[0] || '');
+  const prefix = projectionPrefix ?? (quote + (list ? ' '.repeat(list[0].length) : remainder.match(/^[ \t]*/)?.[0] || ''));
   const eol = source.includes('\r\n') ? '\r\n' : '\n';
   const body = value.replace(/\r\n?/g, '\n').split('\n').join(eol + prefix);
   const left = before && before !== prefix ? eol + eol + prefix : '';

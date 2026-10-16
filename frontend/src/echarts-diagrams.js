@@ -144,6 +144,8 @@ function normalizeVisualMap(option, text, panel, line) {
   if (!option.visualMap) return;
   const hasHeatmap = (Array.isArray(option.series) ? option.series : [option.series])
     .some(series => series?.type === 'heatmap');
+  const hasCalendar = (Array.isArray(option.series) ? option.series : [option.series])
+    .some(series => series?.coordinateSystem === 'calendar');
   const visualMaps = Array.isArray(option.visualMap) ? option.visualMap : [option.visualMap];
   for (const visualMap of visualMaps) {
     const rangeColors = hasHeatmap
@@ -171,7 +173,10 @@ function normalizeVisualMap(option, text, panel, line) {
         // Keep the useful two-ended range filter while styling its handles
         // independently from the old black controller track. Extra text spacing
         // prevents the minimum/maximum labels from colliding with the handles.
-        visualMap.calculable = true;
+        // Calendar legends are read-only by default. Preserve an explicit
+        // range-filter choice, but do not add a second set of endpoint labels.
+        visualMap.calculable = visualMap.calculable ?? !hasCalendar;
+        if (!visualMap.calculable) visualMap.text = visualMap.text ?? [String(visualMap.max ?? ''), String(visualMap.min ?? '')];
         visualMap.realtime = true;
         visualMap.hoverLink = true;
         visualMap.handleSize = visualMap.handleSize || '85%';
@@ -190,7 +195,6 @@ function normalizeVisualMap(option, text, panel, line) {
           ...(visualMap.indicatorStyle || {})
         };
         visualMap.textGap = Math.max(16, Number(visualMap.textGap) || 0);
-        visualMap.text = visualMap.text || [String(visualMap.max ?? ''), String(visualMap.min ?? '')];
       }
     }
   }
@@ -238,6 +242,12 @@ function prepareOption(rawOption, appearance = null) {
     option.title.subtextStyle = normalTextStyle(option.title.subtextStyle, muted, 12);
   }
   normalizeLegend(option, text);
+  const calendars = option.calendar ? (Array.isArray(option.calendar) ? option.calendar : [option.calendar]) : [];
+  for (const calendar of calendars) {
+    for (const key of ['dayLabel', 'monthLabel', 'yearLabel']) calendar[key] = normalTextStyle(calendar[key], text, 12);
+    calendar.itemStyle = { color: panel, borderColor: structure.grid, borderWidth: 1, ...(calendar.itemStyle || {}) };
+    calendar.splitLine = { ...(calendar.splitLine || {}), lineStyle: { color: structure.axis, ...calendar.splitLine?.lineStyle } };
+  }
   option.tooltip = {
     trigger: 'item',
     ...(option.tooltip || {}),
@@ -266,6 +276,11 @@ function prepareOption(rawOption, appearance = null) {
     item.label = normalTextStyle(item.label, text, 12);
     item.emphasis = { ...(item.emphasis || {}), label: normalTextStyle(item.emphasis?.label, text, 12) };
     if (item.type === 'pie') normalizePieSeries(item);
+    if (metadata.dataEditor === 'histogram' && item.type === 'bar') {
+      // Bins stay adjacent; a thin theme-aware outline distinguishes equal
+      // neighbouring frequencies without changing bin widths or values.
+      item.itemStyle = { borderColor: paper, borderWidth: 1, ...(item.itemStyle || {}) };
+    }
     if (item.type === 'heatmap') {
       item.label = {
         ...item.label,
@@ -315,6 +330,15 @@ function prepareOption(rawOption, appearance = null) {
     }
     if (item.type === 'funnel' && !item.itemStyle) item.itemStyle = { borderColor: paper, borderWidth: 1 };
     item.z = item.z ?? seriesIndex + 1;
+    if (item.coordinateSystem === 'calendar') {
+      const calendar = item.calendarId != null
+        ? calendars.find(calendar => calendar.id === item.calendarId)
+        : calendars[item.calendarIndex ?? 0];
+      // Calendar's default z is 2. Our generic first-series z=1 painted
+      // heat cells underneath the empty calendar cells, hiding real data.
+      item.z = Math.max(item.z, (Number(calendar?.z) || 2) + 1);
+      item.zlevel = Math.max(Number(item.zlevel) || 0, Number(calendar?.zlevel) || 0);
+    }
   }
   return { option, height: Math.max(300, Math.min(720, Number(metadata.height) || 420)) };
 }

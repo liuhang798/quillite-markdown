@@ -2,21 +2,24 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { createServer } from 'vite';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+const output = process.env.AUDIT_OUTPUT;
+if (!output) throw Error('Supply AUDIT_OUTPUT in an isolated CodexTemp directory');
+const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { host: '127.0.0.1', port: 0, watch: null, hmr: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE || undefined });
 try {
   for (const mac of [false, true]) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
     if (mac) await context.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' }));
     const page = await context.newPage(), errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const boot = async () => {
       await page.goto(server.resolvedUrls.local[0]);
+      await page.evaluate(async()=>{await import('/src/main.js');});
       await page.waitForSelector('#documentToolsDialog', { state: 'attached' });
       await page.evaluate(() => {
         Object.assign(window.quilliteMarkdown, {
@@ -89,7 +92,7 @@ try {
     await page.locator('.cm-content').click();
     await page.keyboard.press(`${mod}+s`);
     await page.waitForFunction(() => window.savedText?.includes('EXPORT_LATEST'));
-    await page.screenshot({ path: join(tmpdir(), `editor-only-${mac ? 'mac-keys' : 'windows'}.png`) });
+    await page.screenshot({ path: join(output, `editor-only-${mac ? 'mac-keys' : 'windows'}.png`) });
     await boot();
     assert.equal(await page.evaluate(() => localStorage.getItem('editorLayout')), 'editor-only');
     assert.equal(await page.locator('.editor-preview-pane').isVisible(), false);
@@ -115,6 +118,7 @@ try {
       assert.equal(await page.locator('.editor-preview-pane').isVisible(), false);
     }
     assert.deepEqual(errors, []);
+    console.log('PASS editor-only-' + (mac ? 'mac-key-emulation' : 'windows'));
     await context.close();
   }
   console.log('PASS: editor-only width, persistence, paused rendering, Ctrl/Cmd+E, cursor, save, fresh export, restored split preview.');

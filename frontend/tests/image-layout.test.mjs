@@ -10,6 +10,21 @@ import { history, undo, isolateHistory } from '@codemirror/commands';
 
 const apply = (source, change) => source.slice(0, change.from) + change.insert + source.slice(change.to);
 
+test('single-line image split/join preserves table cells and refuses prose or arbitrary tags', () => {
+  for (const source of ['![a](a.png) ![b](b.png)', imageRowSource('![a](a.png) ![b](b.png)',editorImageItems('![a](a.png) ![b](b.png)')).replaceAll('\n','')]) {
+    const separated=apply(source,separateImageChanges(source,editorImageGroups(source)[0],true));
+    assert.ok(!separated.includes('\n'));assert.ok(separated.includes('<br><br>'));
+    const groups=editorImageGroups(separated);assert.equal(groups.length,2);
+    assert.equal(canJoinImageGroups(separated,groups[0],groups[1]),false);
+    assert.equal(canJoinImageGroups(separated,groups[0],groups[1],true),true);
+    assert.equal(canJoinImageGroups(Text.of([separated]),groups[0],groups[1],true),true);
+    for (const replacement of ['<br>caption<br>','<span></span>','<br onload="bad()">']) {
+      const unsafe=separated.replace('<br><br>',replacement), items=editorImageGroups(unsafe);
+      assert.equal(canJoinImageGroups(unsafe,items[0],items[1],true),false);
+    }
+  }
+});
+
 test('quote soft-break rows preserve all images and lone image alignment preserves following Markdown', () => {
   assert.equal(editorImageGroups('![a](a.png) > ![b](b.png)')[0].row, false);
   for (const source of ['> ![a](a.png)\n> ![b](b.png)', '> > ![a](a.png)\n> > ![b](b.png)']) {

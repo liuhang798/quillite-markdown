@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { guardFileDropResolver } from '../src/safe-file-drop.js';
 import { isMissingDocumentError } from '../src/library-state.js';
 import { createRuntimeDiagnostics } from '../src/runtime-diagnostics.js';
+import { selectionHistory, withSelectionHistory } from '../src/selection-history.js';
 
 const source = await readFile(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const between = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
@@ -34,25 +35,25 @@ function documentHarness(bridge) {
   let request = 0;
   const notices = [], displayed = [], edits = [];
   const context = vm.createContext({
-    window: { quilliteMarkdown: bridge }, state: { documentSession: 0 },
-    beginDocumentOpen: () => ++request, canApplyDocumentOpen: id => id === request,
+    window: { quilliteMarkdown: bridge }, state: { documentSession: 0, documentOpenRequest: 0, explorerRequest: 0 },
+    beginDocumentOpen: () => ({id: context.state.documentOpenRequest = ++request}), canApplyDocumentOpen: token => token.id === request,
     maybeDiscardChanges: () => true, setSidebarMode() {},
     displayDocument: doc => { displayed.push(doc); context.state.documentSession++; },
     toggleEditor: mode => edits.push(mode), reportSilentError() {},
     t: key => key, showToast: message => notices.push(message), isMissingDocumentError,
   });
   vm.runInContext(between('async function openFolder()', 'async function openReferenceDocument(')
-    + between('async function loadInitialDocument()', 'async function initialize()'), context);
+    + between('async function loadInitialDocument(', 'async function initialize()'), context);
   return { context, notices, displayed, edits, supersede: () => { request++; context.state.documentSession++; } };
 }
 
 test('missing startup document is contained; a newer open request wins', async () => {
   const h = documentHarness({ getInitialFile: async () => { throw new Error('open file: The file does not exist.'); } });
-  await h.context.loadInitialDocument();
+  await h.context.loadInitialDocument(h.context.beginDocumentOpen());
   assert.deepEqual(h.notices, ['recentMissingTitle']); assert.equal(h.displayed.length, 0);
   let resolve;
   h.context.window.quilliteMarkdown.getInitialFile = () => new Promise(r => { resolve = r; });
-  const pending = h.context.loadInitialDocument(); h.supersede(); resolve({ path: 'old.md' }); await pending;
+  const pending = h.context.loadInitialDocument(h.context.beginDocumentOpen()); h.supersede(); resolve({ path: 'old.md' }); await pending;
   assert.equal(h.displayed.length, 0);
 });
 
@@ -60,7 +61,7 @@ test('startup edit mode cannot switch a newer document into editing', async () =
   let resolve, entered;
   const ready = new Promise(r => { entered = r; });
   const h = documentHarness({ getInitialFile: async () => ({ path: 'first.md' }), getStartupMode: () => new Promise(r => { resolve = r; entered(); }) });
-  const pending = h.context.loadInitialDocument(); await ready; h.supersede(); resolve('edit'); await pending;
+  const pending = h.context.loadInitialDocument(h.context.beginDocumentOpen()); await ready; h.supersede(); resolve('edit'); await pending;
   assert.equal(h.displayed.length, 1); assert.equal(h.edits.length, 0);
 });
 
@@ -84,7 +85,7 @@ test('failed editor mount clears the rejection and retries without changing docu
     runtimeDiagnostics: createRuntimeDiagnostics(''),
     codeEditor: null, editorInitializationPromise: null, editorExtensions: null, editorSourceFallback: false,
     loadEditorDependencies: async () => {}, keymap: { of() {} }, EditorView,
-    basicSetup: [], spellcheckDecorationField: {}, spellcheckViewPlugin: {}, scrollPastEnd() {}, createEditorState() {},
+    basicSetup: [], selectionHistory, withSelectionHistory, spellcheckDecorationField: {}, spellcheckViewPlugin: {}, scrollPastEnd() {}, createEditorState() {},
     els: { editor: { replaceChildren() { cleanups++; }, addEventListener() {} } },
     state: { currentFile: doc }, handleEditorPaste() {}, openEditorClipboardMenu() {},
   });
@@ -115,7 +116,7 @@ test('reported isEmpty mount failure falls back once to source editing without c
     runtimeDiagnostics: createRuntimeDiagnostics(''),
     codeEditor: null, editorInitializationPromise: null, editorExtensions: null, editorSourceFallback: false,
     loadEditorDependencies: async () => {}, keymap: { of() {} }, EditorView,
-    basicSetup: [], spellcheckDecorationField: 'spelling-field', spellcheckViewPlugin: 'spelling-plugin', scrollPastEnd() {}, createEditorState() {},
+    basicSetup: [], selectionHistory, withSelectionHistory, spellcheckDecorationField: 'spelling-field', spellcheckViewPlugin: 'spelling-plugin', scrollPastEnd() {}, createEditorState() {},
     els: { editor: { replaceChildren() {}, addEventListener() {} } },
     state: { currentFile: doc, formulaDisplay: 'preview', diagramDisplay: 'preview' }, handleEditorPaste() {}, openEditorClipboardMenu() {},
     reportSilentError() {}, t: key => key, showToast: message => { recovered = message === 'editorSourceRecovery'; },

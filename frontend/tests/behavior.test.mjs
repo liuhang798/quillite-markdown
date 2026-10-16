@@ -9,6 +9,18 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const embeddedImagePreview = await readFile(new URL('../src/embedded-image-preview.js', import.meta.url), 'utf8');
 const aiChunkingSource = await readFile(new URL('../../ai_chunking.go', import.meta.url), 'utf8');
 
+test('reading image tables preserve prose columns and let nested image rows reflow', () => {
+  assert.match(styles, /table:not\(\.quillite-image-row\):has\(img\) \{ table-layout: fixed; overflow-wrap: anywhere;/);
+  assert.match(styles, /table\.quillite-image-row > tbody > tr \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(min\(72px, 100%\), 1fr\)\)/);
+  assert.match(styles, /table img:is\(\.local-image-loading, \.local-image-error\) \{ min-width: 0; box-sizing: border-box;/);
+  assert.match(renderer, /table\.style\.width = `\$\{widths\.reduce/);
+});
+
+test('main editor binds the advertised cross-platform redo shortcut in both display modes', () => {
+  assert.match(renderer, /redo = commandsModule\.redo/);
+  assert.match(renderer, /const saveKeymap = keymap\.of\(\[\s*\{ key: 'Mod-Shift-z', run: view => redo\(view\), preventDefault: true \}/);
+});
+
 test('opening an existing recent document updates it in place', () => {
   assert.match(renderer, /applyRecentPartition\(upsertRecentFile\([\s\S]*state\.recentFiles,[\s\S]*state\.pinnedRecentFiles,[\s\S]*recentEntry\(doc\)/);
   assert.doesNotMatch(renderer, /\[recentEntry\(doc\), \.\.\.state\.recentFiles\.filter/);
@@ -343,7 +355,8 @@ test('plain text files render without Markdown parsing and edit without Markdown
   assert.match(renderer, /function isPlainTextFile\(path\)/);
   assert.match(renderer, /return \/\\\.txt\$\/i\.test\(path \|\| ''\)/);
   assert.match(renderer, /if \(isPlainTextFile\(doc\.path\)\) \{\s*container\.innerHTML = `<div class="plain-text">\$\{escapeHtml\(content\)\}<\/div>`;/);
-  assert.match(renderer, /const language = editorSourceFallback \|\| isPlainTextFile\(state\.currentFile\?\.path\)\s*\? \[\]\s*: \[markdown\(\), syntaxHighlighting\(markdownHighlightStyle\), embeddedImagePreview, imagePreviewContext\.of\(/);
+  assert.match(renderer, /const language = editorSourceFallback \|\| isPlainTextFile\(state\.currentFile\?\.path\)\s*\? \[\]\s*: \[markdown\(\{ base: markdownLanguage, extensions: \[tableWhitespace\] \}\), syntaxHighlighting\(markdownHighlightStyle\)\]/);
+  assert.match(renderer, /function editorPresentationExtensions\(\) \{\s*if \(state.editorPresentation === 'source' \|\| editorSourceFallback \|\| isPlainTextFile\(state.currentFile\?\.path\)\) return \[\];/);
   assert.doesNotMatch(renderer, /editorExtensions = \[\s*basicSetup,\s*markdown\(\)/);
   assert.match(styles, /\.plain-text \{ white-space: pre-wrap; overflow-wrap: break-word; font-family: "Cascadia Code", Consolas, "Microsoft YaHei UI", monospace;/);
   assert.match(styles, /\.plain-text \{[^}]*font-size: calc\(15px \* var\(--font-scale\)\);/);
@@ -360,7 +373,7 @@ test('new document creation blocks double clicks and starts a three-second coold
 
 test('visual table designer edits cells, structure, order, alignment and persistent column widths', () => {
   assert.match(html, /id="tableDialog"[\s\S]*id="tableRows"[\s\S]*id="tableColumns"[\s\S]*id="addTableRow"[\s\S]*id="addTableColumn"[\s\S]*id="tableDesignerGrid"/);
-  assert.match(renderer, /findMarkdownTableAt\(source, selection\.head\)/);
+  assert.match(renderer, /findEditableTableAt\(source, selection\.head\)/);
   assert.match(renderer, /function renderTableDesigner\(focusCell = null\)/);
   assert.match(renderer, /tools\.dataset\.tableDrag = 'column'/);
   assert.match(renderer, /rowTools\.dataset\.tableDrag = 'row'/);
@@ -371,7 +384,7 @@ test('visual table designer edits cells, structure, order, alignment and persist
   assert.match(renderer, /reorderTableColumn\(tableDesignerState\.model/);
   assert.match(renderer, /reorderTableRow\(tableDesignerState\.model/);
   assert.match(renderer, /serializeMarkdownTable\(tableDesignerState\.model\)/);
-  assert.match(renderer, /stripTableWidthMetadata\(content\)/);
+  assert.match(renderer, /stripTableWidthMetadata\(tableRenderSource\(content\)\)/);
   assert.match(renderer, /function applyMarkdownTableLayouts\(container, layouts\)/);
   assert.match(styles, /\.table-designer-dialog \{[^}]*width: min\(1020px/);
   assert.match(styles, /\.table-column-resizer \{[^}]*cursor: col-resize/);
@@ -404,7 +417,7 @@ test('images support links, asset imports, drag and paste, and display scaling',
   assert.match(renderer, /window\.quilliteMarkdown\.importImage\(path, sourcePath\)/);
   assert.match(renderer, /window\.quilliteMarkdown\.savePastedImage\(path, await fileAsDataURL\(file\)\)/);
   assert.match(renderer, /session !== state\.documentSession \|\| path !== state\.currentFile\?\.path/);
-  assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('paste', handleEditorPaste\)/);
+  assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('paste', handleEditorPaste, true\)/);
   assert.match(renderer, /if \(state\.editing && IMAGE_FILE_PATTERN\.test\(filePath\)\)/);
   assert.match(renderer, /\$\('#pickLocalImage'\)\.addEventListener\('click', \(\) => \{ closeImageDialog\(\); insertLocalImage\(\); \}\)/);
   assert.match(renderer, /els\.imageUrl\.addEventListener\('keydown', event => \{\s*if \(event\.key === 'Enter'\) insertImageFromUrl\(\);/);
@@ -413,10 +426,19 @@ test('images support links, asset imports, drag and paste, and display scaling',
   assert.match(styles, /\.image-dialog-fields input:focus \{ border-color: var\(--accent\);/);
   assert.match(styles, /\.image-width-field input\[type="range"\] \{ height: 24px; padding: 0; border: 0; accent-color: var\(--accent-strong\);/);
   assert.match(styles, /\.cm-embedded-image > \.cm-image-tools,[\s\S]*opacity: 0; visibility: hidden; pointer-events: none;/);
-  assert.match(styles, /\.cm-embedded-image:hover > \.cm-image-tools,[\s\S]*\.cm-image-card\.is-size-open > \.cm-image-size-tools \{ opacity: 1; visibility: visible; pointer-events: auto;/);
+  assert.match(styles, /\.cm-embedded-image:hover > \.cm-image-tools,[\s\S]*\.cm-embedded-image:focus-within > \.cm-image-tools \{ opacity: 1; visibility: visible; pointer-events: auto;/);
+  assert.match(styles, /\.cm-image-item-tools\.is-size-open > \.cm-image-size-tools \{ display: flex;/);
   assert.match(embeddedImagePreview, /card\.tabIndex = 0; card\.setAttribute\('role', 'group'\)/);
   assert.match(embeddedImagePreview, /if \(!event\.target\.closest\('button, input, select, a'\)\) card\.focus\(\{ preventScroll: true \}\)/);
   assert.match(embeddedImagePreview, /card\.classList\.toggle\('is-size-open'\)/);
+});
+
+test('image controls fade without moving their pointer hit targets', () => {
+  const base = styles.match(/\.cm-embedded-image > \.cm-image-tools \{([^}]+)\}/)[1];
+  const visible = styles.match(/\.cm-embedded-image:focus-within > \.cm-image-tools \{([^}]+)\}/)[1];
+  assert.match(base, /transition: opacity \.16s ease, visibility 0s linear \.16s;/);
+  assert.doesNotMatch(base + visible, /(?:transform|translate|scale|animation)\s*:/);
+  assert.match(visible, /pointer-events: auto;/);
 });
 
 test('the update dialog offers in-app download and apply with progress', () => {
@@ -602,11 +624,12 @@ test('LaTeX math, chemistry, and numbered equations are available in preview and
   assert.match(styles, /\.markdown-body \.math-block \{[^}]*overflow-x: auto;/);
 });
 
-test('editor split panes are draggable without a maximum width limit', () => {
+test('editor split panes remain draggable within fitted usable-space limits', () => {
   assert.match(html, /id="editorResizer" class="pane-resizer editor-resizer"/);
   assert.match(renderer, /editorPreviewWidth/);
-  assert.match(renderer, /setEditorPreviewWidth\(startPercent \+ deltaPercent\)/);
-  assert.match(renderer, /Math\.max\(12, Math\.min\(max, Math\.round\(percent\)\)\)/);
+  assert.match(renderer, /setEditorPreviewWidth\(startPercent \+ deltaPercent, true\)/);
+  assert.match(renderer, /fitEditorSplit\(percent, els\.editorView\?\.clientWidth \|\| 0, visibleElementWidth\(els\.editorResizer\)\)/);
+  assert.match(renderer, /normalizeEditorPreviewWidth\(userResize \? \(effectiveChanged \? fitted\.percent : state\.editorPreviewWidth\) : percent\)/);
   assert.match(renderer, /els\.editorResizer\?\.classList\.toggle\('hidden', !state\.editing \|\| state\.editorLayout === 'editor-only'\)/);
   assert.match(styles, /\.editor-preview-pane \{ flex: 0 0 var\(--editor-preview-width, 47%\);/);
   assert.match(styles, /\.editor-preview-pane, \.editor-resizer \{ display: none; \}/);
@@ -723,7 +746,7 @@ test('wide screens can collapse and restore the document outline like the recent
 });
 
 test('body [TOC] markers render a dynamic linked outline and PDF export requests heading bookmarks', () => {
-  assert.match(renderer, /replaceDynamicTocMarkers\(stripTableWidthMetadata\(content\)\)/);
+  assert.match(renderer, /replaceDynamicTocMarkers\(stripTableWidthMetadata\(tableRenderSource\(content\)\)\)/);
   assert.match(renderer, /function renderDynamicTocs\(container/);
   assert.match(renderer, /querySelectorAll\('\[data-dynamic-toc\]'\)/);
   assert.match(renderer, /scrollPreviewContainerToHeading\(container, link\.dataset\.target\)/);
@@ -736,7 +759,8 @@ test('sidebar and TOC resizers preserve preferred widths while fitting the curre
   assert.match(renderer, /sidebar: \{ min: 120, max: 2000, fallback: 258 \}/);
   assert.match(renderer, /toc: \{ \.\.\.TOC_WIDTH_LIMITS, fallback: initialTocDisplay\.defaultWidth \}/);
   assert.match(renderer, /sidebarPreferredWidth: initialSidebarPreferredWidth/);
-  assert.match(renderer, /els\.appShell\.clientWidth - dividerWidth - 240/);
+  assert.match(renderer, /els\.appShell\.clientWidth - dividerWidth - contentMinimum/);
+  assert.match(renderer, /contentMinimum = state\.editing \? \(state\.editorLayout === 'editor-only' \? 360 : 547\) : 240/);
   assert.match(renderer, /fitReaderSidePanels\(\{[\s\S]*sidebarPreferredWidth: state\.sidebarPreferredWidth,[\s\S]*tocPreferredWidth: state\.tocPreferredWidth/);
   assert.match(renderer, /state\.sidebarWidth = fitted\.sidebarWidth;[\s\S]*state\.tocWidth = fitted\.tocWidth/);
   assert.match(renderer, /localStorage\.setItem\('sidebarWidth', String\(state\.sidebarPreferredWidth\)\)/);
@@ -752,7 +776,8 @@ test('sidebar and TOC resizers preserve preferred widths while fitting the curre
   assert.match(renderer, /changed = resizePaneFromEffectiveWidth\(panelName, startWidth \+ delta, resizeSnapshot\)/);
   assert.match(renderer, /if \(changed\) persistPaneWidth\(panelName\)/);
   assert.match(renderer, /if \(resizePaneFromEffectiveWidth\(panelName, resizeSnapshot\.effectiveWidth \+ change, resizeSnapshot\)\) \{\s*persistPaneWidth\(panelName\)/);
-  assert.match(renderer, /const startPercent = state\.editorPreviewWidth;\s*let changed = false;/);
+  assert.match(renderer, /const startPercent = currentEditorPreviewPercent\(\);\s*const preferredPercent = state\.editorPreviewWidth;\s*let changed = false;/);
+  assert.match(renderer, /if \(!changed\) setEditorPreviewWidth\(preferredPercent\)/);
   assert.match(renderer, /if \(changed\) localStorage\.setItem\('editorPreviewWidth', String\(state\.editorPreviewWidth\)\)/);
   assert.match(html, /aria-valuemax="2000"/);
 });
@@ -861,7 +886,7 @@ test('export center groups formats and only exposes settings required by the sel
 
 test('rich clipboard HTML converts to Markdown and selected source has Markdown or plain-text copy options', () => {
   assert.match(renderer, /import \{ hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText \} from '\.\/rich-clipboard\.js'/);
-  assert.match(renderer, /async function handleEditorPaste\(event\)[\s\S]*getData\('text\/html'\)[\s\S]*hasRichClipboardHTML\(html\)[\s\S]*htmlToMarkdown\(html\)[\s\S]*replaceSelection\(markdownSource/);
+  assert.match(renderer, /async function handleEditorPaste\(event\)[\s\S]*getData\('text\/html'\)[\s\S]*hasRichClipboardHTML\(html\)[\s\S]*htmlToMarkdown\(html\)[\s\S]*state\.replaceSelection\(markdownSource\)/);
   assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('contextmenu', openEditorClipboardMenu\)/);
   assert.match(renderer, /async function copyEditorSelection\(mode\)[\s\S]*markdownToPlainText\(markdownSource\)[\s\S]*navigator\.clipboard\.writeText\(output\)/);
   assert.match(html, /id="editorClipboardMenu"[\s\S]*data-editor-copy="markdown"[\s\S]*data-editor-copy="plain"/);
@@ -936,7 +961,7 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(renderer, /function renderAIRewriteDiff\(\)[\s\S]*const showDiff = !insertMode && changes\.length > 0[\s\S]*classList\.toggle\('has-ai-diff-review', showDiff\)/);
   assert.match(renderer, /function replaceWithAIResult\(\)[\s\S]*applyAITextDiff\(aiRewriteDiffSegments\)/);
   assert.match(renderer, /async function runAIDocumentReview\(\)[\s\S]*const instruction = els\.aiReviewInstruction\.value\.trim\(\)[\s\S]*reviewDocumentWithAI\(\{ text: prepared\.text, instruction, requestId: activeAIReviewRequestID \}\)[\s\S]*locateAIReviewSuggestions/);
-  assert.match(renderer, /function applySelectedAIReviewSuggestions\(\)[\s\S]*editorContent\(\) !== aiReviewSnapshot[\s\S]*hasOverlappingReviewSuggestions[\s\S]*changes: selected\.map/);
+  assert.match(renderer, /function applySelectedAIReviewSuggestions\(\)[\s\S]*editorContent\(\) !== aiReviewSnapshot[\s\S]*hasOverlappingReviewSuggestions[\s\S]*const changes = selected\.flatMap[\s\S]*liveAIReplacement[\s\S]*codeEditor\.dispatch\(\{\s*changes,/);
   assert.match(html, /id="rerunAIReview"[\s\S]*data-i18n="aiReviewAgain"/);
   const closeReview = renderer.slice(renderer.indexOf('function closeAIDocumentReview()'), renderer.indexOf('async function runAIDocumentReview()'));
   assert.match(closeReview, /classList\.add\('hidden'\)[\s\S]*focusCodeEditor\(\)/);
@@ -948,7 +973,7 @@ test('AI Edit supports isolated official and third-party providers and can repla
   assert.match(renderer, /if \(!els\.aiCloudConsent\.checked\)/);
   assert.match(renderer, /codeEditor\.state\.doc\.sliceString\(from, to\) !== markdown/);
   assert.match(renderer, /const insertAt = insertMode[\s\S]*\? from : documentLength/);
-  assert.match(renderer, /function replaceWithAIResult\(\)[\s\S]*codeEditor\.dispatch\(\{[\s\S]*changes: \{ from: changeFrom, to: changeTo, insert: replacement \}[\s\S]*userEvent: 'input\.ai'/);
+  assert.match(renderer, /function replaceWithAIResult\(\)[\s\S]*const edit = state\.editorPresentation === 'live'[\s\S]*liveAIReplacement\(codeEditor\.state, changeFrom, changeTo, replacement\)[\s\S]*changes:\{from:changeFrom,to:changeTo,insert:replacement\}[\s\S]*codeEditor\.dispatch\(\{\s*\.\.\.edit,[\s\S]*userEvent: 'input\.ai'/);
   assert.match(renderer, /aiPrivacyNote: '只有你主动选择或确认检查的文档内容会发送给所选 AI 服务/);
   assert.match(renderer, /const aiProviderConfigs = Object\.freeze\([\s\S]*glm-4\.7-flash[\s\S]*qwen-plus[\s\S]*gpt-5-mini[\s\S]*kimi-k3[\s\S]*aiProviderBailian[\s\S]*api\.siliconflow\.cn[\s\S]*openrouter\.ai[\s\S]*localhost:11434/);
   assert.match(renderer, /async function changeAIProvider\(\)[\s\S]*getAIProviderSettings\(provider\)/);

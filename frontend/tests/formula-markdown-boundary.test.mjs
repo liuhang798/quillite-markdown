@@ -2,8 +2,51 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { FORMULA_TEMPLATES, buildFormulaExpression, buildFormulaMarkdown, resolveFormulaOutput, parseFormulaMarkdown, formulaInlineLayout } from '../src/formula-templates.js';
+import { FORMULA_TEMPLATES, buildFormulaExpression, buildFormulaMarkdown, resolveFormulaOutput, parseFormulaMarkdown, formulaInlineLayout, applyFormulaInlineLayout } from '../src/formula-templates.js';
 import { formulaMarkdownMatches, renderLatexResult } from '../src/math-rendering.js';
+import { hasFormulaPlaceholders } from '../src/formula-visual-policy.js';
+import { tableFormulaConstraint } from '../src/formula-editing.js';
+
+test('clicking an unchanged inline layout preserves exact source and template edit state', () => {
+  const renderer = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
+  const fn = renderer.slice(renderer.indexOf('function chooseFormulaInlineLayout('), renderer.indexOf('\nfunction openFormulaDialog('));
+  for (const [source, layout] of [['\\( x+y \\)', 'normal'], ['$\\textstyle  x+y$', 'normal'], ['$\\displaystyle x+y$', 'large'], ['\\(\\displaystyle   x+y\\)', 'large']]) {
+    for (const sourceEdited of [false, true]) {
+      let updates = 0;
+      const context = { els: {formulaMarkdownSource: {value: source}}, formulaWizardState: {mode: 'inline', sourceEdited},
+        parseFormulaMarkdown, formulaInlineLayout, applyFormulaInlineLayout, buildFormulaMarkdown, formulaInlineHasNewline: () => false,
+        updateFormulaPreviewFromMarkdown() { updates++; } };
+      vm.runInNewContext(fn + `\nchooseFormulaInlineLayout('${layout}');`, context);
+      assert.equal(context.els.formulaMarkdownSource.value, source);
+      assert.equal(context.formulaWizardState.sourceEdited, sourceEdited);
+      assert.equal(updates, 0);
+    }
+  }
+});
+
+test('changing inline layout still updates the expression and preview once', () => {
+  const renderer = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
+  const fn = renderer.slice(renderer.indexOf('function chooseFormulaInlineLayout('), renderer.indexOf('\nfunction openFormulaDialog('));
+  let updates = 0;
+  const context = {els: {formulaMarkdownSource: {value: '$x+y$'}}, formulaWizardState: {mode: 'inline'},
+    parseFormulaMarkdown, formulaInlineLayout, applyFormulaInlineLayout, buildFormulaMarkdown, formulaInlineHasNewline: () => false,
+    updateFormulaPreviewFromMarkdown() { updates++; }};
+  vm.runInNewContext(fn + "\nchooseFormulaInlineLayout('large');", context);
+  assert.equal(context.els.formulaMarkdownSource.value, '$\\displaystyle x+y$');
+  assert.equal(updates, 1);
+});
+
+test('formula dialog rejects structural table breaks without rewriting LaTeX', () => {
+  for(const prefix of ['', '> ', '  ']) for(const eol of ['\n','\r\n']) {
+    const source=(prefix==='  '?'1. 表格'+eol+eol:'')+['| 内容 | 另一列 |','| --- | --- |','| $x$ | 保留 |'].map(line=>prefix+line).join(eol)+eol+eol+'正文 $y$';
+    const from=source.indexOf('$x$'),range={from,to:from+3};
+    for(const markdown of ['$x$','$x\\vert y$','$x\\|y$','$\\displaystyle x^2$']) assert.equal(tableFormulaConstraint(source,range,{markdown,displayMode:false}),null);
+    for(const markdown of ['$x|y$','$x\\\\|y$']) assert.equal(tableFormulaConstraint(source,range,{markdown,displayMode:false}),'formulaTablePipe');
+    for(const markdown of ['$$\nx^2\n$$','\\[x^2\\]','$x\ny$']) assert.equal(tableFormulaConstraint(source,range,{markdown,displayMode:markdown!=='$x\ny$'}),'formulaTableInline');
+    assert.equal(tableFormulaConstraint(source,{from:source.indexOf('$y$'),to:source.length},{markdown:'$$\nx\n$$',displayMode:true}),null);
+    assert.equal(tableFormulaConstraint(source,{from:0,to:source.length},{markdown:'$$\nx\n$$',displayMode:true}),null);
+  }
+});
 
 test('final Markdown must contain exactly one complete formula with identical content and mode', () => {
   for (const expression of [String.raw`\text{$x$}`, String.raw`\text{a $x$ b}`]) {
@@ -50,11 +93,11 @@ test('actual preview disables submission without losing the draft; compatible wr
     const context = {
       els: { formulaMarkdownSource: { value: input }, formulaPreview: {} },
       formulaWizardState: { mode: 'inline' },
-      formulaMarkdownMatches, renderLatexResult, resolveFormulaOutput,
+      formulaMarkdownMatches, renderLatexResult, resolveFormulaOutput, hasFormulaPlaceholders,
       parseFormulaMarkdown,
       formulaInlineHasNewline: value => /[\r\n]/.test(value),
       formulaInlineLayout,
-      renderFormulaOutputModes() {}, $: () => button, t: key => key,
+      renderFormulaOutputModes() {}, $: () => button, t: key => key, showToast() {},
       DOMPurify: { sanitize: html => html },
     };
     vm.runInNewContext(preview + '\nupdateFormulaPreviewFromMarkdown();', context);

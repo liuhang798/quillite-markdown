@@ -66,6 +66,8 @@ export function GetRecoverySnapshot():Promise<main.RecoverySnapshot>;
 
 export function GetStartupMode():Promise<string>;
 
+export function GetStartupRecoverySnapshot():Promise<main.RecoverySnapshot>;
+
 export function GetWindowsInstallSafety():Promise<main.WindowsInstallSafety>;
 
 export function ImportImage(arg1:string,arg2:string):Promise<string>;
@@ -75,6 +77,8 @@ export function ListAIModels(arg1:string):Promise<Array<string>>;
 export function ListDocumentVersions(arg1:string):Promise<Array<main.DocumentVersion>>;
 
 export function ListFolder(arg1:string):Promise<main.FolderResult>;
+
+export function ListRecoveryArchives():Promise<Array<main.RecoveryArchive>>;
 
 export function LoginPicGoCloud():Promise<main.PicGoCloudStatus>;
 
@@ -107,6 +111,8 @@ export function ReadFile(arg1:string):Promise<main.Document>;
 export function ReadImageData(arg1:string,arg2:string):Promise<string>;
 
 export function ReadPortableImage(arg1:string,arg2:string):Promise<string>;
+
+export function ReadRecoveryArchive(arg1:string):Promise<main.RecoverySnapshot>;
 
 export function RemoveFavorite(arg1:string):Promise<main.Preferences>;
 

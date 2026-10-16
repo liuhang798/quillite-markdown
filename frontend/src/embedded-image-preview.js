@@ -1,6 +1,9 @@
 import { Facet, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import { isolateHistory } from '@codemirror/commands';
+import { mediaOwnedByInnerEditor, singleLineMedia } from './media-ownership.js';
+import { editableProjectionSync } from './editable-owner.js';
+import { imageDefinitionsField, imageDefinitionsFor } from './editor-reference-context.js';
 import { alignedImageSource, imageAlignment, editorImageItems, editorImageGroups, imageSourceKind, canJoinImageGroups, imageRowSource, separateImageChanges, alignImageChanges, imageDimensions, imageDimensionStyle, resizeImageChanges } from './image-layout.js';
 
 // Keep the public helpers available to existing regression fixtures.
@@ -17,6 +20,8 @@ export const imagePreviewPhrases = {
   'Width': '宽度', 'Height': '高度', 'Auto': '自动', 'Keep ratio': '保持比例',
   'Image size': '尺寸', 'Apply size': '应用尺寸', 'Reset size': '原始尺寸', 'Image controls': '图片操作',
   'Join next image': '与下一张同排', 'Separate images': '拆成单张',
+  'Edit image': '操作图片',
+  'Enter for image actions; Escape to return to editing': '按 Enter 操作图片；Esc 返回编辑',
   'Only adjacent image-only blocks can join; up to six images per row': '仅可合并相邻的纯图片段落；每排最多 6 张',
   'Loading image…': '图片加载中…',
   'Image could not be displayed; view source to inspect it': '图片无法显示，请展开源码检查'
@@ -24,6 +29,40 @@ export const imagePreviewPhrases = {
 export const toggleImageSource = StateEffect.define();
 export const refreshImagePreviews = StateEffect.define();
 export const updateImagePreviewDirectory = StateEffect.define();
+
+// UI-only selection; changing the active image never touches Markdown/history.
+function selectImageControls(root, index) {
+  const cards = [...root.querySelectorAll('.cm-image-card')];
+  index = Math.max(0, Math.min(cards.length - 1, index));
+  root.dataset.activeImage = String(index);
+  const picker = root.querySelector('.cm-image-picker select');
+  if (picker) picker.value = String(index);
+  root.querySelectorAll('.cm-image-item-tools').forEach((panel, i) => {
+    panel.hidden = i !== index;
+    panel.classList.toggle('is-size-open', cards[i].classList.contains('is-size-open'));
+    cards[i].classList.toggle('is-active-image', i === index);
+  });
+  positionImageControls(root);
+}
+
+function positionImageControls(root) {
+  if (!root.isConnected || !root.classList.contains('is-image-row')) return;
+  const toolbar = root.querySelector(':scope > .cm-image-tools');
+  if (root.classList.contains('is-source-open')) { toolbar.style.cssText = ''; root.classList.remove('is-tools-offscreen'); return; }
+  let host = root.closest('.cm-scroller');
+  for (let parent = host?.parentElement?.closest('.cm-scroller'); parent; parent = parent.parentElement?.closest('.cm-scroller')) host = parent;
+  const area = host?.getBoundingClientRect(), content = host?.querySelector(':scope > .cm-content')?.getBoundingClientRect(), rect = root.getBoundingClientRect();
+  const left = Math.max(8, (area?.left || 0) + 8, (content?.left || 0) + 8), right = Math.min(innerWidth - 8, (area?.right || innerWidth) - 8);
+  const top = Math.max(8, (area?.top || 0) + 8), bottom = Math.min(innerHeight - 8, (area?.bottom || innerHeight) - 8);
+  root.classList.toggle('is-tools-offscreen', rect.bottom < top || rect.top > bottom || rect.right < left || rect.left > right);
+  const width = Math.min(360, Math.max(120, right - left));
+  toolbar.style.width = `${width}px`; toolbar.style.maxWidth = 'none';
+  toolbar.style.maxHeight = `${Math.max(80, bottom - top)}px`;
+  toolbar.style.left = `${Math.max(left, Math.min(rect.left, right - width))}px`;
+  const height = toolbar.getBoundingClientRect().height;
+  const y = rect.bottom + height <= bottom ? rect.bottom : rect.top - height >= top ? rect.top - height : Math.max(top, Math.min(rect.bottom, bottom - height));
+  toolbar.style.top = `${y}px`;
+}
 
 // Local paths never become file:// DOM sources. The document-scoped bridge
 // resolves them with the existing MIME/size/bookmark protections. At most four
@@ -63,24 +102,27 @@ function applyImageChanges(view, changes) {
   // toolbar alignment click does not inadvertently trigger source editing.
   const end = Math.max(changes.to, enclosing?.to || 0);
   const transaction = view.state.update({ changes, annotations: isolateHistory.of('full'), userEvent: 'input.image-layout', selection: { anchor: end + changes.insert.length - (changes.to - changes.from) } });
-  const items = editorImageGroups(transaction.newDoc.toString());
+  const items = editorImageGroups(transaction.newDoc.toString(), imageDefinitionsFor(transaction.state));
   view.dispatch(transaction);
   view.dispatch({ effects: refreshImagePreviews.of({ doc: view.state.doc, items }) });
+  // Applying dimensions rebuilds the controls and removes the focused input.
+  // Return keyboard shortcuts to the owning editor, including table cells.
+  view.focus();
 }
 
 class ImageWidget extends WidgetType {
   constructor(item, state, session, next) {
     super(); this.item = item; this.session = session; this.next = next;
     this.labels = Object.fromEntries(Object.keys(imagePreviewPhrases).map(key => [key, state.phrase(key)]));
-    this.joinable = canJoinImageGroups(state.doc, item, next);
+    this.joinable = canJoinImageGroups(state.doc, item, next, state.facet(singleLineMedia));
   }
   eq(other) {
     return this.session === other.session && sameGroup(this.item, other.item) && this.item.open === other.item.open
       && this.joinable === other.joinable && this.labels['Show source'] === other.labels['Show source']
-      && this.item.images.every((image, index) => image.alignment === other.item.images[index].alignment && image.alt === other.item.images[index].alt
+      && this.item.images.every((image, index) => image.alignment === other.item.images[index].alignment && image.alt === other.item.images[index].alt && image.title === other.item.images[index].title
         && JSON.stringify(imageDimensions(image)) === JSON.stringify(imageDimensions(other.item.images[index])));
   }
-  get estimatedHeight() { return this.item.open ? 36 : 280; }
+  get estimatedHeight() { return this.item.open ? 46 : 280; }
   ignoreEvent() { return true; }
   current(view) {
     const field = view.state.field(imagePreviewField, false);
@@ -92,16 +134,41 @@ class ImageWidget extends WidgetType {
     const toolbar = document.createElement('div'); toolbar.className = 'cm-image-tools'; root.append(toolbar);
     const caption = document.createElement('span'); caption.className = 'cm-image-caption'; toolbar.append(caption);
     for (const action of ['source', 'join', 'split']) { const button = document.createElement('button'); button.type = 'button'; button.dataset.imageAction = action; toolbar.append(button); }
+    if (this.item.row) {
+      const label = document.createElement('label'); label.className = 'cm-image-picker';
+      const text = document.createElement('span'); text.textContent = this.labels['Edit image'];
+      const picker = document.createElement('select'); picker.setAttribute('aria-label', this.labels['Edit image']);
+      this.item.images.forEach((image, index) => { const option = document.createElement('option'); option.value = String(index); option.textContent = `${index + 1} · ${image.alt || this.labels['Image controls']}`; picker.append(option); });
+      picker.onchange = () => selectImageControls(root, Number(picker.value));
+      label.append(text, picker); toolbar.append(label);
+      toolbar.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault(); event.stopPropagation();
+        const active = Number(root.dataset.activeImage || 0), card = root.querySelectorAll('.cm-image-card')[active];
+        card.classList.remove('is-size-open'); selectImageControls(root, active); card.focus({ preventScroll: true });
+      });
+    }
     const cards = document.createElement('div'); cards.className = 'cm-image-cards'; root.append(cards);
     for (const image of this.item.images) {
+      const index = cards.children.length;
       const card = document.createElement('div'); card.className = 'cm-image-card'; cards.append(card);
       card.tabIndex = 0; card.setAttribute('role', 'group');
+      if (this.item.row) {
+        card.addEventListener('pointerenter', () => { if (!toolbar.contains(document.activeElement)) selectImageControls(root, index); });
+        card.addEventListener('focus', () => selectImageControls(root, index));
+        card.addEventListener('keydown', event => {
+          if (event.target !== card || !['Enter', ' ', 'Escape'].includes(event.key)) return;
+          event.preventDefault(); event.stopPropagation();
+          if (event.key === 'Escape') view.focus();
+          else root.querySelector('.cm-image-picker select').focus({ preventScroll: true });
+        });
+      }
       card.addEventListener('pointerdown', event => {
         if (!event.target.closest('button, input, select, a')) card.focus({ preventScroll: true });
       });
-      card.addEventListener('mouseleave', () => { if (!card.matches(':focus-within')) card.classList.remove('is-size-open'); });
+      card.addEventListener('mouseleave', () => { if (!this.item.row && !card.matches(':focus-within')) card.classList.remove('is-size-open'); });
       card.addEventListener('focusout', () => queueMicrotask(() => {
-        if (!card.matches(':focus-within') && !card.matches(':hover')) card.classList.remove('is-size-open');
+        if (!this.item.row && !card.matches(':focus-within') && !card.matches(':hover')) card.classList.remove('is-size-open');
       }));
       const tools = document.createElement('div'); tools.className = 'cm-image-tools cm-image-align-tools'; card.append(tools);
       for (const action of ['left', 'center', 'right', 'size']) { const button = document.createElement('button'); button.type = 'button'; button.dataset.imageAction = action; tools.append(button); }
@@ -120,11 +187,26 @@ class ImageWidget extends WidgetType {
       const heightInput = document.createElement('input'); heightInput.type = 'number'; heightInput.min = '1'; heightInput.max = '4096'; heightInput.inputMode = 'numeric'; heightInput.dataset.imageSize = 'height'; heightLabel.append(heightInput);
       const px = document.createElement('span'); px.className = 'cm-image-size-unit'; px.textContent = 'px'; heightLabel.append(px);
       for (const action of ['apply-size', 'reset-size']) { const button = document.createElement('button'); button.type = 'button'; button.dataset.imageSizeAction = action; sizeTools.append(button); }
+      // Single-image actions share one wrapping overlay. Independent left/right
+      // overlays can cover each other in a narrow split editor and trigger the
+      // wrong action. Groups expose one selected image's panel in that overlay.
+      if (!this.item.row) { toolbar.append(tools, sizeTools); }
+      else {
+        const panel = document.createElement('div'); panel.className = 'cm-image-item-tools';
+        panel.dataset.imageIndex = String(index); panel.append(tools, sizeTools); toolbar.append(panel);
+      }
       const frame = document.createElement('div'); frame.className = 'cm-image-frame'; card.append(frame);
       const img = document.createElement('img'); img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; frame.append(img);
       const status = document.createElement('span'); status.className = 'cm-image-error'; frame.append(status);
       img.addEventListener('load', () => { if (!img.isConnected || !this.session.active) return; img.hidden = false; status.hidden = true; view.requestMeasure(); });
       img.addEventListener('error', () => { if (!img.isConnected || !this.session.active) return; img.hidden = true; status.hidden = false; status.textContent = view.state.phrase('Image could not be displayed; view source to inspect it'); view.requestMeasure(); });
+    }
+    if (this.item.row) {
+      const closeSizes = () => { if (!root.matches(':hover') && !root.matches(':focus-within')) { root.querySelectorAll('.cm-image-card').forEach(card => card.classList.remove('is-size-open')); selectImageControls(root, Number(root.dataset.activeImage || 0)); } };
+      root.addEventListener('mouseleave', closeSizes);
+      root.addEventListener('focusout', () => queueMicrotask(closeSizes));
+      root.addEventListener('pointerenter', () => positionImageControls(root));
+      root.addEventListener('focusin', () => positionImageControls(root));
     }
     this.updateDOM(root, view); return root;
   }
@@ -132,6 +214,7 @@ class ImageWidget extends WidgetType {
     // Load/error handlers belong to the DOM's creating session. Recreate on
     // Save As rather than letting stale listeners settle a different session.
     if (displayedSessions.has(root) && displayedSessions.get(root) !== this.session) return false;
+    if (displayedSessions.has(root) && root.classList.contains('is-image-row') !== Boolean(this.item.row)) return false;
     displayedSessions.set(root, this.session);
     if (root.querySelectorAll('.cm-image-card').length !== this.item.images.length) return false;
     const group = this.item;
@@ -141,33 +224,58 @@ class ImageWidget extends WidgetType {
     const size = first.sourceKind === 'embedded' ? ` · ${Math.ceil((first.ref.length - first.ref.indexOf(',') - 1) * 3 / 4 / 1024)} KiB` : '';
     root.querySelector('.cm-image-caption').textContent = group.row ? `${this.labels['Image group']} · ${view.state.phrase('$ images', group.images.length)}` : `${label}${size}`;
     const toolbar = root.querySelector('.cm-image-tools');
-    toolbar.querySelectorAll('button').forEach(button => {
+    if (group.row) {
+      const picker = toolbar.querySelector('.cm-image-picker select');
+      picker.setAttribute('aria-label', this.labels['Edit image']);
+      toolbar.querySelector('.cm-image-picker span').textContent = this.labels['Edit image'];
+      group.images.forEach((image, index) => { picker.options[index].textContent = `${index + 1} · ${image.alt || this.labels['Image controls']}`; });
+    }
+    toolbar.querySelectorAll(':scope > button').forEach(button => {
       const action = button.dataset.imageAction;
       button.textContent = this.labels[action === 'source' ? (group.open ? 'Hide source' : 'Show source') : action === 'join' ? 'Join next image' : 'Separate images'];
-      button.hidden = action === 'split' && !group.row;
+      button.hidden = (group.open && action !== 'source') || (action === 'split' && !group.row);
+      if (action === 'source') button.setAttribute('aria-expanded', String(group.open));
       button.disabled = action === 'join' && !this.joinable;
       if (action === 'join') button.title = this.labels['Only adjacent image-only blocks can join; up to six images per row'];
       button.onmousedown = event => event.preventDefault();
       button.onclick = () => {
         const current = this.current(view); if (!current) return;
-        if (action === 'source') { view.dispatch({ effects: toggleImageSource.of({ from: current.from, to: current.to }), selection: { anchor: current.to } }); return; }
+        if (action === 'source') {
+          view.dispatch({ effects: toggleImageSource.of({ from: current.from, to: current.to }), selection: { anchor: current.to } });
+          if (!current.open) view.requestMeasure({
+            key: root,
+            read: () => {
+              if (!root.isConnected || !this.current(view)?.open) return 0;
+              const button = root.querySelector('[data-image-action="source"]').getBoundingClientRect();
+              const viewport = view.scrollDOM.getBoundingClientRect();
+              return button.top < viewport.top + 8 || button.bottom > viewport.bottom - 8 ? button.top - viewport.top - 8 : 0;
+            },
+            write: delta => { if (delta) view.scrollDOM.scrollTop += delta; }
+          });
+          return;
+        }
         const source = view.state.doc.toString();
         if (action === 'split') {
-          const changes = separateImageChanges(source, current);
+          const changes = separateImageChanges(source, current, view.state.facet(singleLineMedia));
           if (changes) applyImageChanges(view, changes);
         } else {
           const items = view.state.field(imagePreviewField).items, next = items[items.indexOf(current) + 1];
-          if (!canJoinImageGroups(source, current, next)) return;
-          applyImageChanges(view, { from: current.from, to: next.to, insert: `\n\n${imageRowSource(source, [...current.images, ...next.images])}\n\n` });
+          const singleLine = view.state.facet(singleLineMedia);
+          if (!canJoinImageGroups(source, current, next, singleLine)) return;
+          const row = imageRowSource(source, [...current.images, ...next.images]);
+          applyImageChanges(view, { from: current.from, to: next.to, insert: singleLine ? row.replaceAll('\n', '') : `\n\n${row}\n\n` });
         }
       };
     });
     root.querySelectorAll('.cm-image-card').forEach((card, index) => {
+      if (group.open) card.classList.remove('is-size-open');
       const image = group.images[index], frame = card.querySelector('.cm-image-frame'), img = card.querySelector('img'), status = card.querySelector('.cm-image-error');
+      const controlRoot = group.row ? toolbar.querySelectorAll('.cm-image-item-tools')[index] : toolbar;
       const dimensions = imageDimensions(image), widthPercent = dimensions.width.endsWith('%');
       card.setAttribute('aria-label', `${image.alt || label} · ${this.labels['Image controls']}`);
+      if (group.row) { card.title = this.labels['Enter for image actions; Escape to return to editing']; card.setAttribute('aria-description', card.title); }
       frame.style.justifyContent = { left: 'flex-start', center: 'center', right: 'flex-end' }[image.alignment];
-      img.alt = image.alt; img.style.width = imageDimensionStyle(dimensions.width); img.style.height = imageDimensionStyle(dimensions.height);
+      img.alt = image.alt; img.title = image.title || ''; img.style.width = imageDimensionStyle(dimensions.width); img.style.height = imageDimensionStyle(dimensions.height);
       const previous = displayedSources.get(img);
       if (!group.open && (!previous || previous.ref !== image.ref || previous.session !== this.session)) {
         const record = { ref: image.ref, session: this.session }; displayedSources.set(img, record);
@@ -185,7 +293,7 @@ class ImageWidget extends WidgetType {
           img.src = image.ref.startsWith('//') ? `https:${image.ref}` : image.ref;
         }
       }
-      card.querySelectorAll('.cm-image-align-tools button').forEach(button => {
+      controlRoot.querySelectorAll('.cm-image-align-tools button').forEach(button => {
         const action = button.dataset.imageAction, sizeAction = action === 'size';
         const shortAlignment = { left: 'L', center: 'C', right: 'R' }[action];
         button.textContent = sizeAction ? this.labels['Image size'] : group.row ? this.labels[shortAlignment] : this.labels[`Align ${action}`];
@@ -197,13 +305,10 @@ class ImageWidget extends WidgetType {
             card.classList.toggle('is-size-open');
             button.setAttribute('aria-pressed', String(card.classList.contains('is-size-open')));
             if (card.classList.contains('is-size-open')) {
-              const panel = card.querySelector('.cm-image-size-tools'), root = card.closest('.cm-embedded-image');
-              panel.style.left = ''; panel.style.right = '8px'; panel.style.maxWidth = `${Math.max(240, root.clientWidth - 16)}px`;
-              const panelRect = panel.getBoundingClientRect(), rootRect = root.getBoundingClientRect(), cardRect = card.getBoundingClientRect();
-              const left = Math.max(rootRect.left + 8, Math.min(panelRect.left, rootRect.right - panelRect.width - 8));
-              panel.style.left = `${left - cardRect.left}px`; panel.style.right = 'auto';
-              card.querySelector('[data-image-size="width"]').focus({ preventScroll: true });
+              if (group.row) selectImageControls(root, index);
+              controlRoot.querySelector('[data-image-size="width"]').focus({ preventScroll: true });
             }
+            if (group.row) selectImageControls(root, index);
             return;
           }
           const current = this.current(view); if (!current) return;
@@ -211,11 +316,11 @@ class ImageWidget extends WidgetType {
           if (changes && source.slice(changes.from, changes.to) !== changes.insert) applyImageChanges(view, changes);
         };
       });
-      const widthInput = card.querySelector('[data-image-size="width"]'), widthUnit = card.querySelector('[data-image-size-unit="width"]');
-      const heightInput = card.querySelector('[data-image-size="height"]'), ratioInput = card.querySelector('[data-image-keep-ratio]');
-      card.querySelector('[data-image-size-label="width"]').textContent = this.labels.Width;
-      card.querySelector('[data-image-size-label="height"]').textContent = this.labels.Height;
-      card.querySelector('[data-image-size-label="ratio"]').textContent = this.labels['Keep ratio'];
+      const widthInput = controlRoot.querySelector('[data-image-size="width"]'), widthUnit = controlRoot.querySelector('[data-image-size-unit="width"]');
+      const heightInput = controlRoot.querySelector('[data-image-size="height"]'), ratioInput = controlRoot.querySelector('[data-image-keep-ratio]');
+      controlRoot.querySelector('[data-image-size-label="width"]').textContent = this.labels.Width;
+      controlRoot.querySelector('[data-image-size-label="height"]').textContent = this.labels.Height;
+      controlRoot.querySelector('[data-image-size-label="ratio"]').textContent = this.labels['Keep ratio'];
       widthInput.value = dimensions.width.replace('%', ''); widthUnit.value = widthPercent ? '%' : 'px';
       widthInput.max = widthPercent ? '100' : '4096'; widthInput.placeholder = this.labels.Auto;
       heightInput.value = dimensions.height; heightInput.placeholder = this.labels.Auto;
@@ -224,7 +329,7 @@ class ImageWidget extends WidgetType {
       ratioInput.checked = !dimensions.height; heightInput.disabled = ratioInput.checked;
       widthUnit.onchange = () => { widthInput.max = widthUnit.value === '%' ? '100' : '4096'; if (Number(widthInput.value) > Number(widthInput.max)) widthInput.value = widthInput.max; };
       ratioInput.onchange = () => { heightInput.disabled = ratioInput.checked; if (ratioInput.checked) heightInput.value = ''; };
-      card.querySelectorAll('[data-image-size-action]').forEach(button => {
+      controlRoot.querySelectorAll('[data-image-size-action]').forEach(button => {
         const action = button.dataset.imageSizeAction;
         button.textContent = this.labels[action === 'apply-size' ? 'Apply size' : 'Reset size'];
         button.disabled = action === 'reset-size' && !dimensions.width && !dimensions.height;
@@ -247,6 +352,7 @@ class ImageWidget extends WidgetType {
         };
       });
     });
+    if (group.row) selectImageControls(root, Number(root.dataset.activeImage || 0));
     return true;
   }
 }
@@ -254,18 +360,27 @@ class ImageWidget extends WidgetType {
 function decorate(items, state, session) {
   const decorations = [], atoms = [];
   for (let index = 0; index < items.length; index++) {
+    if (mediaOwnedByInnerEditor(state, items[index])) continue;
     const item = items[index], widget = new ImageWidget(item, state, session, items[index + 1]);
     if (item.open) decorations.push(Decoration.widget({ widget, block: true, side: -1 }).range(item.from));
     else {
       const replacement = Decoration.replace({ widget, block: true, inclusive: false }).range(item.from, item.to);
       decorations.push(replacement); atoms.push(replacement);
+      const next = items[index + 1];
+      // Block image widgets already provide the visual line break. Hide only
+      // a pure cell separator between two closed previews, never prose/HTML.
+      if (state.facet(singleLineMedia) && next && !next.open && !mediaOwnedByInnerEditor(state, next)
+        && /^(?:\s*<br\s*\/?\s*>)+\s*$/i.test(state.doc.sliceString(item.to, next.from))) {
+        const gap = Decoration.replace({ inclusive: false }).range(item.to, next.from);
+        decorations.push(gap); atoms.push(gap);
+      }
     }
   }
   return { items, session, decorations: Decoration.set(decorations, true), atoms: Decoration.set(atoms, true) };
 }
 
 export const imagePreviewField = StateField.define({
-  create(state) { return decorate(editorImageGroups(state.doc.toString()), state, createSession(state)); },
+  create(state) { return decorate(editorImageGroups(state.doc.toString(),imageDefinitionsFor(state)), state, createSession(state)); },
   update(value, transaction) {
     if (!transaction.docChanged && !transaction.effects.length && !transaction.selection && !transaction.reconfigured) return value;
     let items = value.items, session = value.session;
@@ -274,15 +389,19 @@ export const imagePreviewField = StateField.define({
       const mapFrom = from => transaction.changes.mapPos(from, 1), mapTo = to => transaction.changes.mapPos(to, -1);
       items = items.filter(item => !changed.some(range => range.from < item.to && range.to > item.from || range.from === range.to && range.from > item.from && range.from < item.to))
         .map(item => ({ ...item, from: mapFrom(item.from), to: mapTo(item.to), images: item.images.map(image => ({ ...image, from: mapFrom(image.from), to: mapTo(image.to) })) }));
-      if (transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = editorImageGroups(transaction.newDoc.toString());
+      if (transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = editorImageGroups(transaction.newDoc.toString(),imageDefinitionsFor(transaction.state));
     }
     for (const effect of transaction.effects) {
       if (effect.is(updateImagePreviewDirectory) && effect.value !== session.context.directory) {
         session = createSession(transaction.state, { ...session.context, directory: effect.value });
-        items = editorImageGroups(transaction.newDoc.toString());
+        items = editorImageGroups(transaction.newDoc.toString(),imageDefinitionsFor(transaction.state));
       }
       if (effect.is(refreshImagePreviews) && effect.value.doc === transaction.newDoc) items = effect.value.items.map(item => ({ ...item, open: items.find(previous => previous.from === item.from && previous.to === item.to)?.open || false }));
       if (effect.is(toggleImageSource)) items = items.map(item => item.from === effect.value.from && item.to === effect.value.to ? { ...item, open: !item.open } : item);
+    }
+    if (imageDefinitionsFor(transaction.startState) !== imageDefinitionsFor(transaction.state)) {
+      items = editorImageGroups(transaction.newDoc.toString(),imageDefinitionsFor(transaction.state)).map(item=>({...item,
+        open:items.find(previous=>previous.from===item.from && previous.to===item.to)?.open || false}));
     }
     if (transaction.selection || transaction.effects.some(effect => effect.is(refreshImagePreviews))) items = items.map(item => transaction.newSelection.ranges.some(range => range.head > item.from && range.head < item.to || range.anchor > item.from && range.anchor < item.to) ? { ...item, open: true } : item);
     return decorate(items, transaction.state, session);
@@ -293,18 +412,21 @@ export const imagePreviewField = StateField.define({
 const imagePreviewScanner = ViewPlugin.fromClass(class {
   constructor(view) { this.view = view; this.session = view.state.field(imagePreviewField).session; this.timer = null; }
   update(update) {
+    if (update.geometryChanged || update.viewportChanged) requestAnimationFrame(() => {
+      if (!this.view.destroyed) this.view.dom.querySelectorAll('.cm-embedded-image.is-image-row').forEach(positionImageControls);
+    });
     const session = update.state.field(imagePreviewField).session;
     if (session !== this.session) { this.session.dispose(); this.session = session; }
     if (update.transactions.some(transaction => transaction.effects.some(effect => effect.is(refreshImagePreviews) && effect.value.doc === update.state.doc))) { clearTimeout(this.timer); return; }
     if (!update.docChanged) return;
     clearTimeout(this.timer);
-    if (update.transactions.some(transaction => transaction.isUserEvent('undo') || transaction.isUserEvent('redo'))) return;
+    if (update.transactions.some(transaction => transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo'))) return;
     this.timer = setTimeout(() => {
-      const doc = this.view.state.doc, items = editorImageGroups(doc.toString());
+      const doc = this.view.state.doc, items = editorImageGroups(doc.toString(),imageDefinitionsFor(this.view.state));
       this.view.dispatch({ effects: refreshImagePreviews.of({ doc, items }) });
     }, 250);
   }
   destroy() { clearTimeout(this.timer); this.session.dispose(); }
 });
 
-export const embeddedImagePreview = [imagePreviewField, imagePreviewScanner, EditorView.atomicRanges.of(view => view.state.field(imagePreviewField).atoms)];
+export const embeddedImagePreview = [imageDefinitionsField, imagePreviewField, imagePreviewScanner, EditorView.atomicRanges.of(view => view.state.field(imagePreviewField).atoms)];

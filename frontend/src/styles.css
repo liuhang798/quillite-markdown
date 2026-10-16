@@ -450,6 +450,28 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .markdown-body h1 { font-size: calc(38px * var(--font-scale)); font-weight: 720; margin: 0 0 30px; }
 .markdown-body h2 { font-size: calc(25px * var(--font-scale)); font-weight: 690; margin: 2.2em 0 .8em; padding-bottom: .45em; border-bottom: 1px solid var(--line); }
 .markdown-body h3 { font-size: calc(20px * var(--font-scale)); margin: 1.8em 0 .55em; }
+/* Draw reference badges with text/CSS, never platform-dependent emoji. */
+.markdown-body h3 > .reference-new-badge, .cm-editor.cm-live-preview .cm-live-heading .reference-new-badge,
+.formula-template-list .template-new-badge {
+  display: inline-block;
+  margin-left: .28em;
+  padding: .2em .48em;
+  border: 1px solid #c72b1a;
+  border-radius: .42em;
+  background: #d93624;
+  color: #ffffff;
+  font: 750 max(10px, .5em)/1.1 "Segoe UI", Arial, sans-serif;
+  letter-spacing: .065em;
+  vertical-align: .18em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+:root[data-color-mode="dark"] .markdown-body h3 > .reference-new-badge,
+:root[data-color-mode="dark"] .cm-editor.cm-live-preview .cm-live-heading .reference-new-badge,
+:root[data-color-mode="dark"] .formula-template-list .template-new-badge {
+  color: #ffffff; background: #c93423; border-color: #f47762;
+}
+.cm-editor.cm-live-preview .cm-live-heading .reference-new-badge span { color: inherit; font: inherit; }
 .markdown-body h4 { font-size: calc(17px * var(--font-scale)); margin: 1.6em 0 .45em; }
 .markdown-body h5 { font-size: calc(15px * var(--font-scale)); margin: 1.5em 0 .4em; }
 .markdown-body h6 { font-size: calc(13px * var(--font-scale)); margin: 1.4em 0 .35em; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -461,9 +483,13 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .mermaid-diagram[data-mermaid-type="journey"] svg,
 .mermaid-diagram[data-mermaid-type="gitgraph"] svg,
 .mermaid-diagram[data-mermaid-type="timeline"] svg,
+.mermaid-diagram[data-mermaid-type="packet"] svg,
+.mermaid-diagram[data-mermaid-type="architecture"] svg,
 .mermaid-diagram[data-mermaid-type="packet-beta"] svg,
 .mermaid-diagram[data-mermaid-type="architecture-beta"] svg { width: max(100%, 980px, var(--mermaid-readable-width, 0px)); }
+.mermaid-diagram[data-mermaid-type="c4"] svg,
 .mermaid-diagram[data-mermaid-type="c4context"] svg { width: max(100%, 1400px, var(--mermaid-readable-width, 0px)); }
+.mermaid-diagram[data-mermaid-type="sequence"] svg,
 .mermaid-diagram[data-mermaid-type="sequencediagram"] svg,
 .mermaid-diagram[data-mermaid-type="flowchart"] svg,
 .mermaid-diagram[data-mermaid-type="erdiagram"] svg { width: max(100%, 680px, var(--mermaid-readable-width, 0px)); }
@@ -483,6 +509,9 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
   stroke-linejoin: initial;
 }
 .echarts-diagram svg text, .echarts-diagram svg tspan { font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif !important; font-weight: 400 !important; font-synthesis: none; stroke: none !important; stroke-width: 0 !important; }
+/* ZRender omits stroke-width when it is SVG's default 1. Restore that
+   default only for explicit strokes; the icon reset must not erase grids. */
+.echarts-diagram svg [stroke]:not([stroke="none"]):not([stroke-width]) { stroke-width: 1; }
 .echarts-loading { display: grid; min-height: 300px; place-items: center; color: var(--muted); }
 .echarts-diagram.echarts-error { height: auto !important; min-height: 0; padding: 18px; }
 :root[data-color-mode="dark"] .mermaid-diagram,
@@ -522,7 +551,14 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .markdown-body img.local-image-loading { min-width: 180px; min-height: 72px; background: linear-gradient(90deg, var(--panel), var(--paper-strong), var(--panel)); box-shadow: none; }
 .markdown-body img.local-image-error { min-width: 180px; min-height: 48px; padding: 12px; border: 1px dashed var(--line); background: var(--panel); box-shadow: none; }
 .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.8em 0; font-family: inherit; font-size: .88em; }
+/* Intrinsic image widths must not collapse neighboring prose to one glyph.
+   Explicit colgroups/inline widths still win, as in the live table editor. */
+.markdown-body table:not(.quillite-image-row):has(img) { table-layout: fixed; overflow-wrap: anywhere; }
+.markdown-body table:not(.quillite-image-row):has(img) > :is(thead, tbody, tfoot) > tr > :is(th, td) { vertical-align: top; }
+.markdown-body table img:is(.local-image-loading, .local-image-error) { min-width: 0; box-sizing: border-box; }
 .markdown-body th, .markdown-body td { padding: 10px 13px; border: 1px solid var(--line); text-align: left; }
+.markdown-body :is(th, td)[align="center"] { text-align: center; }
+.markdown-body :is(th, td)[align="right"] { text-align: right; }
 .markdown-body th { background: var(--panel); font-weight: 650; }
 .markdown-table-scroll { max-width: 100%; margin: 1.8em 0; overflow-x: auto; border-radius: 8px; scrollbar-width: thin; }
 .markdown-table-scroll table { margin: 0; }
@@ -573,6 +609,9 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .split-pane-header > .icon-button { margin-left: auto; flex-shrink: 0; }
 .split-pane-header, .editor-header { min-height: 62px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 13px 16px 10px; }
 .split-pane-header > div, .editor-header > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.editor-header { flex: 0 0 auto; flex-wrap: wrap; gap: 8px 12px; }
+.editor-header > div:first-child { flex: 1 1 200px; max-width: 100%; }
+.editor-header .document-location-button { max-width: 100%; }
 .split-pane-header > .preview-pane-actions { flex-direction: row; flex-shrink: 0; margin-left: auto; gap: 4px; }
 .split-pane-header strong { font-size: 15px; }
 .editor-header strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -585,7 +624,8 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .rename-document-dialog label { display: grid; gap: 8px; font-size: 12px; }
 .rename-document-dialog input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
 .rename-document-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
-.editor-status { display: flex; align-items: center; gap: 5px; color: var(--faint); font-size: 10.5px; }
+.editor-status { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 5px; max-width: 100%; min-width: 0; color: var(--faint); font-size: 10.5px; }
+.editor-status > * { flex-shrink: 0; white-space: nowrap; }
 .editor-status .dirty { color: #b17b4b; }
 .ai-edit-button { min-height: 29px; display: inline-flex; align-items: center; gap: 5px; margin-right: 1px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line)); border-radius: 8px; color: var(--accent-strong); background: transparent; font: inherit; font-weight: 700; cursor: pointer; transition: border-color .15s, color .15s, background .15s, transform .15s; }
 .ai-edit-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -595,6 +635,7 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .editor-format-bar { min-width: 0; min-height: 39px; display: flex; align-items: center; gap: 1px; padding: 4px 8px; overflow: hidden; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 42%, var(--paper)); scrollbar-width: none; }
 .editor-format-bar::-webkit-scrollbar { display: none; }
 .editor-format-bar [hidden] { display: none !important; }
+.link-dialog [hidden] { display: none !important; }
 .editor-format-bar button, .editor-format-bar select { flex: 0 0 auto; height: 29px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
 .editor-format-bar button { min-width: 28px; padding: 0 5px; display: grid; place-items: center; }
 .editor-format-bar button:hover, .editor-format-bar select:hover, .editor-format-bar button:focus-visible, .editor-format-bar select:focus-visible { color: var(--accent-strong); background: var(--accent-soft); outline: none; }
@@ -644,11 +685,10 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .preview-error { color: var(--muted); text-align: center; padding: 60px 20px; }
 #markdownEditor { position: relative; flex: 1; width: 100%; min-height: 0; overflow: hidden; background: transparent; user-select: text; }
 #markdownEditor .cm-editor { position: relative; z-index: 1; height: 100%; outline: none; pointer-events: auto; font-size: calc(15px * var(--font-scale)); }
-.cm-diagram-card { position: relative; box-sizing: border-box; max-width: 100%; margin: 8px 4px 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); font: 12px/1.6 var(--app-font-family); }
+.cm-diagram-card { position: relative; box-sizing: border-box; max-width: 100%; margin: 0 4px; padding: 16px 10px 22px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); font: 12px/1.6 var(--app-font-family); }
 .cm-diagram-card:focus, .cm-diagram-card:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cm-diagram-card, .cm-diagram-card * { user-select: none; -webkit-user-select: none; }
-.structured-diagram-error { color: var(--danger, #b42318); margin: 8px 0; font-size: 13px; }
-.structured-diagram-table [aria-invalid="true"] { border-color: var(--danger, #b42318); }
+.structured-diagram-error { color: var(--chart-validation-color, #b42318); margin: 8px 0; font-size: 13px; }
 .cm-diagram-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 32px; }
 .cm-diagram-label { margin-right: auto; color: var(--muted); font-size: 11px; }
 .cm-diagram-tools button { padding: 4px 9px; min-height: 30px; border: 1px solid var(--line); border-radius: 6px; color: var(--accent-strong); background: var(--paper); font: 12px/1.5 var(--app-font-family); cursor: pointer; }
@@ -658,9 +698,11 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .cm-diagram-tools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cm-diagram-body { min-height: 80px; max-height: 420px; overflow: auto; }
 .cm-diagram-body > .mermaid-diagram { margin: 0; padding: 10px 0; border: 0; background: transparent; }
-.cm-diagram-body > .mermaid-diagram svg { width: 100%; min-width: 0; max-width: 100%; max-height: 370px; object-fit: contain; }
+/* Keep the shared readable SVG width. Bound the scroller, not the diagram:
+   fitting a large graph into a 370px thumbnail shrinks its text below 10px. */
+.cm-diagram-body > .mermaid-diagram svg { max-height: none; }
 .cm-diagram-body > .echarts-diagram { margin: 0; border: 0; border-radius: 0; background: transparent; }
-.cm-diagram-card.is-source-open { margin-bottom: 0; padding: 5px 10px; }
+.cm-diagram-card.is-source-open { padding: 13px 10px 5px; }
 .cm-diagram-card.is-source-open .cm-diagram-body { display: none; }
 .cm-diagram-card.is-error .cm-diagram-body { display: block; min-height: 0; margin-top: 4px; color: var(--muted); }
 .editable-preview-formula { border-radius: 5px; cursor: pointer; transition: background .15s ease, box-shadow .15s ease; }
@@ -668,7 +710,7 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 #markdownEditor .cm-content { cursor: text; user-select: text !important; pointer-events: auto; }
 .cm-formula-render { position: relative; box-sizing: border-box; font-size: calc(16px * var(--font-scale)); color: var(--text); border-radius: 4px; outline-offset: 2px; cursor: pointer; }
 .cm-formula-render.is-inline { display: inline-block; vertical-align: -.08em; max-width: 100%; }
-.cm-formula-render.is-block { display: block; max-width: 100%; margin: 1.7em 0; padding: .6em 1em; text-align: center; }
+.cm-formula-render.is-block { display: block; max-width: 100%; padding: 2.3em 1em; text-align: center; }
 .cm-formula-content { display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: middle; }
 .cm-formula-render.is-inline .cm-formula-content { overflow: visible; }
 .cm-formula-render.is-block .cm-formula-content { display: block; width: 100%; }
@@ -681,7 +723,9 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .cm-formula-render.is-source-open .cm-formula-content { display: none; }
 .cm-formula-render.is-source-open .cm-formula-tools { position: static; display: inline-flex; margin-right: 6px; }
 .cm-formula-render.is-error .cm-formula-content { display: inline; color: var(--muted); margin-right: 8px; }
-.cm-embedded-image { position: relative; padding: 8px 12px; border: 1px solid var(--line, #dce5e0); border-radius: 8px; background: var(--paper, #fff); box-sizing: border-box; overflow: hidden; }
+/* Clip without creating a scroll container: focusing wrapped overlay controls
+   must not scroll the image itself or move the pointer away from its target. */
+.cm-embedded-image { position: relative; padding: 8px 12px; border: 1px solid var(--line, #dce5e0); border-radius: 8px; background: var(--paper, #fff); box-sizing: border-box; overflow: clip; }
 .cm-image-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 28px; font: 12px/1.5 system-ui, sans-serif; }
 .cm-image-caption { margin-right: auto; color: var(--muted, #68716b); }
 .cm-image-tools button { cursor: pointer; padding: 4px 8px; border: 1px solid var(--line, #dce5e0); border-radius: 5px; background: var(--panel, #f7faf8); color: var(--ink, #26352e); font: inherit; }
@@ -692,6 +736,7 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .cm-image-frame [hidden], .cm-embedded-image.is-source-open .cm-image-frame { display: none; }
 .cm-image-error { font: 12px/1.6 system-ui, sans-serif; color: var(--muted, #68716b); }
 .cm-image-cards { display: flex; gap: 12px; }
+.cm-embedded-image.is-image-row .cm-image-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(72px, 100%), 1fr)); }
 .cm-image-card { position: relative; min-width: 0; flex: 1 1 0; border-radius: 6px; outline: none; }
 .cm-image-card:focus-visible { box-shadow: 0 0 0 2px var(--accent, #119966); }
 .cm-image-align-tools { justify-content: flex-end; gap: 4px; }
@@ -708,28 +753,45 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .cm-image-size-tools button { cursor: pointer; min-height: 26px; padding: 3px 7px; border: 1px solid var(--line, #dce5e0); border-radius: 5px; color: var(--ink, #26352e); background: var(--panel, #f7faf8); font: inherit; }
 .cm-image-size-tools button:focus-visible { outline: 2px solid var(--accent, #119966); outline-offset: 2px; }
 .cm-image-size-tools button:disabled { opacity: .45; cursor: not-allowed; }
-.cm-embedded-image > .cm-image-tools,
-.cm-image-card > .cm-image-align-tools,
-.cm-image-card > .cm-image-size-tools { position: absolute; z-index: 4; margin: 0; padding: 5px; border: 1px solid color-mix(in srgb, var(--line, #dce5e0) 86%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--paper, #fff) 92%, transparent); box-shadow: 0 8px 22px rgba(24, 43, 34, .12); backdrop-filter: blur(10px); opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-4px); transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s; }
+/* Keep hit targets stationary from the first visible frame of the fade. */
+.cm-embedded-image > .cm-image-tools { position: absolute; z-index: 4; margin: 0; padding: 5px; border: 1px solid color-mix(in srgb, var(--line, #dce5e0) 86%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--paper, #fff) 92%, transparent); box-shadow: 0 8px 22px rgba(24, 43, 34, .12); backdrop-filter: blur(10px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .16s ease, visibility 0s linear .16s; }
 .cm-embedded-image > .cm-image-tools { top: 8px; left: 12px; max-width: calc(100% - 24px); }
-.cm-embedded-image.is-image-row > .cm-image-tools { top: auto; bottom: 8px; }
-.cm-image-card > .cm-image-align-tools { top: 8px; right: 8px; }
-.cm-image-card > .cm-image-size-tools { top: 43px; right: 8px; width: max-content; max-width: calc(100% - 16px); }
+.cm-embedded-image.is-image-row > .cm-image-tools { position: fixed; top: 100%; bottom: auto; width: calc(100% - 24px); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; z-index: 20; }
+.cm-image-picker { display: flex; align-items: center; gap: 6px; flex-basis: 100%; min-width: 0; }
+.cm-image-picker select { min-width: 0; flex: 1; height: 28px; border: 1px solid var(--line, #dce5e0); border-radius: 5px; background: var(--paper, #fff); color: var(--ink, #26352e); font: inherit; }
+.cm-image-item-tools { flex-basis: 100%; min-width: 0; }
+.cm-image-item-tools[hidden] { display: none; }
+.cm-image-item-tools > .cm-image-size-tools { display: none; }
+.cm-image-item-tools.is-size-open > .cm-image-size-tools { display: flex; }
+.cm-image-picker select:focus-visible { outline: 2px solid var(--accent, #119966); outline-offset: 2px; }
+.cm-embedded-image.is-image-row:is(:hover, :focus-within) .cm-image-card.is-active-image { outline: 2px solid var(--accent, #119966); outline-offset: 2px; }
 .cm-embedded-image:has(.cm-image-card.is-size-open) { overflow: visible; }
 .cm-embedded-image.is-image-row .cm-image-align-tools button { min-width: 26px; padding: 3px 4px; }
 .cm-embedded-image:hover > .cm-image-tools,
-.cm-embedded-image:focus-within > .cm-image-tools,
-.cm-image-card:hover > .cm-image-align-tools,
-.cm-image-card:focus-within > .cm-image-align-tools,
-.cm-image-card.is-size-open > .cm-image-size-tools { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); transition-delay: 0s; }
-.cm-embedded-image.is-image-row:has(.cm-image-card.is-size-open) > .cm-image-tools { opacity: 0; visibility: hidden; pointer-events: none; }
+.cm-embedded-image:focus-within > .cm-image-tools { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
 .cm-image-tools button:disabled { opacity: .45; cursor: not-allowed; }
+.cm-embedded-image:is(:hover, :focus-within) { overflow: visible; }
+.cm-embedded-image.is-tools-offscreen > .cm-image-tools { opacity: 0; visibility: hidden; pointer-events: none; }
+.cm-embedded-image:not(.is-image-row) > .cm-image-tools > .cm-image-align-tools { margin-left: auto; }
+.cm-embedded-image:not(.is-image-row) > .cm-image-tools > .cm-image-size-tools { display: none; flex-basis: 100%; min-width: 0; }
+.cm-embedded-image:not(.is-image-row):has(.cm-image-card.is-size-open) > .cm-image-tools > .cm-image-size-tools { display: flex; }
+.cm-embedded-image.is-source-open > .cm-image-tools > :is(.cm-image-align-tools, .cm-image-size-tools) { display: none; }
+.cm-embedded-image.is-source-open > .cm-image-tools > :is(.cm-image-picker, .cm-image-item-tools) { display: none; }
 .cm-embedded-image.is-source-open .cm-image-cards { display: none; }
+/* Source has no image height to hold an absolute overlay. Keep the return
+   control in flow and visible even after the pointer leaves the image. */
+.cm-embedded-image.is-source-open > .cm-image-tools { position: static; max-width: 100%; padding: 0; border: 0; background: none; box-shadow: none; backdrop-filter: none; opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: none; }
 .cm-image-frame { flex-wrap: wrap; }
 .cm-image-frame img:not([src]) { display: none; }
 .markdown-body table.quillite-image-row { width: 100%; table-layout: fixed; border: 0; border-collapse: collapse; }
 .markdown-body table.quillite-image-row td { padding: 0 6px; border: 0; vertical-align: top; background: transparent; }
 .markdown-body table.quillite-image-row img { max-width: 100%; margin-top: 0; margin-bottom: 0; }
+/* Keep semantic table markup for document exports, but let image-only rows
+   inside a data cell reflow without changing the saved Markdown grouping. */
+.markdown-body :is(td, th) table.quillite-image-row { margin: 0; }
+.markdown-body :is(td, th) table.quillite-image-row > tbody { display: block; }
+.markdown-body :is(td, th) table.quillite-image-row > tbody > tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(72px, 100%), 1fr)); gap: 12px; }
+.markdown-body :is(td, th) table.quillite-image-row > tbody > tr > td { display: block; min-width: 0; width: auto !important; padding: 0 !important; }
 #markdownEditor .cm-scroller { scrollbar-gutter: stable; }
 #markdownEditor .cm-foldGutter { width: 14px; }
 #markdownEditor .cm-gutterElement { padding: 0 8px 0 5px; }
@@ -1247,6 +1309,11 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .image-dialog-fields input { height: 42px; width: 100%; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: var(--panel); }
 .image-dialog-fields input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .image-dialog { width: min(540px, 100%); }
+.link-dialog { margin: auto; width: min(540px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; color: var(--text); }
+.link-dialog::backdrop { background: rgba(20, 32, 25, .4); backdrop-filter: blur(4px); }
+.link-dialog small, #linkReferenceHint { color: var(--muted); font-size: 11px; line-height: 1.6; }
+#footnoteBody { box-sizing: border-box; width: 100%; min-height: 130px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--paper); color: var(--text); font: 14px/1.6 var(--app-font-family); }
+#linkError { color: var(--text); font-size: 12px; line-height: 1.5; }
 .image-width-field > div { display: grid; grid-template-columns: minmax(0, 1fr) 52px; align-items: center; gap: 12px; }
 .image-width-field input[type="range"] { height: 24px; padding: 0; border: 0; accent-color: var(--accent-strong); box-shadow: none; }
 .image-width-field output { color: var(--accent-strong); font-size: 12px; font-weight: 700; text-align: right; }
@@ -1356,6 +1423,8 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .formula-template-list button:hover { background: var(--paper-strong); }
 .formula-template-list button.active { border-color: color-mix(in srgb, var(--accent) 62%, var(--line)); color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 10%, var(--paper-strong)); }
 .formula-template-list button.active code { color: var(--accent-strong); }
+.formula-template-list button > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.formula-template-list .template-new-badge { margin-left: 6px; vertical-align: .08em; }
 #diagramTemplateList button { grid-template-columns: minmax(0, 1fr) auto auto; }
 .diagram-visual-badge { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--line)); border-radius: 6px; color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 10%, var(--paper-strong)); }
 .diagram-visual-badge svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
@@ -1366,7 +1435,7 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .formula-structure-toolbar button { padding: 5px 8px; min-height: 30px; border: 1px solid var(--line); border-radius: 6px; color: var(--accent-strong); background: var(--paper-strong); font: 12px var(--app-font-family); }
 .formula-structure-toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .formula-structure-toolbar button:disabled { opacity: .45; }
-#formulaMathfield { display: block; width: 100%; min-height: 64px; padding: 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper-strong); font-size: 23px; --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: var(--accent-soft); }
+#formulaMathfield { display: block; width: 100%; min-height: 64px; padding: 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper-strong); font-size: 23px; --caret-color: var(--accent); --selection-color: var(--text); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: var(--accent-soft); }
 #formulaMathfield:focus-within { outline: 2px solid var(--accent); }
 /* MathLive reads user-select when mounting and before handling pointer input.
    Never inherit the non-selectable application chrome into its shadow editor. */
@@ -1423,6 +1492,10 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .diagram-dialog { width: min(1480px, calc(100vw - 32px)); height: min(940px, calc(100vh - 24px)); padding: 26px 28px 22px; }
+/* Catalog text must remain readable even when the global green accent keeps
+   its brand color. Do not change chart data-series colors or saved sources. */
+.formula-dialog { --accent-strong: color-mix(in srgb, var(--accent) 62%, #111312); }
+:root[data-color-mode="dark"] .formula-dialog { --accent-strong: color-mix(in srgb, var(--accent) 60%, #ffffff); }
 .diagram-dialog .formula-dialog-header { min-height: 68px; }
 .diagram-header-actions { display: flex; flex: none; align-items: flex-start; gap: 8px; }
 .diagram-header-actions .formula-guide-link { margin-top: 22px; }
@@ -1447,14 +1520,17 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .diagram-preview .mermaid-diagram svg { display: block; max-width: 100%; margin: auto; }
 .diagram-preview .echarts-diagram { width: 100%; min-height: 360px; margin: 0; border: 0; background: transparent; box-shadow: none; }
 .diagram-preview .mermaid-error { width: 100%; }
-.structured-diagram-editor { grid-column: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; margin-top: 13px; padding: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
-.structured-diagram-settings { display: flex; align-items: end; gap: 9px; overflow-x: auto; padding-bottom: 2px; }
+.structured-diagram-editor { grid-column: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; margin-top: 13px; padding: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+:root[data-color-mode="dark"] .structured-diagram-editor { --chart-validation-color: #ff858d; }
+.structured-diagram-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); align-items: end; gap: 8px; max-height: 125px; overflow: auto; padding: 2px; flex-shrink: 0; }
 .structured-diagram-settings:empty { display: none; }
-.structured-diagram-settings label { min-width: 130px; display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.structured-diagram-settings label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 650; }
 .structured-diagram-settings label:has(input[type="checkbox"]) { min-width: auto; display: flex; align-items: center; flex-direction: row-reverse; justify-content: flex-end; padding: 7px 3px; white-space: nowrap; }
 .structured-diagram-settings input:not([type="checkbox"]), .structured-diagram-settings select, .structured-diagram-table input, .structured-diagram-table select { width: 100%; min-width: 80px; height: 34px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; outline: none; color: var(--text); background: var(--paper-strong); font-size: 11px; }
 .structured-diagram-settings input:focus, .structured-diagram-settings select:focus, .structured-diagram-table input:focus, .structured-diagram-table select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 13%, transparent); }
-.structured-diagram-table-wrap { min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-strong); }
+.structured-diagram-table input[aria-invalid="true"], .structured-diagram-table select[aria-invalid="true"] { border-color: var(--chart-validation-color, #b42318); }
+.structured-diagram-table [aria-invalid="true"]:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--chart-validation-color, #b42318) 25%, transparent); }
+.structured-diagram-table-wrap { flex: 1 0 125px; min-height: 125px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-strong); }
 .structured-diagram-table { width: 100%; border-collapse: collapse; table-layout: auto; }
 .structured-diagram-table th { position: sticky; top: 0; z-index: 1; padding: 8px; border-bottom: 1px solid var(--line); color: var(--muted); background: var(--panel); font-size: 10px; font-weight: 700; text-align: left; white-space: nowrap; }
 .structured-diagram-table td { padding: 5px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
@@ -1465,6 +1541,18 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .structured-diagram-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 10.5px; }
 .structured-diagram-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 8px; color: var(--accent-strong); background: var(--paper-strong); font-size: 11px; font-weight: 700; cursor: pointer; }
 .structured-diagram-actions button:hover { border-color: var(--accent); background: var(--accent-soft); }
+.diagram-search { min-width: 0; padding: 0 0 10px; }
+.diagram-search input, .diagram-paste-panel textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper-strong); font: inherit; }
+.diagram-search input::placeholder { color: var(--muted); opacity: 1; }
+.diagram-search input:focus-visible, .diagram-paste-panel textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.diagram-search-empty { padding: 12px; color: var(--muted); }
+.diagram-paste-panel { flex-shrink: 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--panel); }
+.diagram-paste-panel summary { cursor: pointer; color: var(--accent-strong); }
+.diagram-paste-panel p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.diagram-paste-panel label { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+.diagram-paste-panel input[type="checkbox"] { accent-color: var(--accent); }
+.structured-diagram-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.structured-diagram-table input:disabled, .structured-diagram-table select:disabled { opacity: .4; cursor: not-allowed; }
 .flowchart-mode-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; margin-top: 12px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-strong); }
 .flowchart-mode-bar button { min-height: 32px; padding: 6px 13px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font-size: 12px; cursor: pointer; }
 .flowchart-mode-bar button.active { color: var(--accent-strong); background: var(--accent-soft); font-weight: 700; }
@@ -1504,6 +1592,8 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .flowchart-node:active { cursor: grabbing; }
 .flowchart-node .flowchart-node-shape { fill: var(--paper-strong); stroke: color-mix(in srgb, var(--text) 50%, var(--line)); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .flowchart-node:hover .flowchart-node-shape { stroke: var(--accent); }
+.flowchart-node:focus-visible .flowchart-node-shape { stroke: var(--accent-strong); stroke-width: 3; stroke-dasharray: 4 3; }
+.flowchart-edge:focus-visible .flowchart-edge-path { stroke: var(--accent-strong); stroke-width: 3; stroke-dasharray: 4 3; }
 .flowchart-node.selected .flowchart-node-shape { fill: var(--accent-soft); stroke: var(--accent-strong); stroke-width: 2.5; }
 .flowchart-node.connect-origin .flowchart-node-shape { fill: color-mix(in srgb, var(--accent) 20%, var(--paper)); stroke: var(--accent-strong); stroke-dasharray: 6 4; }
 .flowchart-node text { fill: var(--text); stroke: none; font: 600 13px "Segoe UI", "Microsoft YaHei", sans-serif; text-anchor: middle; pointer-events: none; }
@@ -1531,6 +1621,8 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .diagram-dialog .formula-dialog-actions { margin-top: 14px; }
 .formula-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .formula-dialog-actions .large-button { min-width: 98px; }
+#insertDiagram:disabled,
+#insertFormula:disabled { background: color-mix(in srgb, var(--line) 78%, var(--paper)) !important; color: var(--muted) !important; cursor: not-allowed; filter: none; opacity: .72; }
 body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; }
 @keyframes dialog-fade { from { opacity: 0; } }
 @keyframes dialog-rise { from { opacity: 0; transform: translateY(8px) scale(.985); } }
@@ -1940,6 +2032,7 @@ body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; 
 .document-history-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 13px; }
 .document-history-empty { flex: 1; display: grid; place-content: center; gap: 6px; color: var(--muted); text-align: center; }
 .document-history-empty p { margin: 0; font-size: 11px; }
+#restoreDocumentHistory:disabled { color: var(--muted) !important; border-color: var(--line); background: var(--panel) !important; box-shadow: none; cursor: not-allowed; filter: none; }
 .document-history-difference { color: var(--ink); font-size: 11px; }
 .document-history-comparison { min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .document-history-comparison section { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }

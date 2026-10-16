@@ -1,4 +1,7 @@
 import nspell from 'nspell';
+import {markdownParser} from './markdown-parser.js';
+import {prepareFootnotes} from './markdown-formats.js';
+import {footnoteProjection} from './footnote-editing.js';
 
 export const SPELLCHECK_LANGUAGES = ['auto', 'en-US', 'en-GB'];
 
@@ -43,9 +46,15 @@ function maskPattern(characters, source, pattern, group = 0) {
 
 // Markdown source contains many non-prose ranges. Masking keeps source offsets
 // stable while preventing URLs, code, HTML and formulas from becoming false hits.
-export function proseForSpellcheck(markdownSource) {
+export function proseForSpellcheck(markdownSource, depth = 0) {
   const source = String(markdownSource || '');
-  const characters = [...source];
+  // All parser/editor offsets are UTF-16, including text after emoji.
+  const characters = source.split('');
+  markdownParser.parse(source).iterate({enter(node) {
+    if (['FencedCode','CodeBlock','InlineCode'].includes(node.name)) {
+      maskRange(characters,node.from,node.to);return false;
+    }
+  }});
 
   if (/^---\s*(?:\r?\n|$)/.test(source)) {
     const end = source.slice(source.indexOf('\n') + 1).search(/^---\s*$/m);
@@ -79,9 +88,21 @@ export function proseForSpellcheck(markdownSource) {
   maskPattern(characters, source, /\$\$[^]*?\$\$/g);
   maskPattern(characters, source, /(?<!\\)\$(?!\s)[^$\n]+?(?<!\s)\$/g);
   maskPattern(characters, source, /(?:https?:\/\/|www\.)[^\s<>()]+/gi);
-  maskPattern(characters, source, /^ {0,3}\[[^\]\n]+\]:\s+\S+.*$/gm);
+  maskPattern(characters, source, /^ {0,3}\[(?!\^)[^\]\n]+\]:\s+\S+.*$/gm);
+  maskPattern(characters, source, /\[\^[^\]\n]+\]/g);
   maskPattern(characters, source, /\]\(([^)\s]+)(?:\s+["'][^)]*)?\)/g, 1);
   maskPattern(characters, source, /\]\[([^\]\n]+)\]/g, 1);
+
+  // A footnote's four-space continuation is prose, not a top-level indented
+  // code block. Analyze its projected body, then copy the mask back by UTF-16
+  // segments. Code inside the note remains excluded by the same parser.
+  if (depth < 8) for (const definition of prepareFootnotes(source).definitions.values()) {
+    const projection = footnoteProjection(source,definition);
+    const prose = proseForSpellcheck(projection.text,depth+1);
+    for (const segment of projection.segments) for (let i=0;i<segment.to-segment.from;i++) {
+      characters[segment.from+i]=prose[segment.offset+i];
+    }
+  }
 
   return characters.join('');
 }

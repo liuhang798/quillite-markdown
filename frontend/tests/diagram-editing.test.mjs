@@ -4,8 +4,21 @@ import vm from 'node:vm';
 import { isolateHistory } from '@codemirror/commands';
 import { readFileSync } from 'node:fs';
 import { DIAGRAM_TEMPLATES, diagramTemplateById, diagramTemplateSource } from '../src/diagram-templates.js';
-import { identifyDiagramTemplate, findEditableDiagramFenceAt, diagramReplacementMarkdown } from '../src/diagram-editing.js';
+import { identifyDiagramTemplate, findEditableDiagramFenceAt, diagramReplacementMarkdown, projectedDiagramReplacement, diagramDisplayName } from '../src/diagram-editing.js';
 import { parseStructuredDiagram, serializeStructuredDiagram } from '../src/structured-diagram-editor.js';
+
+test('C4 display names distinguish five families without changing template identity or prefixed source', () => {
+  const kinds = ['Context', 'Container', 'Component', 'Dynamic', 'Deployment'];
+  const zh = ['系统上下文图', '容器图', '组件图', '动态图', '部署图'];
+  for (const [i, kind] of kinds.entries()) for (const prefix of ['', '%% comment\n', '---\ntitle: test\n---\n%% comment\n']) {
+    const source = prefix + 'C4' + kind + '\nSystem(a,"App")';
+    assert.equal(diagramDisplayName(source), 'C4 ' + zh[i]);
+    assert.equal(diagramDisplayName(source, 'mermaid', 'en'), 'C4 ' + kind.toLowerCase());
+    assert.equal(identifyDiagramTemplate(source), 'c4');
+  }
+  assert.equal(diagramDisplayName('futureDiagram'), '自定义图表');
+  assert.equal(diagramDisplayName('{"series":[{"type":"bar"}]}', 'echarts', 'en'), diagramTemplateById('bar-chart').name.en);
+});
 
 test('all 37 chart templates reopen with their exact source and correct engine', () => {
   for (const template of DIAGRAM_TEMPLATES) {
@@ -84,7 +97,7 @@ test('saving an existing diagram refuses stale sessions or changed source ranges
   const fn = renderer.slice(renderer.indexOf('function replaceExistingFlowchart('), renderer.indexOf('function insertGeneratedDiagram('));
   const state = { editing: true, documentSession: 1 };
   const calls = [];
-  const context = vm.createContext({ state, codeEditor: { state: { doc: { sliceString: () => 'original' } }, dispatch: value => calls.push(value), focus() {} }, diagramReplacementMarkdown, isolateHistory, showToast() {}, t: x => x });
+  const context = vm.createContext({ state, codeEditor: { state: { doc: { sliceString: () => 'original' } }, dispatch: value => calls.push(value), focus() {} }, projectedDiagramReplacement, isolateHistory, showToast() {}, t: x => x });
   vm.runInContext(fn, context);
   const range = { from: 0, to: 8, documentSession: 0, original: 'original', engine: 'echarts' };
   context.replaceExistingFlowchart(range, '{}');

@@ -73,6 +73,40 @@ function upsertNode(nodes, candidate) {
   }
 }
 
+// Shared by layout and drawing so larger shapes cannot overlap after arranging.
+export function flowchartNodeSize(node) {
+  if (node.diagramNodeType === 'state') return node.stateToken === '[*]' ? { width: 52, height: 52 } : { width: 132, height: 48 };
+  if (node.mindmapRoot) return { width: 184, height: 76 };
+  if (node.shape === 'decision') return { width: 176, height: 94 };
+  if (node.shape === 'circle') return { width: 86, height: 86 };
+  if (node.shape === 'terminal') return { width: 164, height: 64 };
+  return { width: 164, height: 68 };
+}
+
+// A mindmap must stay one rooted tree. Delete only selected topics, promote
+// their surviving children to the nearest surviving ancestor, and keep root.
+export function removeMindmapSelection(model, selection) {
+  const root = model.nodes.find(node => node.mindmapRoot) || model.nodes[0];
+  if (!root || !selection) return model;
+  if (selection.type === 'edge') {
+    return { ...model, edges: model.edges.map(edge => edge.id === selection.id ? { ...edge, from: root.id } : edge) };
+  }
+  const removed = new Set(selection.type === 'nodes' ? selection.ids : selection.type === 'node' ? [selection.id] : []);
+  removed.delete(root.id);
+  const parents = new Map(model.edges.map(edge => [edge.to, edge.from]));
+  return {
+    ...model,
+    nodes: model.nodes.filter(node => !removed.has(node.id)),
+    edges: model.edges.filter(edge => !removed.has(edge.to)).map(edge => {
+      let from = edge.from;
+      const seen = new Set();
+      while (removed.has(from) && !seen.has(from)) { seen.add(from); from = parents.get(from) || root.id; }
+      if (removed.has(from)) from = root.id;
+      return from === edge.from ? edge : { ...edge, from };
+    })
+  };
+}
+
 export function layoutFlowchart(model, width = 920, height = 560) {
   const nodes = model.nodes.map(node => ({ ...node }));
   if (!nodes.length) return { ...model, nodes };
@@ -87,30 +121,39 @@ export function layoutFlowchart(model, width = 920, height = 560) {
   const roots = nodes.filter(node => (incoming.get(node.id) || 0) === 0).map(node => node.id);
   const queue = (roots.length ? roots : [nodes[0].id]).map(id => ({ id, rank: 0 }));
   const ranks = new Map();
-  while (queue.length) {
-    const current = queue.shift();
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const current = queue[cursor];
     if (ranks.has(current.id)) continue;
     ranks.set(current.id, current.rank);
     for (const target of outgoing.get(current.id) || []) {
       if (!ranks.has(target)) queue.push({ id: target, rank: current.rank + 1 });
     }
   }
-  nodes.forEach(node => {
-    if (!ranks.has(node.id)) ranks.set(node.id, Math.max(0, ...ranks.values()) + 1);
-  });
+  let maxRank = 0;
+  for (const rank of ranks.values()) maxRank = Math.max(maxRank, rank);
+  nodes.forEach(node => { if (!ranks.has(node.id)) ranks.set(node.id, ++maxRank); });
   const groups = new Map();
   nodes.forEach(node => {
     const rank = ranks.get(node.id) || 0;
     if (!groups.has(rank)) groups.set(rank, []);
     groups.get(rank).push(node);
   });
-  const maxRank = Math.max(0, ...groups.keys());
   const horizontal = model.direction === 'LR' || model.direction === 'RL';
+  const largest = nodes.reduce((size, node) => {
+    const next = flowchartNodeSize(node);
+    return { width: Math.max(size.width, next.width), height: Math.max(size.height, next.height) };
+  }, { width: 0, height: 0 });
+  // The canvas can pan beyond its initial viewport. Grow the layout instead
+  // of fitting more ranks/siblings into a fixed rectangle and overlapping them.
+  const primaryStep = Math.max((horizontal ? width - 180 : height - 150) / Math.max(1, maxRank),
+    (horizontal ? largest.width : largest.height) + 48);
+  const crossMinimum = (horizontal ? largest.height : largest.width) + 40;
   for (const [rank, group] of groups) {
     group.forEach((node, index) => {
-      const primary = 90 + (horizontal ? width - 180 : height - 150) * (maxRank ? rank / maxRank : .5);
+      const primarySize = horizontal ? width : height;
+      const primary = primarySize / 2 + (rank - maxRank / 2) * primaryStep;
       const crossSize = horizontal ? height : width;
-      const cross = crossSize * (index + 1) / (group.length + 1);
+      const cross = crossSize / 2 + (index - (group.length - 1) / 2) * Math.max(crossSize / (group.length + 1), crossMinimum);
       node.x = horizontal ? primary : cross;
       node.y = horizontal ? cross : primary;
       if (model.direction === 'RL') node.x = width - node.x;

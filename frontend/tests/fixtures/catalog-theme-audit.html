@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN" data-accent="jade"><meta charset="utf-8"><title>公式与图表日夜审计</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>
+html,body{height:auto!important;overflow:auto!important}body{padding:20px;color:var(--text);background:var(--bg)}header{display:flex;gap:16px;align-items:center;margin-bottom:16px}button,select{padding:8px 12px;color:var(--text);background:var(--paper);border:1px solid var(--line);border-radius:6px}#charts,#formulas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}article{padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--text);overflow:auto}h2{font:600 16px system-ui}.echarts-diagram{margin:0}#formulas{margin-top:16px}.formula-visual-host{min-height:64px}.katex-display{overflow:auto}
+</style>
+<header><h1>公式与图表日夜审计</h1><button id="mode">切换白天／黑夜</button><select id="accent" aria-label="主题色"></select><span id="status">准备中</span></header>
+<div id="charts"></div><div id="formulas"></div><pre id="report"></pre>
+<script type="module">
+import 'katex/dist/katex.min.css';
+import DOMPurify from 'dompurify';
+import { ADDITIONAL_CHART_TEMPLATES } from '/src/additional-chart-templates.js';
+import { renderEChartsDiagrams, releaseEChartsDiagrams } from '/src/echarts-diagrams.js';
+import { FORMULA_TEMPLATES, buildFormulaExpression } from '/src/formula-templates.js';
+import { renderLatex } from '/src/math-rendering.js';
+import { ACCENT_THEMES } from '/src/appearance.js';
+const $=s=>document.querySelector(s), root=document.documentElement;
+root.dataset.colorMode=new URLSearchParams(location.search).get('mode')==='dark'?'dark':'light';
+for(const id of Object.keys(ACCENT_THEMES)){const o=document.createElement('option');o.value=id;o.textContent=id;$('#accent').append(o);}
+function render(){
+ releaseEChartsDiagrams($('#charts'));$('#charts').replaceChildren();$('#formulas').replaceChildren();
+ for(const t of ADDITIONAL_CHART_TEMPLATES){const card=document.createElement('article'),title=document.createElement('h2'),chart=document.createElement('div');title.textContent=t.name.zh;chart.className='echarts-diagram';chart.dataset.echartsSource=encodeURIComponent(t.source.zh);card.append(title,chart);$('#charts').append(card);}
+ let errors=0;
+ for(const t of FORMULA_TEMPLATES){const card=document.createElement('article'),title=document.createElement('h2'),formula=document.createElement('div');title.textContent=t.name.zh;formula.className='formula-preview';const html=renderLatex(buildFormulaExpression(t),true);if(html.includes('katex-error'))errors++;formula.innerHTML=DOMPurify.sanitize(html);card.append(title,formula);$('#formulas').append(card);}
+ renderEChartsDiagrams($('#charts'));
+ $('#status').textContent=`${root.dataset.colorMode} / ${root.dataset.accent}：95 公式，${errors} 错误；4 新图表，${$('#charts').querySelectorAll('.echarts-error').length} 错误`;
+}
+$('#mode').onclick=()=>{root.dataset.colorMode=root.dataset.colorMode==='dark'?'light':'dark';render();};
+$('#accent').onchange=e=>{root.dataset.accent=e.target.value;render();};
+render();
+</script></html>

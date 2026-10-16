@@ -135,6 +135,21 @@ export function createDocumentTools(host) {
       if (snapshot) {
         const item = node('details'); item.append(node('summary', `${text('恢复备份','Recovery')} · ${snapshot.name} · ${snapshot.updatedAt}`), preview(snapshot.content), button(text('另存恢复副本（不覆盖）','Save recovery copy (no overwrite)'), async () => { const copy = await host.api.saveConflictCopy(snapshot.path, snapshot.content); if (copy) message(text('副本已保存：','Copy saved: ') + copy.path); })); list.append(item);
       } else list.append(node('p', text('暂无待恢复备份。','No recovery snapshot.')));
+      const archives = await host.api.listRecoveryArchives();
+      for (const archive of archives) {
+        const item = node('details'), content = node('div');
+        item.append(node('summary', `${text('保留的旧草稿','Preserved draft')} · ${archive.name} · ${archive.updatedAt}`), content);
+        item.addEventListener('toggle', () => { if (item.open && !content.childNodes.length) void run(async () => {
+          const saved = await host.api.readRecoveryArchive(archive.id);
+          content.append(preview(saved.content), button(text('另存旧草稿（不覆盖）','Save preserved draft (no overwrite)'), async () => {
+            const copy = await host.api.saveConflictCopy(saved.path, saved.content);
+            if (copy) message(text('副本已保存：','Copy saved: ') + copy.path);
+          }));
+          message(text('旧草稿已读取，原文档未改变。','Preserved draft loaded; the original document is unchanged.'));
+        }); });
+        list.append(item);
+      }
+      message(text('恢复备份已读取。','Recovery backups loaded.'));
       if (!context.path) return;
       const versions = await host.api.listDocumentVersions(context.path);
       for (const version of versions) {

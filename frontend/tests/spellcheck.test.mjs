@@ -24,3 +24,17 @@ test('findSpellingErrors respects ignored and personal words', () => {
 test('normalizePersonalWords validates, de-duplicates and sorts words', () => {
   assert.deepEqual(normalizePersonalWords(['Beta', 'beta', 'alpha', '', 'two words', 'writer’s']), ['alpha', 'Beta', "writer's"]);
 });
+
+test('spelling offsets stay UTF-16 after emoji and code is excluded in containers', () => {
+  const source='😀 Hello wurld\n\n> ```text\n> speling\n> ```\n\n    speling\n\n`speling`\n';
+  const errors=findSpellingErrors(source,createSpellChecker(aff,dic));
+  assert.deepEqual(errors,[{from:source.indexOf('wurld'),to:source.indexOf('wurld')+5,word:'wurld'}]);
+  assert.equal(proseForSpellcheck(source).length,source.length);
+});
+
+test('footnote prose is checked without treating continuation code or labels as words', () => {
+  const source='Hello[^speling]\n\n[^speling]: Hello wurld\n    \n    world wurld\n    \n    ```text\n    speling\n    ```';
+  const errors=findSpellingErrors(source,createSpellChecker(aff,dic));
+  assert.deepEqual(errors.map(e=>e.word),['wurld','wurld']);
+  for(const e of errors)assert.equal(source.slice(e.from,e.to),'wurld');
+});

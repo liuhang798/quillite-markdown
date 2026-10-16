@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateLatex, convertLatexToMarkup } from 'mathlive/ssr';
-import { canLoadVisualFormula, visualFormulaValue, FORMULA_STRUCTURES } from '../src/formula-visual-policy.js';
+import { canLoadVisualFormula, visualFormulaValue, hasFormulaPlaceholders, isMatrixCellPosition, FORMULA_STRUCTURES } from '../src/formula-visual-policy.js';
 import { FORMULA_TEMPLATES, buildFormulaExpression, buildFormulaMarkdown, parseFormulaMarkdown, formulaInlineLayout } from '../src/formula-templates.js';
 import { renderLatex } from '../src/math-rendering.js';
 import { scanMarkdownFormulas, formulaReplacement } from '../src/formula-editing.js';
@@ -48,6 +48,48 @@ test('visual formula parser rejects external commands, comments and unbounded in
 test('structure toolbar actions are fixed local LaTeX structures, not arbitrary commands', () => {
   assert.equal(new Set(FORMULA_STRUCTURES.map(([key]) => key)).size, FORMULA_STRUCTURES.length);
   for (const [_key, source] of FORMULA_STRUCTURES) assert.ok(canLoadVisualFormula(source));
+});
+
+test('unfilled structure slots are recognized without matching escaped or longer commands', () => {
+  for (const value of [String.raw`\placeholder{}`, String.raw`\frac{x}{\placeholder{}}`, String.raw`\begin{matrix}a\\\placeholder{}\end{matrix}`]) {
+    assert.equal(hasFormulaPlaceholders(value), true);
+  }
+  for (const value of ['x', String.raw`\frac{x}{2}`, String.raw`\\placeholder{}`, String.raw`\placeholderOther{}`]) {
+    assert.equal(hasFormulaPlaceholders(value), false);
+  }
+});
+
+test('matrix commands require a caret inside a matrix and never a neighbouring or selected block', () => {
+  const atoms = [{ depth: 0, latex: '' }, { depth: 2, latex: 'a' }, { depth: 2, latex: 'b' },
+    { depth: 1, latex: String.raw`\frac{a}{b}` }, { depth: 1, latex: 'c' },
+    { depth: 0, latex: String.raw`\begin{bmatrix}\frac{a}{b}&c\end{bmatrix}` },
+    { depth: 0, latex: '+x' }, { depth: 1, latex: 'z' }, { depth: 0, latex: String.raw`\sqrt{z}` }];
+  const field = { position: 0, lastOffset: atoms.length - 1, selectionIsCollapsed: true, getElementInfo: offset => atoms[offset] };
+  for (const position of [1, 2, 3, 4]) { field.position = position; assert.equal(isMatrixCellPosition(field), true); }
+  for (const position of [0, 5, 6, 7, 8]) { field.position = position; assert.equal(isMatrixCellPosition(field), false); }
+  field.position = 1; field.selectionIsCollapsed = false;
+  assert.equal(isMatrixCellPosition(field), false);
+  const source = readFileSync(new URL('../src/formula-visual-editor.js', import.meta.url), 'utf8');
+  assert.ok(source.indexOf('!isMatrixCellPosition(field)') < source.indexOf('field.executeCommand(command)'));
+});
+
+test('incomplete structure shows actionable guidance, blocks insertion, then resumes normal rendering', () => {
+  const renderer = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
+  const handler = renderer.slice(renderer.indexOf('function renderFormulaPreview('), renderer.indexOf('\nfunction updateFormulaPreviewFromMarkdown'));
+  const preview = { textContent: '', innerHTML: '' }, button = { disabled: false };
+  let calls = 0;
+  const context = { hasFormulaPlaceholders, els: { formulaPreview: preview, formulaMarkdownSource: { value: '' } },
+    $: () => button, t: key => key, formulaMarkdownMatches: () => true, showToast: () => {}, formulaWizardState: {},
+    renderLatexResult: () => { calls++; return { valid: true, html: '<span>rendered</span>' }; }, DOMPurify: { sanitize: html => html } };
+  vm.runInNewContext(handler, context);
+  context.renderFormulaPreview(String.raw`\frac{x}{\placeholder{}}`, false);
+  assert.equal(preview.textContent, 'formulaIncomplete');
+  assert.equal(button.disabled, true);
+  assert.equal(calls, 0);
+  context.renderFormulaPreview(String.raw`\frac{x}{2}`, false);
+  assert.equal(button.disabled, false);
+  assert.equal(preview.innerHTML, '<span>rendered</span>');
+  assert.equal(calls, 1);
 });
 
 test('late visual imports cannot reopen or overwrite a closed, changed or superseded dialog', async () => {

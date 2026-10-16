@@ -1,13 +1,41 @@
-import { DIAGRAM_TEMPLATES } from './diagram-templates.js';
+import { DIAGRAM_TEMPLATES, diagramTemplateById } from './diagram-templates.js';
 import { sourceLines } from './source-lines.js';
+
+function diagramKeyword(source) {
+  const start = String(source).replace(/^\s*---\r?\n[\s\S]*?\r?\n---\s*\r?\n/u, '').replace(/^\s*%%[^\n]*(?:\n|$)/gmu, '').trimStart();
+  return start.match(/^[\w-]+/u)?.[0]?.toLowerCase();
+}
+
+// Display names do not change the editor/template identity or source.
+export function diagramDisplayName(source, engine = 'mermaid', locale = 'zh') {
+  const names = {
+    c4context: ['C4 系统上下文图', 'C4 context'],
+    c4container: ['C4 容器图', 'C4 container'],
+    c4component: ['C4 组件图', 'C4 component'],
+    c4dynamic: ['C4 动态图', 'C4 dynamic'],
+    c4deployment: ['C4 部署图', 'C4 deployment'],
+  };
+  const c4 = engine === 'mermaid' && names[diagramKeyword(source)];
+  return c4 ? c4[locale === 'en' ? 1 : 0] : diagramTemplateById(identifyDiagramTemplate(source, engine)).name[locale === 'en' ? 'en' : 'zh'];
+}
 
 export function identifyDiagramTemplate(source, engine = 'mermaid') {
   if (engine === 'echarts') {
     try {
       const option = JSON.parse(source);
       const series = option.series;
+      if (option.__quillite?.dataEditor === 'histogram') return 'histogram-chart';
+      if (option.__quillite?.dataEditor === 'percent') return 'percent-bar-chart';
+      if (Array.isArray(series) && series.length > 1 && series.every(item => ['bar', 'line'].includes(item?.type))) {
+        if (option.yAxis?.type === 'category') return 'diverging-bar-chart';
+        if (series.some(item => item.type === 'bar') && series.some(item => item.type === 'line')) return 'combo-chart';
+        if (series.every(item => item.type === 'bar')) return series.every(item => item.stack) ? 'stacked-bar-chart' : 'bar-chart';
+        return series.some(item => item.areaStyle) ? 'area-chart' : 'line-chart';
+      }
       if (Array.isArray(series) && series.length === 1) {
         const item = series[0];
+        if (item.type === 'heatmap' && item.coordinateSystem === 'calendar') return 'calendar-chart';
+        if (item.type === 'bar' && option.yAxis?.type === 'category') return 'horizontal-bar-chart';
         if (item.type === 'bar') return 'bar-chart';
         if (item.type === 'line') return item.areaStyle ? 'area-chart' : 'line-chart';
         if (item.type === 'pie' && Array.isArray(item.radius)) return 'doughnut-chart';
@@ -17,8 +45,7 @@ export function identifyDiagramTemplate(source, engine = 'mermaid') {
     } catch { /* Invalid JSON still needs a source-editing entry point. */ }
     return 'source-echarts';
   }
-  const start = String(source).replace(/^\s*---\r?\n[\s\S]*?\r?\n---\s*\r?\n/u, '').replace(/^\s*%%[^\n]*(?:\n|$)/gmu, '').trimStart();
-  const keyword = start.match(/^[\w-]+/u)?.[0]?.toLowerCase();
+  const keyword = diagramKeyword(source);
   if (keyword === 'graph') return 'flowchart';
   if (keyword === 'sankey') return 'sankey';
   if (keyword === 'statediagram') return 'state';
@@ -67,4 +94,27 @@ export function diagramReplacementMarkdown(range, source) {
   const ending = range.lineEnding === '\r\n' ? '\r\n' : '\n';
   const body = String(source).split(/\r?\n/u).map(line => indent + line).join(ending);
   return `${indent}${marker}${range.language || range.engine || 'mermaid'}${ending}${body}${ending}${indent}${marker}`;
+}
+
+// Retain each existing container prefix, including compact quotes and tabs.
+// New lines use a continuation prefix; unchanged suffix lines keep their own
+// prefix even when preceding lines have been inserted or removed.
+export function projectedDiagramReplacement(range, source) {
+  const markdown=diagramReplacementMarkdown(range,source);
+  if(!range.projectionPrefixes)return markdown.replace(/\r?\n/g,newline=>newline+(range.projectionPrefix||''));
+  const oldLines=String(range.source).split(/\r?\n/),newLines=String(source).split(/\r?\n/);
+  const prefixes=range.projectionPrefixes,lines=markdown.split(/\r?\n/);
+  let start=0,end=0;
+  while(start<oldLines.length&&start<newLines.length&&oldLines[start]===newLines[start])start++;
+  while(end<oldLines.length-start&&end<newLines.length-start&&oldLines.at(-1-end)===newLines.at(-1-end))end++;
+  const fallback=(range.projectionPrefix||'').replace(/>$/, '> ');
+  return lines.map((line,i)=>{
+    if(!i)return line;
+    if(i===lines.length-1)return prefixes.at(-1)+line;
+    const row=i-1,oldRow=row>=newLines.length-end?oldLines.length-(newLines.length-row):row;
+    const exists=row<start||row>=newLines.length-end||row-start<oldLines.length-start-end;
+    let prefix=exists?prefixes[oldRow+1]:fallback;
+    if(prefix.endsWith('>')&&/^[\t ]/.test(line))prefix+=' ';
+    return prefix+line;
+  }).join(range.lineEnding==='\r\n'?'\r\n':'\n');
 }

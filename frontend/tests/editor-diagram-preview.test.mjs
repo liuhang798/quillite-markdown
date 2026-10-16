@@ -2,19 +2,65 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { EditorState } from '@codemirror/state';
+import { EditorSelection, EditorState } from '@codemirror/state';
 import { history, undo, redo, undoDepth, isolateHistory } from '@codemirror/commands';
 import { DIAGRAM_TEMPLATES, diagramTemplateSource } from '../src/diagram-templates.js';
-import { diagramReplacementMarkdown } from '../src/diagram-editing.js';
+import { diagramReplacementMarkdown, projectedDiagramReplacement } from '../src/diagram-editing.js';
 import { editorDiagramItems, editorDiagramField, diagramPreviewContext, toggleDiagramSource, setDiagramDisplay,
-  diagramRenderFailed, refreshDiagramPreviews, refreshDiagramTheme, editSelectedDiagram, deleteRenderedDiagram,
+  diagramRenderFailed, refreshDiagramPreviews, refreshDiagramTheme, editSelectedDiagram, deleteRenderedDiagram, activeDiagramSourceItem, returnDiagramSourceToRendered, insertDiagramSourceNewline,
   DIAGRAM_PREVIEW_LIMIT, DIAGRAM_PREVIEW_DOCUMENT_LIMIT, DIAGRAM_SOURCE_LIMIT } from '../src/editor-diagram-preview.js';
 
 const fence = (body = 'pie\n"One": 1', engine = 'mermaid') => `\`\`\`${engine}\n${body}\n\`\`\``;
 const create = (doc, context = {}) => EditorState.create({ doc, extensions: [history(), editorDiagramField, diagramPreviewContext.of(context)] });
 const viewFor = state => { const view = { state, focus() {} }; view.dispatch = spec => { view.state = view.state.update(spec).state; }; return view; };
 
-test('all 37 chart templates in both languages retain exact source and engine', () => {
+test('diagram deletion requests a visible caret and keeps one undo transaction',()=>{
+ const source=fence(),view=viewFor(create(source));let request;
+ const dispatch=view.dispatch;view.dispatch=spec=>{request=spec;dispatch(spec);};
+ const item=view.state.field(editorDiagramField).items[0];assert.equal(deleteRenderedDiagram(view,item,view.state.doc),true);
+ assert.equal(request.scrollIntoView,true);assert.equal(request.selection.anchor,item.from);assert.equal(undoDepth(view.state),1);
+ undo(view);assert.equal(view.state.doc.toString(),source);
+ const block=readFileSync(new URL('../src/live-editable-block.js',import.meta.url),'utf8');
+ assert.match(block,/transactions\.some\(next => next\.scrollIntoView\)\) transaction\.scrollIntoView = true/);
+});
+
+test('diagram source return closes explicit and caret-open source without content or history changes',()=>{
+ for(const explicit of [true,false]){
+  const text=fence(),view=viewFor(create(text)),item=view.state.field(editorDiagramField).items[0];
+  view.dispatch({selection:{anchor:item.from+12},effects:explicit?toggleDiagramSource.of(item):[]});
+  assert.ok(activeDiagramSourceItem(view));assert.equal(returnDiagramSourceToRendered(view),true);
+  assert.equal(view.state.doc.toString(),text);assert.equal(undoDepth(view.state),0);
+  assert.equal(activeDiagramSourceItem(view),null);assert.equal(view.state.field(editorDiagramField).openRanges.length,0);
+  assert.equal(view.state.selection.main.from,item.from);assert.equal(view.state.selection.main.to,item.to);
+  assert.equal(view.state.selection.main.head,item.from,'scroll targets the visible start of the collapsed card');
+ }
+});
+
+test('diagram return resolves current source and preserves other open diagrams and source edit history',()=>{
+ const text=fence()+'\n\n'+fence('pie\n"Two": 2'),view=viewFor(create(text));
+ const [first,second]=view.state.field(editorDiagramField).items;
+ view.dispatch({effects:[toggleDiagramSource.of(first),toggleDiagramSource.of(second)],selection:{anchor:first.from+12}});
+ view.dispatch({changes:{from:first.from+12,insert:' '},selection:{anchor:first.from+13},userEvent:'input.type'});
+ const changed=view.state.doc.toString();assert.equal(returnDiagramSourceToRendered(view),true);
+ assert.equal(view.state.doc.toString(),changed);assert.equal(undoDepth(view.state),1);
+ assert.equal(view.state.field(editorDiagramField).openRanges.length,1);
+ undo(view);assert.equal(view.state.doc.toString(),text);
+});
+
+test('diagram return rejects stale, failed, read-only, disabled and destroyed source views',()=>{
+ for(const kind of ['stale','failed','readOnly','disabled','destroyed']){
+  const view=viewFor(create(fence())),item=view.state.field(editorDiagramField).items[0];
+  view.dispatch({effects:toggleDiagramSource.of(item)});
+  if(kind==='stale')view.dispatch({changes:{from:12,insert:' '}});
+  if(kind==='failed')view.dispatch({effects:diagramRenderFailed.of({doc:view.state.doc,item})});
+  if(kind==='readOnly')view.state=EditorState.create({doc:fence(),extensions:[editorDiagramField,EditorState.readOnly.of(true)]});
+  if(kind==='disabled')view.dispatch({effects:setDiagramDisplay.of('source')});
+  if(kind==='destroyed')view.destroyed=true;
+  assert.equal(returnDiagramSourceToRendered(view,item),false,kind);
+ }
+});
+
+test('all chart templates in both languages retain exact source and engine', () => {
   for (const template of DIAGRAM_TEMPLATES) for (const locale of ['zh', 'en']) {
     const raw = `before\n\n${fence(diagramTemplateSource(template, locale), template.engine || 'mermaid')}\n\nafter`;
     for (const source of [raw, raw.replace(/\n/g, '\r\n')]) {
@@ -31,10 +77,130 @@ test('all 37 chart templates in both languages retain exact source and engine', 
   }
 });
 
+test('all catalog diagrams in quotes and lists retain source, fence markers and replacement prefixes',()=>{
+  for(const template of DIAGRAM_TEMPLATES)for(const locale of ['zh','en'])for(const [intro,prefix]of [['','> '],['','> > '],['- Item\n\n','  ']]) {
+    const body=diagramTemplateSource(template,locale),engine=template.engine||'mermaid';
+    const raw='~~~~'+engine+'\n'+body+'\n~~~~';
+    const source=intro+raw.replace(/^/gm,prefix);
+    const [item]=editorDiagramItems(source);assert.ok(item,template.id+' '+prefix);
+    assert.equal(item.source,body);assert.equal(item.projectionPrefix,prefix);assert.equal(item.original,source.slice(item.from,item.to));
+    const replacement=diagramReplacementMarkdown(item,body).replaceAll('\n','\n'+item.projectionPrefix);
+    assert.equal(source.slice(0,item.from)+replacement+source.slice(item.to),source);
+    assert.equal(create(source).field(editorDiagramField).atoms.size,1);
+  }
+});
+
+test('nested diagrams preserve blank lines, CRLF and selection/undo semantics',()=>{
+  const source='> ~~~~MERMAID\r\n> flowchart LR\r\n> \r\n>   A-->B\r\n> \r\n> ~~~~';
+  const [item]=editorDiagramItems(source);assert.equal(item.source,'flowchart LR\n\n  A-->B\n');
+  assert.equal(item.lineEnding,'\r\n');assert.equal(item.projectionPrefix,'> ');
+  assert.equal(diagramReplacementMarkdown(item,item.source).replaceAll('\r\n','\r\n> '),item.original);
+  const view=viewFor(create(source)),current=view.state.field(editorDiagramField).items[0];
+  view.dispatch({selection:{anchor:current.from,head:current.to}});assert.equal(view.state.field(editorDiagramField).atoms.size,1);
+  assert.equal(deleteRenderedDiagram(view,current,view.state.doc),true);assert.equal(view.state.doc.toString(),'> ');
+  undo(view);assert.equal(view.state.doc.toString(),source.replaceAll('\r\n','\n'));
+});
+
+test('compact quotes, mixed prefixes and tab lists render and preserve exact replacement syntax',()=>{
+  const body='flowchart LR\n  A[Original]-->B\n  B-->C';
+  const wrap=[
+    raw=>raw.split('\n').map(line=>(/^\s/.test(line)?'> ':'>')+line).join('\n'),
+    raw=>raw.split('\n').map((line,i)=>(i%2&&!/^\s/.test(line)?'>':'> ')+line).join('\n'),
+    raw=>'- Item\n\n'+raw.replace(/^/gm,'\t'),
+    raw=>'12. '+raw.replaceAll('\n','\n    ')
+  ];
+  for(const make of wrap)for(const ending of ['\n','\r\n']) {
+    const source=make('~~~~mermaid\n'+body+'\n~~~~').replaceAll('\n',ending);
+    const [item]=editorDiagramItems(source);assert.ok(item,source);assert.equal(item.source,body);
+    const replace=text=>source.slice(0,item.from)+projectedDiagramReplacement(item,text)+source.slice(item.to);
+    assert.equal(replace(body),source,'no syntax normalization');
+    assert.equal(replace(body.replace('Original','Edited')),source.replace('Original','Edited'));
+    for(const next of [body.replace('  A[Original]-->B','  A[Original]-->B\n  X-->Y'),body.replace('  A[Original]-->B\n','')]) {
+      const changed=replace(next),[reopened]=editorDiagramItems(changed);assert.ok(reopened,changed);assert.equal(reopened.source,next);
+      assert.equal(changed.split(ending).at(-1),source.split(ending).at(-1),'closing prefix retained');
+    }
+  }
+});
+
+test('direct diagram source Enter preserves quote/list prefixes and has isolated undo',()=>{
+  for(const [intro,prefix] of [['','> '],['','>'],['- Item\n\n','\t'],['','>   '],['','']]) {
+    const source=intro+fence('flowchart LR\nA-->B').replace(/^/gm,prefix);
+    const view=viewFor(create(source)),item=view.state.field(editorDiagramField).items[0];assert.ok(item,source);
+    const at=source.indexOf('A-->B')+5;view.dispatch({selection:{anchor:at},effects:toggleDiagramSource.of(item)});
+    assert.equal(insertDiagramSourceNewline(view),true);
+    assert.equal(view.state.doc.toString(),source.slice(0,at)+'\n'+prefix+source.slice(at));
+    assert.equal(view.state.field(editorDiagramField).items.length,1);
+    undo(view);assert.equal(view.state.doc.toString(),source);redo(view);assert.equal(view.state.doc.toString(),source.slice(0,at)+'\n'+prefix+source.slice(at));
+  }
+  for(const kind of ['prose','opening','closing','composing','readonly','disabled']) {
+    const source=fence()+'\n\nAfter',view=viewFor(create(source)),item=view.state.field(editorDiagramField).items[0];
+    const at=kind==='prose'?source.length:kind==='opening'?item.from+2:kind==='closing'?item.to-1:source.indexOf('pie')+3;
+    view.dispatch({selection:{anchor:at,head:kind==='selection'?at-1:at},effects:toggleDiagramSource.of(item)});
+    if(kind==='composing')view.composing=true;
+    if(kind==='readonly')view.state=EditorState.create({doc:source,selection:{anchor:at},extensions:[editorDiagramField,EditorState.readOnly.of(true)]});
+    if(kind==='disabled')view.dispatch({effects:setDiagramDisplay.of('source')});
+    assert.equal(insertDiagramSourceNewline(view),false,kind);assert.equal(view.state.doc.toString(),source);
+  }
+});
+
+test('diagram source Enter replaces forward/backward and multiline selections without losing container prefixes',()=>{
+ for(const [intro,prefix]of [['',''],['','> '],['','>'],['- Item\n\n','  '],['- Item\n\n','\t'],['> - Item\n>\n','>   ']])for(const multiline of [false,true])for(const backward of [false,true]){
+  const source=intro+fence('flowchart LR\nA;   B;\nC').replace(/^/gm,prefix);
+  const view=viewFor(create(source)),item=view.state.field(editorDiagramField).items[0];assert.ok(item,source);
+  const from=source.indexOf('   B'),to=multiline?source.indexOf('C\n'):from+3;
+  view.dispatch({effects:toggleDiagramSource.of(item),selection:{anchor:backward?to:from,head:backward?from:to}});
+  assert.equal(insertDiagramSourceNewline(view),true);
+  const expected=source.slice(0,from)+'\n'+prefix+source.slice(to);
+  assert.equal(view.state.doc.toString(),expected);assert.equal(view.state.field(editorDiagramField).items.length,1);
+  assert.equal(view.state.selection.main.head,from+1+prefix.length);assert.equal(undoDepth(view.state),1);
+  undo(view);assert.equal(view.state.doc.toString(),source);redo(view);assert.equal(view.state.doc.toString(),expected);
+ }
+});
+
+test('diagram source Enter at indentation keeps only indentation before caret and supports independent blank lines',()=>{
+ const source='> '+fence('flowchart LR\n  A;   B;').replaceAll('\n','\n> ');
+ const view=viewFor(create(source)),item=view.state.field(editorDiagramField).items[0],at=source.indexOf('   B');
+ view.dispatch({effects:toggleDiagramSource.of(item),selection:{anchor:at}});
+ assert.equal(insertDiagramSourceNewline(view),true);
+ const first=source.slice(0,at)+'\n>   '+source.slice(at);assert.equal(view.state.doc.toString(),first);
+ assert.equal(insertDiagramSourceNewline(view),true);
+ assert.equal(view.state.doc.toString(),source.slice(0,at)+'\n>   \n>   '+source.slice(at));
+ undo(view);assert.equal(view.state.doc.toString(),first);undo(view);assert.equal(view.state.doc.toString(),source);
+});
+
+test('diagram Enter handles multiple body selections atomically but leaves fence/prefix-crossing selections to structural commands',()=>{
+ const source='> '+fence('flowchart LR\nA; B;\nC; D;').replaceAll('\n','\n> ');
+ const view=viewFor(EditorState.create({doc:source,extensions:[editorDiagramField,history(),EditorState.allowMultipleSelections.of(true)]}));
+ const item=view.state.field(editorDiagramField).items[0],one=source.indexOf(' B'),two=source.indexOf(' D');
+ view.dispatch({effects:toggleDiagramSource.of(item),selection:EditorSelection.create([EditorSelection.range(one,one+1),EditorSelection.range(two,two+1)])});
+ assert.equal(insertDiagramSourceNewline(view),true);assert.equal(view.state.doc.toString(),source.replace(' B','\n> B').replace(' D','\n> D'));
+ assert.equal(view.state.selection.ranges.length,2);undo(view);assert.equal(view.state.doc.toString(),source);
+ for(const [from,to]of [[source.indexOf('A;'),source.lastIndexOf('```')],[source.indexOf('A;'),source.indexOf('> C')+1],[source.indexOf('> A')+1,source.indexOf('B;')]]){
+  view.dispatch({selection:{anchor:from,head:to}});assert.equal(insertDiagramSourceNewline(view),false);assert.equal(view.state.doc.toString(),source);
+ }
+});
+
+test('nested math, HTML, literal code examples and incomplete fences are never diagrams',()=>{
+  for(const prefix of ['> ','> > ','  '])for(const body of [
+    '$$\n'+fence()+'\n$$','\\[\n'+fence()+'\n\\]',
+    '<pre>\n'+fence()+'\n</pre>','<!--\n'+fence()+'\n-->',
+    '````markdown\n'+fence()+'\n````','```mermaid\npie\n'
+  ]) {
+    const source=(prefix==='  '?'- Item\n\n':'')+body.replace(/^/gm,prefix);
+    assert.deepEqual(editorDiagramItems(source),[],source);
+  }
+});
+
+test('nested diagram scans share the document and item limits with root diagrams',()=>{
+  const nested=fence().replace(/^/gm,'> ');
+  assert.equal(editorDiagramItems((nested+'\n\n').repeat(DIAGRAM_PREVIEW_LIMIT+5)).length,DIAGRAM_PREVIEW_LIMIT);
+  assert.equal(editorDiagramItems('> '+ 'x'.repeat(DIAGRAM_PREVIEW_DOCUMENT_LIMIT)+'\n'+nested).length,0);
+});
+
 test('only complete parser-confirmed fences hide source; examples, HTML, comments and containers remain intact', () => {
   for (const source of ['````markdown\n' + fence() + '\n````', '<!--\n' + fence() + '\n-->', '<pre>\n' + fence() + '\n</pre>',
     '$$\n' + fence() + '\n$$', 'before\n$$\n' + fence() + '\n$$', '\\[\n' + fence() + '\n\\]', 'before\n\\[\n' + fence() + '\n\\]',
-    '    ```mermaid\n    pie\n    "One": 1\n    ```', '> ' + fence().replace(/\n/g, '\n> '), '```mermaid\npie\n', 'paragraph `mermaid pie`']) {
+    '    ```mermaid\n    pie\n    "One": 1\n    ```', '```mermaid\npie\n', 'paragraph `mermaid pie`']) {
     assert.equal(editorDiagramItems(source).length, 0, source);
   }
   const source = '# 标题 😀\r\n\r\n  ~~~~MERMAID\r\n  pie\r\n  "One": 1\r\n  ~~~~\r\nnext';
@@ -120,13 +286,15 @@ test('actual in-place save preserves no-op source and rejects immutable-document
   const fn = renderer.slice(renderer.indexOf('function replaceExistingFlowchart('), renderer.indexOf('function insertGeneratedDiagram('));
   const source = fence(), doc = { sliceString: () => source }, calls = [];
   const context = vm.createContext({ state: { editing: true, documentSession: 1 }, codeEditor: { state: { doc }, dispatch: value => calls.push(value), focus() {} },
-    diagramReplacementMarkdown, isolateHistory, showToast() {}, t: key => key });
+    projectedDiagramReplacement, isolateHistory, showToast() {}, t: key => key });
   vm.runInContext(fn, context);
   const range = { ...editorDiagramItems(source)[0], editorDoc: doc, documentSession: 1 };
   context.replaceExistingFlowchart(range, range.source); assert.equal(calls.length, 0);
   context.replaceExistingFlowchart({ ...range, editorDoc: {} }, 'pie\n"One": 2'); assert.equal(calls.length, 0);
   context.replaceExistingFlowchart({ ...range, documentSession: 0 }, 'pie\n"One": 2'); assert.equal(calls.length, 0);
   context.replaceExistingFlowchart(range, 'pie\n"One": 2'); assert.equal(calls.length, 1);
+  assert.equal(calls[0].selection.head,range.from);
+  assert.equal(calls[0].selection.anchor,range.from+calls[0].changes.insert.length);
 });
 
 test('actual widgets have local accessible actions, lazy rendering and cleanup; no detached floating editor', () => {

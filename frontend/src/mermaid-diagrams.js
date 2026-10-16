@@ -1,4 +1,9 @@
 import DOMPurify from 'dompurify';
+import { normalizeFlowchartNodeContrast, automaticDiagramForeground } from './diagram-contrast.js';
+import { compactC4Viewport } from './c4-viewport.js';
+import { separateC4DynamicRelations, protectC4Labels, matchC4ArrowColors } from './c4-dynamic-relations.js';
+import { routeC4AroundNodes } from './c4-obstacle-routing.js';
+import { normalizedMermaidType, hasMermaidConfiguration, hasConfiguredMermaidForeground } from './mermaid-render-metadata.js';
 
 let renderSequence = 0;
 let renderQueue = Promise.resolve();
@@ -93,7 +98,9 @@ function diagramTheme() {
       relationLabelBackground: color('--paper', dark ? '#1D2420' : '#FFFFFF'),
       relationLabelColor: color('--text', dark ? '#E7ECE9' : '#1F2924'),
       labelTextColor: color('--text', dark ? '#E7ECE9' : '#1F2924'),
-      nodeTextColor: color('--text', dark ? '#E7ECE9' : '#1F2924'),
+      // Let Mermaid derive nodeTextColor from primaryTextColor. Supplying a
+      // derived default here pins it even when a diagram selects theme: base
+      // and explicitly overrides primaryTextColor in its init/frontmatter.
       titleColor: color('--text', dark ? '#E7ECE9' : '#1F2924'),
       actorTextColor: color('--text', dark ? '#E7ECE9' : '#1F2924'),
       actorBkg: color('--panel', dark ? '#242C28' : '#F5F8F6'),
@@ -123,6 +130,12 @@ function diagramTheme() {
       taskBorderColor: color('--accent', '#159A63'),
       activeTaskBkgColor: color('--accent', '#159A63'),
       activeTaskBorderColor: color('--accent-strong', '#0F7D50'),
+      // Mermaid's base defaults use white/lightgrey even with darkMode=true.
+      // Keep excluded dates and completed tasks neutral in the application theme.
+      excludeBkgColor: color('--line', dark ? '#39443E' : '#D9E0DB'),
+      altSectionBkgColor: color('--panel', dark ? '#242C28' : '#F5F8F6'),
+      doneTaskBkgColor: color('--panel', dark ? '#242C28' : '#F5F8F6'),
+      doneTaskBorderColor: color('--muted', dark ? '#A8ADAA' : '#68716B'),
       gridColor: color('--line', dark ? '#39443E' : '#D9E0DB'),
       todayLineColor: color('--accent', '#159A63'),
       ...pieVariables,
@@ -218,11 +231,7 @@ function sourceFrom(element) {
   }
 }
 
-function diagramType(source) {
-  return source.split(/\s+/u, 1)[0].toLowerCase().replace(/[^a-z0-9-]/g, '');
-}
-
-function normalizeSVGTypography(svg, type = '') {
+function normalizeSVGTypography(svg, type = '', preserveForeground = false) {
   if (!svg) return;
   svg.querySelectorAll('text, tspan').forEach(label => {
     const size = Number.parseFloat(getComputedStyle(label).fontSize);
@@ -246,7 +255,15 @@ function normalizeSVGTypography(svg, type = '') {
   });
 
   normalizeEdgeLabelBackgrounds(svg);
-  if (type.startsWith('c4')) normalizeC4Diagram(svg);
+  if (type === 'flowchart' && !preserveForeground) normalizeFlowchartNodeContrast(svg);
+  if (type.startsWith('c4')) {
+    normalizeC4Diagram(svg, preserveForeground);
+    separateC4DynamicRelations(svg);
+    if (!preserveForeground) matchC4ArrowColors(svg);
+    protectC4Labels(svg, renderedDiagramColors().paper);
+    routeC4AroundNodes(svg);
+    compactC4Viewport(svg);
+  }
   if (type === 'erdiagram') normalizeERDiagram(svg);
   if (type === 'requirementdiagram') normalizeRequirementDiagram(svg);
   if (type === 'xychart-beta') normalizeXYChart(svg);
@@ -472,7 +489,7 @@ function expandSVGViewBox(svg, padding = 10) {
   svg.setAttribute('viewBox', `${nextX} ${nextY} ${nextRight - nextX} ${nextBottom - nextY}`);
 }
 
-function normalizeC4Diagram(svg) {
+function normalizeC4Diagram(svg, preserveForeground = false) {
   const { dark, text, muted } = renderedDiagramColors();
   // Mermaid measures C4 stereotypes with guillemets (for example
   // `«person»`) but draws the longer ASCII form (`<<person>>`) into that
@@ -495,10 +512,9 @@ function normalizeC4Diagram(svg) {
     label.style.setProperty('letter-spacing', '0', 'important');
   });
 
-  // C4 keeps fixed #444 relationship colours even under a dark custom theme.
-  // Leave white node text intact, but make relationship lines, arrowheads and
-  // their captions use a readable neutral foreground.
-  svg.querySelectorAll('line').forEach(connector => {
+  if (preserveForeground) return;
+  // Metadata distinguishes defaults from explicit values, even #444/white.
+  svg.querySelectorAll('[data-c4-line-auto="true"] > line, [data-c4-line-auto="true"] > path, [data-c4-border-auto="true"] > rect').forEach(connector => {
     connector.style.setProperty('stroke', dark ? muted : '#55615B', 'important');
     connector.style.setProperty('opacity', '1', 'important');
   });
@@ -507,11 +523,23 @@ function normalizeC4Diagram(svg) {
     marker.style.setProperty('stroke', dark ? muted : '#55615B', 'important');
   });
   svg.querySelectorAll('text').forEach(label => {
+    if (label.closest('.c4-shape, [data-c4-text-auto="false"]')) return;
     const fill = (label.getAttribute('fill') || '').toLowerCase();
     if (fill === '#444444' || fill === '#000000' || fill === 'black') {
       label.style.setProperty('fill', text, 'important');
       label.style.setProperty('opacity', '1', 'important');
     }
+  });
+  svg.querySelectorAll('.c4-shape.c4-auto-color').forEach(node => {
+    let shape = node.querySelector('.label-container, .basic');
+    // Person graphics wrap the painted body/head in an unpainted group. Its
+    // inherited fill is not the visible backdrop behind the body text.
+    if (shape?.tagName === 'g') shape = shape.querySelector('rect, path, circle, ellipse');
+    const labels = [...node.querySelectorAll('.label text, .label tspan')];
+    if (!shape || !labels.length || Number(getComputedStyle(shape).fillOpacity) !== 1) return;
+    for (let parent = shape; parent && parent !== svg; parent = parent.parentElement) if (Number(getComputedStyle(parent).opacity) !== 1) return;
+    const color = automaticDiagramForeground(getComputedStyle(shape).fill, getComputedStyle(labels[0]).fill);
+    if (color) for (const label of labels) label.style.setProperty('fill', color, 'important');
   });
 }
 
@@ -605,12 +633,19 @@ async function renderContainer(container, messages, generation) {
     if (!element.isConnected) continue;
     const source = sourceFrom(element).trim();
     if (!source) continue;
-    element.dataset.mermaidType = diagramType(source);
     const id = `quillite-mermaid-${Date.now()}-${++renderSequence}`;
     element.classList.add('mermaid-rendering');
     element.setAttribute('aria-busy', 'true');
     try {
-      const { svg } = await engine.render(id, source);
+      // Ask Mermaid to parse configuration rather than duplicating its YAML /
+      // init grammar. Unknown parser support preserves authored foregrounds.
+      let preserveForeground = false;
+      if (hasMermaidConfiguration(source)) {
+        const parsed = typeof engine.parse === 'function' ? await engine.parse(source) : null;
+        preserveForeground = !parsed || hasConfiguredMermaidForeground(parsed.config);
+        if (!isCurrent() || !element.isConnected) return;
+      }
+      const { svg, diagramType } = await engine.render(id, source);
       if (!isCurrent()) return;
       if (!element.isConnected) continue;
       const safeSVG = DOMPurify.sanitize(svg, {
@@ -619,7 +654,8 @@ async function renderContainer(container, messages, generation) {
         FORBID_ATTR: ['onload', 'onclick', 'onerror']
       });
       element.innerHTML = safeSVG;
-      normalizeSVGTypography(element.querySelector('svg'), element.dataset.mermaidType);
+      element.dataset.mermaidType = normalizedMermaidType(diagramType);
+      normalizeSVGTypography(element.querySelector('svg'), element.dataset.mermaidType, preserveForeground);
       element.dataset.mermaidRendered = 'true';
       element.classList.remove('mermaid-rendering', 'mermaid-error');
       element.setAttribute('aria-label', messages.diagramLabel);

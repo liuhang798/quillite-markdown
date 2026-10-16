@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>矩阵历史回归</title>
+<button id="load">加载矩阵</button><button id="inside">定位首格</button>
+<button data-command="addRowAfter">加行</button><button data-command="removeRow">删行</button>
+<button data-command="undo">撤销</button><button data-command="redo">重做</button>
+<button id="read">读取状态</button><div id="host"></div><pre id="result"></pre>
+<script type="module">
+import { createFormulaVisualEditor } from '/src/formula-visual-editor.js';
+const editor = createFormulaVisualEditor(document.querySelector('#host'), () => report());
+function report() {
+ document.querySelector('#result').textContent = JSON.stringify({value:editor.value(),undo:editor.field.canUndo(),redo:editor.field.canRedo()},null,2);
+}
+document.querySelector('#load').onclick = () => {editor.load('\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}');report();};
+document.querySelector('#inside').onclick = () => {editor.field.position=1;editor.field.focus();report();};
+document.querySelectorAll('[data-command]').forEach(button=>{button.onpointerdown=e=>e.preventDefault();button.onclick=()=>{editor.command(button.dataset.command);report();};});
+document.querySelector('#read').onclick=report;
+</script>

@@ -109,6 +109,9 @@ window.quilliteMarkdown = {
     try { return resolved(JSON.parse(sessionStorage.getItem(browserRecoveryKey) || 'null')); }
     catch { return resolved(null); }
   },
+  getStartupRecoverySnapshot: () => desktopRuntime ? Backend.GetStartupRecoverySnapshot() : window.quilliteMarkdown.getRecoverySnapshot(),
+  listRecoveryArchives: () => desktopRuntime ? Backend.ListRecoveryArchives() : resolved([]),
+  readRecoveryArchive: id => desktopRuntime ? Backend.ReadRecoveryArchive(id) : resolved(null),
   clearRecoverySnapshot: () => {
     if (desktopRuntime) return Backend.ClearRecoverySnapshot();
     sessionStorage.removeItem(browserRecoveryKey);

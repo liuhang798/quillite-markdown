@@ -18,6 +18,27 @@ export function visualFormulaValue(original, initialSerialized, currentSerialize
   return initialSerialized === currentSerialized ? original : currentSerialized;
 }
 
+// MathLive structure buttons insert editable slots, not malformed LaTeX.
+// Ignore an escaped backslash; a genuine placeholder still prevents insertion.
+export function hasFormulaPlaceholders(source) {
+  return /(?:^|[^\\])(?:\\\\)*\\placeholder\b/.test(String(source));
+}
+
+// Public MathLive offsets are post-order: an enclosing atom follows its
+// descendants at a shallower depth. Do not rely on private model internals.
+export function isMatrixCellPosition(field) {
+  if (!field.selectionIsCollapsed) return false;
+  let depth = field.getElementInfo(field.position)?.depth;
+  if (!Number.isFinite(depth)) return false;
+  for (let offset = field.position + 1; offset <= field.lastOffset; offset++) {
+    const info = field.getElementInfo(offset);
+    if (!info || !Number.isFinite(info.depth) || info.depth >= depth) continue;
+    if (/^\\begin\{(?:[pbBvV]?matrix\*?|array|[dr]?cases)\}/.test(info.latex || '')) return true;
+    depth = info.depth;
+  }
+  return false;
+}
+
 export const FORMULA_STRUCTURES = [
   ['fraction', '\\frac{#@}{#?}'], ['root', '\\sqrt{#@}'], ['power', '{#@}^{#?}'],
   ['subscript', '{#@}_{#?}'], ['integral', '\\int_{#?}^{#?} #@\\,dx'],

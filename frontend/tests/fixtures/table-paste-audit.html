@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>隔离表格粘贴审计</title>
+<style>html,body{margin:0;height:100%}iframe{width:100%;height:calc(100% - 95px);border:0;display:block}textarea{width:45%;height:70px}#rich{display:inline-block;vertical-align:top}td{border:1px solid #aaa;padding:3px}</style>
+<iframe title="完整应用隔离测试" src="/"></iframe>
+<textarea aria-label="隔离剪贴板"></textarea><div id="rich" contenteditable="true" aria-label="隔离表格"><table><tr><td><strong>甲</strong></td><td>乙</td></tr><tr><td>丙</td><td><em>丁</em></td></tr></table></div>
+<div contenteditable="true" aria-label="合并表格"><table><tr><td colspan="2">合并</td></tr><tr><td>甲</td><td>乙</td></tr></table></div>
+<div contenteditable="true" aria-label="混合表格">不能丢失的前文<table><tr><td>甲</td><td>乙</td></tr></table></div>
+<div contenteditable="true" aria-label="图片表格"><table><tr><td><img alt="不可静默丢失的图片"></td><td>乙</td></tr></table></div>
+</html>

@@ -13,6 +13,28 @@ import {
 } from '../src/formula-templates.js';
 import { renderLatex } from '../src/math-rendering.js';
 
+test('vector template commands remain separated from edited plain-letter and compound operands', () => {
+  for (const id of ['dot-product', 'cross-product']) {
+    for (const values of [
+      { left: 'u', right: 'v', angle: 'w' },
+      { left: 'a+b', right: 'c+d', angle: '\\alpha+\\beta' },
+      { left: '\\vec{u}', right: '\\mathbf{v}', angle: '2\\theta' },
+    ]) {
+      const expression = buildFormulaExpression(formulaTemplateById(id), values);
+      assert.doesNotMatch(expression, /\\(?:lVert|times)[A-Za-z]/);
+      assert.match(expression, /\\(?:sin|cos)\\left\(/);
+      for (const display of [false, true]) {
+        const html = renderLatex(expression, display);
+        assert.match(html, /class="katex"/);
+        assert.doesNotMatch(html, /katex-error|#cc0000/, `${id}: ${expression}`);
+      }
+      if (id === 'cross-product' && values.left === 'a+b') {
+        assert.ok(expression.includes('\\left(a+b\\right)\\times \\left(c+d\\right)'));
+      }
+    }
+  }
+});
+
 test('formula builder provides a broad catalog grouped by academic discipline', () => {
   assert.ok(FORMULA_TEMPLATES.length >= 70);
   assert.ok(FORMULA_DISCIPLINES.length >= 10);
@@ -24,6 +46,19 @@ test('formula builder provides a broad catalog grouped by academic discipline', 
   assert.ok(formulaTemplatesForDiscipline('chemistry').length >= 7);
   assert.ok(formulaTemplatesForDiscipline('chemical-reaction').length >= 7);
   assert.equal(formulaTemplatesForDiscipline('all').length, FORMULA_TEMPLATES.length);
+});
+
+test('every math template renders edited parameters, not only its defaults', () => {
+  for (const template of FORMULA_TEMPLATES.filter(item => item.kind === 'math')) {
+    const values = Object.fromEntries(template.fields.map((item, index) => [item.key, 'uvwxyzabc'[index % 9]]));
+    if (template.id === 'matrix3') Object.assign(values, {row1:'u,v,w',row2:'x,y,z',row3:'a,b,c'});
+    const expression = buildFormulaExpression(template, values);
+    for (const display of [false, true]) {
+      const html = renderLatex(expression, display);
+      assert.match(html, /class="katex"/, template.id);
+      assert.doesNotMatch(html, /katex-error|#cc0000/, `${template.id}: ${expression}`);
+    }
+  }
 });
 
 test('every formula template has a unique id and renders its defaults without a KaTeX or mhchem error', () => {
@@ -74,7 +109,7 @@ test('common formula templates generate valid LaTeX from user values', () => {
   );
   assert.equal(
     buildFormulaExpression(formulaTemplateById('eigenvalue')),
-    '\\det\\left(A-\\lambda\\,I\\right)=0',
+    '\\det\\left(A-\\lambda\\cdot I\\right)=0',
   );
 });
 

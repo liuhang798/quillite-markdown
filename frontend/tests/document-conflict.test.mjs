@@ -37,7 +37,9 @@ function harness() {
     window: { quilliteMarkdown: api, confirm: () => true },
     els: { editorFileName: {}, editorSaveState: {} },
     editorContent: () => state.currentFile.content,
-    codeEditor: { state: { doc: { length: 5 } }, dispatch: tx => calls.push(['edit', tx.changes.insert]) },
+    codeEditor: { state: { doc: { length: 5 } }, dispatch: tx => calls.push(tx.changes ? ['edit', tx.changes.insert] : ['effects', tx.effects]) },
+    editorPresentation: { reconfigure: extensions => ({ reconfigure: extensions }) },
+    editorPresentationExtensions: () => ({ documentPath: state.currentFile.path }),
     focusCodeEditor() {}, renderEditorPreview() {}, renderCurrentDocument() {},
     setDirty: value => { state.dirty = value; }, t: key => key, showToast: key => calls.push(['toast', key]),
     clearRecoverySnapshot: async () => {}, cancelScheduledRecoverySnapshot() {},
@@ -175,13 +177,14 @@ test('copy cancellation or an existing destination leaves conflict and edits int
 });
 
 test('successful copy opens the copy and leaves source revision out of future saves', async () => {
-  const { context: c, state, api } = harness();
+  const { context: c, state, api, calls } = harness();
   api.saveConflictCopy = async () => ({ path: '/new.md', name: 'new.md', content: 'local', revision: 'copy-revision' });
   await c.saveDocument(true);
   assert.equal(state.currentFile.path, '/new.md');
   assert.equal(state.currentFile.revision, 'copy-revision');
   assert.equal(state.documentConflict, null);
   assert.equal(state.dirty, false);
+  assert.deepEqual(calls.find(call => call[0] === 'effects'), ['effects', { reconfigure: { documentPath: '/new.md' } }]);
 });
 
 test('background edit invalidates a pending merge or disk selection', async () => {
