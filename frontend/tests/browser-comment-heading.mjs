@@ -20,7 +20,7 @@ try{
  await page.locator('#openFileButton').click();await page.locator('#editButton').click();
  const editor=page.locator('#markdownEditor > .cm-editor'),content=editor.locator('> .cm-scroller > .cm-content'),preview=page.locator('#editorPreviewContent');
  const read=()=>editor.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const v=EditorView.findFromDOM(el);return {text:v.state.doc.toString(),head:v.state.selection.main.head};});
- const reset=async text=>{await page.locator('[data-editor-presentation="source"]').click();await content.fill(text);await content.press('Control+Home');await page.locator('[data-editor-presentation="live"]').click();await page.waitForTimeout(150);assert.equal((await read()).text,text);};
+ const reset=async text=>{await page.locator('[data-editor-presentation="source"]').click();await content.fill(text);await content.press('Control+Home');await page.locator('[data-editor-presentation="live"]').click();await page.locator('#restoreLivePreviewButton').click();await page.waitForTimeout(150);assert.equal((await read()).text,text);};
  const shot=async name=>{await page.waitForTimeout(200);await page.screenshot({path:output+'/'+name+'.png'});};
  await editor.getByText('我是正文',{exact:true}).click();await shot('01-before-repair');
  assert.equal(await editor.locator('.cm-live-html').count(),0,'mixed comment/title must never become an opaque HTML widget');

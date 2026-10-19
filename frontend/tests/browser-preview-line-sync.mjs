@@ -27,6 +27,7 @@ try {
       }, source);
       await page.locator('#openFileButton').click(); await page.locator('#editButton').click();
       await page.locator(`[data-editor-presentation="${presentation}"]`).click();
+      if(presentation==='live')await page.locator('#restoreLivePreviewButton').click();
       const editor=page.locator('#markdownEditor > .cm-editor'), preview=page.locator('#editorPreviewContent');
       await preview.getByText('末尾定位文字',{exact:true}).waitFor();
       const read=()=>editor.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const v=EditorView.findFromDOM(el);const{undoDepth}=await import('/node_modules/@codemirror/commands/dist/index.js');return {text:v.state.doc.toString(),line:v.state.doc.lineAt(v.state.selection.main.head).number,history:undoDepth(v.state)};});

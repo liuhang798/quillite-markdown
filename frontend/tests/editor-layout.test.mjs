@@ -39,7 +39,7 @@ function harness(saved = null) {
     dataset: { editorLayout }, classList: { toggle() {} },
     setAttribute(name, value) { this[name] = value; },
   }));
-  const editor = { requestMeasure() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
+  const editor = { requestMeasure() {}, dispatch() {}, focus() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
   const context = vm.createContext({
     state: { editorPreviewWidth: 47, dirty: true, reviewResults: ['suggestion'] },
     document: { body: { dataset: {} }, querySelectorAll: selector => selector === '[data-editor-presentation]' ? [] : buttons },
@@ -47,6 +47,7 @@ function harness(saved = null) {
     $: () => current, t: key => key, showToast() {},
     codeEditor: editor, scheduleFormatToolbarLayout() {}, schedulePaneWidthRefresh() {},
     updatePaneResizerVisibility() {}, suspendEditorPreview() {}, renderEditorPreview() {}, editorContent: () => editor.content,
+    editorPresentation: { reconfigure: extensions => extensions }, editorPresentationExtensions: () => [],
   });
   vm.runInContext(functions, context);
   context.setEditorLayout(context.normalizeEditorLayout(storage.get('editorLayout')), true);
@@ -102,6 +103,46 @@ test('editor-only persists, suspends preview and restores fresh split content wi
   assert.deepEqual(calls, ['pause', '# Draft']);
   assert.equal(JSON.stringify(editor), before);
   assert.equal(harness('editor-only').context.state.editorLayout, 'editor-only');
+});
+
+test('explicit mode actions hide or restore preview while manual visibility stays independent', () => {
+  for (const layout of ['editor-left', 'preview-left']) {
+    const {context, storage, editor} = harness(layout);
+    context.state.editing=true; context.state.currentFile={path:'draft.md'};
+    const before=JSON.stringify(editor), calls=[];
+    context.suspendEditorPreview=()=>calls.push('pause');
+    context.renderEditorPreview=text=>calls.push(text);
+    context.setEditorPresentation('live');
+    assert.equal(context.state.editorLayout,'editor-only');
+    assert.equal(context.state.lastSplitLayout,layout);
+    assert.equal(storage.get('editorPresentation'),'live');
+    context.setEditorLayout(layout); // Explicit restore does not change mode.
+    assert.equal(context.state.editorPresentation,'live');
+    context.syncEditorLayoutOptions();
+    assert.equal(context.state.editorLayout,layout);
+    context.setEditorPresentation('live'); // Re-click applies its default again.
+    assert.equal(context.state.editorLayout,'editor-only');
+    context.setEditorPresentation('source');
+    assert.equal(context.state.editorLayout,layout);
+    context.setEditorLayout('editor-only');
+    assert.equal(context.state.editorPresentation,'source');
+    context.syncEditorLayoutOptions();
+    assert.equal(context.state.editorLayout,'editor-only');
+    context.setEditorPresentation('source');
+    assert.equal(context.state.editorLayout,layout);
+    assert.equal(storage.get('editorLayout'),layout);
+    assert.equal(JSON.stringify(editor),before);
+    assert.deepEqual(calls,['pause','# Draft','pause','# Draft','pause','# Draft']);
+  }
+});
+
+test('IME composition blocks both mode and automatic layout changes', () => {
+  const {context,storage,editor}=harness('editor-left');
+  context.state.editorPresentation='source'; editor.composing=true;
+  context.setEditorPresentation('live');
+  assert.equal(context.state.editorPresentation,'source');
+  assert.equal(context.state.editorLayout,'editor-left');
+  assert.equal(storage.has('editorPresentation'),false);
 });
 
 test('editor-only guards scheduled, direct and cursor rendering and explicitly refreshes exports', () => {

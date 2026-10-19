@@ -16,6 +16,7 @@ try{
  const editor=app.locator('#markdownEditor > .cm-editor'),content=editor.locator('> .cm-scroller > .cm-content');
  const source='# Heading\n\nBODY\n\n```text\nCODE\n```';
  await app.locator('[data-editor-presentation="source"]').click();await content.focus();await page.keyboard.insertText(source);await app.locator('[data-editor-presentation="live"]').click();
+ await app.locator('#restoreLivePreviewButton').click();
  const read=()=>editor.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');return EditorView.findFromDOM(el).state.doc.toString();});
  const shot=async name=>{if(process.env.AUDIT_OUTPUT){await page.waitForTimeout(250);await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/${name}.png`});}};
  const check=async label=>{

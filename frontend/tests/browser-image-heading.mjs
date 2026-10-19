@@ -24,6 +24,7 @@ try {
       const doc=image+gap+'图片后文字\n\n下面文字';
       await app.locator('[data-editor-presentation="source"]').click();await content.fill(doc);
       await app.locator('[data-editor-presentation="live"]').click();
+      await app.locator('#restoreLivePreviewButton').click();
       await editor.locator('.cm-line').filter({hasText:'图片后文字'}).click();
       await app.locator('#headingSelect').click();await app.locator('#textStyleMenu button').nth(level).click();
       const expected=image+'\n\n'+'#'.repeat(level)+' 图片后文字\n\n下面文字';

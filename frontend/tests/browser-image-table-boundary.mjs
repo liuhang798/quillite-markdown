@@ -31,6 +31,7 @@ try{
    const source='Before\n\n'+table+gap;
    await app.locator('[data-editor-presentation="source"]').click();await content.fill(source);await content.press('Control+End');
    await app.locator('[data-editor-presentation="live"]').click();
+   await app.locator('#restoreLivePreviewButton').click();
    await editor.locator('.cm-live-table').waitFor({state:'visible'});
    await openImage();await app.locator('#imageUrl').fill(image);
    await app.locator('#imageWidth').focus();await page.keyboard.press('End');

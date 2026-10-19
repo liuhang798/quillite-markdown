@@ -28,8 +28,9 @@ try {
       for(const width of [980,1450,1920]) {
         await page.setViewportSize({width,height:850});
         for(const layout of ['preview-left','editor-left','editor-only']) {
-          if(layout==='editor-left')await app.locator('#swapEditorLayoutButton').click();
+          await app.locator('#restoreLivePreviewButton').click();
           if(layout==='editor-only')await app.locator('#hideLivePreviewButton').click();
+          else if(await app.locator('body').getAttribute('data-editor-layout')!==layout)await app.locator('#swapEditorLayoutButton').click();
           const label=`${theme}-${language}-${width}-${layout}`;
           await page.waitForTimeout(100);
           const before=await control.boundingBox(),status=await app.locator('.editor-status').boundingBox(),bar=await app.locator('#editorFormatBar').boundingBox();
@@ -40,23 +41,30 @@ try {
           assert.ok(Math.abs(l.width-s.width)<1,label+' equal segments');
           await source.click();assert.equal(await source.getAttribute('aria-pressed'),'true');
           await page.waitForTimeout(200);
-          assert.deepEqual(await control.boundingBox(),before,label+' stable size');
+          const after=await control.boundingBox();
+          assert.equal(after.width,before.width,label+' stable control width');
+          assert.equal(after.height,before.height,label+' stable control height');
+          assert.equal(await app.locator('.editor-preview-pane').isVisible(),true,label+' source opens preview');
           assert.match(await control.evaluate(el=>getComputedStyle(el,'::before').transform),/^matrix\(1, 0, 0, 1, [1-9]/);
           await source.focus();await page.keyboard.press('ArrowLeft');
           assert.equal(await live.getAttribute('aria-pressed'),'true');
+          assert.equal(await app.locator('.editor-preview-pane').isVisible(),false,label+' live closes preview');
           assert.equal(await live.evaluate(el=>el===document.activeElement),true);
           await page.keyboard.press('ArrowRight');assert.equal(await source.getAttribute('aria-pressed'),'true');
           await page.keyboard.press('Home');assert.equal(await live.getAttribute('aria-pressed'),'true');
           await page.keyboard.press('End');assert.equal(await source.getAttribute('aria-pressed'),'true');
           await live.click();assert.equal(await read(),'# Heading\n\nSample text');
+          await app.locator('#restoreLivePreviewButton').click();
+          assert.equal(await live.getAttribute('aria-pressed'),'true',label+' manual restore keeps live mode');
+          assert.equal(await app.locator('.editor-preview-pane').isVisible(),true);
           if(process.env.AUDIT_OUTPUT&&width===1450&&layout==='editor-left'&&language==='zh-CN'){
             await page.waitForTimeout(200);
             await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/switch-${theme}.png`});
             await app.locator('.editor-header-actions').screenshot({path:`${process.env.AUDIT_OUTPUT}/switch-detail-${theme}.png`});
           }
+          await app.locator('#hideLivePreviewButton').click();
           console.log('PASS '+label);
         }
-        await app.locator('#restoreLivePreviewButton').click();await app.locator('#swapEditorLayoutButton').click();
       }
     }
   }

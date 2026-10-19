@@ -543,6 +543,8 @@ The flowchart canvas supports input/output parallelograms through quick insertio
 
 Live editing / Source sits at the lower right of the editor header, with equal-width segments and a sliding highlight. It supports mouse and left/right arrow keys, light/dark themes, and stable control dimensions when switching.
 
+Clicking Live editing hides the split preview; clicking Source opens it in the remembered orientation. Restore preview and the preview close button remain independent controls without changing the editing mode, document content or undo history.
+
 Source mode and image Show source condense long Base64 data into a “Base64 image · format · size” label while keeping descriptions, dimensions and alignment editable. This affects display only: copying and saving retain the complete data, with undo/redo and light/dark theme support.
 
 - After choosing italic, bold, strikethrough or highlight at an empty caret, type directly to replace the selected placeholder without clicking the document again. The first input collapses the selection at the new text's end, so subsequent typing appends normally and remains undoable.

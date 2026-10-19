@@ -526,7 +526,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     untitledDocument: '未命名文档', saved: '已保存', unsaved: '尚未保存', autoSaved: '已自动保存', saveAs: '另存为', exitEdit: '退出编辑', markdownEditorAria: 'Markdown 编辑器', largeDocumentOptimized: '已启用大文档优化：预览将延迟刷新，并暂停全文拼写扫描',
     recoveryLabel: '异常恢复', recoveryTitle: '发现未保存的编辑内容', recoveryDescription: '轻阅在上次异常结束前保存了一份恢复副本。你可以继续编辑，或放弃副本并以磁盘文件为准。', recoveryDocument: '恢复文档', recoverySavedAt: '快照时间', recoveryDiscard: '放弃恢复内容', recoveryRestore: '恢复并继续编辑', recoveryFailed: '无法读取恢复内容，磁盘文件未受影响', recoveryRestored: '已恢复上次未保存的编辑内容', unsavedCloseLabel: '文档更改', unsavedTitle: '尚未保存', unsavedCloseDescription: '文档中的更改尚未保存。是否在退出前保存？', save: '保存', dontSave: '不保存', savingDocument: '正在保存…',
     codeLang: '选择编程语言', codeNoLang: '无语言（纯文本）',
-    liveEditing: '即时渲染', sourceEditing: '源码', editorPresentationLabel: '编辑显示方式', liveEditingHint: '直接点击文字、表格单元格或代码编辑；查看语法请切换源码',
+    liveEditing: '即时渲染', sourceEditing: '源码', editorPresentationLabel: '编辑显示方式', liveEditingHint: '即时渲染自动关闭分栏预览，源码自动打开；也可单独恢复或关闭预览',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> 保存　 <kbd>Ctrl</kbd> + <kbd>E</kbd> 预览', backToTop: '回到顶部', backToTopAria: '回到文档顶部',
     toc: '本页目录', tocViewMode: '目录显示方式', tocTreeMode: '折叠目录', tocFlatMode: '平铺目录', tocSearchPlaceholder: '搜索标题', clearTocSearch: '清除标题搜索', tocNoMatches: '没有匹配的标题', openCompactToc: '展开本页目录', closeCompactToc: '收起本页目录', dynamicTocTitle: '目录', expandTocSection: '展开“{title}”', collapseTocSection: '折叠“{title}”', releaseToOpen: '松开以打开文档', interfaceLanguage: '界面语言', softwareFont: '软件字体', fontSystem: '系统默认', fontSans: '无衬线', fontSerif: '衬线', fontRounded: '圆体', fontSongti: '宋体', fontKaiti: '楷体', fontChanged: '软件字体已切换', fontSaveFailed: '无法保存字体设置', defaultApp: '设为默认 MD 应用', windowsSettings: 'Windows 设置',
     exportHTML: '导出 HTML', htmlExported: 'HTML 网页已导出', htmlExportFailed: 'HTML 导出失败', exportFileInUse: '导出文件正被其他程序占用，请关闭该文件后重试，或选择其他文件名', exportDocumentTooLarge: '渲染后的文档超过 96 MiB 导出上限。请压缩大图片或拆分文档后重试', exportSourceDocumentTooLarge: '源文档超过 64 MiB 导出上限。请拆分文档后重试', exportImageResourceFailed: '部分图片无法读取，已停止导出，避免生成缺失内容的图片。请检查原图片后重试',
@@ -618,7 +618,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     untitledDocument: 'Untitled document', saved: 'Saved', unsaved: 'Unsaved', autoSaved: 'Autosaved', saveAs: 'Save As', exitEdit: 'Exit editing', markdownEditorAria: 'Markdown editor', largeDocumentOptimized: 'Large-document mode enabled: preview updates are deferred and full-document spell scans are paused',
     recoveryLabel: 'CRASH RECOVERY', recoveryTitle: 'Unsaved edits were found', recoveryDescription: 'Quillite saved a recovery copy before the previous session ended unexpectedly. Continue editing it, or discard it and keep the version on disk.', recoveryDocument: 'Document', recoverySavedAt: 'Snapshot', recoveryDiscard: 'Discard recovery copy', recoveryRestore: 'Restore & Continue', recoveryFailed: 'The recovery copy could not be read. The file on disk was not changed.', recoveryRestored: 'Unsaved edits from the previous session were restored', unsavedCloseLabel: 'DOCUMENT CHANGES', unsavedTitle: 'Unsaved changes', unsavedCloseDescription: 'This document has unsaved changes. Save them before quitting?', save: 'Save', dontSave: "Don't Save", savingDocument: 'Saving…',
     codeLang: 'Select a language', codeNoLang: 'No language (plain text)',
-    liveEditing: 'Live editing', sourceEditing: 'Source', editorPresentationLabel: 'Editor display', liveEditingHint: 'Click text, table cells or code to edit in place. Switch to Source to edit syntax.',
+    liveEditing: 'Live editing', sourceEditing: 'Source', editorPresentationLabel: 'Editor display', liveEditingHint: 'Live editing hides the split preview; Source opens it. You can also restore or close preview independently.',
     editorShortcut: '<kbd>Ctrl</kbd> + <kbd>S</kbd> Save　 <kbd>Ctrl</kbd> + <kbd>E</kbd> Preview', backToTop: 'Back to top', backToTopAria: 'Back to document top',
     toc: 'ON THIS PAGE', tocViewMode: 'Outline view', tocTreeMode: 'Collapsible outline', tocFlatMode: 'Flat outline', tocSearchPlaceholder: 'Search headings', clearTocSearch: 'Clear heading search', tocNoMatches: 'No matching headings', openCompactToc: 'Open table of contents', closeCompactToc: 'Close table of contents', dynamicTocTitle: 'Table of contents', expandTocSection: 'Expand “{title}”', collapseTocSection: 'Collapse “{title}”', releaseToOpen: 'Release to open document', interfaceLanguage: 'Interface language', softwareFont: 'App font', fontSystem: 'System', fontSans: 'Sans serif', fontSerif: 'Serif', fontRounded: 'Rounded', fontSongti: 'Song style', fontKaiti: 'Kai style', fontChanged: 'App font changed', fontSaveFailed: 'Unable to save the font setting', defaultApp: 'Set as default MD app', windowsSettings: 'Windows Settings',
     exportHTML: 'Export HTML', htmlExported: 'HTML page exported', htmlExportFailed: 'HTML export failed', exportFileInUse: 'The export file is open in another app. Close it and try again, or choose a different file name.', exportDocumentTooLarge: 'The rendered document exceeds the 96 MiB export limit. Compress large images or split the document and try again.', exportSourceDocumentTooLarge: 'The source document exceeds the 64 MiB export limit. Split the document and try again.', exportImageResourceFailed: 'Some images could not be read. Export was stopped to avoid creating an incomplete image. Check the source images and try again.',
@@ -5391,9 +5391,11 @@ function setEditorPresentation(mode) {
   localStorage.setItem('editorPresentation', state.editorPresentation);
   if (codeEditor && editorPresentation) {
     codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
-    codeEditor.focus();
   }
-  syncEditorLayoutOptions();
+  // Couple only an explicit mode action to preview visibility. Manual preview
+  // controls and restored layout preferences remain independent afterwards.
+  setEditorLayout(state.editorPresentation === 'live' ? 'editor-only' : state.lastSplitLayout, true);
+  codeEditor?.focus();
 }
 
 function setEditorFormulaDisplay(mode) {

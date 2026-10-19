@@ -139,6 +139,7 @@ try {
   await page.keyboard.press('Control+End');
   await page.keyboard.insertText('新增内容');
   await page.locator('[data-editor-presentation="live"]').click();
+  await page.locator('#restoreLivePreviewButton').click();
   await page.locator('.cm-live-table').waitFor();
   await page.locator('.cm-live-table td .cm-content').first().click();
   await page.keyboard.press('End');await page.keyboard.type('app');
@@ -175,7 +176,7 @@ try {
   assert.match(await page.locator('.cm-content').innerText(),/\*\*not bold\*\*/);
   await page.evaluate(()=>{localStorage.setItem('editorPresentation','source');localStorage.setItem('language','en');});
   await page.reload();
-  await page.waitForFunction(()=>document.querySelector('[data-editor-presentation="source"]').textContent==='Source');
+  await page.waitForFunction(()=>document.querySelector('[data-editor-presentation="source"] [data-i18n="sourceEditing"]').textContent==='Source');
   assert.equal(await page.locator('[data-editor-presentation="source"]').getAttribute('aria-pressed'),'true');
   assert.deepEqual(errors, []);
   console.log('PASS: live rendering, table click, tasks/undo, IME lifecycle, mode/save/history, formula/image coexistence, editor-only');

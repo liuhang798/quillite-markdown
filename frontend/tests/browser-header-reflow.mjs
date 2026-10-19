@@ -45,8 +45,9 @@ try {
   for(const width of [980,1100,1500,1920]){
    await page.setViewportSize({width,height:1000});
    for(const layout of ['preview-left','editor-left','editor-only']){
-    if(layout==='editor-left')await app.locator('#swapEditorLayoutButton').click();
+    await app.locator('#restoreLivePreviewButton').click();
     if(layout==='editor-only')await app.locator('#hideLivePreviewButton').click();
+    else if(await app.locator('body').getAttribute('data-editor-layout')!==layout)await app.locator('#swapEditorLayoutButton').click();
     const label=`${language}-${width}-${layout}`;await check(label);
     await app.locator('[data-editor-presentation="source"]').click();assert.equal(await editor.locator('.cm-live-heading').count(),0);await app.locator('[data-editor-presentation="live"]').click();assert.equal(await read(),'# Heading\n\nBODY');
     const before=await app.locator('body').evaluate(()=>({...window.headerCalls}));await app.locator('#saveAsButton').click();await app.locator('#documentHistoryButton').click();await app.locator('#documentHistoryDialog').waitFor({state:'visible'});if(language==='zh-CN'&&width===1100&&layout==='preview-left')await shot('02-history');await app.locator('#closeDocumentHistory').click();
@@ -57,8 +58,6 @@ try {
     await app.locator('#renameDocumentButton').focus();await page.keyboard.press('Tab');assert.equal(await app.locator('#editorDocumentLocation').evaluate(el=>el===document.activeElement),true);await page.keyboard.press('Tab');assert.equal(await app.locator('#saveAsButton').evaluate(el=>el===document.activeElement),true);await app.locator('#documentHistoryButton').focus();await page.keyboard.press('Tab');assert.equal(await app.locator('[data-editor-presentation="live"]').evaluate(el=>el===document.activeElement),true);await page.keyboard.press('Tab');await page.keyboard.press('Enter');assert.equal(await app.locator('[data-editor-presentation="source"]').getAttribute('aria-pressed'),'true');await app.locator('[data-editor-presentation="live"]').click();
     console.log(label+': labels, hit targets, modes, Save As cancel, history, rename cancel, exit/reenter and Tab/Enter passed');
    }
-   await app.locator('#restoreLivePreviewButton').click();
-   if(await app.locator('body').getAttribute('data-editor-layout')==='editor-left')await app.locator('#swapEditorLayoutButton').click();
   }
  }
  assert.deepEqual(errors,[]);

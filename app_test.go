@@ -131,6 +131,32 @@ func TestEditorPresentationSwitchBelowStatus(t *testing.T) {
 	}
 }
 
+func TestEditorPresentationControlsPreviewVisibility(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start, end := strings.Index(source, "function setEditorPresentation(mode)"), strings.Index(source, "function setEditorFormulaDisplay(mode)")
+	if start < 0 || end <= start {
+		t.Fatal("presentation action missing")
+	}
+	if !strings.Contains(source[start:end], "setEditorLayout(state.editorPresentation === 'live' ? 'editor-only' : state.lastSplitLayout, true)") {
+		t.Fatal("explicit presentation action must apply its preview default")
+	}
+	for _, id := range []string{"hideLivePreviewButton", "restoreLivePreviewButton"} {
+		marker := "$('#" + id + "').addEventListener('click', () => {"
+		start := strings.Index(source, marker)
+		if start < 0 {
+			t.Fatalf("missing manual preview control: %s", id)
+		}
+		end := strings.Index(source[start:], "\n});")
+		if end < 0 || strings.Contains(source[start:start+end], "setEditorPresentation") {
+			t.Fatalf("manual preview control must not change editing mode: %s", id)
+		}
+	}
+}
+
 func TestTextStyleIconFollowsAIAndRetainsNativeSelect(t *testing.T) {
 	menu, err := os.ReadFile("frontend/src/text-style-menu.js")
 	if err != nil {
