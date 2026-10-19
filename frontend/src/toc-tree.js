@@ -1,3 +1,6 @@
+import { markdownParser } from './markdown-parser.js';
+import { frontmatterRange, maskFrontmatter } from './frontmatter.js';
+
 const STORAGE_KEY = 'tocCollapsedByDocument';
 const MAX_STORED_DOCUMENTS = 40;
 
@@ -36,9 +39,25 @@ export function filterTocTree(nodes = [], query = '') {
 }
 
 export function replaceDynamicTocMarkers(markdown = '') {
-  const lines = String(markdown).split('\n');
+  const source = String(markdown);
+  const lines = source.split('\n');
+  const protectedRanges = [];
+  const metadata = frontmatterRange(source);
+  if (metadata) protectedRanges.push(metadata);
+  markdownParser.parse(maskFrontmatter(source)).iterate({ enter(node) {
+    if (['HTMLBlock', 'FencedCode', 'CodeBlock'].includes(node.name)) {
+      protectedRanges.push({ from: node.from, to: node.to });
+      return false;
+    }
+  } });
+  let offset = 0;
+  let protectedIndex = 0;
   let fence = '';
   return lines.map(line => {
+    const from = offset;
+    offset += line.length + 1;
+    while (protectedIndex < protectedRanges.length && protectedRanges[protectedIndex].to <= from) protectedIndex++;
+    if (protectedRanges[protectedIndex]?.from <= from) return line;
     const opening = line.match(/^ {0,3}(`{3,}|~{3,})/);
     if (opening) {
       const marker = opening[1][0];

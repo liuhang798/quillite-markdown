@@ -1,39 +1,12 @@
+import { markdownParser } from './markdown-parser.js';
+import { codeProjection } from './projected-code.js';
+
 export const TABLE_LIMITS = Object.freeze({ minRows: 2, maxRows: 20, minColumns: 1, maxColumns: 12, minWidth: 170, maxWidth: 360, defaultWidth: 220 });
 
 const WIDTH_METADATA = /^\s*<!--\s*quillite-table-widths:\s*([\d,\s]+)\s*-->\s*$/i;
 const DIVIDER_CELL = /^:?-{3,}:?$/;
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || minimum));
-
-function sourceLines(source) {
-  const lines = [];
-  let start = 0;
-  for (let index = 0; index <= source.length; index += 1) {
-    if (index !== source.length && source[index] !== '\n') continue;
-    const rawEnd = index > start && source[index - 1] === '\r' ? index - 1 : index;
-    lines.push({ text: source.slice(start, rawEnd), start, end: index < source.length ? index + 1 : index });
-    start = index + 1;
-  }
-  return lines;
-}
-
-function fencedCodeLines(lines) {
-  const blocked = Array(lines.length).fill(false);
-  let activeFence = null;
-  lines.forEach((line, index) => {
-    if (!activeFence) {
-      const opening = line.text.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
-      if (!opening) return;
-      activeFence = { character: opening[1][0], length: opening[1].length };
-      blocked[index] = true;
-      return;
-    }
-    blocked[index] = true;
-    const closing = line.text.match(/^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/);
-    if (closing && closing[1][0] === activeFence.character && closing[1].length >= activeFence.length) activeFence = null;
-  });
-  return blocked;
-}
 
 export function splitMarkdownTableRow(line) {
   let source = String(line || '').trim();
@@ -159,50 +132,57 @@ export function serializeMarkdownTable(model) {
   ].join('\n');
 }
 
-export function findMarkdownTables(source) {
-  const text = String(source || '');
-  const lines = sourceLines(text);
-  const fencedLines = fencedCodeLines(lines);
-  const tables = [];
-  for (let dividerIndex = 1; dividerIndex < lines.length; dividerIndex += 1) {
-    if (fencedLines[dividerIndex] || fencedLines[dividerIndex - 1]) continue;
-    if (!lines[dividerIndex].text.includes('|') && !lines[dividerIndex - 1].text.includes('|')) continue;
-    const dividerCells = splitMarkdownTableRow(lines[dividerIndex].text);
-    const alignments = dividerCells.map(dividerAlignment);
-    if (!alignments.length || alignments.some(alignment => alignment === null)) continue;
-    const headerCells = splitMarkdownTableRow(lines[dividerIndex - 1].text);
-    if (headerCells.length !== alignments.length) continue;
-    let lastIndex = dividerIndex;
-    const cells = [headerCells];
-    for (let rowIndex = dividerIndex + 1; rowIndex < lines.length; rowIndex += 1) {
-      const line = lines[rowIndex].text;
-      if (!line.trim() || !line.includes('|')) break;
-      const row = splitMarkdownTableRow(line);
-      if (row.length !== alignments.length) break;
-      cells.push(row);
-      lastIndex = rowIndex;
-    }
-    if (cells.length < TABLE_LIMITS.minRows) cells.push(Array(alignments.length).fill(''));
-    let firstIndex = dividerIndex - 1;
-    let widths = [];
-    let hasWidthMetadata = false;
-    if (firstIndex > 0) {
-      const match = lines[firstIndex - 1].text.match(WIDTH_METADATA);
-      if (match) {
-        widths = match[1].split(',').map(value => Number(value.trim()));
-        firstIndex -= 1;
-        hasWidthMetadata = true;
-      }
-    }
-    tables.push({
-      from: lines[firstIndex].start,
-      to: lines[lastIndex].end,
-      line: dividerIndex,
-      hasWidthMetadata,
-      model: { cells, alignments, widths: normalizedWidths(widths, alignments.length) }
-    });
-    dividerIndex = lastIndex;
+// Project whole syntax rows, omitting only their quote/list prefixes. Cell
+// contents remain original Markdown and retain exact UTF-16 source positions.
+export function tableProjection(source, node) {
+  const rows=[];
+  for(let child=node.firstChild;child;child=child.nextSibling) if(['TableHeader','TableDelimiter','TableRow'].includes(child.name)) rows.push(child);
+  const start=source.lastIndexOf('\n',node.from-1)+1;
+  let prefix=source.slice(start,node.from);
+  for(let parent=node.parent;parent;parent=parent.parent) {
+    const mark=parent.name==='ListItem' && parent.getChild('ListMark');
+    if(mark && mark.from>=start && mark.to<=node.from) prefix=prefix.slice(0,mark.from-start)+' '.repeat(mark.to-mark.from)+prefix.slice(mark.to-start);
   }
+  return codeProjection(source,rows.map((row,index)=>({from:row.from,to:index<rows.length-1?source.indexOf('\n',row.to)+1:row.to})),node.from,prefix,node);
+}
+
+export function serializeTableReplacement(model, table) {
+  return serializeMarkdownTable(model).replaceAll('\n','\n'+(table?.prefix || ''))+(table?.trailingNewline===false?'':'\n');
+}
+
+export function findMarkdownTables(source, syntaxTree) {
+  const text = String(source || '');
+  if (!syntaxTree && text.includes('\r\n')) {
+    const removed=[];
+    for(const match of text.matchAll(/\r(?=\n)/g))removed.push(match.index-removed.length);
+    const restore=position=>{let low=0,high=removed.length;while(low<high){const middle=(low+high)>>1;if(removed[middle]<=position)low=middle+1;else high=middle;}return position+low;};
+    return findMarkdownTables(text.replace(/\r(?=\n)/g,'')).map(table=>({...table,
+      from:restore(table.from),to:restore(table.to),tableFrom:restore(table.tableFrom),tableTo:restore(table.tableTo)}));
+  }
+  const tables = [];
+  const visit=node=>{
+    if(node.name==='Table') {
+      const projection=tableProjection(text,node), rows=projection.text.split('\n');
+      const alignments=splitMarkdownTableRow(rows[1]).map(dividerAlignment);
+      const cells=[rows[0],...rows.slice(2)].map(splitMarkdownTableRow);
+      // An irregular row cannot be round-tripped without inventing/dropping cells.
+      if(!alignments.length || alignments.some(a=>a===null) || cells.some(row=>row.length!==alignments.length)) return;
+      if(cells.length<TABLE_LIMITS.minRows)cells.push(Array(alignments.length).fill(''));
+      let previous=node.prevSibling;
+      while(previous?.name==='QuoteMark')previous=previous.prevSibling;
+      const lineStart=text.lastIndexOf('\n',node.from-1)+1;
+      const adjacent=previous && text.slice(previous.to,node.from).replaceAll('\r','')==='\n'+text.slice(lineStart,node.from);
+      const metadata=adjacent && previous.name==='CommentBlock' && text.slice(previous.from,previous.to).match(WIDTH_METADATA);
+      const widths=metadata?metadata[1].split(',').map(value=>Number(value.trim())):[];
+      tables.push({from:metadata?previous.from:node.from,to:node.to+(text[node.to]==='\n'?1:0),
+        line:text.slice(0,node.from).split('\n').length,hasWidthMetadata:!!metadata,
+        prefix:projection.prefix,tableFrom:node.from,tableTo:node.to,
+        model:{cells,alignments,widths:normalizedWidths(widths,alignments.length)}});
+      return;
+    }
+    for(let child=node.firstChild;child;child=child.nextSibling)visit(child);
+  };
+  visit((syntaxTree || markdownParser.parse(text)).topNode);
   return tables;
 }
 
@@ -213,7 +193,7 @@ export function findMarkdownTableAt(source, offset) {
 
 export function stripTableWidthMetadata(source) {
   const text = String(source || '');
-  const characters = [...text];
+  const characters = text.split(''); // Source ranges use UTF-16, including after emoji.
   findMarkdownTables(text).filter(table => table.hasWidthMetadata).forEach(table => {
     const lineEnd = text.indexOf('\n', table.from);
     const end = lineEnd < 0 ? text.length : lineEnd;

@@ -2,13 +2,41 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { marked } from 'marked';
 import { mathExtensions, renderLatex, renderLatexResult, collectFormulaRendering, formulaMarkdownMatches } from '../src/math-rendering.js';
-import { scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas } from '../src/formula-editing.js';
+import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas, tableFormulaConstraint } from '../src/formula-editing.js';
 import { formulaValues, formulaTemplateById, buildFormulaExpression, buildFormulaMarkdown, formulaInlineHasNewline, parseFormulaMarkdown, resolveFormulaOutput } from '../src/formula-templates.js';
 import { formulaFallbackSource } from '../src/formula-export.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 marked.use({ extensions: mathExtensions });
 const renderer = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
+
+function selectedDetails(source, from, to, indexed = true) {
+  const body = renderer.slice(renderer.indexOf('function selectedFormulaDetails()'), renderer.indexOf('\nfunction formulaTemplateValues'));
+  const context = {
+    codeEditor: {state: {doc: {toString:()=>source,sliceString:(a,b)=>source.slice(a,b)},selection:{main:{from,to}}}},
+    findFormulaAt, currentFormulaIndex:()=>indexed ? scanMarkdownFormulas(source) : [],
+  };
+  return vm.runInNewContext(body+'\nselectedFormulaDetails();',context);
+}
+
+test('plain selected TeX seeds a new formula rather than no-op existing-formula editing', () => {
+  for (const raw of ['Alpha','x^2','\\frac{a}{b}','\\ce{H2O}','x \\tag{2}']) {
+    const source='Before\n\n'+raw+'\n\nAfter', result=selectedDetails(source,8,8+raw.length);
+    assert.equal(result.editRange,null,raw);
+    assert.equal(result.templateId,raw.startsWith('\\ce')?'chem-custom':'custom');
+    assert.equal(result.mode,raw.includes('\\tag')?'numbered':'inline');
+    assert.ok(result.source);
+  }
+});
+
+test('existing or explicitly delimited selections retain the no-op preservation path', () => {
+  for (const raw of ['$x$','$$x$$','\\(x\\)','\\[x\\]']) for (const indexed of [true,false]) {
+    const source='Before\n\n'+raw+'\n\nAfter',result=selectedDetails(source,8,8+raw.length,indexed);
+    assert.equal(result.editRange.from,8);assert.equal(result.editRange.to,8+raw.length);
+  }
+  const result=selectedDetails('Before $x^2$ After',8,11);
+  assert.equal(result.editRange.from,7);assert.equal(result.editRange.to,12);
+});
 
 test('actual save handler rejects stale sessions/documents and preserves no-op source', () => {
   const saveSource = renderer.slice(renderer.indexOf('function insertGeneratedFormula()'), renderer.indexOf('\nconst diagramWizardState'));
@@ -22,7 +50,7 @@ test('actual save handler rejects stale sessions/documents and preserves no-op s
       formulaWizardState: { mode, initialMarkdown: unchanged ? input : '$x$', editRange: { from: 0, to: 3, raw: '$x$', mode: 'inline' }, context: { session: 1, path: 'one.md', document } },
       codeEditor: { state: { doc: current }, dispatch: value => writes.push(value), focus() {} },
       $: () => ({ value: '1' }), showToast: message => messages.push(message), t: key => key,
-      formulaEditIsCurrent, formulaReplacement, formulaInsertion, parseFormulaMarkdown, resolveFormulaOutput,
+      formulaEditIsCurrent, formulaReplacement, formulaInsertion, parseFormulaMarkdown, resolveFormulaOutput, tableFormulaConstraint,
       buildFormulaMarkdown, formulaInlineHasNewline, renderLatex, renderLatexResult, formulaMarkdownMatches, closeFormulaDialog: () => { closed = true; },
     };
     vm.runInNewContext(saveSource + '\ninsertGeneratedFormula();', context);

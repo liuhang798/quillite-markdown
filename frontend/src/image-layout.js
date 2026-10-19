@@ -53,8 +53,8 @@ export function imageAlignment(style) {
   return 'center';
 }
 
-export function editorImageItems(source) {
-  return markdownImageRanges(source, { preview: true }).filter(item => {
+export function editorImageItems(source, definitions) {
+  return markdownImageRanges(source, { preview: true, definitions }).filter(item => {
     if (item.previewFrom === undefined || item.previewTo > source.length || !imageSourceKind(item.ref)) return false;
     return !item.attributes?.some((a, i, all) => all.findIndex(b => a.name === b.name) !== i);
   }).slice(0, 256).map(item => ({
@@ -115,10 +115,10 @@ function imageContinuation(source, group) {
   return prefix.replace(/(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/g, marker => ' '.repeat(marker.length));
 }
 
-export function separateImageChanges(source, group) {
+export function separateImageChanges(source, group, singleLine = false) {
   const continuation = imageContinuation(source, group);
   if (continuation === null) return null;
-  return { from: group.from, to: group.to, insert: group.images.map(image => source.slice(image.from, image.to)).join(`\n${continuation}\n${continuation}`) };
+  return { from: group.from, to: group.to, insert: group.images.map(image => source.slice(image.from, image.to)).join(singleLine ? '<br><br>' : `\n${continuation}\n${continuation}`) };
 }
 
 export function alignImageChanges(source, group, index, alignment) {
@@ -180,8 +180,8 @@ function pureImageTable(source, images, from, to) {
   return structure.length === expected.length && structure.every((tag, i) => tag === expected[i]);
 }
 
-export function editorImageGroups(source) {
-  const images = editorImageItems(source), groups = [], used = new Set();
+export function editorImageGroups(source, definitions) {
+  const images = editorImageItems(source, definitions), groups = [], used = new Set();
   for (const item of images) {
     if (used.has(item)) continue;
     let siblings = [], from = item.from, to = item.to, row = false;
@@ -206,12 +206,13 @@ export function editorImageGroups(source) {
   return groups.sort((a, b) => a.from - b.from);
 }
 
-export function canJoinImageGroups(source, first, next) {
+export function canJoinImageGroups(source, first, next, singleLine = false) {
   if (!next || first.images.length + next.images.length > MAX_IMAGE_ROW) return false;
   // Also accepts a CodeMirror Text rope: do not stringify the whole document
   // once per image/keystroke merely to enable a small toolbar button.
   const slice = typeof source === 'string' ? (from, to) => source.slice(from, to) : (from, to) => source.sliceString(from, to);
-  if (slice(first.to, next.from).trim()) return false;
+  const gap = slice(first.to, next.from);
+  if ((singleLine ? gap.replace(/<br\s*\/?\s*>/gi, '') : gap).trim()) return false;
   const lineStart = typeof source === 'string' ? source.lastIndexOf('\n', first.from - 1) + 1 : source.lineAt(first.from).from;
   const endPosition = Math.max(next.from, next.to - 1);
   const lineEnd = typeof source === 'string' ? source.indexOf('\n', endPosition) : source.lineAt(endPosition).to;
@@ -221,7 +222,7 @@ export function canJoinImageGroups(source, first, next) {
 // Called after DOMPurify. Image-only Markdown paragraphs become real tables
 // so multi-image rows also survive Word export, not just browser flex layout.
 export function normalizeImageRows(container) {
-  for (const paragraph of container.querySelectorAll('p, li')) {
+  for (const paragraph of container.querySelectorAll('p, li, th, td')) {
     const children = [...paragraph.childNodes];
     const images = children.filter(node => node.nodeType === 1 && node.tagName === 'IMG');
     if (images.length < 2 || images.length > MAX_IMAGE_ROW || children.some(node => node.nodeType === 1 ? node.tagName !== 'IMG' : node.nodeType !== 3 || node.textContent.trim())) continue;
@@ -233,7 +234,7 @@ export function normalizeImageRows(container) {
       if (!img.style.marginLeft && !img.style.marginRight) { img.style.display = 'block'; img.style.marginLeft = 'auto'; img.style.marginRight = 'auto'; }
       cell.append(img);
     }
-    if (paragraph.tagName === 'LI') paragraph.replaceChildren(table);
+    if (['LI', 'TH', 'TD'].includes(paragraph.tagName)) paragraph.replaceChildren(table);
     else paragraph.replaceWith(table);
   }
 }

@@ -1,3 +1,5 @@
+import { formulaMatrixCell, formulaMatrixRow } from './formula-matrix.js';
+
 const field = (key, zh, en, value, placeholder = value) => ({ key, label: { zh, en }, value, placeholder });
 
 const OUTPUT_MODES = ['inline', 'block', 'numbered'];
@@ -23,6 +25,54 @@ const chemistryTemplate = (id, group, zh, en, fields, build) => ({
 });
 
 export const FORMULA_TEMPLATES = [
+  mathTemplate('trig-identity', 'algebra', '三角恒等式', 'Trigonometric identity', [
+    field('angle', '角度', 'Angle', 'x'),
+  ], v => `\\sin^2\\left(${v.angle}\\right)+\\cos^2\\left(${v.angle}\\right)=1`),
+  mathTemplate('tangent-identity', 'algebra', '正切与正弦余弦', 'Tangent identity', [
+    field('angle', '角度', 'Angle', 'x'),
+  ], v => `\\tan\\left(${v.angle}\\right)=\\frac{\\sin\\left(${v.angle}\\right)}{\\cos\\left(${v.angle}\\right)},\\quad\\cos\\left(${v.angle}\\right)\\ne0`),
+  mathTemplate('angle-addition', 'algebra', '和差角公式', 'Angle sum and difference', [
+    field('a', '角 α', 'Angle α', '\\alpha'), field('b', '角 β', 'Angle β', '\\beta'),
+  ], v => `\\sin\\left(${v.a}\\pm ${v.b}\\right)=\\sin\\left(${v.a}\\right)\\cos\\left(${v.b}\\right)\\pm\\cos\\left(${v.a}\\right)\\sin\\left(${v.b}\\right)`),
+  mathTemplate('double-angle', 'algebra', '倍角公式', 'Double-angle formula', [
+    field('angle', '角度', 'Angle', 'x'),
+  ], v => `\\sin\\left(2\\cdot ${formulaOperand(v.angle)}\\right)=2\\sin\\left(${v.angle}\\right)\\cos\\left(${v.angle}\\right)`),
+  mathTemplate('set-union', 'mathematics', '集合交并集', 'Set union and intersection', [
+    field('a', '集合 A', 'Set A', 'A'), field('b', '集合 B', 'Set B', 'B'),
+  ], v => `${formulaOperand(v.a)}\\cup ${formulaOperand(v.b)},\\quad ${formulaOperand(v.a)}\\cap ${formulaOperand(v.b)}`),
+  mathTemplate('set-membership', 'mathematics', '集合属于与包含', 'Membership and subset', [
+    field('element', '元素', 'Element', 'x'), field('a', '集合 A', 'Set A', 'A'), field('b', '集合 B', 'Set B', 'B'),
+  ], v => `${v.element}\\in ${v.a},\\quad ${v.a}\\subseteq ${v.b}`),
+  mathTemplate('set-builder', 'mathematics', '集合描述法', 'Set-builder notation', [
+    field('element', '元素', 'Element', 'x'), field('condition', '条件', 'Condition', 'x>0'),
+  ], v => `\\left\\{${v.element}\\mid ${v.condition}\\right\\}`),
+  mathTemplate('logic-quantifiers', 'mathematics', '逻辑量词', 'Logical quantifiers', [
+    field('domain', '定义域', 'Domain', '\\mathbb{R}'), field('predicate', '命题', 'Predicate', 'P(x,y)'),
+  ], v => `\\forall x\\in ${v.domain},\\quad\\exists y\\in ${v.domain}: ${v.predicate}`),
+  mathTemplate('logic-implication', 'mathematics', '逻辑蕴含', 'Logical implication', [
+    field('p', '命题 P', 'Proposition P', 'P'), field('q', '命题 Q', 'Proposition Q', 'Q'),
+  ], v => `\\left(${v.p}\\Rightarrow ${v.q}\\right)\\Leftrightarrow\\left(\\neg ${formulaOperand(v.q)}\\Rightarrow\\neg ${formulaOperand(v.p)}\\right)`),
+  mathTemplate('aligned-derivation', 'algebra', '多行对齐推导', 'Aligned derivation', [
+    field('left', '左侧表达式', 'Left expression', '(x+1)^2'), field('step1', '第一步', 'First step', 'x^2+2x+1'), field('step2', '第二步', 'Second step', 'x(x+2)+1'),
+  ], v => `\\begin{aligned}${v.left}&=${v.step1}\\\\&=${v.step2}\\end{aligned}`),
+  mathTemplate('system3', 'algebra', '三元方程组', 'Three-equation system', [
+    field('a', '第一个方程', 'First equation', 'x+y+z=6'), field('b', '第二个方程', 'Second equation', 'x-y=0'), field('c', '第三个方程', 'Third equation', 'z=2'),
+  ], v => `\\begin{cases}${v.a}\\\\${v.b}\\\\${v.c}\\end{cases}`),
+  mathTemplate('sample-covariance', 'probability', '样本协方差', 'Sample covariance', [
+    field('n', '样本数（大于 1）', 'Sample size (> 1)', 'n'), field('x', '变量 x', 'Variable x', 'x'), field('y', '变量 y', 'Variable y', 'y'),
+  ], v => `s_{xy}=\\frac{1}{${formulaOperand(v.n)}-1}\\sum_{i=1}^{${v.n}}\\left({${v.x}}_i-\\overline{${v.x}}\\right)\\left({${v.y}}_i-\\overline{${v.y}}\\right)`),
+  mathTemplate('standard-error', 'probability', '均值标准误', 'Standard error of the mean', [
+    field('s', '样本标准差', 'Sample standard deviation', 's'), field('n', '样本数', 'Sample size', 'n'),
+  ], v => `\\mathrm{SE}(\\bar{x})=\\frac{${v.s}}{\\sqrt{${v.n}}}`),
+  mathTemplate('mean-confidence', 'probability', '均值置信区间（总体标准差已知）', 'Mean confidence interval (known σ)', [
+    field('mean', '样本均值', 'Sample mean', '\\bar{x}'), field('z', '正态临界值', 'Normal critical value', 'z_{1-\\alpha/2}'), field('sigma', '总体标准差', 'Population standard deviation', '\\sigma'), field('n', '样本数', 'Sample size', 'n'),
+  ], v => `${v.mean}\\pm ${formulaOperand(v.z)}\\cdot\\frac{${v.sigma}}{\\sqrt{${v.n}}}`),
+  mathTemplate('poisson', 'probability', '泊松分布', 'Poisson distribution', [
+    field('lambda', '参数 λ（大于 0）', 'Rate λ (> 0)', '\\lambda'), field('k', '次数 k（非负整数）', 'Count k (nonnegative integer)', 'k'),
+  ], v => `P(X=${v.k})=\\frac{${formulaPower(v.lambda, v.k)}e^{-${formulaOperand(v.lambda)}}}{${formulaOperand(v.k)}!}`),
+  mathTemplate('linear-regression', 'probability', '一元线性回归', 'Simple linear regression', [
+    field('intercept', '截距', 'Intercept', '\\beta_0'), field('slope', '斜率', 'Slope', '\\beta_1'), field('x', '自变量', 'Predictor', 'x_i'), field('error', '误差项', 'Error term', '\\varepsilon_i'),
+  ], v => `y_i=${formulaOperand(v.intercept)}+${formulaProduct(v.slope, v.x)}+${formulaOperand(v.error)}`),
   mathTemplate('custom', 'mathematics', '自定义公式', 'Custom formula', [
     field('formula', 'LaTeX 内容', 'LaTeX source', 'E = mc^2'),
   ], values => values.formula),
@@ -46,7 +96,7 @@ export const FORMULA_TEMPLATES = [
   mathTemplate('logarithm', 'mathematics', '对数', 'Logarithm', [
     field('base', '底数', 'Base', 'a'),
     field('value', '真数', 'Argument', 'x'),
-  ], values => `\\log_{${values.base}} ${values.value}`),
+  ], values => `\\log_{${values.base}} ${formulaOperand(values.value)}`),
   mathTemplate('absolute-value', 'mathematics', '绝对值', 'Absolute value', [
     field('expression', '表达式', 'Expression', 'x-a'),
   ], values => `\\left|${values.expression}\\right|`),
@@ -193,8 +243,9 @@ export const FORMULA_TEMPLATES = [
   ], values => {
     const variables = values.variables.split(/[,，]/).map(value => value.trim());
     if (!variables.length || variables.length > 16 || variables.some(value => !value)) throw new Error('FORMULA_VARIABLES_INVALID');
-    const terms = variables.map(value => `\\frac{\\partial ${values.function}}{\\partial ${formulaVariable(value)}}`);
-    return `\\nabla ${values.function}=\\left(${terms.join(',')}\\right)`;
+    const expression = formulaOperand(values.function);
+    const terms = variables.map(value => `\\frac{\\partial ${expression}}{\\partial ${formulaVariable(value)}}`);
+    return `\\nabla ${expression}=\\left(${terms.join(',')}\\right)`;
   }),
   mathTemplate('limit', 'calculus', '极限', 'Limit', [
     field('variable', '变量', 'Variable', 'x'),
@@ -218,7 +269,7 @@ export const FORMULA_TEMPLATES = [
     field('a12', '第 1 行第 2 列', 'Row 1, column 2', 'b'),
     field('a21', '第 2 行第 1 列', 'Row 2, column 1', 'c'),
     field('a22', '第 2 行第 2 列', 'Row 2, column 2', 'd'),
-  ], values => `\\begin{bmatrix}${values.a11} & ${values.a12} \\\\ ${values.a21} & ${values.a22}\\end{bmatrix}`),
+  ], values => `\\begin{bmatrix}${formulaMatrixCell(values.a11)} & ${formulaMatrixCell(values.a12)} \\\\ ${formulaMatrixCell(values.a21)} & ${formulaMatrixCell(values.a22)}\\end{bmatrix}`),
   mathTemplate('vector', 'linear-algebra', '向量', 'Vector', [
     field('name', '向量名称', 'Vector name', 'a'),
     field('components', '分量（逗号分隔）', 'Components', 'a_1,a_2,a_3'),
@@ -227,34 +278,40 @@ export const FORMULA_TEMPLATES = [
     field('left', '向量 a', 'Vector a', '\\vec a'),
     field('right', '向量 b', 'Vector b', '\\vec b'),
     field('angle', '夹角', 'Angle', '\\theta'),
-  ], values => `${formulaProduct(values.left, values.right)}=\\lVert${values.left}\\rVert\\lVert${values.right}\\rVert\\cos\\left(${values.angle}\\right)`),
+  ], values => `${formulaProduct(values.left, values.right)}=\\lVert ${values.left}\\rVert\\lVert ${values.right}\\rVert\\cos\\left(${values.angle}\\right)`),
   mathTemplate('cross-product', 'linear-algebra', '向量叉积', 'Cross product', [
     field('left', '向量 a', 'Vector a', '\\vec a'),
     field('right', '向量 b', 'Vector b', '\\vec b'),
     field('angle', '夹角', 'Angle', '\\theta'),
-  ], values => `\\lVert${values.left}\\times${values.right}\\rVert=\\lVert${values.left}\\rVert\\lVert${values.right}\\rVert\\sin ${values.angle}`),
+  ], values => `\\lVert ${formulaOperand(values.left)}\\times ${formulaOperand(values.right)}\\rVert=\\lVert ${values.left}\\rVert\\lVert ${values.right}\\rVert\\sin\\left(${values.angle}\\right)`),
   mathTemplate('determinant2', 'linear-algebra', '2×2 行列式', '2×2 determinant', [
     field('a11', '第 1 行第 1 列', 'Row 1, column 1', 'a'),
     field('a12', '第 1 行第 2 列', 'Row 1, column 2', 'b'),
     field('a21', '第 2 行第 1 列', 'Row 2, column 1', 'c'),
     field('a22', '第 2 行第 2 列', 'Row 2, column 2', 'd'),
-  ], values => `\\begin{vmatrix}${values.a11}&${values.a12}\\\\${values.a21}&${values.a22}\\end{vmatrix}=${formulaProduct(values.a11, values.a22)}-${formulaProduct(values.a12, values.a21)}`),
+  ], values => {
+    Object.values(values).forEach(formulaMatrixCell);
+    return `\\begin{vmatrix}${values.a11}&${values.a12}\\\\${values.a21}&${values.a22}\\end{vmatrix}=${formulaProduct(values.a11, values.a22)}-${formulaProduct(values.a12, values.a21)}`;
+  }),
   mathTemplate('matrix3', 'linear-algebra', '3×3 矩阵', '3×3 matrix', [
-    field('row1', '第 1 行', 'Row 1', 'a,b,c'),
-    field('row2', '第 2 行', 'Row 2', 'd,e,f'),
-    field('row3', '第 3 行', 'Row 3', 'g,h,i'),
-  ], values => `\\begin{bmatrix}${values.row1.replaceAll(',', '&')}\\\\${values.row2.replaceAll(',', '&')}\\\\${values.row3.replaceAll(',', '&')}\\end{bmatrix}`),
+    field('row1', '第 1 行（3 项，逗号分隔）', 'Row 1 (3 comma-separated entries)', 'a,b,c'),
+    field('row2', '第 2 行（3 项，逗号分隔）', 'Row 2 (3 comma-separated entries)', 'd,e,f'),
+    field('row3', '第 3 行（3 项，逗号分隔）', 'Row 3 (3 comma-separated entries)', 'g,h,i'),
+  ], values => `\\begin{bmatrix}${formulaMatrixRow(values.row1)}\\\\${formulaMatrixRow(values.row2)}\\\\${formulaMatrixRow(values.row3)}\\end{bmatrix}`),
   mathTemplate('inverse2', 'linear-algebra', '2×2 逆矩阵', '2×2 inverse matrix', [
     field('a', '元素 a', 'Element a', 'a'),
     field('b', '元素 b', 'Element b', 'b'),
     field('c', '元素 c', 'Element c', 'c'),
     field('d', '元素 d', 'Element d', 'd'),
-  ], values => `A^{-1}=\\frac{1}{${formulaProduct(values.a, values.d)}-${formulaProduct(values.b, values.c)}}\\begin{bmatrix}${values.d}&-${formulaOperand(values.b)}\\\\-${formulaOperand(values.c)}&${values.a}\\end{bmatrix}`),
+  ], values => {
+    Object.values(values).forEach(formulaMatrixCell);
+    return `A^{-1}=\\frac{1}{${formulaProduct(values.a, values.d)}-${formulaProduct(values.b, values.c)}}\\begin{bmatrix}${values.d}&-${formulaOperand(values.b)}\\\\-${formulaOperand(values.c)}&${values.a}\\end{bmatrix}`;
+  }),
   mathTemplate('eigenvalue', 'linear-algebra', '特征值方程', 'Eigenvalue equation', [
     field('matrix', '矩阵', 'Matrix', 'A'),
     field('eigenvalue', '特征值', 'Eigenvalue', '\\lambda'),
     field('identity', '单位矩阵', 'Identity matrix', 'I'),
-  ], values => `\\det\\left(${values.matrix}-${values.eigenvalue}\\,${values.identity}\\right)=0`),
+  ], values => `\\det\\left(${formulaOperand(values.matrix)}-${formulaProduct(values.eigenvalue, values.identity)}\\right)=0`),
   mathTemplate('cases', 'algebra', '分段函数', 'Piecewise function', [
     field('result1', '第一段结果', 'First result', 'x^2'),
     field('condition1', '第一段条件', 'First condition', 'x \\ge 0'),
@@ -265,12 +322,12 @@ export const FORMULA_TEMPLATES = [
   mathTemplate('mean', 'probability', '算术平均数', 'Arithmetic mean', [
     field('variable', '数据符号', 'Data symbol', 'x'),
     field('count', '样本数', 'Sample count', 'n'),
-  ], values => `\\bar{${values.variable}}=\\frac{1}{${values.count}}\\sum_{i=1}^{${values.count}}${values.variable}_i`),
+  ], values => `${formulaMeanSymbol(values.variable)}=\\frac{1}{${values.count}}\\sum_{i=1}^{${values.count}}${formulaIndexedOperand(values.variable)}_i`),
   mathTemplate('weighted-mean', 'probability', '加权平均数', 'Weighted mean', [
     field('value', '数据符号', 'Value symbol', 'x'),
     field('weight', '权重符号', 'Weight symbol', 'w'),
     field('count', '样本数', 'Sample count', 'n'),
-  ], values => `\\bar{${values.value}}=\\frac{\\sum_{i=1}^{${values.count}}${values.weight}_i${values.value}_i}{\\sum_{i=1}^{${values.count}}${values.weight}_i}`),
+  ], values => `${formulaMeanSymbol(values.value)}=\\frac{\\sum_{i=1}^{${values.count}}${formulaIndexedOperand(values.weight)}_i\\cdot ${formulaIndexedOperand(values.value)}_i}{\\sum_{i=1}^{${values.count}}${formulaIndexedOperand(values.weight)}_i}`),
   mathTemplate('variance', 'probability', '方差', 'Variance', [
     field('variable', '随机变量', 'Random variable', 'X'),
     field('mean', '均值', 'Mean', '\\mu'),
@@ -290,7 +347,7 @@ export const FORMULA_TEMPLATES = [
   mathTemplate('conditional-probability', 'probability', '条件概率', 'Conditional probability', [
     field('eventA', '事件 A', 'Event A', 'A'),
     field('eventB', '事件 B', 'Event B', 'B'),
-  ], values => `P(${values.eventA}\\mid ${values.eventB})=\\frac{P(${values.eventA}\\cap ${values.eventB})}{P(${values.eventB})}`),
+  ], values => `P(${values.eventA}\\mid ${values.eventB})=\\frac{P(${formulaOperand(values.eventA)}\\cap ${formulaOperand(values.eventB)})}{P(${values.eventB})}`),
   mathTemplate('bayes', 'probability', '贝叶斯公式', 'Bayes theorem', [
     field('eventA', '事件 A', 'Event A', 'A'),
     field('eventB', '事件 B', 'Event B', 'B'),
@@ -465,6 +522,17 @@ export function formulaOperand(value) {
 
 export function formulaProduct(...values) {
   return values.map(formulaOperand).join('\\cdot ');
+}
+
+// A new sample index must apply to the entire operand, never duplicate its subscript.
+function formulaIndexedOperand(value) {
+  const text = String(value).trim();
+  return text.includes('_') ? `\\left(${text}\\right)` : formulaOperand(text);
+}
+
+function formulaMeanSymbol(value) {
+  const text = String(value).trim();
+  return `${formulaOperand(text) === text ? '\\bar' : '\\overline'}{${text}}`;
 }
 
 export function formulaPower(value, exponent) {

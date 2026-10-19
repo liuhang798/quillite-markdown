@@ -4,23 +4,31 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { createServer } from 'vite';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+const output = process.env.AUDIT_OUTPUT;
+if (!output) throw Error('Supply AUDIT_OUTPUT in an isolated CodexTemp directory');
+const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { host: '127.0.0.1', port: 0, watch: null, hmr: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE || undefined });
+const isolatedPage = async options => {
+  const page = await browser.newPage(options);
+  await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+  return page;
+};
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await isolatedPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.resolvedUrls.local[0]);
+  await page.evaluate(async()=>{await import('/src/main.js');});
   await page.waitForFunction(() => window.quilliteMarkdown && document.querySelector('#documentToolsDialog'));
   await page.evaluate(() => {
     window.conflictWrites = [];
     const api = window.quilliteMarkdown;
+    api.openFile = async () => ({ path: 'New document.md', name: 'New document.md', directory: '.', content: '', revision: 'original' });
     api.readDocumentConflict = async () => ({ path: 'New document.md', content: '# 磁盘版本\n外部编辑新增的内容。', revision: 'disk-one' });
     api.saveFile = async (...args) => {
       window.conflictWrites.push(args);
@@ -29,7 +37,8 @@ try {
     };
     api.saveConflictCopy = async () => null;
   });
-  await page.locator('#newFileButton').click();
+  await page.locator('#openFileButton').click();
+  await page.locator('#editButton').click();
   await page.locator('.cm-content').click();
   await page.keyboard.insertText('# 当前编辑\n我正在修改的内容。');
   await page.keyboard.press('Control+s');
@@ -41,7 +50,7 @@ try {
   const editBox = await page.locator('#documentConflictCurrent').boundingBox();
   assert.equal(diskBox.y, editBox.y);
   assert.ok(editBox.x > diskBox.x);
-  await page.screenshot({ path: join(tmpdir(), 'quillite-conflict-comparison.png'), animations: 'disabled' });
+  await page.screenshot({ path: join(output, 'quillite-conflict-comparison.png'), animations: 'disabled' });
   await page.locator('#conflictKeep').click();
   await page.locator('#saveButton').click();
   await page.waitForFunction(() => !document.querySelector('#conflictMerge').disabled);
@@ -80,8 +89,10 @@ try {
   await page.keyboard.press('Control+z');
   assert.match(await page.locator('.cm-content').innerText(), /保留这段可撤回内容/);
   assert.deepEqual(errors, []);
-  const reader = await browser.newPage();
+  const reader = await isolatedPage();
+  reader.on('pageerror', error => errors.push(error.message));
   await reader.goto(server.resolvedUrls.local[0]);
+  await reader.evaluate(async()=>{await import('/src/main.js');});
   await reader.waitForFunction(() => window.quilliteMarkdown && document.querySelector('#documentToolsDialog'));
   await reader.evaluate(() => {
     window.quilliteMarkdown.openFile = async () => ({ path: '/reader.md', name: 'reader.md', content: 'ORIGINAL READER', revision: 'a'.repeat(64) });
@@ -97,6 +108,7 @@ try {
   await reader.locator('#conflictApply').click();
   await reader.waitForFunction(() => JSON.parse(sessionStorage.getItem('quilliteDocumentRecovery')).content === 'NEW READER MERGE');
   await reader.reload();
+  await reader.locator('#reviewRecovery').click();
   await reader.locator('#restoreRecovery').waitFor({ state: 'visible' });
   await reader.evaluate(() => {
     const disk = { path: '/reader.md', name: 'reader.md', content: 'EXTERNAL DISK', revision: 'b'.repeat(64) };
@@ -110,13 +122,15 @@ try {
   console.log('Reader-only merge backup and restart recovery: PASS');
   // Crash recovery must not turn an unconfirmed conflict into autosave authority.
   for (const metadata of [{}, { baseRevision: 'a'.repeat(64), conflict: true }]) {
-    const restored = await browser.newPage();
+    const restored = await isolatedPage();
+    restored.on('pageerror', error => errors.push(error.message));
     await restored.goto(server.resolvedUrls.local[0]);
     await restored.waitForFunction(() => window.quilliteMarkdown && document.querySelector('#documentToolsDialog'));
     await restored.evaluate(meta => sessionStorage.setItem('quilliteDocumentRecovery', JSON.stringify({
       path: '/conflict.md', name: 'conflict.md', content: 'UNCONFIRMED LOCAL', updatedAt: new Date().toISOString(), ...meta,
     })), metadata);
     await restored.reload();
+    await restored.locator('#reviewRecovery').click();
     await restored.locator('#restoreRecovery').waitFor({ state: 'visible' });
     await restored.evaluate(() => {
       window.auditWrites = [];
@@ -138,7 +152,8 @@ try {
   }
   console.log('Legacy and conflicted crash recovery across autosave interval: PASS');
   console.log('Browser conflict comparison / keep / cancelled copy / merge / explicit save: PASS');
-  console.log(join(tmpdir(), 'quillite-conflict-comparison.png'));
+  assert.deepEqual(errors, []);
+  console.log(join(output, 'quillite-conflict-comparison.png'));
 } finally {
   await browser.close();
   await server.close();

@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "2.7.8"
+	appVersion      = "3.0.0"
 	maxRecent       = 10
 )
 
@@ -122,30 +122,32 @@ type Preferences struct {
 }
 
 type App struct {
-	ctx                 context.Context
-	mu                  sync.RWMutex
-	preferencesMu       sync.Mutex
-	recoveryMu          sync.Mutex
-	workspaceMu         sync.Mutex
-	workspacePlan       *workspaceReplacePlan
-	historyMu           sync.Mutex
-	picGoCloudLoginMu   sync.Mutex
-	securityBookmarksMu sync.Mutex
-	draftsMu            sync.Mutex
-	aiRequestMu         sync.Mutex
-	draftFiles          map[string]bool
-	draftReplacements   map[string]bool
-	dirty               bool
-	language            string
-	initialFile         string
-	frontendReady       bool
-	preferencesOverride string
-	referenceOverride   string
-	aiCredentials       aiCredentialStore
-	aiRewriteCancel     context.CancelFunc
-	aiRewriteGeneration uint64
-	aiReviewCancel      context.CancelFunc
-	aiReviewGeneration  uint64
+	ctx                  context.Context
+	mu                   sync.RWMutex
+	preferencesMu        sync.Mutex
+	recoveryMu           sync.Mutex
+	startupRecoveryReady bool
+	startupRecovery      *RecoverySnapshot
+	workspaceMu          sync.Mutex
+	workspacePlan        *workspaceReplacePlan
+	historyMu            sync.Mutex
+	picGoCloudLoginMu    sync.Mutex
+	securityBookmarksMu  sync.Mutex
+	draftsMu             sync.Mutex
+	aiRequestMu          sync.Mutex
+	draftFiles           map[string]bool
+	draftReplacements    map[string]bool
+	dirty                bool
+	language             string
+	initialFile          string
+	frontendReady        bool
+	preferencesOverride  string
+	referenceOverride    string
+	aiCredentials        aiCredentialStore
+	aiRewriteCancel      context.CancelFunc
+	aiRewriteGeneration  uint64
+	aiReviewCancel       context.CancelFunc
+	aiReviewGeneration   uint64
 }
 
 func NewApp() *App {

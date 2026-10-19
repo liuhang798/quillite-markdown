@@ -54,3 +54,22 @@ export const TEXT_COLOR_VALUES = new Set(['default', ...TEXT_COLOR_BY_ID.keys()]
 export function textColorValue(color) {
   return color === 'default' ? 'var(--text)' : TEXT_COLOR_BY_ID.get(color) || null;
 }
+
+// Match balanced span tags, not a lazy regex that stops at a nested close tag.
+// Only the product's palette or legacy hex-color syntax may become a style.
+export function scanTextColorSpans(source, offset = 0) {
+  const stack = [], spans = [];
+  for (const match of source.matchAll(/<\/?span\b[^>\n]*>/gi)) {
+    const tag = match[0];
+    if (/^<\/span\s*>$/i.test(tag)) {
+      const open = stack.pop();
+      if (open?.color) spans.push({ from: offset + open.from, to: offset + match.index + tag.length,
+        openLength: open.length, closeLength: tag.length, color: open.color });
+    } else if (/^<span\b/i.test(tag)) {
+      const named = tag.match(/^<span\s+data-md-color=(["'])([^"']+)\1\s*>$/i);
+      const legacy = tag.match(/^<span\s+style=(["'])color:\s*(#[\da-f]{3,8})\s*;?\1\s*>$/i);
+      stack.push({ from: match.index, length: tag.length, color: named ? textColorValue(named[2]) : legacy?.[2] || null });
+    }
+  }
+  return spans.sort((a, b) => a.from - b.from || b.to - a.to);
+}

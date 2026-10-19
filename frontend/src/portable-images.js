@@ -1,5 +1,11 @@
-import { markdownLanguage } from '@codemirror/lang-markdown';
+import { markdownParser } from './markdown-parser.js';
+import { maskFrontmatter } from './frontmatter.js';
 import { decodeHTML, decodeHTMLAttribute } from 'entities';
+import { markdownReferenceDefinitions } from './reference-definitions.js';
+import { prepareFootnotes } from './markdown-formats.js';
+import { footnoteProjection } from './footnote-editing.js';
+import { fieldPosition } from './projected-code.js';
+import { scanMarkdownFormulas } from './formula-editing.js';
 
 export const MAX_PORTABLE_BYTES = 64 * 1024 * 1024;
 const bytes = text => new TextEncoder().encode(text).length;
@@ -55,16 +61,16 @@ function htmlImages(html, base, preview) {
 
 // Lezer supplies exact source offsets and excludes code, escapes and comments.
 // Replacements never search/replace identical-looking strings in code blocks.
-export function markdownImageRanges(source, { preview = false } = {}) {
-  const tree = markdownLanguage.parser.parse(source), definitions = new Map(), result = [];
+export function markdownImageDefinitions(source, tree) {
+  if (!source.includes(']:')) return new Map();
+  return new Map([...markdownReferenceDefinitions(source,tree)].map(([label,{ref,title}])=>[label,{ref,title}]));
+}
+
+export function markdownImageRanges(source, { preview = false, definitions, excludedRanges = [] } = {}) {
+  const tree = markdownParser.parse(maskFrontmatter(source)), result = [];
+  definitions ??= markdownImageDefinitions(source, tree);
   tree.iterate({ enter(node) {
-    if (node.name !== 'LinkReference') return;
-    const label = node.node.getChild('LinkLabel'), url = node.node.getChild('URL'), title = node.node.getChild('LinkTitle');
-    if (label && url && !definitions.has(labelKey(source.slice(label.from, label.to)))) {
-      definitions.set(labelKey(source.slice(label.from, label.to)), { ref: decode(source.slice(url.from, url.to)), title: title ? source.slice(title.from, title.to) : '' });
-    }
-  } });
-  tree.iterate({ enter(node) {
+    if(excludedRanges.some(range=>node.from>=range.from&&node.to<=range.to))return false;
     if (node.name === 'Image') {
       let paragraph = node.node.parent;
       while (paragraph && paragraph.name !== 'Paragraph') paragraph = paragraph.parent;
@@ -100,15 +106,31 @@ export function markdownImageRanges(source, { preview = false } = {}) {
   return result.sort((a, b) => a.from - b.from);
 }
 
+// Export/save-as scan the whole document, unlike preview widgets which scan
+// their own editable scope. Footnote continuations look like code to the root
+// parser, so scan their projected bodies and map only image ranges back.
+function documentImageRanges(source) {
+  const notes=source.includes('[^')?prepareFootnotes(source).definitions:new Map();
+  const definitions=markdownImageDefinitions(source);
+  const result=markdownImageRanges(source,{definitions,excludedRanges:[...notes.values(),...scanMarkdownFormulas(source)]});
+  for(const note of notes.values()) {
+    const projection=footnoteProjection(source,note),range={from:note.bodyFrom,to:note.to,projection};
+    for(const item of markdownImageRanges(projection.text,{definitions,excludedRanges:scanMarkdownFormulas(projection.text)})) {
+      result.push({...item,from:fieldPosition(range,item.from),to:fieldPosition(range,item.to),continuationPrefix:projection.prefix});
+    }
+  }
+  return result.sort((a,b)=>a.from-b.from);
+}
+
 function imageReplacement(item, ref) {
-  if (item.kind === 'reference') return `![${item.alt}](<${ref}>${item.title ? ` ${item.title}` : ''})`;
+  if (item.kind === 'reference') return `![${item.alt}](<${ref}>${item.title ? ` ${item.title}` : ''})`.replaceAll('\n','\n'+(item.continuationPrefix||''));
   if (item.kind === 'html') return ref.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   return `<${ref}>`;
 }
 
 export async function transformMarkdownImages(source, resolve, { portable = false } = {}) {
   if (source.length > MAX_PORTABLE_BYTES || bytes(source) > MAX_PORTABLE_BYTES) throw new Error('PORTABLE_TOO_LARGE');
-  const ranges = markdownImageRanges(source), replacements = [], cache = new Map();
+  const ranges = documentImageRanges(source), replacements = [], cache = new Map();
   let size = bytes(source);
   for (const item of ranges) {
     const embedded = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,[A-Za-z0-9+/=]+$/i.test(item.ref);
@@ -147,7 +169,7 @@ export function imageReferenceForNewDirectory(ref, sourceDirectory) {
 
 export function rebaseMarkdownImages(source, directory) {
   const parts = []; let cursor = 0;
-  for (const item of markdownImageRanges(source)) {
+  for (const item of documentImageRanges(source)) {
     if (!local(item.ref)) continue;
     const ref = imageReferenceForNewDirectory(item.ref, directory);
     if (ref === item.ref) continue;

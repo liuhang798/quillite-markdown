@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
+import { decodeHTML } from 'entities';
 
 const RICH_HTML_PATTERN = /<(?:h[1-6]|p|div|br|strong|b|em|i|u|s|strike|del|a|ul|ol|li|blockquote|pre|code|table|img|span)\b/i;
 const MAX_RICH_CLIPBOARD_HTML = 5 * 1024 * 1024;
@@ -92,17 +93,49 @@ export function htmlToMarkdown(html) {
   return richTextConverter.turndown(source)
     .replace(/\u00a0/g, ' ')
     .replace(/^(\s*)([-+*]|\d+[.)])\s{2,}/gm, '$1$2 ')
-    .replace(/[ \t]+\n/g, '\n')
+    // Turndown encodes an HTML <br> as two trailing spaces. Do not erase
+    // that semantic line break while cleaning incidental trailing whitespace.
+    .replace(/[ \t]+\n/g, whitespace => whitespace.startsWith('  ') ? '  \n' : '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-function inlinePlainText(tokens = []) {
+// Convert only parser-recognized HTML, never an entire concatenated result:
+// literal code and escaped/encoded angle brackets must remain literal text.
+// No DOM is created, so copying cannot execute markup or load its resources.
+function htmlPlainText(source, context={hidden:''}) {
+  source=String(source);
+  const chunks=[];let cursor=0,hidden=context.hidden;
+  const tags=/<!--[\s\S]*?(?:-->|$)|<\/?([a-z][\w:-]*)\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
+  for(const match of source.matchAll(tags)) {
+    if(!hidden)chunks.push(source.slice(cursor,match.index));
+    cursor=match.index+match[0].length;
+    const tag=match[0],name=match[1]?.toLowerCase(),closing=tag.startsWith('</');
+    if(!name)continue;
+    if(hidden){if(closing&&name===hidden)hidden='';continue;}
+    if(!closing&&/^(?:script|style|noscript)$/.test(name)){hidden=name;continue;}
+    if(name==='img'&&!closing) {
+      // Consume whole attribute values so text such as title='alt="wrong"'
+      // cannot masquerade as the image's actual alternative text.
+      for(const attr of tag.matchAll(/([^\s=<>/'"]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) {
+        if(attr[1].toLowerCase()==='alt'){chunks.push(attr[2]??attr[3]??attr[4]??'');break;}
+      }
+    } else if(/^(?:br|p|div|h[1-6]|li|tr|blockquote|pre|section|article|details|summary|hr)$/.test(name))chunks.push('\n');
+  }
+  if(!hidden)chunks.push(source.slice(cursor));
+  context.hidden=hidden;
+  return decodeHTML(chunks.join(''));
+}
+
+function inlinePlainText(tokens = [], context={hidden:''}) {
   return tokens.map(token => {
+    if (token.type === 'html') return htmlPlainText(token.text || token.raw || '',context);
+    if (context.hidden) return '';
     if (token.type === 'br') return '\n';
-    if (token.type === 'image') return token.text || '';
-    if (Array.isArray(token.tokens)) return inlinePlainText(token.tokens);
-    return String(token.text ?? token.raw ?? '');
+    if (token.type === 'codespan' || token.type === 'escape') return token.text || '';
+    if (token.type === 'image') return decodeHTML(token.text || '');
+    if (Array.isArray(token.tokens)) return inlinePlainText(token.tokens,context);
+    return decodeHTML(String(token.text ?? token.raw ?? ''));
   }).join('');
 }
 
@@ -124,8 +157,8 @@ function blockPlainText(tokens = []) {
     }
     if (token.type === 'blockquote') return blockPlainText(token.tokens || []);
     if (Array.isArray(token.tokens)) return inlinePlainText(token.tokens);
-    if (token.type === 'html') return String(token.text || token.raw || '').replace(/<[^>]+>/g, '');
-    return String(token.text ?? token.raw ?? '');
+    if (token.type === 'html') return htmlPlainText(token.text || token.raw || '');
+    return decodeHTML(String(token.text ?? token.raw ?? ''));
   }).filter(Boolean).join('\n');
 }
 

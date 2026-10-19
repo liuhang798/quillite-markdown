@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestStandaloneImageTablesRetainReadableColumnsAndNestedReflow(t *testing.T) {
+	data, err := buildStandaloneHTML(`<table><tbody><tr><td><table class="quillite-image-row"><tbody><tr><td><img src="https://example.com/a.png"></td><td><img src="https://example.com/b.png"></td></tr></tbody></table></td><td>Keep text</td></tr></tbody></table>`, "Images", "en", "light", "#159A63")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{`table:not(.quillite-image-row):has(img){table-layout:fixed`, `grid-template-columns:repeat(auto-fit,minmax(min(72px,100%),1fr))`, `<td>Keep text</td>`, `https://example.com/b.png`} {
+		if !strings.Contains(string(data), required) {
+			t.Fatalf("image table layout missing: %s", required)
+		}
+	}
+}
+
+func TestStandaloneTableAlignmentRemainsVisible(t *testing.T) {
+	data, err := buildStandaloneHTML(`<table><tr><th align="center">Center</th><td align="right">Right</td></tr></table>`, "Table", "en", "light", "#159A63")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{`<th align="center">Center</th>`, `<td align="right">Right</td>`, `[align="center"]{text-align:center}`, `[align="right"]{text-align:right}`} {
+		if !strings.Contains(string(data), required) {
+			t.Fatalf("table alignment missing: %s", required)
+		}
+	}
+}
+
 func TestStandaloneImageLayoutsUseStrictStyleWhitelist(t *testing.T) {
 	fragment := `<table class="quillite-image-row" style="position:fixed;background:url(https://bad)"><tbody><tr><td style="width:50%;font-family:evil"><img src="data:image/png;base64,AAAA" style="display:block;margin-left:0;margin-right:auto;position:fixed;background:url(https://bad)"></td><td style="width:50%"><img src="data:image/png;base64,AAAA" style="display:block;margin-left:auto;margin-right:0"></td></tr></tbody></table><img src="data:image/png;base64,AAAA" style="display:block;margin-left:auto;margin-right:auto"><p style="margin-left:auto;display:block">正文</p>`
 	result, err := sanitizeStandaloneHTML(fragment)

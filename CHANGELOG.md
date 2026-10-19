@@ -2,6 +2,32 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [3.0.0] - 2026-10-19
+
+### 简体中文
+
+- **新增：即时渲染编辑模式。** 直接在排版后的 Markdown 中编辑标题、正文、列表、引用、表格和代码，无需反复对照源码；可随时切换源码模式，保留文档内容和撤回历史。复杂语法、纯文本及超限文档继续提供源码回退。
+- 优化原位编辑体验：改善鼠标定位、中文输入、拖选、复制粘贴和撤回重做；修复代码块编辑跳动、表格清空单元格后退回源码，以及图片与标题、表格相邻时的编辑问题。
+- 重设计“即时渲染／源码”左右切换器，放在标题栏右下方；文字样式菜单更清晰，适配中英文、明暗主题和窄窗口。
+- 增强图片编辑：内嵌 Base64 编码在源码中显示为格式／大小短标签，复制与保存仍保留完整图片数据；保留尺寸、对齐、同排和表格内图片编辑。
+- 完善 41 类图表与 95 种公式模板、可视化参数和数据编辑，修复日历热力图、直方图等显示及数据更新；新增流程图输入／输出平行四边形和教学范例。
+- 统一编辑与预览的标题、列表、引用等排版，完善嵌套内容、链接、脚注、搜索与图表的交互及导出。
+- 最近阅读支持 Ctrl／⌘ 多选和批量清除；只移除记录，不删除原文件，保留收藏和当前未保存文档。
+- 加强文档会话、自动保存冲突、恢复档案、图片上传和运行时异常处理；保留文件安全边界，改善大文档与切换性能。
+- 完整逐项变更记录见 [v3.0.0 详细更新](https://github.com/liuhang798/quillite-markdown/blob/v3.0.0/docs/releases/3.0.0-details.md)。
+
+### English
+
+- **New: live-rendered editing mode.** Edit headings, prose, lists, quotes, tables and code directly in rendered Markdown. Switch to source at any time while preserving document content and undo history. Complex syntax, plain text and oversized documents retain source fallback.
+- Improve in-place editing, mouse positioning, IME input, selection, copy/paste and undo/redo. Fix code-block editing jumps, tables reverting to source after clearing cells, and image-adjacent heading/table editing.
+- Redesign the Live editing / Source control as a lower-right segmented switch. Refine the text-style menu across Chinese/English, light/dark themes and narrow panes.
+- Condense embedded Base64 image data to format/size labels in source while preserving complete data on copy and save; retain sizing, alignment, image rows and images inside tables.
+- Refine 41 chart types and 95 equation templates, visual parameters and chart data editing. Fix calendar heatmap, histogram and other data/rendering updates; add input/output parallelograms and a teaching flowchart example.
+- Align editor/preview typography for headings, lists and quotes, and improve nested content, links, footnotes, search, diagram interaction and export.
+- Add Ctrl/⌘ multi-selection and bulk clearing in Recent. Only records are removed; original files, Favorites and unsaved documents are preserved.
+- Strengthen document sessions, autosave conflicts, recovery archives, image uploads and runtime error handling, while preserving file-safety boundaries and improving large-document/switching performance.
+- See the [complete v3.0.0 change record](https://github.com/liuhang798/quillite-markdown/blob/v3.0.0/docs/releases/3.0.0-details.md).
+
 ## [2.7.8] - 2026-10-13
 
 ### 简体中文

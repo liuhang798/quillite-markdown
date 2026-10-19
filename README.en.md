@@ -1,6 +1,8 @@
 <div align="center">
   <img src="build/appicon.png" width="96" alt="Quillite Markdown icon">
   <h1>Quillite Markdown</h1>
+  <p>Live editing preserves nested quote rails, list indentation and bullet levels without leaking source-only italics or orange bold text. Explicit formatting and undo remain intact.</p>
+  <p>Live editing and split preview share body and six-level heading typography. Closed leading YAML metadata stays literal instead of becoming a Setext heading, without rewriting the document.</p>
   <p>Image layout fixes preserve quote/list containers, soft-break rows and Word rows inside lists, with regression coverage for special paths and cross-directory Save As loading.</p>
   <p><strong>A fast, local-first Markdown reader, viewer and editor — about 12 MB on Windows.</strong></p>
   <p>Live preview · Syntax highlighting · Plain local files · Windows, macOS and Linux</p>
@@ -20,6 +22,141 @@
   </p>
 </div>
 
+Rendering reliability: link-containing documents render on first open, failed switches clear stale content, large paragraphs use line-by-line Setext detection, and the editor tolerates detached DOM boundaries. Invalid or unavailable external links show a warning instead of an unhandled rejection. Native PDF timeouts/failures can fall back to system printing; file-lock and access errors keep their dedicated warnings.
+
+Faster document switching: reading mode skips hidden editor previews and editing-only location markers, and TOC layout updates are coalesced per frame. Editing previews retain source-line mapping and pointer navigation.
+
+Ctrl-click Recent documents to select multiple items (⌘ on macOS), then use Clear selected, the context menu, or Delete while the list has focus. Escape cancels selection. Confirmation removes only recent records and their pins, preserving files, Favorites and unsaved documents. Failed records remain available to retry.
+
+Large-document reading shows text first, highlights code near the viewport in scheduled frames, and defers offscreen code/fixed-width table layout. Parsed HTML is cached only in memory (4 entries / 16 MiB maximum) with exact-content invalidation. Search, heading navigation, printing and export retain complete content; very long code blocks remain complete plain text to avoid expensive highlighting.
+
+All four image-storage modes show save failures, preserve your selection for retry, and leave the current document unchanged.
+
+Live editing and the reading preview both preserve ordinary prose line breaks. Right-clicking preview text locates its actual source line rather than always jumping to the paragraph start. Long lines still wrap to each pane's available width.
+
+You can close image settings or change your selection while a save or sign-in is pending. Late responses do not close a reopened dialog or replace newer choices. Settings writes and sign-in operations are serialized, and connection checks never delete credentials.
+
+While image selection, paste or upload is pending, insertion follows its original text location rather than a newly moved caret. Switching documents or leaving edit mode cancels pending insertions; changed selections are never overwritten. Captions and widths retain their original values, and image insertion is independently undoable.
+
+Image completion does not steal typing focus from Find/Replace fields. Cancelled operations remain silent after leaving and re-entering edit mode.
+
+Editor notifications stay clear of the bottom Find/Replace panel and adapt when the window is resized. Closing search restores the usual position without changing text, caret or undo history.
+
+Concurrent uploads have isolated progress identities: older requests cannot overwrite newer progress, and changing storage settings does not relabel an upload already in progress.
+
+Failed PicGo Cloud uploads, including delayed authentication errors, never clear a newer login. Images fall back to the saved local asset without automatic retries; you can explicitly sign in again and insert another image.
+
+Renaming keeps equations, diagrams, tables and footnotes editable in place without losing unsaved text or undo history. Footnote editing also follows the new file after Save As.
+
+Version history honors the latest selection: old responses cannot replace the preview after closing, reopening or switching documents. Restore stays disabled while loading or after failure. Restoring changes only the editor, supports undo, and writes to the document only when saved.
+
+New and Open remain safe during startup: delayed restoration does not replace the active document or newly typed text, and new recent and pinned entries remain visible.
+
+Folder restoration and explorer refresh honor the latest action: delayed responses do not override a newly chosen folder (including reopening the same path), newer file lists, or the current sidebar tab.
+
+Older recovery drafts live in `recovery-archives` under the user configuration directory, separate from the active editor snapshot. Recover draft opens manually without stealing typing focus; save current edits before restoring, and Later keeps the backup. More → Document tools → Safety lets you inspect and save preserved drafts separately. Archives are create-only, capped at 64 entries / 256 MiB, and never automatically removed. Preservation failures retain original material and prompt manual saving. To free space, save needed drafts first, then organize this directory yourself.
+
+The recovery dialog keeps Tab focus inside, closes with Escape, and blocks background document shortcuts. Pending recovery can be cancelled without late results replacing subsequent input. If the source cannot be read, recovery creates a separate new draft without a false source-conflict warning; its first save still asks for a name and location. Cancelling an already-started creation request does not delete any empty draft it may have created.
+
+Inside live code blocks, Tab indents the current or selected lines and Shift+Tab unindents them, including multiple carets and shared document undo/redo. Escape returns to the document without changing code; Tab navigation between table cells is unchanged. Pasted code retains tabs, empty lines and spaces without automatic reformatting.
+
+Entering a newline or pasting text with a trailing newline into an empty code block retains a separate closing-fence separator. Subsequent typing cannot join the closing fence and absorb following prose. Quotes, lists, details and footnotes preserve the same behavior, undo/redo and follow-up caret position.
+
+Live tables accept tab-separated grids (TSV) and rectangular HTML text tables, starting at the current cell or the top-left cell of a dragged range. They expand up to 20 rows (including the header) and 12 columns; existing larger tables can be filled within their current bounds. Empty cells, untouched content, alignment and existing column widths are preserved, with one-step undo/redo and the caret restored to the last pasted cell. A paste is limited to 500,000 characters. Merged cells, irregular grids, images or other media, and prose mixed outside an HTML table are rejected without changing the document. A successful retry clears the earlier paste warning without dismissing unrelated notifications. Ordinary non-grid text keeps the existing single-cell newline handling.
+
+Opening the table designer or adding rows/columns focuses the intended cell immediately. Selecting another cell afterward is not overridden by a delayed focus, including after cancelling and reopening the dialog.
+
+Opening the image dialog, adding chart data rows and adding mindmap nodes also focus their input immediately. Later clicks into the image caption, another data cell or search field are not overridden by a stale delayed focus.
+
+New flowchart and state-diagram nodes follow the same focus rule. Isolated mouse/keyboard regression for all three canvases covers nodes and edges, dragging, zoom, structural changes and save/undo.
+
+Select an entire formatted span and click its inline-format button again to remove that format. Bold and italic toggle independently, and each formatting action can be undone separately.
+
+The link tool exposes text, destination and tooltip fields. Press Ctrl/⌘+K inside an existing link to edit it; reference links retain their shared definition with an explicit warning. Cancel preserves the document and Apply is one undo step. Footnotes append their definition at the document end without absorbing following paragraph text.
+
+New reference links use unique names and append their definitions to the document end. Autolinks provide an address-only field, require complete HTTP/HTTPS URLs, and keep displayed text synchronized when the address changes.
+
+Toolbar-generated collapsible sections support direct title/body editing, collapse/expand, and returning from source to rendered editing. HTML blocks preserve paragraph boundaries for Markdown content. Images, equations and diagrams inside the body render in the inner editor, with resizing, in-place editing and the main document's undo/redo, without duplicate previews. Display modes and themes stay synchronized. Standalone HTML comments have a labeled editable area while remaining hidden in reading mode. HTML with complex attributes or incomplete structure currently retains source editing without rewriting its structure.
+
+When code, tables, collapsible content or footnote blocks show their source, Return to rendered view floats at the block's upper right on hover, without a header that shifts the editor viewport. Long blocks use their visible top; nested source views share the action. Keyboard focus reveals it and touch devices keep it visible. Returning preserves text carets, selections and undo history. Switching documents or editing modes clears stale controls.
+
+Exposed block source keeps a continuous themed background and rounded boundaries, including empty lines and the active caret line. Light and dark themes retain their block colors without changing the document.
+
+Pointer activation of Show source anchors the block's screen position instead of scrolling to the previous caret at the end of a long block. Keyboard activation still reveals the caret. Anchor reconciliation stops on scrolling, input or document changes; subsequent editing retains normal caret navigation.
+
+Code-body carets reject lossy outer-editor selection echoes at hidden fence boundaries, preventing subsequent input from escaping the block. Clicking a projected block or its source action no longer preemptively steals its editing focus. Explicit source editing, pointer selections and undo retain their normal behavior.
+
+While long documents with multiple code blocks refresh, the active editor stays continuously attached instead of being removed and reinserted. This prevents subsequent typing and IME composition from losing focus and escaping before the opening fence. A four-block pointer/input regression checks production bundles, exact Markdown and undo/redo.
+
+Rendered code input keeps the editor viewport stable, including partially visible long blocks, newlines, multiline input and IME composition. Unchanged footnotes no longer invalidate other blocks' measured heights. Plain, quoted, listed, collapsible, footnote and indented code share the protection; wheel scrolling and explicit keyboard navigation remain available. Source mode retains its existing behavior.
+
+Browser DOM edits are checked for valid range boundaries. Invalid ranges are rejected and redrawn from the recorded document, preventing out-of-range text duplication while preserving undo history. HTML entities in Markdown link destinations and titles are decoded once before safe attribute escaping; query parameters stay intact and unsafe protocols remain filtered.
+
+The editor header reflows to fit its pane: document details and actions move onto separate rows when needed, while status and button labels stay horizontal in both languages. All actions remain available; long names are truncated visually but still open the full rename field.
+
+Dragging the preview divider or library boundary keeps usable space for editing. Both pane orientations and arrow-key resizing share the same limits. Smaller windows temporarily constrain the split; enlarging the window restores the saved width preference without changing text, selection or undo history.
+
+Tables with trailing spaces or tabs on delimiter rows remain editable and render correctly. Recognition preserves original source whitespace, code examples and prose hard breaks.
+
+Column-width metadata belongs to its table: partial cross-block deletion retains widths, while whole-block moves, copies and deletion include the matching settings and support exact undo.
+
+Nested tables and code share the main document's undo/redo and formatting shortcuts. Tables open the visual designer in place, and nested controls inherit the interface language. Internal table-width comments stay hidden. If the document changes while the table dialog is open, saving is blocked without discarding the dialog input.
+
+At the text boundaries of code, comments and collapsible content, arrow keys move into adjacent editing areas. Table boundary navigation follows cell order horizontally and the same column vertically. Navigation never rewrites Markdown; entering hidden content from its section title expands it.
+
+Shift + arrow keys extend a selection beyond an inner text boundary into adjacent areas. Cross-block deletion or replacement retains required delimiters in partially selected code, tables, collapsible sections and comments; fully selected blocks can still be removed. Changes share the main document's single-step undo and return the caret to the corresponding inner text.
+
+Shift-click and continuous mouse dragging can extend selections across code, tables and nested content in either direction while preserving the original anchor. Inner and outer editing areas share a consistent selection highlight; dragging within one editor retains its native behavior.
+
+Cross-block dragging continuously scrolls near the editor's top or bottom edge. Moving back to the middle, releasing the mouse or pressing Escape stops scrolling; document changes cancel pending dragging so an outdated selection cannot keep moving.
+
+Selected text can move between code, prose, table cells and nested editing areas in one undoable transaction. Hold Ctrl to copy instead (Option on macOS). Partial cross-block moves retain required source structure, stale drops are rejected after document switching, and text dragging no longer opens the file-import overlay.
+Selections containing complete code, table or details blocks preserve paragraph boundaries when dropped into prose. Starting a drag inside a selected block retains the complete selection instead of narrowing it to the active field.
+Drops into quote or list prose retain the actual container prefix or continuation indentation, including nested, ordered and task lists, without detaching remaining text or following items. Complete fenced code in these containers supports live editing, newlines, line joining, source round-trips and cross-block selection/dragging. Hidden prefixes map to source positions while sharing undo history. Space/tab-indented code also supports direct editing, cross-block selection, source return and undo. Trailing newlines retain indentation, and clearing a block keeps the caret ready to type at the original position. Regular GFM tables support direct cell editing inside quotes, lists and details sections. Structure edits retain container prefixes, column widths and alignment; wide tables scroll within their own area. Source round-trips and adding, removing or reordering rows/columns share undo history. Complex tables with irregular rows or unsupported structure retain source.
+
+Multiline pastes over cross-block selections retain code-container prefixes. Reverse selections remove selected prose while keeping the list markers, task checks and fences needed by retained code. Literal closing fences cannot truncate the code, and each replacement is undoable in one step.
+
+Rich clipboard content follows the actual editable field: ordinary/nested prose and table cells retain Markdown formatting; code, inline code, comments and section titles use plain text. Cross-block selections starting in code do not introduce bold/italic markers, and nested edits share the main document's undo history.
+Typing, pasting or dropping a matching closing fence into a live code editor widens the outer fence without changing the literal code or swallowing following prose. Source mode still allows direct fence editing.
+
+Heading, quote and list actions exclude the next line when a selection ends at its start. Format painter recognizes combined bold/italic, highlighting, underline, super/subscript and keyboard styles without duplicating existing styles; inline and block changes undo together.
+
+List conversion replaces previous markers and preserves child indentation; reapplying task-list formatting retains existing checks. Format painter supports palette text colors, including recoloring part of colored text while retaining surrounding color and inline styles.
+
+ATX heading changes inside lists and quotes retain their containers. Explicitly converting a task to a heading keeps its list position and removes its checkbox, recoverable in one undo step. Format painter detects nested heading/list syntax and does not add another quote level to existing quotes. Heading/quote actions leave code blocks, HTML blocks and table source intact.
+
+Changing a Setext (underlined) heading level converts the whole heading without leaving its underline or splitting off another heading. Soft line breaks join with spaces; explicit breaks remain as `<br>`. Converting to prose preserves original text line breaks and neighboring paragraph boundaries, with single-step undo. Safe inline `<br>` tags display as line breaks in live editing, with directly editable text on both sides.
+
+Converting an underlined heading to a quote or ordinary list retains the whole heading; task conversion keeps its text with a checkbox. In live editing, Enter at the heading end starts a line after its hidden underline, while Backspace at the heading start returns it to prose, retaining quote/list containers and single-step undo.
+
+With live cursors across headings, quotes, lists and prose, Enter and Backspace handle each context independently, retaining list continuation and numbering, atomic deletion of hidden markers and single-step undo.
+
+Enter inside heading text retains the first part as a heading and moves the remainder to prose; underlined headings normalize to equivalent ATX headings before splitting. Bold, italic, strike, highlight, color and common inline tags close and reopen at the split, retaining the insertion point and single-step undo.
+
+Splitting a link inside a heading preserves its destination, tooltip and nested styles. Shorthand references become explicit references without changing their definitions; split autolinks keep the original full destination. URL-looking display text is not mistaken for the actual target.
+
+Bold, highlight, color and underline around inline equations survive live editing and heading splits; equations inherit the surrounding text size and color. Highlights can wrap image tags containing attribute equals signs without interpreting image attributes as prose formatting.
+
+Live footnote references use the same first-appearance numbering as reading, including tables and collapsible sections. Click a number or press Enter while it is focused to edit the note. Arrow keys return to adjacent text; Delete/Backspace removes only that reference, preserving the definition and undo history. The dialog supports multiline Markdown, keeps identifiers unchanged, cancels without edits, and rejects stale document snapshots.
+
+Footnote definitions appear as directly editable numbered blocks at their source positions, hiding markers and continuation indentation. Multiline input and paste share the document's undo history. Cross-definition selection and cutting preserve markers of partially selected blocks. View Source / Return to Rendered View round-trips without rewriting definition order or existing indentation.
+
+Footnote bodies render full Markdown, including tables, lists, fenced code, display equations and diagrams. Formula/diagram edits retain enclosing indentation. Replacing a selection from an inner table or code block to text outside the footnote preserves partially selected structures and supports undo.
+
+The Edit Table action on a footnote table opens that existing table for structural changes, retaining footnote, quote and collapsible containers, column widths and single-step undo. Saving an unchanged table again does not add an undo step.
+
+Full, collapsed and shortcut reference images/links in footnotes inherit document definitions. Editing or removing a definition updates both panes and supports undo. Click within a footnote link and press Ctrl/⌘+K to edit its destination and title while preserving its reference relationship.
+
+Definitions may also live inside a footnote and be shared by the main text or other notes. The first definition in source order wins regardless of footnote citation/display order. Reference links in footnote tables and collapsible bodies use the same target lookup and editing rules.
+
+With the caret inside a footnote table, the toolbar Table button and its More Formats entry edit that table instead of inserting a blank one. Quotes, lists and collapsible containers retain column widths, enclosing indentation and undo. Source mode uses the same lookup.
+
+New tables inserted into quotes, lists, collapsible bodies or footnotes retain the surrounding indentation, width metadata and following text. Insertion at paragraph text boundaries, mid-text, blank lines or over selected text supports single-step undo. The dialog uses the selection and document snapshot captured when opened, avoiding focus-driven insertion drift.
+
+Portable Markdown export and cross-directory Save As also process images inside footnotes, including quotes, lists, tables and collapsible bodies. Shared definitions stay unchanged; only image occurrences are converted. Remote, missing or complex images in footnotes block incomplete portable copies, while image examples in code, formulas and comments are ignored. Switching or reopening documents during image reads cancels subsequent actions from the old export session.
+
+Opening an existing diagram moves keyboard focus into a visible editing control. Deferred focus restoration does not steal focus from a newer control or document. Large Mermaid diagrams retain their readable width inside a scrolling editor viewport instead of being squeezed into a fixed-height thumbnail.
+
 Reliability fixes: Windows cloud-folder saves no longer create hard links, while failed saves restore the original or retain recovery material. Diagram/formula scanning handles very long lines without whole-line regular expressions that can exhaust the WebView stack. AI operations support up to 2,000,000 Unicode characters and explain size, empty-answer, truncation and provider-filter errors before applying output. Responses exceeding 8 MiB, unterminated SSE or provider errors stop processing; partial output cannot be applied. Diagnostics hide complete paths and retain only fixed safe error categories. File opening remains limited to 64 MiB. For occupied or unwritable export targets, close the occupying app or select a writable folder and a new filename.
 
 Conflict recovery retains the original revision and paused state across restarts. Legacy snapshots require comparison before saving. Backups remain intact while conflicts are unresolved, and outdated merge drafts cannot be applied to newer edits without restarting the merge explicitly.
@@ -29,6 +166,38 @@ Reliability protection: virtual dropped files without disk paths receive save-fi
 Opt-in error logs include the frontend asset fingerprint, editor failure stage and source-fallback mode, with explicit truncation markers. No document content, paths, credentials or activity history are added.
 
 New diagrams appear rendered with source collapsed and the caret on the following blank line. Show source remains available, and an explicitly selected global source mode is respected.
+
+Mermaid/ECharts inside blockquotes and lists also render, edit in place and return from source. Saving retains container prefixes without replacing identical neighboring diagrams. Subgraphs, custom styles and complex data mappings remain in lossless source mode instead of being forced through simplified templates.
+
+After deleting a nested diagram, the caret stays at the deletion point and scrolls into the main editor's viewport for continued typing. Deletion and subsequent typing undo separately. Lossy-visual-conversion warnings clear when saving or cancelling the dialog without dismissing newer unrelated notifications.
+
+Diagrams support compact blockquotes without a space after `>`, mixed quote prefixes, and tab-indented lists. In-place saves retain existing line prefixes; new lines use the container's continuation prefix. Pressing Enter in exposed diagram source preserves quote/list nesting and code indentation and can be undone separately, without splitting the diagram.
+
+Exposed diagram source uses normal-weight, upright monospace text and shows complete quote/list prefixes without inheriting prose emphasis or quote borders. Syntax colors and the active-line cue remain; returning to the rendered view restores container styling without rewriting Markdown.
+
+Mermaid flowchart nodes with a custom opaque solid background and no explicit text color receive a black or white foreground when contrast is insufficient. Backgrounds and Markdown remain unchanged; explicit foregrounds, transparent backgrounds and complex paints are not forcibly overridden.
+
+Diagram types come from Mermaid's render result, so leading comments, init directives or YAML frontmatter no longer bypass type-specific layout and readability handling. Configured foreground colors and custom theme CSS opt out of automatic flowchart recoloring.
+
+C4 diagrams compact excessive empty space between the title and drawing to bring primary nodes into the initial view without changing source. Nested boundaries and multirow layouts cap the vertical spacing base at 32, preserving smaller custom margins and original horizontal spacing; the engine recalculates connector endpoints. Wide and multirow diagrams remain scrollable instead of shrinking their text to fit the viewport.
+
+C4Dynamic preserves repeated interactions between the same nodes in source order, separating curves and labels for repeated and reverse relationships while retaining arrow directions, technology labels and source. Other C4 types retain Mermaid's relationship-update semantics; `UpdateRelStyle` currently retains upstream first-match behavior.
+
+When a C4 connector or caption covers a node, the renderer searches for an orthogonal route outside node bounds while preserving original ports and arrows. Captions move with the route and retain explicit offsets. Unobstructed relationships stay unchanged. Routing work is bounded; if no safe route is found, the original relation remains rather than being discarded.
+
+Repeated long relationships use separate outer channels spaced for the widest caption in the pair. Crossing captions try other positions along their original paths, and long captions no longer seal port exits. Person heads and bodies are treated separately, alongside database and queue boundaries. Self-relationships display loops retaining valid ports, forward/reverse/bidirectional arrows and source; person self-ports incorrectly placed inside the head are corrected to the outer body boundary. Searches are bounded and dense relationships may still cross; this is not a global crossing-free layout guarantee.
+
+C4 live cards and in-place editors distinguish context, container, component, dynamic and deployment diagrams in both languages without changing template identity or source. Captions across C4 types default to connection centers while retaining explicit horizontal offsets; canvas-colored backgrounds mask lines beneath the text. Automatic node text improves contrast on opaque fills, using the actual painted body for people rather than their wrapper's inherited color. Default boundaries and connectors follow the theme. Explicit node, boundary text and connector colors remain unchanged, including black and white. In normal color mode, arrowheads follow their own connectors while preserving forward, reverse and bidirectional geometry; explicit global foreground themes are not forcibly restyled.
+
+Set `themeVariables.primaryTextColor` in Mermaid init directives or YAML frontmatter to customize theme text colors. Omitting `theme` inherits the application's base theme and correctly derives node text colors; explicit `theme: base` also works. Colors survive appearance changes and source round trips without leaking into subsequent ordinary diagrams. Theme configuration cannot disable security filtering.
+
+Diagram source supports mid-line Enter, replacing selected code with a newline, and consecutive blank lines. Forward and backward selections preserve quote/list prefixes and code indentation from the selection start, with independently undoable newlines. Structural selections crossing fence or container markers remain handled by normal editing commands.
+
+Flowchart, state and mind-map canvases support keyboard control: arrows navigate nodes/edges, Enter selects or connects, F2 edits labels, Shift+arrows moves, Alt+arrows pans, Delete removes and Ctrl/Command+A selects all. Mind maps retain their root; state initial/final markers cannot be renamed. Position changes affect the current canvas only and are not serialized into standard Mermaid source.
+
+Mind maps resolve hierarchy from relative indentation rather than requiring two spaces per level. Square, rounded and circular node IDs and shapes survive edits. Sources with comments, icons, classes, Markdown strings or unsupported shapes stay in source mode rather than undergoing a lossy conversion.
+
+Mind-map labels preserve literal parentheses, quotes, Markdown markers and HTML-like text instead of changing punctuation or breaking diagram syntax. Generated Mermaid text escapes decode when reopening the canvas and display as text in SVG previews and exports.
 
 Save protection: final publication never overwrites a concurrently recreated destination. Windows exclusively verifies the original; unavailable protection is treated as a conflict. Failed saves restore the original or retain recovery material. macOS/Linux retain hidden `.quillite-save-recovery-*` original-file backups beside the document to preserve late writes through other applications' open handles. These consume disk space and are not automatically cleaned. Unsupported filesystem operations fail closed; save a new copy instead.
 
@@ -46,6 +215,12 @@ On Windows, the startup window adapts to its monitor's available work area and D
 
 Saves and AI edits are scoped to their document session. Late results cannot change another document, and typing during a save keeps newer content marked unsaved. Saved copies of built-in examples become ordinary editable files.
 
+Isolated AI interaction regression covers all eight toolbar entries, seven nested editing contexts, partial acceptance, redaction restoration, and cancellation guards. Responses are mocked; this is not a real-provider or native-credential test. Scope and screenshots: [AI editing audit](docs/audits/2026-10-15-ai-edit.md).
+
+AI edits and review fixes preserve live containers: table cells and collapsible titles use the existing single-line newline normalization, pipes in cells are escaped, and footnote/quote/list continuation prefixes are retained without adding duplicates already present in a reply. Source mode still writes literal Markdown. Switching documents while review settings are pending discards the old entry request. See the [multiline AI and session audit](docs/audits/2026-10-15-ai-context.md).
+
+Cross-block AI replacements also retain only one outer footnote/quoted-code prefix without removing deeper indentation. Literal code fences widen the existing wrapper; fully selected blocks remain replaceable. See the isolated [AI boundary audit](docs/audits/2026-10-15-ai-boundaries.md).
+
 Ordinary document saves stage and sync a temporary file before replacement, preserving the original if writing fails. History pruning only touches verified snapshots. Windows installation and removal recheck directory ownership and do not overwrite or delete shortcuts based solely on their names; macOS updates retain the previous app bundle for recovery.
 
 Chart security checks distinguish raw data from executable options, preserving legitimate column names and dimension mappings. Large arrays are traversed incrementally to avoid argument-count errors.
@@ -57,7 +232,50 @@ Close the live preview to enter full-width **Editor only**. Click **Restore prev
 
 ![Quillite Markdown split-view Markdown editor with live preview and syntax highlighting](screenshots/en/03-split-editor.png)
 
+The editor defaults to **Live editing**: headings, emphasis, strikethrough, highlights, links, lists, tasks, quotes, fenced code, tables, rules and `[TOC]` render directly in the editing area. Prose formatting stays hidden during caret placement. Table cells and code are editable in place with character-level clicking and drag selection, without expanding entire blocks into source. Tab / Shift+Tab moves between cells, Enter advances, and Escape returns to the document; pasted newlines become spaces and pipes are escaped. Edits immediately update the original Markdown and share the main document's save/undo history. Tables retain the visual structure designer; tables and code offer an explicit **View source** action. Task checkboxes are directly editable and undoable. The **Live editing / Source** switch remembers its setting without changing Markdown, selection, undo history or split-layout preferences. Existing image, equation and diagram previews remain available. Plain text, incomplete/complex mixed syntax and prose over 300,000 characters retain source; embedded image payloads do not count toward that prose limit. Native IME composition is preserved until commit.
+
 ## Why Quillite Markdown?
+
+In the main editor, select repeated text with Ctrl/⌘+D to apply inline formatting, colors, headings, quotes and lists to all selections, preserving direction and single-step undo. Block markers are added only once per line. The format painter supports multiple targets and waits while a selection modifier or pointer is held. In live editing, Enter after inline formatting keeps the text and inserts each newline after its closing markers. Nested-cell and complex cross-container multi-selection remain under audit.
+
+Image rows share one wrapping action panel. Choose the target by image number/description, or hover a card; focus a card and press Enter for actions, Escape to return. The panel stays within the editor viewport and outside the image when space permits, with an always-available source-return control. Images wrap in narrow cells while remaining in the same group.
+
+Image actions fade in without sliding, keeping button edges stationary for immediate clicks. The return control remains visible while image source is expanded.
+
+Nested footnote, collapsible-section, code and table editors share the document history. Undo preserves keyboard focus when an inner editor is rebuilt, so redo remains available without stealing focus from another control.
+
+Whole-block drops into footnotes preserve paragraph separation and nested indentation, keeping code and tables inside their quote/list container. Standard collapsible and HTML content blocks inside quotes support live editing, retaining quote/footnote prefixes for title, prose newline, code and table edits, with source round-trips and shared undo. Literal closing tags in code examples do not truncate the enclosing block.
+
+Reading and styled HTML use stable columns for tables containing images, preventing neighboring text from collapsing into a single-character column. Explicit column widths still take precedence. Image groups wrap inside cells and text aligns at the top without rewriting Markdown.
+
+Image-only table cells use the same row layout in editing and reading. Alignment and size changes survive source round-trips without losing editable cells. Images can be separated/rejoined within a cell with stepwise undo; mixed prose and image links retain their content.
+
+Regular GFM tables render inline equations, direct image URLs and embedded images in their cells, with in-place editing, image sizing/alignment, undo and source-return controls. The formula dialog preserves drafts and rejects block output or unescaped pipes that would split a cell. Full, collapsed and shortcut image references share document definitions across table cells and collapsible bodies. Target/title edits refresh all uses; removing a definition retains editable source, and undo restores the images.
+
+Live edits forward only changed characters and retain measured heights of unchanged tables and code blocks, avoiding jump-and-return scrolling in long documents. Regression tests check both animation-frame positions and scroll writes.
+
+Visible text in headings, prose and tables supports precise mouse placement without inserting into hidden line-prefix/suffix markers. Vertical spacing for tables, code, block formulas and diagrams is included in editor height measurements. Browser audits verify clicked positions, actual insertions and exact undo, with real documents tested only in isolated memory.
+
+In live editing, Enter at the visible end of a line of strikethrough, bold or other formatted text preserves the previous line's complete formatting instead of splitting hidden closing markers. Lists and quotes continue normally, with single-step undo. Source mode still inserts a newline at the literal cursor position.
+
+After selecting text and applying highlight, bold or a text color, press Enter directly to finish formatting and start a new line without first clicking at the end. Stacked formats are supported. Manually reselecting text keeps normal Enter-to-replace behavior, and placeholders inserted without a selection remain replaceable by typing.
+
+Toolbar text colors render directly in live editing with the same palette as the reading preview, hiding their `data-md-color` tags. Colors combine with bold and highlights, while editing and newline preserve the wrappers. Source mode shows the original tags.
+
+Task-list text also renders highlights, underline, superscript/subscript, keyboard keys and text colors, including completed, quoted and nested tasks. Enter at the end of formatted text preserves its wrappers and continues the next task; checkbox and text changes remain undoable.
+
+Checkboxes (including empty tasks), bullets and decoded entities stay rendered during caret movement and selection. Arrow navigation crosses complete source markers, while copying preserves Markdown. The main editor and nested table/code editors support `Ctrl/Command+Shift+Z` redo.
+
+After choosing **Show source** on an image, **Hide source** stays visible above it even when the pointer leaves, allowing an immediate return to the preview without changing image content or undo history.
+Single-image source, alignment and size controls share one wrapping overlay so they do not cover each other in narrow split panes. Controls remain hidden until hover or keyboard focus.
+
+Canvas auto layout spaces nodes using their actual sizes; larger diagrams remain navigable by zooming and panning. State transitions expose supported label editing, not unsaved line-style choices. Mind maps preserve hierarchies deeper than five levels. Deleting a topic moves its surviving children to its parent, keeps the root, and selecting a connection offers an explicit **Move to root** action. Edits save as standard Mermaid; manually dragged coordinates are transient canvas layout, not encoded in the standard source.
+
+Invalid chart numbers, empty rows or duplicate series names disable insert/save until corrected. Renaming a series updates column headers, accessible cell names and validation labels without interrupting typing.
+
+Sequence visual editing keeps request/response arrows separate from participant IDs when changing messages or arrow types. Unsupported activation and other syntax remains in source mode.
+
+Timeline edits preserve grouped events under each period, while keeping explicitly separate same-name periods distinct.
 
 - **Lightweight by design:** the Windows installer is about **12 MB**, built with Go and Wails instead of Electron.
 - **Local-first and private:** open and edit ordinary Markdown files on your computer—no account, proprietary vault or cloud lock-in.
@@ -106,6 +324,18 @@ Statistical chart editing preserves zero values and identifies invalid numeric f
 
 Render Mermaid/ECharts diagrams directly in the editor. Selection, hover or keyboard focus exposes local Edit/Show source actions; double-click or Enter opens in-place editing. Pie and other supported diagrams prioritize title/category/value fields, while complex syntax retains source editing. Source toggles preserve text, copy retains Markdown, and deletion/changes are individually undoable. Cancel, unchanged saves and stale-document checks preserve source and drafts. More → Editor layout remembers rendered/source display, including editor-only mode. Render only mounted near-visible diagrams, capped at 64 diagrams and 20,000 characters each; documents over 300,000 characters and ambiguous quote/list containers retain source. Rendering failures show guidance and original source. File-save, installer and uninstaller logic remain unchanged.
 
+## What's new in 3.0.0
+
+- **New: live-rendered editing mode.** Edit headings, prose, lists, quotes, tables and code directly in rendered Markdown. Switch to source at any time while preserving document content and undo history. Complex syntax, plain text and oversized documents retain source fallback.
+- Improve in-place editing, mouse positioning, IME input, selection, copy/paste and undo/redo. Fix code-block editing jumps, tables reverting to source after clearing cells, and image-adjacent heading/table editing.
+- Redesign the Live editing / Source control as a lower-right segmented switch. Refine the text-style menu across Chinese/English, light/dark themes and narrow panes.
+- Condense embedded Base64 image data to format/size labels in source while preserving complete data on copy and save; retain sizing, alignment, image rows and images inside tables.
+- Refine 41 chart types and 95 equation templates, visual parameters and chart data editing. Fix calendar heatmap, histogram and other data/rendering updates; add input/output parallelograms and a teaching flowchart example.
+- Align editor/preview typography for headings, lists and quotes, and improve nested content, links, footnotes, search, diagram interaction and export.
+- Add Ctrl/⌘ multi-selection and bulk clearing in Recent. Only records are removed; original files, Favorites and unsaved documents are preserved.
+- Strengthen document sessions, autosave conflicts, recovery archives, image uploads and runtime error handling, while preserving file-safety boundaries and improving large-document/switching performance.
+- See the [complete v3.0.0 change record](https://github.com/liuhang798/quillite-markdown/blob/v3.0.0/docs/releases/3.0.0-details.md).
+
 ## What's new in 2.7.8
 
 - Render Mermaid / ECharts diagrams inside the editor and collapse source after insertion, with local editing, source controls, undo/redo and editor-only mode.
@@ -115,7 +345,11 @@ Render Mermaid/ECharts diagrams directly in the editor. Selection, hover or keyb
 
 ## What's new in 2.7.7
 
-- Offline visual equation editing, mouse caret placement, matrix row/column operations and search across 79 templates; complex equations retain source editing.
+- Offline visual equation editing, mouse caret placement, matrix row/column operations and search across 95 templates, including trigonometry, sets, logic, aligned derivations and statistics; complex equations retain source editing.
+- Bilingual search across 41 chart templates, including histograms, 100% stacked bars, horizontal rankings and calendar heatmaps. Histograms distinguish adjacent bins with theme-aware thin outlines and offer editable horizontal-axis labels/units. Common statistics charts offer data tables, multi-series editing and Excel/TSV/CSV paste; basic class/ER diagrams offer field/relation forms. Advanced configurations remain in source mode when they cannot be parsed losslessly.
+- Calendar heatmaps display recorded values above the date grid and leave missing dates empty. Cells and legends remain visible in light/dark mode without overwriting custom value ranges.
+- Automatic calendar color scales grow and shrink with the current data: changing the maximum from 50 to 30 updates the legend to 30. Disable auto-scaling to keep a fixed domain; existing custom domains remain fixed by default.
+- The diagram catalog search field, category buttons and template list share aligned horizontal edges.
 - Render equations in the editor, with Normal/Large inline layout and shared final Markdown validation for preview and saving. Invalid drafts stay intact without document writes.
 - Compact equation dialogs and editor toolbars; custom image dimensions, original-size reset and overlay controls without reflow.
 - Add equation-session, export, delimiter and large-image regressions while preserving source, undo history and file-safety boundaries.
@@ -168,7 +402,7 @@ Render Mermaid/ECharts diagrams directly in the editor. Selection, hover or keyb
 - Flowcharts, state diagrams, and mind maps now use a visual node canvas for adding, connecting, dragging, and editing nodes without hand-writing Mermaid; sequence, Gantt, timeline, Kanban, and common data charts retain structured field editors.
 - The canvas supports full screen, 50%–200% zoom, free panning, edge expansion, automatic layout, and select-all group movement. State diagrams use compact nodes and offset transition labels to prevent overlaps.
 - Existing flowchart, state, and mind-map fences can be reopened from the editor and saved in place, with a safe Source-mode fallback for advanced Mermaid syntax.
-- Academic Formulas defaults to inline output. Put the cursor inside an existing formula and choose Edit current formula, or double-click its live preview, to restore its content, numbering, and display mode and replace it in place. Long custom equations use multiline editing without silent truncation. Changes verify the document session and source snapshot; ambiguous previews never replace content. Numeric factors use explicit multiplication, and unsupported equations remain readable in exports. Manual source survives output-mode changes; changing templates requires confirmation.
+- Academic Formulas defaults to inline output. Select plain text or TeX and confirm in the formula dialog to convert it directly. Put the cursor inside an existing formula and choose Edit current formula, or double-click its live preview, to restore its content, numbering, and display mode and replace it in place; saving unchanged content adds no undo step. Long custom equations use multiline editing without silent truncation. Changes verify the document session and source snapshot; ambiguous previews never replace content. Numeric factors use explicit multiplication, and unsupported equations remain readable in exports. Manual source survives output-mode changes; changing templates requires confirmation.
 
 Equation templates can be searched by Chinese/English names, subjects, parameter labels and common keywords. The first query searches all subjects; select a category to narrow it. Filtering never changes the equation being edited. Inside the dialog, `Ctrl/⌘ + F` focuses search, `Esc` clears its query, and `↓` moves to the results.
 
@@ -178,7 +412,22 @@ The editor renders equations using preview styling. Click to select; double-clic
 
 Click inside visual equations to place the caret in fractions, scripts and matrix cells, then type to edit. Clicking or dragging changes only the caret/selection and never rewrites the equation automatically.
 
+Dot/cross-product templates accept plain letters or compound expressions in place of default vectors. Generated LaTeX separates commands from parameters and preserves grouping for cross-product operands and angles.
+
 Choose Normal/Large layout when editing an inline equation. Large layout expands fractions and sum symbols while keeping the equation inline; editor, live preview and reading share the same typesetting. The choice persists per equation as standard LaTeX `\displaystyle`, can be switched back, and never changes other equations in bulk. Scripts retain appropriate sizes; line height may increase.
+
+Clicking the unchanged inline layout preserves exact source and lets you continue editing template parameters without an unnecessary replace-source confirmation. Actual manual source edits still require confirmation before template parameters replace them.
+
+Deferred initial focus after opening the formula dialog or switching templates never overrides a later click into another parameter. Closing or reopening the dialog invalidates the old focus request.
+
+Compound parameters retain their grouping in logarithms, gradients, eigenvalue equations, means and conditional probability. For example, a logarithm argument of `u+v` remains one complete argument. Mean templates group already-subscripted data symbols before adding a sample index, avoiding duplicate subscripts. Existing document equations are not rewritten automatically.
+
+Each 3×3 matrix row takes three comma-separated cells, with English or Chinese separators. Commas inside function parentheses, TeX groups and nested matrices stay inside their cells. Missing, extra or empty cells and unclosed structures retain your input and prompt correction. Parameters for 2×2 matrices, determinants and inverses cannot inject outer row/column commands. Use visual matrix controls or Custom formula for other sizes and structures.
+
+Correcting a formula or closing its dialog clears that dialog's obsolete content-validation warning without dismissing messages from other operations.
+Manually numbered display formulas in Advanced source synchronize the number field without rewriting the source. Switching to Display and back to Numbered retains that number.
+
+A successful chart-data import retry, or closing the chart dialog, clears the old import warning without dismissing messages from other operations.
 
 The compact equation-dialog header and layout controls leave more height for visual editing and live preview. Controls wrap on narrow windows, while Save and Cancel remain accessible at the bottom.
 
@@ -282,6 +531,22 @@ Equation actions stay beside their equation: rendered equations show Edit/Show s
 
 ## Highlights
 
+Table cells can be cleared and edited again. Clearing a final cell preserves a missing row boundary in the same undoable operation, keeping the table rendered and restoring the original source on undo.
+
+Inserting an image after a table adds the required Markdown blank-line separation without changing table content or widths. Images inside table cells remain supported.
+
+The aligned 16px text-style icon (T with paragraph lines) after AI opens an independently widened, centered paragraph/six-heading menu, with tooltips, keyboard selection and a narrow-window More formats fallback.
+
+Prose immediately after a standalone HTML image can be formatted as a heading, list or quote. Formatting adds a separating blank line when required, preserves image settings and supports single-step undo.
+
+The flowchart canvas supports input/output parallelograms through quick insertion or existing-node shape conversion, retaining labels and connections. Chart examples include a two-number input–calculate–output flow using standard Mermaid `[/text/]` notation.
+
+Live editing / Source sits at the lower right of the editor header, with equal-width segments and a sliding highlight. It supports mouse and left/right arrow keys, light/dark themes, and stable control dimensions when switching.
+
+Source mode and image Show source condense long Base64 data into a “Base64 image · format · size” label while keeping descriptions, dimensions and alignment editable. This affects display only: copying and saving retain the complete data, with undo/redo and light/dark theme support.
+
+- After choosing italic, bold, strikethrough or highlight at an empty caret, type directly to replace the selected placeholder without clicking the document again. The first input collapses the selection at the new text's end, so subsequent typing appends normally and remains undoable.
+- In root prose/headings, inserting a comment at an empty caret creates a separate block before the current block without splitting headings or multiline formatting. Selected text and code/table interiors retain the existing wrapping behavior. Existing `<!-- comment --># Heading` lines offer “Separate comment and heading”, preserving the comment with one-step undo. Mixed/unfinished comments remain editable source; explicit source mode retains literal Markdown editing.
 - Click the editor filename to rename it safely and use the displayed location to reveal it. A new draft's first manual save asks for a name and folder; autosave continues protecting the draft. Save As remembers the last chosen folder and never overwrites an existing file. Cross-folder copies keep image links pointed at the original attachments.
 - Image storage now offers opt-in Base64 embedding for PNG, JPEG, WebP, GIF and BMP, plus a Portable Markdown export that embeds local images into a new standalone `.md` copy without changing originals or attachments. Limits: 25 MiB per image, 64 MiB per document and 256 distinct images per export. Online images are not fetched automatically. Encoded image data is omitted from AI requests; some Markdown readers may not support embedded images.
 - The source editor previews local attachments (relative/absolute paths and file URLs), HTTP(S) images, Base64/data images, reference-style Markdown and HTML `<img>`, also in editor-only mode. Image actions stay hidden until hover, keyboard focus or a touch tap, then appear as an overlay without shifting the document. Every image supports undoable left/center/right alignment plus percent/pixel width and an optional explicit pixel height; aspect ratio is preserved by default and original sizing can be restored in one click. Reading preview and styled HTML/PDF exports retain the layout, and large embedded-image payloads no longer force formulas in the same document back to source. SVG is displayed only as an image, never as executable inline markup. Code and ordinary links are not loaded. Show Source never changes document content; missing images retain their references with a placeholder. Limits: 256 previews and 25 MiB per local/embedded image. Online images depend on network access and browser format support.
@@ -293,19 +558,38 @@ Equation actions stay beside their equation: rendered equations show Edit/Show s
 - The optional AI Assistant provides two reviewable workflows. AI Edit processes only Markdown explicitly selected by the user and can polish, rewrite, shorten, expand, summarize, translate, or follow a custom instruction. AI Check sends the whole document only after confirmation, then lists precisely locatable grammar, spelling, punctuation, clarity, consistency, and Markdown suggestions; users choose individual fixes and apply them in one undoable transaction. Built-in official integrations cover DeepSeek, Zhipu GLM, Qwen, OpenAI, and Kimi, with Alibaba Cloud Model Studio, SiliconFlow, OpenRouter, and custom OpenAI-compatible endpoints available as additional providers. After a provider key is saved, the app loads models through the provider's model API, while a custom model ID can also be entered manually. Provider keys coexist in separate Windows Credential Manager, macOS Keychain, or Linux Secret Service entries; the default provider and model can be selected together without overwriting or removing another key. Keys are never written to preferences, logs, or feedback data, and every cloud operation asks for consent before document content is sent.
 - The formatting toolbar covers H1–H6, bold, italic, strikethrough, highlight, text color, links, inline/fenced code, quotes, lists, tasks, horizontal rules, tables and images. The text-color control sits directly after Highlight and offers a complete 48-color square palette with the default color, seven grayscale steps and 40 spectrum shades. Changes preview live, can be recolored or reset, and remain fully undoable. When space runs out, controls move into the immediately responsive in-app More Formats menu instead of creating a horizontal scrollbar. More Formats also adds bold italic, underline, superscript, subscript, Academic Formulas, hard breaks, footnotes, reference links, autolinks, syntax escaping, HTML/collapsible blocks, keyboard keys and comments. Common actions support `Ctrl/Cmd + B`, `Ctrl/Cmd + I`, `Ctrl/Cmd + K`, `Ctrl/Cmd + Shift + X` and `Ctrl/Cmd + Shift + H`.
 - A visual table designer lets you edit cells directly, change row and column counts, add, remove, or drag rows and columns into order, choose left/center/right alignment per column, and drag column borders to resize. Place the cursor inside an existing Markdown table and use the table button to edit it in place; the saved source remains a standard portable GFM table.
-- Rich text pasted from web pages or Word is converted automatically from clipboard HTML to Markdown. Headings, emphasis, lists, quotes, code, links, online images, and GFM tables are preserved while Office-only styling and unsafe addresses are removed. Right-click selected editor text to copy it as Markdown or plain text.
-- Built-in offline English spell checking marks misspellings with a red wavy underline. Right-click to apply a suggestion, ignore the word in the current document, or add it to the persistent personal dictionary. More → Spell check controls Auto/US/UK dictionaries and personal words; code, URLs, formulas, acronyms, and camel-case identifiers are excluded, and document text is never uploaded.
-- Built-in Academic Formulas, KaTeX typesetting, and mhchem chemistry support: one unified entry groups 79 templates by mathematics, algebra and functions, geometry, calculus, linear algebra, probability and statistics, physics, chemistry, and chemical reactions. New formulas default to inline output, with display and numbered modes still available. Place the cursor in an existing formula and choose Edit current formula, or double-click the rendered formula in the live preview, to edit and replace it in place without selecting its complete source; the guide is available directly inside the dialog. Raw `$…$` / `\(…\)` inline math, `$$…$$` / `\[…\]` display math, `\ce{…}` chemistry, and `\tag{…}` numbering remain fully supported. [Open the formula and chemistry guide](https://qm.ssssa.cn/guides/formulas/).
+- Rich text pasted from web pages or Word is converted automatically from clipboard HTML to Markdown. Headings, emphasis, lists, quotes, code, links, online images, and GFM tables are preserved while Office-only styling and unsafe addresses are removed. Conversion runs before native paste so content is inserted once and undone in one step; code and table editors keep their own plain-text paste rules. Right-click selected editor text to copy it as Markdown or plain text. Plain-text copy strips underline/color HTML tags, decodes entities and preserves breaks, while tags and entities inside code remain literal. Markdown copy retains the original source.
+- Built-in offline English spell checking marks misspellings in prose, tables, collapsible sections, and footnotes with a red wavy underline. Right-click to apply an undoable suggestion, ignore the word in the current document, or add it to the persistent personal dictionary. More → Spell check controls Auto/US/UK dictionaries and personal words; re-enabling immediately restores marks. Code, URLs, formulas, acronyms, and camel-case identifiers are excluded, and document text is never uploaded.
+- Built-in Academic Formulas, KaTeX typesetting, and mhchem chemistry support: one unified entry groups 95 templates by mathematics, algebra and functions, geometry, calculus, linear algebra, probability and statistics, physics, chemistry, and chemical reactions. New formulas default to inline output, with display and numbered modes still available. Place the cursor in an existing formula and choose Edit current formula, or double-click the rendered formula in the live preview, to edit and replace it in place without selecting its complete source; the guide is available directly inside the dialog. Raw `$…$` / `\(…\)` inline math, `$$…$$` / `\[…\]` display math, `\ce{…}` chemistry, and `\tag{…}` numbering remain fully supported. [Open the formula and chemistry guide](https://qm.ssssa.cn/guides/formulas/).
 - Typora-style Mermaid diagrams render directly from fenced ` ```mermaid ` blocks. Flowcharts open on a visual canvas where process, decision, and start/end nodes can be added, dragged, connected, relabelled, reshaped, and automatically arranged in four directions. Put the cursor inside a diagram fence to reveal Edit this diagram and save changes back to that block in place. Only the drawing workspace expands in full-screen mode, where Exit and Insert/Save remain available and the canvas can be zoomed from 50% to 200% with buttons or `Ctrl/Cmd + wheel`. At every zoom level, empty-space dragging pans freely, edge dragging extends the view, and Select all or `Ctrl/Cmd + A` lets every node move as one group. Quillite generates standard Mermaid; advanced subgraphs and styling can stay safely in Source mode. The other Mermaid templates retain editable source, live preview, and one-click insertion, while Word/HTML/PDF exports preserve the rendered result. [Open the Mermaid examples](docs/Mermaid-图表完整案例.md).
 - A canvas badge marks every template with visual editing. State diagrams and mind maps now share the complete node canvas used by flowcharts, including full screen, zoom, free panning, node dragging, select-all group movement, connections, and automatic layout. State diagrams retain transition semantics, while mind maps retain a cycle-safe parent-child hierarchy; all three canvas types reopen from document fences and save in place. Sequence, Gantt, timeline, Kanban, pie, bar, line, and doughnut charts expose structured fields and data rows with a live preview. Advanced syntax stays safely in Source mode rather than being converted with data loss.
 - Diagram Builder also includes 15 offline data charts: bar, line, stacked bar, area, scatter, diverging comparison, bar-and-line combo, funnel, heatmap, box plot, bubble, gauge, doughnut, waterfall, and word cloud. Editable fenced `echarts` JSON stays in the Markdown file, renders locally as SVG, and exports consistently to Word, HTML, and PDF. [Open the data-chart examples](docs/ECharts-数据图表案例.md).
-- Three built-in reference shortcuts—Charts, Formulas, and Formatting—cover all 37 diagram templates, all 79 Academic Formula templates, and the Markdown/HTML formats supported by the editor. Opening a reference does not add it to Recent Reading.
+- Three built-in reference shortcuts—Charts, Formulas, and Formatting—cover all 41 diagram templates, all 95 Academic Formula templates, and the Markdown/HTML formats supported by the editor. Charts are grouped by purpose and formulas by discipline; new headings use a custom fiery-red rounded NEW badge with light/dark styling instead of system emoji. The chart and formula pickers display matching NEW badges from the same addition list. Opening a reference does not add it to Recent Reading.
 - More settings offers System, Sans serif, Serif, Rounded, Song-style, and Kai-style app fonts. The interface, Markdown editor prose, reader and live preview share the selected font immediately and remember the choice. Font changes preserve the caret and undo history, while code remains monospaced.
 - More → App font → Body & math typography offers 11 automatic Chinese/English pairings: Default, Modern, Clear & readable, Book reading, Classic document, Literary, Handwritten feel, Soft & rounded, Magazine, Technical and Monospaced prose. The floating panel previews both panes directly in the current document; save remembers settings, while cancel or Escape restores the previous display. Previous custom pairs remain available. Small/Standard/Large math sizes retain KaTeX fonts; code stays monospaced, local fonts fall back when unavailable, and no online fonts are downloaded.
 - Close Preview returns from the reading screen to Home without removing the document from Recent. Home now provides the three complete examples together with a comprehensive shortcut guide for files, reading, editing, and text formatting.
 - Inserting a code block lets you pick a common programming language (JavaScript, Python, Go, Java, C/C++, Rust, HTML, SQL, and more) and writes a language-tagged fenced block with highlighting. An “Exit editing” button in the editor header returns you to the immersive reading view at any time.
 - Undo from the toolbar or with `Ctrl/Cmd + Z`; each document has isolated history that stops at the originally loaded content.
-- `Ctrl/Cmd + F` searches Markdown source in place, highlights matches and scrolls to the selected result; the polished find-and-replace panel follows the selected Chinese or English interface language.
+- `Ctrl/Cmd + F` searches Markdown source in place, highlights matches and scrolls to the selected result. In live editing, a match inside hidden syntax such as a link destination temporarily reveals that part, including inside tables and details blocks; closing search restores rendering. The find-and-replace panel follows the selected Chinese or English interface language.
+- Inside table cells, code, details bodies/summaries, HTML prose and footnotes, `Ctrl/Cmd + F` opens document-wide search. `F3` / `Shift + F3` and `Ctrl/Cmd + G` / `Ctrl/Cmd + Shift + G` navigate next/previous results. Keyboard focus follows the result so typing replaces the selected text, not the old cell. Navigation still reveals hidden destinations after the panel closes.
+- Search highlights reach tables, code and nested editable prose using matches from the original Markdown, without inventing regex line endings at cell boundaries. “All” preserves multiple selections after closing the panel; typing across those selections shares one undo action and respects field rules such as escaping table pipes.
+- Multiple carets inside rendered blocks follow the actual text instead of stretching along the block edge, including emptied table cells. Multi-selection newline and paste retain code/footnote prefixes, normalize line breaks to spaces in table cells and section titles, and keep caret offsets correct for Windows multiline clipboard text.
+- Mixed-selection paste handles each insertion position separately: prose retains rich formatting while code, comments and section titles receive plain text, including inline code inside nested prose. Repeated Backspace/Delete after clearing table, code or footnote fields cannot escape their boundaries into structure or following text; footnote-end carets and highlights stay aligned with the text.
+- Word deletion (Ctrl+Backspace/Delete on Windows/Linux, Option+Backspace/Delete on macOS) also protects table, code and footnote boundaries. Carets added inside projected fields with Ctrl+click (Command+click on macOS) synchronize to the main document and survive paste, undo/redo and follow-up typing; literal code, comments and section titles do not receive rich-text markers.
+- Multi-caret Enter inside a table cell or section title inserts spaces under its single-line rules instead of navigating away and losing carets; single-caret Enter keeps its existing navigation. Active cells retain caret-owned edge whitespace. Final blank lines in quoted/list code map after container prefixes, so follow-up typing does not break the code block.
+- In live rendering, deletion and paste move invalid edge whitespace outside bold, italic, strikethrough and highlight markers without losing text or spaces. Ambiguous whitespace uses equivalent character references to avoid creating indented code or extra hard breaks. Word deletion no longer exposes broken markup; emptied wrappers are removed, nested formatting and undo/redo are preserved, and active footnotes retain new leading spaces owned by the caret.
+- Emptying colors, links, inline code, underline, superscript/subscript, keyboard styling or HTML highlights also removes their empty wrapper, so subsequent typing is plain text without stale styles or backticks. Removing a reference link preserves shared definitions; nonempty whitespace in code/HTML remains content.
+- Pasting, typing or deleting across different inline styles preserves unselected text styles and link targets, repairing both selection boundaries instead of exposing broken markers. Adjacent emphasis uses equivalent HTML to avoid delimiter ambiguity; toolbar toggles still remove it. Nested prose, tables, footnotes and single-step undo are supported.
+- Cross-style edits retain reference links' original identifiers and shared definitions. Shortened angle-bracket autolinks keep their complete destination (including `mailto:` for email), while formatting punctuation and character entities remain literal label text. Unselected inline code retains its code styling.
+- Typing, deleting or adding a newline inside a shortcut/collapsed reference label retains its original identifier without changing shared definitions or other references. Backspace at the label start or Delete at its end removes the paired hidden link markers while keeping the text, rather than leaving broken source; each operation is undoable in one step.
+- Deleting a hidden edge of bold, italic, strikethrough, highlight, text color, inline code or other supported inline styles also removes its paired marker. Only that formatting layer is removed; text and enclosing styles remain, with accurate follow-up typing and single-step undo.
+- Live inline code accepts literal backticks by widening its delimiters. Semantic padding stays hidden without rewriting code content. The toolbar can remove long-delimiter code styling while retaining literal backticks, intentional spaces and footnote positions, with undo/redo support.
+- Newlines and multiline paste inside live inline code close each physical line separately, preventing stray backticks or accidental headings/fenced blocks. Quote, list and footnote continuation remains structural; multiline code application/removal shares the same rules and undo history.
+- Multiline prose selections follow visible text instead of flooding the line end; empty lines remain indicated and code backgrounds do not hide the selection. Removing inline-code boundaries preserves literal punctuation; forward joining quote/list lines removes hidden prefixes, with subsequent typing and undo/redo preserved.
+- Multiple carets can join quote/list lines and nested prose in one operation. Each editable field retains its rules: code keeps literal punctuation and tables keep cell boundaries. Deleting hidden style edges in tables, details and footnotes behaves like ordinary prose, with one-step undo for the complete action.
+- Reapplying inline code preserves displayed backticks, backslashes and edge spaces without exposing extra escapes; source mode retains literal source text. Inline formatting records its actual resulting selection so formatting can be applied again after undo/redo.
+- Live mode can remove code styling from only the selected text, retaining the remaining code, literal punctuation and spaces, including multiple selections within one span. Ctrl/⌘+D selects the next occurrence from details, tables and footnotes. Undo/redo retains actual caret positions and selection direction without changing continuous-typing history grouping.
+- Live single-line text selections are painted from visible text bounds; hidden format markers no longer stretch a two-letter selection to the end of the line.
 - Create a Markdown file and begin editing immediately, with autosave every 10 seconds while editing. Atomic recovery snapshots can restore unsaved edits after an abnormal exit. Large documents automatically use deferred preview refreshes, pause full-document spell scans, and avoid copying the entire buffer on every keystroke.
 - One “Export document” action opens every export option without extra tools for Word, styled HTML, unstyled HTML, PDF with heading bookmarks, and high-resolution PNG/JPEG images. Every image page is rendered independently at 2× resolution with the A4 aspect ratio and saved under sequential filenames, without whole-document scaling or resampling. Even when Single long image is selected, documents longer than three A4 pages automatically switch to A4 HD pages so viewers and social apps cannot reduce a tens-of-thousands-pixel image to a blurry thumbnail. Documents up to three pages can still use a losslessly joined 1280px layout that exports at approximately 2560px wide. It supports reusable presets plus `{title}`, `{date}`, and `{page}` header/footer variables. PDF export uses an installed Edge, Chrome, or Chromium to create navigable bookmarks without increasing Quillite's installer size, with system printing as a fallback. Install [Pandoc](https://pandoc.org/installing.html) locally to add EPUB, RTF, ODT, LaTeX, MediaWiki, or custom writer/extension/argument exports. Pandoc is optional.
 - Direct PicGo Cloud hosting is available under More → Image hosting. Choose PicGo Cloud and sign in securely in the system browser—there is no need to install PicGo or copy a credential, while free allowances and later billing are provided by PicGo Cloud. The login token is stored separately in the local configuration directory rather than normal preferences. Selected, dropped, and pasted images are still saved to the document's local `assets` directory first, then uploaded through presigned or multipart APIs and inserted as an online URL. A loading indicator shows real transfer percentage and the online-link generation stage. Any failure falls back to the portable local path so the image is never lost. Users who already have PicGo can keep using the Local PicGo compatibility mode, whose Server connection remains restricted to localhost/loopback addresses.
@@ -395,6 +679,20 @@ cd frontend
 npm install
 npm run build
 ```
+
+For real-input formula regression, run `node tests/browser-formula-roundtrip.mjs` from `frontend`. Provide Playwright (optionally via `PLAYWRIGHT_MODULE`) and a Chromium browser (optionally via `BROWSER_EXECUTABLE`). The test uses synthetic documents in a fresh browser context, not real documents or desktop file APIs. It checks every registered formula's block insertion, advanced-source editing, cancellation, source round trips, single-step undo/redo, and document history isolation; it does not cover every parameter or output mode.
+
+Run `node tests/browser-formula-structures.mjs` for real-input coverage of 13 visual structure tools, four matrix row/column actions, placeholder validation, saving, and undo. Set `AUDIT_FORMULA_MODE` to `inline`, `block` (default), or `numbered` to test each output mode. This also uses isolated synthetic documents; it does not prove all template parameters, complex nesting, or IME combinations are covered.
+
+Incomplete or invalid equations and invalid chart data show a muted Insert/Save button with a not-allowed cursor. Valid input restores the normal button appearance. Selected equation text and slots follow the app's light/dark theme independently of the system preference.
+
+Chart validation messages adapt to light/dark surfaces; invalid fields retain their error border and focus ring while focused. Run `node tests/browser-chart-series-paste.mjs` for isolated CSV/TSV and row-operation checks on 12 data charts, plus series additions/removals, confirmation/cancellation and undo on eight charts. Set `AUDIT_THEME=dark` and `AUDIT_CONTRAST=strict` to check the actual styles.
+
+After showing a diagram's source in live editing, hover over the source to reveal Return to rendered view at its upper right without scrolling back to the beginning. Returning selects the diagram without changing content or undo history. Returning and redoing an edit target the visible start of the chart, preventing a jump below the collapsed source. Run `node tests/browser-chart-source-roundtrip.mjs` for title/data edits, exact source retention, invalid JSON rejection, cancellation, undo and returned-chart visibility across the current 19 ECharts templates and four complex configurations. Configurations that cannot be parsed completely remain source-editable.
+
+Run `node tests/browser-mermaid-roundtrip.mjs` on isolated synthetic documents to exercise all 22 current Mermaid templates: real source edits, no-op saves, invalid syntax rejection, return to rendered view, cancellation, undo/redo and new-document history isolation. The 11 visual templates also receive node, field or value edits followed by save and reopen checks. Set `AUDIT_THEME=dark` to repeat in dark mode. This is not complete acceptance of every canvas operation or arbitrary Mermaid syntax.
+
+Saving or cancelling a diagram dismisses its obsolete source-validation warning without hiding newer warnings from other operations. Gantt excluded dates, alternate regions and completed tasks use the current light/dark theme's neutral colors. Run `node tests/browser-diagram-feedback.mjs` with `AUDIT_STRICT=1` to check warning cleanup, theme switching and unchanged document content; `AUDIT_THEME=dark` starts in dark mode.
 
 Build on the current platform:
 

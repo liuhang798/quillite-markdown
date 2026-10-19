@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { DIAGRAM_CATEGORIES, DIAGRAM_TEMPLATES, diagramTemplateSource, diagramTemplatesForCategory } from '../src/diagram-templates.js';
+import { flowchartNodeSize } from '../src/flowchart-designer.js';
 
 const renderer = await readFile(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const diagramModule = await readFile(new URL('../src/mermaid-diagrams.js', import.meta.url), 'utf8');
@@ -12,6 +13,23 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 const auditPage = await readFile(new URL('./diagram-audit.html', import.meta.url), 'utf8');
 const auditScript = await readFile(new URL('./diagram-audit.js', import.meta.url), 'utf8');
 const echartsExamples = await readFile(new URL('../../docs/ECharts-数据图表案例.md', import.meta.url), 'utf8');
+
+test('Mermaid leaves node foreground derivation to the selected base theme', () => {
+  const theme = diagramModule.slice(diagramModule.indexOf('function diagramTheme()'), diagramModule.indexOf('function configureMermaid('));
+  assert.match(theme, /name:\s*'base'/);
+  assert.match(theme, /primaryTextColor:\s*color\('--text'/);
+  assert.doesNotMatch(theme, /\bnodeTextColor\s*:/);
+  // Real init/frontmatter, theme switching and per-diagram reset are covered
+  // by browser-mermaid-custom-contrast.mjs using actual SVG computed colors.
+});
+
+test('editor Mermaid preserves readable SVG sizing inside a bounded scrolling viewport', () => {
+  const rule = styles.match(/\.cm-diagram-body > \.mermaid-diagram svg\s*\{([^}]+)\}/)?.[1];
+  assert.match(rule, /max-height:\s*none/);
+  assert.doesNotMatch(rule, /(?:^|[;\s])(?:width|max-width|height):\s*(?:100%|\d+px)/);
+  assert.match(styles, /\.cm-diagram-body\s*\{[^}]*max-height:\s*420px;[^}]*overflow:\s*auto/);
+  assert.match(styles, /width:\s*max\(100%,\s*var\(--mermaid-readable-width/);
+});
 
 test('Typora-style Mermaid fences render as diagrams instead of highlighted code', () => {
   assert.match(renderer, /normalizedLanguage === 'mermaid'/);
@@ -84,7 +102,7 @@ test('editor offers one localized diagram builder with the full common Mermaid c
   assert.match(styles, /\.flowchart-canvas-viewport\.is-panning \{[^}]*cursor:\s*grabbing/s);
   assert.match(styles, /\.diagram-fullscreen #toggleDiagramFullscreen \{\s*display:\s*none/);
   assert.match(styles, /\.flowchart-visual-editor \{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\)/s);
-  assert.equal(DIAGRAM_TEMPLATES.length, 37);
+  assert.equal(DIAGRAM_TEMPLATES.length, 41);
   assert.equal(new Set(DIAGRAM_TEMPLATES.map(template => template.id)).size, DIAGRAM_TEMPLATES.length);
   for (const template of DIAGRAM_TEMPLATES) {
     assert.ok(DIAGRAM_CATEGORIES.some(category => category.id === template.category));
@@ -92,7 +110,7 @@ test('editor offers one localized diagram builder with the full common Mermaid c
     assert.ok(diagramTemplateSource(template, 'zh').trim());
     assert.ok(diagramTemplateSource(template, 'en').trim());
   }
-  assert.equal(diagramTemplatesForCategory('all').length, 37);
+  assert.equal(diagramTemplatesForCategory('all').length, 41);
   assert.match(renderer, /template\.engine === 'echarts' \? 'echarts' : 'mermaid'/);
   assert.ok(renderer.includes("template.engine === 'echarts' ? 'echarts' : 'mermaid'"));
 });
@@ -107,7 +125,8 @@ test('existing Mermaid flowcharts, state diagrams, and mindmaps reopen on the ca
   assert.match(renderer, /function mindmapCanvasModel\(source\)/);
   assert.match(renderer, /function serializeStateCanvas\(model\)/);
   assert.match(renderer, /function serializeMindmapCanvas\(model\)/);
-  assert.match(renderer, /node\.diagramNodeType === 'state'[^\n]+width: 52, height: 52[^\n]+width: 132, height: 48/);
+  assert.deepEqual(flowchartNodeSize({ diagramNodeType: 'state', stateToken: '[*]' }), { width: 52, height: 52 });
+  assert.deepEqual(flowchartNodeSize({ diagramNodeType: 'state' }), { width: 132, height: 48 });
   assert.match(renderer, /stateOffset = model\.canvasType === 'state' \? 13 : 0/);
   assert.match(renderer, /stateEdge \? 'url\(#flowchartArrowSmall\)' : 'url\(#flowchartArrow\)'/);
   assert.match(styles, /\.flowchart-node\.state-node text \{[^}]*font-size:\s*11px/s);
@@ -136,7 +155,7 @@ test('popular diagram templates are visibly marked and expose structured visual 
 
 test('ECharts catalog supplies all requested data visualizations and an offline SVG export path', () => {
   const echartsTemplates = DIAGRAM_TEMPLATES.filter(template => template.engine === 'echarts');
-  assert.equal(echartsTemplates.length, 15);
+  assert.equal(echartsTemplates.length, 19);
   for (const id of ['bar-chart', 'line-chart', 'stacked-bar-chart', 'area-chart', 'scatter-chart', 'diverging-bar-chart', 'combo-chart', 'funnel-chart', 'heatmap-chart', 'boxplot-chart', 'bubble-chart', 'gauge-chart', 'doughnut-chart', 'waterfall-chart', 'word-cloud']) {
     assert.ok(echartsTemplates.some(template => template.id === id), `missing ${id}`);
   }
@@ -163,10 +182,10 @@ test('ECharts catalog supplies all requested data visualizations and an offline 
   assert.match(echartsModule, /visualMap\.itemWidth\s*=\s*visualMap\.itemWidth\s*\|\|\s*12/);
   assert.match(echartsModule, /const HEATMAP_PALETTE = \['#C9E3F1', '#86C8C0', '#F3E39A', '#EEA06F', '#D85E63'\]/);
   assert.match(echartsModule, /visualMap\.itemHeight\s*=\s*visualMap\.itemHeight\s*\|\|\s*180/);
-  assert.match(echartsModule, /visualMap\.calculable\s*=\s*true/);
+  assert.match(echartsModule, /visualMap\.calculable\s*=\s*visualMap\.calculable\s*\?\?\s*!hasCalendar/);
   assert.match(echartsModule, /visualMap\.handleSize\s*=\s*visualMap\.handleSize\s*\|\|\s*'85%'/);
   assert.match(echartsModule, /visualMap\.indicatorStyle\s*=\s*\{/);
-  assert.match(echartsModule, /visualMap\.text\s*=\s*visualMap\.text\s*\|\|\s*\[String\(visualMap\.max/);
+  assert.doesNotMatch(echartsModule, /visualMap\.text\s*=\s*visualMap\.text\s*\|\|\s*\[String\(visualMap\.max/);
   assert.match(echartsModule, /item\.type === 'heatmap'/);
   assert.match(echartsModule, /item\.type === 'boxplot'/);
   assert.match(echartsModule, /color:\s*dark\s*\?\s*'#294254'\s*:\s*'#D8EAF7'/);
@@ -179,9 +198,9 @@ test('ECharts catalog supplies all requested data visualizations and an offline 
   assert.match(styles, /\.echarts-diagram svg text[^}]*stroke:\s*none\s*!important/s);
 });
 
-test('ECharts example document contains 15 complete and valid runnable chart cases', () => {
+test('ECharts example document contains 19 complete and valid runnable chart cases', () => {
   const sources = [...echartsExamples.matchAll(/```echarts\s*\n([\s\S]*?)\n```/gu)].map(match => match[1]);
-  assert.equal(sources.length, 15);
+  assert.equal(sources.length, 19);
   for (const [index, source] of sources.entries()) {
     const option = JSON.parse(source);
     assert.ok(Array.isArray(option.series), `case ${index + 1} should contain series`);
@@ -204,7 +223,7 @@ test('Mermaid diagrams use safe SVG labels, avoid stale rendering work, and expo
   assert.match(diagramModule, /color\('--accent-soft'/);
   assert.doesNotMatch(diagramModule, /primaryColor:\s*value\('--accent-soft'/);
   assert.match(diagramModule, /htmlLabels:\s*false/);
-  assert.match(diagramModule, /function normalizeSVGTypography\(svg, type = ''\)/);
+  assert.match(diagramModule, /function normalizeSVGTypography\(svg, type = '', preserveForeground = false\)/);
   assert.match(diagramModule, /function applyReadableSVGWidth\(svg, type = ''\)/);
   assert.match(diagramModule, /const targetFontSize = \(type === 'gantt' \? 14 : 13\) \* fontScale/);
   assert.match(diagramModule, /Math\.max\(320, Math\.min\(6000, readableWidth\)\)/);
@@ -221,14 +240,17 @@ test('Mermaid diagrams use safe SVG labels, avoid stale rendering work, and expo
   assert.match(diagramModule, /c4ShapeMargin:\s*120/);
   assert.match(diagramModule, /c4ShapeInRow:\s*3/);
   assert.match(diagramModule, /c4:\s*\{[^}]+useMaxWidth:\s*false/s);
-  assert.match(diagramModule, /normalizeSVGTypography\(element\.querySelector\('svg'\), element\.dataset\.mermaidType\)/);
+  assert.match(diagramModule, /normalizeSVGTypography\(element\.querySelector\('svg'\), element\.dataset\.mermaidType, preserveForeground\)/);
+  assert.match(diagramModule, /const \{ svg, diagramType \} = await engine\.render\(id, source\)/);
+  assert.match(diagramModule, /element\.dataset\.mermaidType = normalizedMermaidType\(diagramType\)/);
   assert.match(diagramModule, /function normalizeERDiagram\(svg\)/);
   assert.match(diagramModule, /type === 'erdiagram'/);
   assert.match(diagramModule, /\.relationshipLabelBox, \.edgeLabel rect, rect\.labelBkg/);
   assert.match(diagramModule, /label\.style\.setProperty\('fill', text, 'important'\)/);
   assert.match(diagramModule, /edgeLabelBackground:/);
   assert.match(diagramModule, /relationLabelColor:/);
-  assert.match(diagramModule, /function normalizeC4Diagram\(svg\)/);
+  assert.match(diagramModule, /function normalizeC4Diagram\(svg, preserveForeground = false\)/);
+  assert.match(diagramModule, /normalizeC4Diagram\(svg, preserveForeground\)/);
   assert.match(diagramModule, /type\.startsWith\('c4'\)/);
   assert.match(diagramModule, /label\.textContent = `«\$\{match\[1\]\}»`/);
   assert.match(diagramModule, /label\.removeAttribute\('textLength'\)/);
@@ -261,6 +283,7 @@ test('Mermaid diagrams use safe SVG labels, avoid stale rendering work, and expo
   assert.match(diagramModule, /\.edgeLabel rect\.background/);
   assert.match(diagramModule, /box\.style\.setProperty\('stroke', 'none', 'important'\)/);
   assert.match(styles, /data-mermaid-type="c4context"[^}]+1400px/);
+  for (const type of ['c4','sequence','packet','architecture']) assert.ok(styles.includes(`data-mermaid-type="${type}"`));
   assert.match(styles, /width:\s*max\(100%, var\(--mermaid-readable-width, 0px\)\)/);
   assert.match(styles, /data-mermaid-type="flowchart"[\s\S]+680px, var\(--mermaid-readable-width, 0px\)/);
   assert.match(styles, /\.mermaid-diagram svg text[^}]+font-weight:\s*400\s*!important[^}]+stroke:\s*none\s*!important/s);
@@ -299,7 +322,10 @@ test('appearance changes rebuild Mermaid and ECharts with explicit dark-mode col
   assert.match(renderer, /setColorMode[\s\S]+refreshDiagramAppearance\(\)/);
   assert.match(diagramModule, /name:\s*'base'/);
   assert.match(diagramModule, /darkMode:\s*dark/);
-  assert.match(diagramModule, /C4 keeps fixed #444 relationship colours/);
+  assert.match(diagramModule, /\[data-c4-line-auto="true"\] > line/);
+  assert.match(diagramModule, /\[data-c4-border-auto="true"\] > rect/);
+  assert.match(diagramModule, /\.c4-shape\.c4-auto-color/);
+  assert.match(diagramModule, /automaticDiagramForeground\(getComputedStyle\(shape\)\.fill/);
   assert.match(diagramModule, /marker\.style\.setProperty\('fill', dark \? muted/);
   assert.match(diagramModule, /export async function refreshMermaidDiagrams/);
   assert.match(echartsModule, /option\.darkMode\s*=\s*dark/);

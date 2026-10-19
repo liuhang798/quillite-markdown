@@ -1,6 +1,9 @@
+import { TABLE_CHART_IDS, parseTableChart, serializeTableChart, tableChartDefinition, validateTableChart } from './chart-data-editor.js';
+import { parseEntityDiagram, serializeEntityDiagram, validateEntityDiagram, entityDiagramDefinition } from './entity-diagram-editor.js';
+import { encodeMindmapLabel, decodeMindmapLabel } from './mermaid-label-text.js';
 export const STRUCTURED_VISUAL_DIAGRAM_IDS = Object.freeze([
   'sequence', 'gantt', 'state', 'timeline', 'kanban', 'mindmap', 'pie',
-  'bar-chart', 'line-chart', 'doughnut-chart', 'sankey'
+  'bar-chart', 'line-chart', 'doughnut-chart', 'sankey', ...TABLE_CHART_IDS, 'class', 'er'
 ]);
 
 const text = value => String(value ?? '').trim();
@@ -28,7 +31,10 @@ function parseSequence(source) {
       rows.push({ type: match[1].toLowerCase(), from: match[2], to: '', label: text(match[3] || match[2]) });
       continue;
     }
-    match = line.match(/^([^\s]+)\s*(-->>|->>|-->|->|-\)|--)\s*([^:]+?)(?:\s*:\s*(.*))?$/u);
+    // Stop before the longest arrow token; a greedy sender consumes the first
+    // dash of a response and exposes a different participant in the form.
+    // Unsupported arrows/activation syntax stay in source mode, not a lossy form.
+    match = line.match(/^([\p{L}_][\p{L}\p{N}_-]*?)\s*(-->>|->>|-->|->|-\))\s*([\p{L}_][\p{L}\p{N}_-]*)(?:\s*:\s*(.*))?$/u);
     if (match) rows.push({ type: match[2], from: text(match[1]), to: text(match[3]), label: text(match[4]) });
     else unsupportedLines.push(raw);
   }
@@ -38,15 +44,16 @@ function parseSequence(source) {
 function parseTimeline(source) {
   const model = { settings: { title: '' }, rows: [], unsupportedLines: [] };
   let currentPeriod = '';
+  let periodGroup = -1;
   for (const raw of String(source).split(/\r?\n/u).slice(1)) {
     const line = raw.trim();
     if (!line) continue;
     if (/^title\s+/iu.test(line)) { model.settings.title = line.replace(/^title\s+/iu, ''); continue; }
     const parts = line.split(':').map(text);
-    if (parts[0]) currentPeriod = parts.shift();
+    if (parts[0]) { currentPeriod = parts.shift(); periodGroup += 1; }
     const events = parts.filter(Boolean);
     if (!currentPeriod || !events.length) model.unsupportedLines.push(raw);
-    else events.forEach(event => model.rows.push({ period: currentPeriod, event }));
+    else events.forEach(event => model.rows.push({ period: currentPeriod, event, periodGroup }));
   }
   return model;
 }
@@ -90,15 +97,32 @@ function parseKanban(source) {
 }
 
 function parseMindmap(source) {
-  const rows = [];
-  for (const raw of String(source).split(/\r?\n/u).slice(1)) {
+  const rows = [], stack = [], unsupportedLines = [];
+  const lines = String(source).split(/\r?\n/u);
+  if (lines[0]?.trim() !== 'mindmap') unsupportedLines.push(lines[0] || '');
+  for (const raw of lines.slice(1)) {
     if (!raw.trim()) continue;
-    const spaces = raw.match(/^\s*/u)?.[0].length || 0;
-    const label = raw.trim().replace(/^root\(\((.*)\)\)$/u, '$1');
-    rows.push({ level: Math.max(0, Math.round((spaces - 2) / 2)), label });
+    const indent = raw.match(/^[ \t]*/u)[0].length;
+    const body = raw.trim();
+    // Preserve syntax we cannot faithfully expose (comments, icons, classes,
+    // Markdown strings, HTML, and other node shapes) in the source editor.
+    if (/%%|::|[`"<>]|^---/u.test(body)) { unsupportedLines.push(raw); continue; }
+    let label = body, shape = 'default', id = '';
+    const match = body.match(/^([\p{L}\p{N}_-]*)(\(\(|\[|\()([^\[\](){}]+)(\)\)|\]|\))$/u);
+    if (match && ({ '((': '))', '[': ']', '(': ')' })[match[2]] === match[4]) {
+      [, id, , label] = match;
+      shape = { '((': 'circle', '[': 'square', '(': 'round' }[match[2]];
+    } else if (/[\[\](){}]/u.test(body)) { unsupportedLines.push(raw); continue; }
+    // Mermaid attaches a node to the latest preceding smaller indentation,
+    // not to an absolute number of two-space steps.
+    while (stack.length && stack.at(-1).indent >= indent) stack.pop();
+    if (rows.length && !stack.length) { unsupportedLines.push(raw); continue; }
+    const level = stack.length;
+    label = decodeMindmapLabel(label);
+    rows.push({ level, label, syntax: { id, shape, body, label } });
+    stack.push({ indent });
   }
-  if (rows.length) rows[0].level = 0;
-  return { settings: {}, rows };
+  return { settings: {}, rows, unsupportedLines };
 }
 
 function parseGantt(source) {
@@ -172,7 +196,10 @@ function serializeSankey(model) {
 export function parseStructuredDiagram(templateId, source) {
   try {
     let model = null;
-    if (templateId === 'sequence') model = parseSequence(source);
+    if (TABLE_CHART_IDS.includes(templateId)) model = parseTableChart(templateId, source);
+    else if (['class', 'er'].includes(templateId)) model = parseEntityDiagram(templateId, source);
+    else if (['bar-chart', 'line-chart'].includes(templateId) && JSON.parse(source)?.series?.length > 1) model = parseTableChart(templateId, source);
+    else if (templateId === 'sequence') model = parseSequence(source);
     else if (templateId === 'sankey') model = parseSankey(source);
     else if (templateId === 'timeline') model = parseTimeline(source);
     else if (templateId === 'state') model = parseState(source);
@@ -205,7 +232,17 @@ function serializeSequence(model) {
 function serializeTimeline(model) {
   const lines = ['timeline'];
   if (model.settings.title) lines.push(`    title ${safeMermaidText(model.settings.title)}`);
-  model.rows.forEach(row => { if (row.period && row.event) lines.push(`    ${safeMermaidText(row.period)} : ${safeMermaidText(row.event)}`); });
+  let previousGroup = null, previousPeriod = '';
+  model.rows.forEach(row => {
+    if (!row.period || !row.event) return;
+    const period = safeMermaidText(row.period);
+    // Explicit repeated periods can be separate nodes. Only continue events
+    // that belonged to the same source node and still share its period label.
+    const group = Number.isInteger(row.periodGroup) ? row.periodGroup : null;
+    const continuation = group !== null && group === previousGroup && period === previousPeriod;
+    lines.push(`    ${continuation ? '' : period} : ${safeMermaidText(row.event)}`);
+    previousGroup = group; previousPeriod = period;
+  });
   return lines.join('\n');
 }
 
@@ -241,8 +278,17 @@ function serializeMindmap(model) {
   const rows = model.rows.filter(row => row.label);
   const lines = ['mindmap'];
   rows.forEach((row, index) => {
-    const level = index === 0 ? 0 : Math.max(1, Math.min(5, Number(row.level) || 1));
-    const value = index === 0 ? `root((${safeMermaidText(row.label)}))` : safeMermaidText(row.label);
+    // Depth is bounded by the available topics, not an arbitrary five-level
+    // cutoff that silently promotes descendants when a canvas is saved.
+    const level = index === 0 ? 0 : Math.max(1, Math.min(rows.length, Math.floor(Number(row.level) || 1)));
+    const syntax = row.syntax;
+    let value;
+    if (syntax && row.label === syntax.label) value = syntax.body;
+    else if (syntax) {
+      const delimiters = { circle: ['((', '))'], square: ['[', ']'], round: ['(', ')'], default: ['', ''] }[syntax.shape];
+      if (!delimiters) throw new Error('unsupported-mindmap-shape');
+      value = `${syntax.id}${delimiters[0]}${encodeMindmapLabel(row.label)}${delimiters[1]}`;
+    } else value = index === 0 ? `root((${encodeMindmapLabel(row.label)}))` : encodeMindmapLabel(row.label);
     lines.push(`${'  '.repeat(level + 1)}${value}`);
   });
   return lines.join('\n');
@@ -326,6 +372,8 @@ function serializeECharts(templateId, model) {
 export function serializeStructuredDiagram(templateId, model) {
   const validation = validateStructuredDiagram(templateId, model);
   if (!validation.valid) throw Object.assign(new Error(validation.code), validation);
+  if (model.tableChart) return serializeTableChart(model);
+  if (model.entityDiagram) return serializeEntityDiagram(model);
   if (templateId === 'sankey') return serializeSankey(model);
   if (templateId === 'sequence') return serializeSequence(model);
   if (templateId === 'timeline') return serializeTimeline(model);
@@ -340,6 +388,8 @@ export function serializeStructuredDiagram(templateId, model) {
 
 export function validateStructuredDiagram(templateId, model) {
   if (!model?.rows || !model.settings) return { valid: false, code: 'invalid-model' };
+  if (model.tableChart) return validateTableChart(model);
+  if (model.entityDiagram) return validateEntityDiagram(model);
   const statistical = ['pie', 'doughnut-chart', 'bar-chart', 'line-chart', 'sankey'].includes(templateId);
   if (statistical && !model.rows.length) return { valid: false, code: 'empty-rows' };
   const fields = structuredDiagramDefinition(templateId).columns;
@@ -362,7 +412,9 @@ export function validateStructuredDiagram(templateId, model) {
   return { valid: true };
 }
 
-export function structuredDiagramDefinition(templateId, locale = 'zh') {
+export function structuredDiagramDefinition(templateId, locale = 'zh', model = null) {
+  if (model?.tableChart) return tableChartDefinition(model, locale);
+  if (['class', 'er'].includes(templateId)) return entityDiagramDefinition(templateId, locale);
   const en = locale === 'en';
   const common = { add: en ? 'Add row' : '添加一行', remove: en ? 'Remove' : '删除' };
   if (templateId === 'sankey') return { ...common, settings: [], columns: [{ key: 'from', label: en ? 'Source' : '来源' }, { key: 'to', label: en ? 'Target' : '目标' }, { key: 'value', label: en ? 'Value' : '数值', type: 'number', min: 0 }], empty: { from: 'Source', to: 'Target', value: 10 } };
@@ -371,7 +423,7 @@ export function structuredDiagramDefinition(templateId, locale = 'zh') {
   if (templateId === 'timeline') return { ...common, settings: [{ key: 'title', label: en ? 'Title' : '标题' }], columns: [{ key: 'period', label: en ? 'Time / Stage' : '时间／阶段' }, { key: 'event', label: en ? 'Event' : '事件' }], empty: { period: en ? 'New stage' : '新阶段', event: en ? 'New event' : '新事件' } };
   if (templateId === 'state') return { ...common, settings: [{ key: 'direction', label: en ? 'Direction' : '方向', type: 'select', options: [['', en ? 'Automatic' : '自动'], ['LR', en ? 'Left → right' : '左 → 右'], ['TB', en ? 'Top → bottom' : '上 → 下'], ['RL', en ? 'Right → left' : '右 → 左'], ['BT', en ? 'Bottom → top' : '下 → 上']] }], columns: [{ key: 'from', label: en ? 'From state' : '起始状态' }, { key: 'to', label: en ? 'To state' : '目标状态' }, { key: 'label', label: en ? 'Transition' : '转换条件' }], empty: { from: en ? 'State A' : '状态A', to: en ? 'State B' : '状态B', label: en ? 'Event' : '事件' } };
   if (templateId === 'kanban') return { ...common, settings: [], columns: [{ key: 'column', label: en ? 'Column' : '看板列' }, { key: 'task', label: en ? 'Task card' : '任务卡片' }], empty: { column: en ? 'To do' : '待处理', task: en ? 'New task' : '新任务' } };
-  if (templateId === 'mindmap') return { ...common, settings: [], columns: [{ key: 'level', label: en ? 'Level' : '层级', type: 'number', min: 0, max: 5 }, { key: 'label', label: en ? 'Topic' : '主题' }], empty: { level: 1, label: en ? 'New topic' : '新主题' } };
+  if (templateId === 'mindmap') return { ...common, settings: [], columns: [{ key: 'level', label: en ? 'Level' : '层级', type: 'number', min: 0 }, { key: 'label', label: en ? 'Topic' : '主题' }], empty: { level: 1, label: en ? 'New topic' : '新主题' } };
   if (['pie', 'doughnut-chart'].includes(templateId)) return { ...common, settings: [{ key: 'title', label: en ? 'Title' : '标题' }, ...(templateId === 'pie' ? [{ key: 'showData', label: en ? 'Show values' : '显示数值', type: 'checkbox' }] : [{ key: 'seriesName', label: en ? 'Series' : '系列名称' }])], columns: [{ key: 'label', label: en ? 'Category' : '分类' }, { key: 'value', label: en ? 'Value' : '数值', type: 'number', min: 0 }], empty: { label: en ? 'New category' : '新分类', value: 10 } };
   return { ...common, settings: [{ key: 'title', label: en ? 'Title' : '标题' }, { key: 'seriesName', label: en ? 'Series' : '系列名称' }, { key: 'yAxisName', label: en ? 'Y-axis' : '纵轴名称' }], columns: [{ key: 'label', label: en ? 'Category' : '分类' }, { key: 'value', label: en ? 'Value' : '数值', type: 'number' }], empty: { label: en ? 'New category' : '新分类', value: 0 } };
 }

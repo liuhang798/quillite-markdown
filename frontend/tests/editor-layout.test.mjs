@@ -6,6 +6,30 @@ import test from 'node:test';
 const source = await readFile(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+test('editor header reflows whole controls instead of compressing their labels', () => {
+  assert.match(css, /\.editor-header\s*\{[^}]*flex:\s*0 0 auto;[^}]*flex-wrap:\s*wrap;/);
+  assert.match(css, /\.editor-header > div:first-child\s*\{[^}]*flex:\s*1 1 200px;[^}]*max-width:\s*100%;/);
+  assert.match(css, /\.editor-status\s*\{[^}]*flex-wrap:\s*wrap;[^}]*max-width:\s*100%;/);
+  assert.match(css, /\.editor-status > \*\s*\{[^}]*flex-shrink:\s*0;[^}]*white-space:\s*nowrap;/);
+  assert.match(css, /\.editor-header \.document-location-button\s*\{[^}]*max-width:\s*100%;/);
+});
+
+test('all split resize paths use fitted bounds and preserve window-independent preference', () => {
+  assert.match(source, /paneResizeObserver\.observe\(els.editorView\)/);
+  assert.match(source, /const startPercent = currentEditorPreviewPercent\(\)/);
+  assert.match(source, /setEditorPreviewWidth\(currentEditorPreviewPercent\(\) \+ change, true\)/);
+  assert.match(source, /userResize \? \(effectiveChanged \? fitted.percent : state.editorPreviewWidth\) : percent/);
+  assert.match(source, /contentMinimum = state.editing \? \(state.editorLayout === 'editor-only' \? 360 : 547\) : 240/);
+  for (const name of ['aria-valuemin','aria-valuemax','aria-valuenow']) assert.ok(source.includes(`setAttribute('${name}'`));
+});
+
+test('diagram search uses the same panel gutter as category buttons and templates', () => {
+  assert.match(css, /\.formula-template-panel\s*\{[^}]*padding:\s*14px/);
+  assert.match(css, /\.diagram-search\s*\{[^}]*min-width:\s*0;\s*padding:\s*0 0 10px;/);
+  assert.match(css, /\.diagram-search input,[^{]*\{[^}]*width:\s*100%;[^}]*box-sizing:\s*border-box/);
+  assert.match(html, /class="diagram-search"[\s\S]*?id="diagramCategoryTabs"/);
+});
 const functions = source.slice(source.indexOf('function normalizeEditorLayout('), source.indexOf('function syncDocumentWidthOptions('));
 
 function harness(saved = null) {
@@ -18,10 +42,10 @@ function harness(saved = null) {
   const editor = { requestMeasure() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
   const context = vm.createContext({
     state: { editorPreviewWidth: 47, dirty: true, reviewResults: ['suggestion'] },
-    document: { body: { dataset: {} }, querySelectorAll: () => buttons },
+    document: { body: { dataset: {} }, querySelectorAll: selector => selector === '[data-editor-presentation]' ? [] : buttons },
     localStorage: { setItem: (key, value) => storage.set(key, value) },
     $: () => current, t: key => key, showToast() {},
-    codeEditor: editor, scheduleFormatToolbarLayout() {},
+    codeEditor: editor, scheduleFormatToolbarLayout() {}, schedulePaneWidthRefresh() {},
     updatePaneResizerVisibility() {}, suspendEditorPreview() {}, renderEditorPreview() {}, editorContent: () => editor.content,
   });
   vm.runInContext(functions, context);

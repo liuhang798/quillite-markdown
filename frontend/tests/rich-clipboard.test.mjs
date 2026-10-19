@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from '../src/rich-clipboard.js';
+import { marked } from 'marked';
+
+test('explicit rich-text line breaks survive Markdown conversion and reading rendering',()=>{
+  const markdown=htmlToMarkdown('<p><strong>Rich</strong><br><em>Text</em></p>');
+  assert.equal(markdown,'**Rich**  \n*Text*');
+  assert.match(marked.parse(markdown),/<strong>Rich<\/strong><br>\s*<em>Text<\/em>/);
+});
 
 test('web HTML becomes portable Markdown with GFM tables and formatting', () => {
   const markdown = htmlToMarkdown(`
@@ -45,4 +52,25 @@ test('rich clipboard detection ignores empty and unformatted text', () => {
   assert.equal(hasRichClipboardHTML('普通文本'), false);
   assert.equal(hasRichClipboardHTML('<p>网页段落</p>'), true);
   assert.equal(hasRichClipboardHTML(`<p>${'a'.repeat(5 * 1024 * 1024)}</p>`), false);
+});
+
+for(const [name,source,expected] of [
+  ['inline formatting','Text <u>Under</u> and <span data-md-color="spectrum-3-red">Red</span>','Text Under and Red'],
+  ['entities','Text &lt;tag&gt; &amp; &#x4E2D;','Text <tag> & 中'],
+  ['literal inline code','Text `<u>literal</u> &amp;`','Text <u>literal</u> &amp;'],
+  ['literal fenced code','```html\n<u>literal</u> &amp;\n```','<u>literal</u> &amp;'],
+  ['HTML line break','Text <u>Under</u><br>Next','Text Under\nNext'],
+  ['quoted attribute angle','Text <span title="a > b">Body</span>','Text Body'],
+  ['comment','Text <!-- hidden -->Visible','Text Visible'],
+  ['block HTML','<div>One<br>Two &amp; Three</div>','One\nTwo & Three'],
+  ['image alt','Text ![A &amp; B](https://example.com/a.png)','Text A & B'],
+  ['HTML image alt','Text <img src="https://example.com/a.png" alt="A &amp; B">','Text A & B'],
+  ['HTML image attribute boundary',`Text <img title='alt="wrong"' alt="Right">`,'Text Right'],
+  ['escape remains literal',String.raw`Text \<u>literal\</u>`,'Text <u>literal</u>'],
+  ['inert HTML content','<div>Before<script>alert(1)</script><style>.x{}</style>After</div>','BeforeAfter'],
+  ['inline hidden content','Text <script>hidden</script><style>hidden</style><noscript>hidden</noscript>After','Text After'],
+  ['encoded hidden tags are visible','Text &lt;script&gt;visible&lt;/script&gt;','Text <script>visible</script>'],
+])test('plain-text copy preserves visible semantics: '+name,()=>assert.equal(markdownToPlainText(source),expected));
+test('plain-text HTML extraction skips unclosed hidden content without repeatedly searching for a closer',()=>{
+  assert.equal(markdownToPlainText('<div>Before<script>'+('<script>x'.repeat(10000))),'Before');
 });

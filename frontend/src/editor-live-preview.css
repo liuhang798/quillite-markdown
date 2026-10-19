@@ -1,0 +1,171 @@
+.editor-presentation-switch { position: relative; isolation: isolate; display: inline-grid; grid-template-columns: repeat(2, 1fr); flex-shrink: 0; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.editor-presentation-switch::before { content: ""; position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 2); border-radius: 6px; background: var(--accent-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent), 0 1px 3px #0000000a; transition: transform .16s ease; }
+.editor-presentation-switch:has([data-editor-presentation="source"].active)::before { transform: translateX(100%); }
+.editor-presentation-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 76px; height: 24px; border: 0; border-radius: 6px; padding: 0 10px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; }
+.editor-presentation-switch button svg { width: 13px; height: 13px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.editor-presentation-switch button:hover:not(:disabled) { color: var(--text); }
+.editor-presentation-switch button.active { color: var(--accent-strong); }
+.editor-presentation-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor-presentation-switch button:disabled { opacity: .5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .editor-presentation-switch::before { transition: none; } }
+.cm-editor.cm-live-preview .cm-content { font-family: var(--body-font-family); }
+.cm-editor.cm-live-preview .cm-line { line-height: 1.86; }
+#markdownEditor .cm-editor.cm-live-preview { font-size: calc(16px * var(--font-scale, 1)); letter-spacing: .02em; }
+/* Shared typography with the editing preview. Use padding, not vertical
+   margins, in CodeMirror so its measured heights and mouse positions agree. */
+.cm-editor.cm-live-preview .cm-live-heading,
+.editor-preview-content :is(h1,h2,h3,h4,h5,h6) { color: var(--text); font-weight: 700; line-height: 1.35; letter-spacing: -.025em; }
+.cm-editor.cm-live-preview .cm-live-h1, .editor-preview-content h1 { font-size: calc(30px * var(--font-scale, 1)); font-weight: 720; }
+.cm-editor.cm-live-preview .cm-live-h2, .editor-preview-content h2 { font-size: calc(22px * var(--font-scale, 1)); font-weight: 690; }
+.cm-editor.cm-live-preview .cm-live-h3, .editor-preview-content h3 { font-size: calc(18px * var(--font-scale, 1)); }
+.cm-editor.cm-live-preview .cm-live-h4, .editor-preview-content h4 { font-size: calc(17px * var(--font-scale, 1)); }
+.cm-editor.cm-live-preview .cm-live-h5, .editor-preview-content h5 { font-size: calc(15px * var(--font-scale, 1)); }
+.cm-editor.cm-live-preview .cm-live-h6, .editor-preview-content h6 { font-size: calc(13px * var(--font-scale, 1)); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.editor-preview-content.markdown-body :is(h1,h2,h3,h4,h5,h6) { margin: 0; padding: calc(32px * var(--font-scale, 1)) 0 calc(12px * var(--font-scale, 1)); border: 0; }
+.editor-preview-content.markdown-body > :is(h1,h2,h3,h4,h5,h6):first-child { padding-top: 0; }
+.cm-editor.cm-live-preview .cm-live-heading-start { padding-top: max(0px, calc((32px - var(--heading-blank-lines, 0) * 29.76px) * var(--font-scale, 1))); }
+.cm-editor.cm-live-preview .cm-live-heading-end { padding-bottom: calc(12px * var(--font-scale, 1)); }
+.cm-editor.cm-live-preview .cm-live-heading-first { padding-top: 0; }
+.cm-live-heading-gap-1 { --heading-blank-lines: 1; }
+.cm-live-heading-gap-2 { --heading-blank-lines: 2; }
+.cm-live-heading-gap-3 { --heading-blank-lines: 3; }
+.cm-live-heading-gap-4 { --heading-blank-lines: 4; }
+.cm-editor.cm-live-preview .cm-live-h2.cm-live-heading-end,
+.editor-preview-content.markdown-body h2 { border-bottom: 1px solid var(--line); }
+.cm-editor.cm-live-preview .cm-live-frontmatter,
+.markdown-body pre.markdown-frontmatter { font: calc(14px * var(--font-scale, 1))/1.65 Consolas, 'SFMono-Regular', monospace; letter-spacing: normal; color: var(--muted); background: var(--panel); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-editor.cm-live-preview .cm-live-frontmatter { padding-left: 14px; padding-right: 14px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+.cm-editor.cm-live-preview .cm-live-frontmatter-start { padding-top: 12px; border-top: 1px solid var(--line); border-radius: 8px 8px 0 0; }
+.cm-editor.cm-live-preview .cm-live-frontmatter-end { padding-bottom: 12px; border-bottom: 1px solid var(--line); border-radius: 0 0 8px 8px; }
+.cm-editor.cm-live-preview .cm-live-frontmatter span { font: inherit; color: inherit; text-decoration: none; }
+.markdown-body pre.markdown-frontmatter { margin: 0 0 1.25em; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
+.markdown-body pre.markdown-frontmatter code { font: inherit; color: inherit; background: transparent; padding: 0; }
+.cm-editor.cm-live-preview .cm-live-heading > span { color: inherit; font-size: inherit; font-weight: inherit; }
+.cm-editor.cm-live-preview .cm-live-strong { font-weight: 700; }
+.cm-editor.cm-live-preview .cm-live-strong, .cm-editor.cm-live-preview .cm-live-em { color: var(--text); }
+.cm-editor.cm-live-preview .cm-live-strong > span, .cm-editor.cm-live-preview .cm-live-em > span { color: inherit; }
+.cm-editor.cm-live-preview .cm-formula-render.is-inline:not(.is-source-open) { font-size: inherit; color: inherit; }
+.cm-editor.cm-live-preview .cm-live-em { font-style: italic; }
+.cm-editor.cm-live-preview .cm-live-strike { text-decoration: line-through; }
+.cm-editor.cm-live-preview .cm-live-u { text-decoration: underline; text-underline-offset: .2em; }
+.cm-editor.cm-live-preview .cm-live-sup { font-size: .8em; vertical-align: super; }
+.cm-editor.cm-live-preview .cm-live-sub { font-size: .8em; vertical-align: sub; }
+.cm-editor.cm-live-preview .cm-live-mark, .cm-editor.cm-live-preview .cm-live-highlight { background: #f6d85f70; border-radius: 2px; color: var(--text); }
+.cm-editor.cm-live-preview .cm-live-link { color: var(--accent-strong); text-decoration: underline; text-underline-offset: .18em; }
+.cm-editor.cm-live-preview .cm-live-footnote { display: inline; font-size: .75em; vertical-align: super; line-height: 0; }
+.cm-live-footnote button { font: inherit; line-height: 1; color: var(--accent-strong); background: transparent; border: 0; padding: 0 2px; cursor: pointer; text-decoration: none; }
+.cm-live-footnote button:hover { text-decoration: underline; }
+.cm-editor .cm-live-footnote-definition { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.cm-live-footnote-definition > .cm-live-footnote-number { color: var(--accent-strong); font-size: .85em; min-width: 1.5em; text-align: right; padding-top: .2em; }
+.cm-live-footnote-definition > .cm-live-block-content { flex: 1; min-width: 0; }
+.cm-live-footnote button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.cm-editor.cm-live-preview .cm-live-color span { color: inherit; }
+.cm-editor.cm-live-preview .cm-live-kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-family: monospace; font-size: .9em; }
+.cm-source-quote { color: var(--syntax-quote); font-style: italic; }
+.cm-source-list { color: var(--syntax-list); font-weight: 700; }
+.cm-editor.cm-live-preview :is(.cm-source-quote, .cm-source-list) { color: inherit; font-weight: inherit; font-style: inherit; }
+.cm-editor.cm-live-preview .cm-line.cm-live-container-line {
+  padding-left: calc(var(--live-quote-depth, 0) * 23px + var(--live-list-depth, 0) * 1.7em);
+  padding-top: var(--live-quote-top, 0px); padding-bottom: var(--live-quote-bottom, 0px);
+}
+.cm-editor.cm-live-preview .cm-live-quote { color: var(--muted); background-color: color-mix(in srgb, var(--accent-soft) 48%, transparent); }
+.cm-editor.cm-live-preview .cm-line.cm-live-list-start { text-indent: calc(-1 * (var(--live-marker-width, 1em) + .25em)); padding-top: max(.35em, var(--live-quote-top, 0px)); }
+.cm-editor.cm-live-preview .cm-line.cm-live-container-line.cm-live-heading-start { padding-top: calc(var(--live-quote-top, 0px) + max(0px, (32px - var(--heading-blank-lines, 0) * 29.76px) * var(--font-scale, 1))); }
+.cm-editor.cm-live-preview .cm-line.cm-live-container-line.cm-live-heading-end { padding-bottom: calc(var(--live-quote-bottom, 0px) + 12px * var(--font-scale, 1)); }
+.cm-editor.cm-live-preview .cm-line.cm-live-nested-list-end { padding-bottom: max(1em, var(--live-quote-bottom, 0px)); }
+.cm-editor.cm-live-preview .cm-line.cm-live-quote-gap { line-height: 1.6; }
+.cm-editor.cm-live-preview .cm-line.cm-live-list-leading-gap { line-height: calc(12px * var(--font-scale, 1)); }
+.cm-editor.cm-live-preview .cm-line.cm-live-heading-before-list { padding-bottom: 0; }
+.cm-editor.cm-live-preview .cm-live-list-number { display: inline-block; width: var(--live-marker-width, 1em); text-align: right; text-indent: 0; color: var(--accent); font-weight: 400; }
+.cm-editor.cm-live-preview .cm-live-list-number span { color: inherit; font: inherit; }
+.cm-editor.cm-live-preview .cm-live-code-line { background: var(--panel, #f5f8f6); }
+.cm-editor.cm-live-preview .cm-live-code, .cm-editor.cm-live-preview .cm-live-inline-code { font-family: Consolas, 'SFMono-Regular', monospace; font-size: .92em; }
+.cm-editor.cm-live-preview .cm-live-inline-code { background: var(--accent-soft); border-radius: 4px; padding: 1px 3px; }
+.cm-editor.cm-live-preview .cm-live-code-language { color: var(--muted); font-size: .8em; }
+/* Exposed diagram source is code, not a styled quote/list descendant. Preserve
+   syntax colors, but never inherit prose emphasis or hide its outer markers. */
+.cm-editor.cm-live-preview .cm-diagram-source-line { border: 0; padding-left: 0; background: var(--panel, #f5f8f6); color: var(--text); }
+.cm-editor.cm-live-preview .cm-diagram-source-line,
+.cm-editor.cm-live-preview .cm-diagram-source-line span { font-family: 'Cascadia Code', Consolas, 'SFMono-Regular', monospace; font-weight: 400; font-style: normal; font-size: inherit; text-decoration: none; }
+.cm-editor.cm-live-preview .cm-diagram-source-line.cm-activeLine { background: var(--accent-soft); }
+.cm-live-widget { color: var(--text); }
+.cm-live-source-notice { padding: 6px 12px 14px; border-left: 2px solid var(--accent); color: var(--muted); background: var(--accent-soft); font: 12px/1.6 system-ui; }
+.cm-live-widget:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-live-bullet { display: inline-block; width: 1em; text-indent: 0; text-align: center; color: var(--accent); cursor: text; }
+.cm-live-task input { accent-color: var(--accent); width: 14px; height: 14px; margin: 0 3px; vertical-align: middle; cursor: pointer; }
+.cm-live-rule { padding: 12px 0; cursor: text; }
+.cm-live-rule hr { margin: 0; border: 0; border-top: 1px solid var(--line); }
+/* Block decorations must include all vertical spacing in their measured box.
+   Vertical margins are invisible to CodeMirror's height map and shift clicks. */
+.cm-live-table, .cm-live-html { position: relative; padding: 8px 0; max-width: 100%; cursor: text; }
+.cm-live-table { contain: inline-size; }
+.cm-live-block-content { overflow-x: auto; }
+.cm-live-block-content table { width: 100%; border-collapse: collapse; font-size: .95em; }
+.cm-live-block-content td, .cm-live-block-content th { border: 1px solid var(--line); padding: 7px 12px; min-width: 70px; }
+.cm-live-block-content th { font-weight: 600; background: var(--accent-soft); text-align: left; }
+.cm-live-block-content [align='center'] { text-align: center; }
+.cm-live-block-content [align='right'] { text-align: right; }
+.cm-live-block-content [align='left'] { text-align: left; }
+.cm-live-block-content p { margin: .4em 0; }
+.cm-live-details, .cm-live-html-content, .cm-live-comment { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.cm-live-details-header { display: flex; align-items: start; gap: 12px; }
+.cm-live-details-title { flex: 1; min-width: 0; font-weight: 600; color: var(--accent-strong); }
+.cm-live-details-header > button { flex: none; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; cursor: pointer; font: 11px/1.4 system-ui; }
+.cm-live-details-body { padding-top: 10px; }
+.cm-live-details-body[hidden] { display: none; }
+.cm-live-comment small { color: var(--muted); font-size: 11px; }
+.cm-live-comment { background: var(--accent-soft); }
+.cm-live-comment-heading-repair { padding: 4px 0; }
+.cm-live-comment-heading-repair button { cursor: pointer; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: 12px/1.5 system-ui; }
+.cm-live-source-return { height: 0; overflow: hidden; }
+/* Preserve the block surface while source is exposed, even on the active line.
+   No vertical margins: CodeMirror must measure every part of the source box. */
+.cm-editor.cm-live-preview .cm-line.cm-live-source-line {
+  background: var(--panel, #f5f8f6);
+  padding-left: 16px;
+  padding-right: 16px;
+  box-shadow: inset 1px 0 var(--line), inset -1px 0 var(--line);
+}
+.cm-editor.cm-live-preview .cm-line.cm-live-source-comment { background: var(--accent-soft); }
+.cm-editor.cm-live-preview .cm-line.cm-live-source-first { border-radius: 7px 7px 0 0; border-top: 1px solid var(--line); }
+.cm-editor.cm-live-preview .cm-line.cm-live-source-last { border-radius: 0 0 7px 7px; border-bottom: 1px solid var(--line); }
+.cm-editor.cm-live-preview .cm-line.cm-live-source-first.cm-live-source-last { border-radius: 7px; }
+.cm-live-source-panel { position: absolute; z-index: 6; transform: translateX(-100%); opacity: 0; pointer-events: none; font: 11px/1.4 system-ui; }
+.cm-live-source-panel.is-source-hovered, .cm-live-source-panel:hover, .cm-live-source-panel:focus-within { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .cm-live-source-panel { opacity: 1; pointer-events: auto; } }
+.cm-live-source-panel[hidden] { display: none; }
+.cm-live-source-panel button { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; font: inherit; cursor: pointer; white-space: nowrap; }
+.cm-live-source-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-live-code.cm-live-widget { padding: 20px 16px; border-radius: 7px; background: var(--panel, #f5f8f6); }
+.cm-live-code .cm-live-block-content pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, 'SFMono-Regular', monospace; }
+.cm-live-toc { display: grid; gap: 4px; padding: 20px 16px; border-left: 3px solid var(--accent); }
+.cm-live-toc button { border: 0; background: none; text-align: left; color: var(--accent-strong); font: inherit; cursor: pointer; }
+.cm-live-toc button:hover { text-decoration: underline; }
+.cm-live-table-edit { position: absolute; right: 4px; top: 4px; opacity: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; cursor: pointer; font: inherit; font-size: 11px; }
+.cm-live-table:hover .cm-live-table-edit, .cm-live-table:focus-within .cm-live-table-edit { opacity: 1; }
+@media (hover: none) { .cm-live-table-edit { opacity: 1; } }
+.cm-live-editable-block .cm-live-block-content table { table-layout: fixed; }
+.cm-live-editable-block .cm-live-block-content td,
+.cm-live-editable-block .cm-live-block-content th { padding: 7px 12px; vertical-align: top; }
+.cm-editor .cm-live-inner.cm-editor { height: auto; min-height: 0; border: 0; border-radius: 0; background: transparent; font: inherit; outline: none; }
+.cm-editor .cm-live-inner .cm-scroller { overflow: visible; font: inherit; line-height: inherit; }
+/* Each inner editor is a stacking context. Lift the active image
+   owner above sibling cells and block actions while its popup is visible. */
+:is(#markdownEditor, .cm-editor) .cm-live-inner:has(.cm-embedded-image.is-image-row:not(.is-source-open):not(.is-tools-offscreen):is(:hover, :focus-within)) { z-index: 3; }
+.cm-editor .cm-live-inner .cm-content { padding: 0; min-height: 1.8em; font: inherit; caret-color: var(--accent-strong); }
+.cm-editor .cm-live-inner .cm-line { padding: 0; }
+.cm-editor .cm-live-inner .cm-gutters { display: none; }
+.cm-editor.cm-live-preview.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.cm-editor.cm-live-preview > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.cm-editor .cm-live-inner .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.cm-editor.cm-live-measured-selection > .cm-scroller > .cm-selectionLayer .cm-selectionBackground { visibility: hidden; }
+.cm-editor > .cm-scroller > .cm-live-selection-layer .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+.cm-editor > .cm-scroller > .cm-live-selection-layer { pointer-events: none; }
+.cm-editor.cm-live-measured-selection > .cm-scroller > .cm-content::selection,
+.cm-editor.cm-live-measured-selection > .cm-scroller > .cm-content *::selection { background: transparent !important; }
+.cm-live-editable-block td:focus-within, .cm-live-editable-block th:focus-within { outline: 1px solid var(--accent); outline-offset: -1px; }
+.cm-live-block-actions { position: absolute; right: 4px; top: -25px; display: flex; gap: 4px; opacity: 0; pointer-events: none; z-index: 2; }
+.cm-live-editable-block { position: relative; }
+.cm-live-block-actions button { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; cursor: pointer; font: 11px/1.4 system-ui; }
+.cm-live-editable-block:hover > .cm-live-block-actions, .cm-live-editable-block:focus-within > .cm-live-block-actions { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .cm-live-block-actions { opacity: 1; pointer-events: auto; } }

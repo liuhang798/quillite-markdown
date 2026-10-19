@@ -10,9 +10,51 @@ import {
   reorderTableRow,
   resizeTableModel,
   serializeMarkdownTable,
+  serializeTableReplacement,
   splitMarkdownTableRow,
   stripTableWidthMetadata
 } from '../src/table-designer.js';
+import {buildLivePlan} from '../src/editor-live-preview.js';
+import {marked} from 'marked';
+import {EditorState} from '@codemirror/state';
+
+test('container tables map every cell and survive structural edits with one metadata record',()=>{
+  for(const [intro,first,prefix] of [['','> ','> '],['- item\n\n','  ','  '],['','- ','  '],['123. item\n\n','     ','     '],['- outer\n  - inner\n\n','    ','    '],['> - item\n>\n','>   ','>   '],['','> > ','> > ']]) {
+    const source='😀 intro\n\n'+intro+['| A | B |','| --- | ---: |','| C | D |'].map((r,i)=>(i?prefix:first)+r).join('\n')+'\n\nend';
+    const item=buildLivePlan(source).widgets.find(item=>item.kind==='table');assert.ok(item);
+    assert.deepEqual(item.cells.map(c=>source.slice(c.from,c.to)),['A','B','C','D']);
+    const table=findMarkdownTableAt(source,source.indexOf('| C |')+2);assert.ok(table);assert.equal(table.prefix,prefix);
+    table.model.widths=[250,300];table.model.cells[1][0]='Edited';
+    const next=source.slice(0,table.from)+serializeTableReplacement(table.model,table)+source.slice(table.to);
+    const saved=findMarkdownTables(next);assert.equal(saved.length,1);assert.equal(saved[0].hasWidthMetadata,true);
+    assert.deepEqual(saved[0].model.widths,[250,300]);assert.equal(saved[0].model.cells[1][0],'Edited');
+    const again=next.slice(0,saved[0].from)+serializeTableReplacement(saved[0].model,saved[0])+next.slice(saved[0].to);
+    assert.equal(again,next);assert.equal(again.match(/quillite-table-widths/g).length,1);
+    const stripped=stripTableWidthMetadata(next);assert.equal(stripped.length,next.length);assert.ok(stripped.startsWith('😀 intro'));
+    assert.ok(!stripped.includes('quillite-table-widths'));assert.match(marked.parse(stripped),/<table>/);
+    assert.ok(!buildLivePlan(next).widgets.some(item=>item.kind==='comment'));
+  }
+});
+
+test('table syntax in indented/fenced code never opens the structure editor',()=>{
+  const table='| A | B |\n| --- | --- |\n| C | D |';
+  for(const source of [table.split('\n').map(r=>'    '+r).join('\n'),'> ```\n'+table.split('\n').map(r=>'> '+r).join('\n')+'\n> ```'])assert.equal(findMarkdownTables(source).length,0);
+});
+
+test('malformed extra cells cannot be silently discarded by structure serialization',()=>{
+  const source='> | A | B |\n> | --- | --- |\n> | C | D | E |';
+  assert.equal(findMarkdownTables(source).length,0);
+  assert.ok(!buildLivePlan(source).widgets.some(item=>item.kind==='table'));
+});
+
+test('metadata separated from a table is not consumed and CRLF cell positions stay exact',()=>{
+  const source='> <!-- quillite-table-widths: 310, 320 -->\n>\n> | A | B |\n> | --- | --- |\n> | | D |';
+  assert.equal(findMarkdownTables(source)[0].hasWidthMetadata,false);
+  const crlf=source.replaceAll('\n','\r\n'),table=findMarkdownTables(crlf)[0];
+  assert.deepEqual(table.model.cells,[['A','B'],['','D']]);assert.ok(crlf.slice(table.from,table.to).startsWith('| A |'));
+  const doc=EditorState.create({doc:crlf}).doc.toString(),item=buildLivePlan(doc).widgets.find(item=>item.kind==='table');
+  assert.deepEqual(item.cells.map(cell=>doc.slice(cell.from,cell.to)),['A','B','','D']);
+});
 
 test('visual table models resize without losing existing cell content', () => {
   const model = createTableModel(3, 2, index => `标题 ${index + 1}`);

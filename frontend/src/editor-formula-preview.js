@@ -4,6 +4,8 @@ import { isolateHistory } from '@codemirror/commands';
 import { scanMarkdownFormulas } from './formula-editing.js';
 import { editorImageItems } from './image-layout.js';
 import { renderLatexResult } from './math-rendering.js';
+import { mediaOwnedByInnerEditor } from './media-ownership.js';
+import { editableProjectionSync } from './editable-owner.js';
 
 export const formulaPreviewContext = Facet.define({ combine: values => values[0] || {} });
 export const toggleFormulaSource = StateEffect.define();
@@ -167,6 +169,7 @@ class FormulaWidget extends WidgetType {
 function decorate(items, state, enabled, openRanges = []) {
   const decorations = [], atoms = [];
   if (enabled) for (const item of items) {
+    if (mediaOwnedByInnerEditor(state, item)) continue;
     item.open = !item.html || openRanges.some(range => sameRange(range, item))
       || state.selection.ranges.some(range => range.head > item.from && range.head < item.to || range.anchor > item.from && range.anchor < item.to);
     const widget = new FormulaWidget(item, state), block = item.mode !== 'inline';
@@ -192,7 +195,7 @@ export const editorFormulaField = StateField.define({
       openRanges = openRanges.map(map).filter(range => range.from <= range.to);
       items = items.filter(item => !touched.some(range => range.from < item.to && range.to > item.from
         || range.from === range.to && range.from > item.from && range.from < item.to)).map(item => ({ ...item, ...map(item) }));
-      if (transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = enabled ? editorFormulaItems(transaction.newDoc) : [];
+      if (transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = enabled ? editorFormulaItems(transaction.newDoc) : [];
     }
     for (const effect of transaction.effects) {
       if (effect.is(setFormulaDisplay)) { enabled = effect.value !== 'source'; items = enabled ? editorFormulaItems(transaction.newDoc) : []; }
@@ -211,7 +214,7 @@ const scanner = ViewPlugin.fromClass(class {
   update(update) {
     if (!update.docChanged) return;
     clearTimeout(this.timer);
-    if (!update.state.field(editorFormulaField).enabled || update.transactions.some(transaction => transaction.isUserEvent('undo') || transaction.isUserEvent('redo'))) return;
+    if (!update.state.field(editorFormulaField).enabled || update.transactions.some(transaction => transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo'))) return;
     this.timer = setTimeout(() => {
       const doc = this.view.state.doc;
       this.view.dispatch({ effects: refreshFormulaPreviews.of({ doc, items: editorFormulaItems(doc) }) });

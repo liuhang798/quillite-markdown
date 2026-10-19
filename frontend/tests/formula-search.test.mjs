@@ -61,12 +61,12 @@ test('search has translated labels, live result feedback and no accidental submi
 });
 
 test('actual template switch preserves manual source when cancelled and changes only after confirmation', () => {
-  const source = renderer.slice(renderer.indexOf('function chooseFormulaTemplate('), renderer.indexOf('\nfunction chooseFormulaDiscipline('));
+  const source = renderer.slice(renderer.indexOf('function scheduleFormulaFocus('), renderer.indexOf('\nfunction chooseFormulaDiscipline('));
   const run = accepted => {
     let regenerated = 0;
     const context = {
       formulaTemplateById: id => ({ id }), formulaWizardState: { templateId: 'custom', sourceEdited: true },
-      window: { confirm: () => accepted }, t: key => key, rememberFormulaFieldValues() {}, renderFormulaTemplateList() {},
+      window: { confirm: () => accepted }, document: { activeElement: {} }, t: key => key, rememberFormulaFieldValues() {}, renderFormulaTemplateList() {},
       renderFormulaFields: () => { regenerated++; }, els: { formulaBuilderPanel: { scrollTop: 2 } }, requestAnimationFrame() {},
     };
     vm.runInNewContext(source + '\nchooseFormulaTemplate("newton-second-law");', context);

@@ -5,10 +5,20 @@ import test from 'node:test';
 import { marked } from 'marked';
 import { escapeMarkdownText, highlightExtension, nextFootnoteNumber, prepareFootnotes, renderFootnoteSection } from '../src/markdown-formats.js';
 import { LEGACY_TEXT_COLORS, TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from '../src/text-colors.js';
+import { textColorEdit } from '../src/inline-format-toggle.js';
+import {renderPreparedFootnotes} from '../src/footnote-rendering.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const renderer = await readFile(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+test('footnote content retains paragraphs, tables, lists and fenced blocks in the full rendering pipeline',()=>{
+  const body='First\n\n| Head |\n| --- |\n| Cell |\n\n- Item\n\n```js\nconst x = 1;\n```';
+  const prepared=prepareFootnotes('Text[^n]\n\n[^n]: '+body.replaceAll('\n','\n    '));
+  const rendered=renderPreparedFootnotes(prepared,marked,'Footnotes');
+  for(const pattern of [/<p>First<\/p>/,/<table>/,/<td>Cell<\/td>/,/<ul>/,/<pre><code class="language-js">/,/href="#fnref-1-1"/])assert.match(rendered,pattern);
+  assert.equal((renderer.match(/renderPreparedFootnotes\(prepared, marked, t\('footnotes'\)(?:, sourceMap\??\.parse)?\)/g)||[]).length,2,'reading and anchor checking must share complete Markdown and reference scope');
+});
 
 test('format toolbar exposes all six headings and the missing practical Markdown formats', () => {
   for (const heading of ['# ', '## ', '### ', '#### ', '##### ', '###### ']) {
@@ -43,7 +53,13 @@ test('text color palette follows highlight and only writes fixed safe color mark
   assert.match(renderer, /function buildTextColorMenu\(\)/);
   assert.match(renderer, /for \(const color of TEXT_COLOR_PALETTE\)/);
   assert.match(renderer, /function applyTextColor\(color\)/);
-  assert.match(renderer, /<span data-md-color="\$\{color\}">/);
+  assert.match(renderer, /textColorEdit\(source, from, to, color, t\('coloredText'\)\)/);
+  for (const color of TEXT_COLOR_VALUES) {
+    const edit = textColorEdit('文字', 0, 2, color);
+    if (color === 'default') assert.equal(edit, null);
+    else assert.equal(edit.insert, `<span data-md-color="${color}">文字</span>`);
+  }
+  assert.equal(textColorEdit('文字', 0, 2, 'red" onclick="alert(1)'), null);
   assert.match(renderer, /ADD_ATTR: \['target', 'rel', 'data-md-color'\]/);
   assert.match(renderer, /container\.querySelectorAll\('\[data-md-color\]'\)/);
   assert.match(styles, /\.markdown-body \[data-md-color="red"\] \{ color: var\(--md-color-red\); \}/);

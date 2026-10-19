@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>即时渲染编辑回归</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/editor-live-preview.css">
+<style>:root{--accent:#079767;--accent-strong:#007954;--accent-soft:#edf8f3;--text:#25332e;--muted:#65766e;--line:#d8e5de;--bg:white;--surface:#f5f8f6;--body-font-family:system-ui}body{font:16px system-ui;margin:30px auto;max-width:900px;color:var(--text)}#editor{border:1px solid var(--line);height:650px}.cm-editor{height:100%}.cm-content{padding:20px}.cm-scroller{overflow:auto}</style>
+<h1>即时渲染编辑回归</h1><p>点击正文、单元格和代码原位编辑，文档始终保留原始 Markdown。</p>
+<button id="crossExample">加载跨块选择样例</button><button id="nestedExample">加载嵌套选择样例</button><button id="longExample">加载长文拖选样例</button><pre id="selectionStatus" aria-label="选区状态"></pre>
+<div id="editor"></div><h2>当前源码</h2><pre id="sourceStatus" aria-label="当前源码"></pre>
+<select id="blockKind" aria-label="整块拖动类型"><option value="code">代码</option><option value="table">表格</option><option value="details">折叠区块</option></select><button id="blockExample">加载整块拖动样例</button>
+<p>外部测试文字：<span id="externalText">OutsideText</span></p>
+<p>外部测试链接：<a id="externalLink" href="https://example.com/docs?q=markdown#intro">示例文档</a></p>
+<select id="dropTarget" aria-label="拖放目标类型"><option value="code">代码</option><option value="table">表格</option><option value="summary">摘要</option><option value="quote">引用</option><option value="list">列表</option><option value="quote-list">引用内列表</option><option value="list-quote">列表内引用</option><option value="nested-list">嵌套列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select><button id="targetExample">加载目标区块样例</button>
+<button id="switchLater">1秒后切换隔离文档</button>
+<button id="containerCodeExample">加载容器代码样例</button><label><input type="checkbox" id="emptyContainer">空代码块</label>
+<label>隔离剪贴板文本<textarea id="clipboardSource" aria-label="隔离剪贴板文本"></textarea></label>
+<script type="module">
+import { basicSetup } from 'codemirror';
+import { EditorState, Compartment, Transaction } from '@codemirror/state';
+import { EditorView, highlightActiveLine } from '@codemirror/view';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { undo, redo } from '@codemirror/commands';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import { editorLivePreview, livePreviewContext, livePreviewField, stableActiveLine } from '../../src/editor-live-preview.js';
+import { crossSelectionField } from '../../src/editable-cross-selection.js';
+const mode = new Compartment();
+const doc = '# 即时渲染编辑\n\n这是 **加粗**、*斜体*、~~删除线~~、==高亮== 和 `行内代码`。\n\n> 引用内容\n> 第二行\n\n- [ ] 待完成任务\n- [x] 已完成任务\n- 普通列表\n  - 嵌套项目\n\n| 名称 | 数量 |\n| --- | ---: |\n| 中文 | 2 |\n\n---\n\n<u>下划线</u>、<sup>上标</sup>、[链接](https://example.com)\n\n结束\n';
+const presentation = [editorLivePreview, livePreviewContext.of({render: source => DOMPurify.sanitize(marked.parse(source))})];
+const diagnostics = EditorView.updateListener.of(update => {
+  document.querySelector('#selectionStatus').textContent = JSON.stringify({ anchor: update.state.selection.main.anchor, head: update.state.selection.main.head,
+    cross: update.state.field(crossSelectionField, false), events: update.transactions.map(tr => tr.annotation(Transaction.userEvent) || '') });
+  document.querySelector('#sourceStatus').textContent = update.state.doc.toString();
+});
+const extensions = [basicSetup.filter(extension => extension !== highlightActiveLine()), stableActiveLine, markdown({base:markdownLanguage}), EditorView.lineWrapping, mode.of(presentation), diagnostics];
+const view = new EditorView({ parent: document.querySelector('#editor'), state: EditorState.create({ doc, selection:{anchor:doc.length}, extensions }) });
+document.querySelector('#crossExample').onclick = () => {
+  const source = '前文\n\n```text\nABC\nDEF\n```\n\n后文\n\n结束';
+  view.setState(EditorState.create({ doc: source, extensions })); view.dispatch({ selection: { anchor: source.length } });
+};
+document.querySelector('#nestedExample').onclick = () => {
+  const source = '前文\n\n<details open>\n<summary>混合</summary>\n\n```text\nABC\nDEF\n```\n\n内部后文\n\n</details>\n\n后文\n\n结束';
+  view.setState(EditorState.create({ doc: source, extensions })); view.dispatch({ selection: { anchor: source.length } });
+};
+document.querySelector('#longExample').onclick = () => {
+  const source = '开始\n\n```text\nABC\nDEF\n```\n\n' + Array.from({length:120}, (_, i) => `第 ${i + 1} 段：长文档拖选测试`).join('\n\n') + '\n\n```text\nXYZ\nUVW\n```\n\n结束';
+  view.setState(EditorState.create({ doc: source, extensions })); view.dispatch({ selection: { anchor: 0 }, scrollIntoView: true });
+};
+document.querySelector('#switchLater').onclick = () => setTimeout(() => {
+  const source = '另一份隔离文档\n\n接收位置\n\n结束';
+  view.setState(EditorState.create({doc:source,extensions}));
+  view.dispatch({selection:{anchor:0},scrollIntoView:true});
+},1000);
+document.querySelector('#blockExample').onclick = () => {
+  const blocks = {code:'```text\nABC\nDEF\n```',table:'| 名称 | 数量 |\n| --- | --- |\n| 内容 | 2 |',details:'<details open>\n<summary>说明</summary>\n\n区块正文\n\n</details>'};
+  const source='开头\n\n'+blocks[document.querySelector('#blockKind').value]+'\n\n目标段落\n\n结束';
+  view.setState(EditorState.create({doc:source,extensions}));view.dispatch({selection:{anchor:0},scrollIntoView:true});
+};
+document.querySelector('#targetExample').onclick = () => {
+  const targets={code:'```text\n目标内容\n结束代码\n```',table:'| 名称 | 数量 |\n| --- | --- |\n| 目标内容 | 2 |',summary:'<details open>\n<summary>目标内容</summary>\n\n内部正文\n\n</details>',quote:'> 目标内容\n> 引用末尾',list:'- 目标内容\n- 列表末尾'};
+  Object.assign(targets,{'quote-list':'> - 目标内容\n> - 下条','list-quote':'- > 目标内容\n- 下条','nested-list':'- 外层\n  - 目标内容\n  - 下条',ordered:'123. 目标内容\n124. 下条',task:'- [x] 目标内容\n- [ ] 下条'});
+  const source='开头\n\n```text\nABC\nDEF\n```\n\n分界\n\n'+targets[document.querySelector('#dropTarget').value]+'\n\n外部结束';
+  view.setState(EditorState.create({doc:source,extensions}));view.dispatch({selection:{anchor:0},scrollIntoView:true});
+};
+document.querySelector('#containerCodeExample').onclick = () => {
+  const kinds={quote:['','> '],list:['- 条目\n\n','  '],'quote-list':['> - 条目\n> \n','>   '],'list-quote':['- 条目\n\n','  > '],'nested-list':['- 外层\n  - 内层\n\n','    '],ordered:['123. 条目\n\n','     '],task:['- [x] 条目\n\n','  ']};
+  const [intro,prefix]=kinds[document.querySelector('#dropTarget').value] || kinds.quote;
+  const body=document.querySelector('#emptyContainer').checked?'```text\n```':'```text\nABC\nDEF\n```';
+  const source='开头\n\n'+intro+body.split('\n').map(line=>prefix+line).join('\n')+'\n\n后文';
+  view.setState(EditorState.create({doc:source,extensions}));view.dispatch({selection:{anchor:0},scrollIntoView:true});
+};
+window.liveAudit = {view,doc,undo:()=>undo(view),redo:()=>redo(view),field:()=>view.state.field(livePreviewField,false),mode:enabled=>view.dispatch({effects:mode.reconfigure(enabled?presentation:[])})};
+</script></html>

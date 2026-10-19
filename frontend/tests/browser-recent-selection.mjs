@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {createServer} from 'vite';
+const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error',plugins:[{
+ name:'isolated-recent-selection',enforce:'pre',transform(code,id){if(id.replaceAll('\\','/').endsWith('/src/renderer.js'))return code+`\nwindow.recentAudit={seed(prefs){applyLibraryPreferences(prefs);setSidebarMode('recent');},snapshot(){return {selection:state.recentSelection,dirty:state.dirty,current:state.currentFile?.path,text:codeEditor?editorContent():null,favorites:state.favoriteFiles.map(f=>f.path),pins:state.pinnedRecentFiles};}};`;}
+}]});
+let browser;
+try{
+ await server.listen();browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE||undefined});
+ const page=await browser.newPage({viewport:{width:1450,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+ await page.goto(server.resolvedUrls.local[0]);await page.waitForFunction(()=>window.recentAudit&&window.quilliteMarkdown);
+ await page.evaluate(()=>{
+  window.recentPrefs={recentFiles:['C:/pinned.md','C:/keep.md','C:/missing.md','C:/fail.md'],pinnedRecentFiles:['C:/pinned.md'],favoriteFiles:['C:/pinned.md'],recentFileStatuses:[{path:'C:/missing.md',exists:false}]};
+  window.removed=[];window.opened=[];window.failRemoval=true;
+  window.quilliteMarkdown.getPreferences=async()=>window.recentPrefs;
+  window.quilliteMarkdown.removeRecent=async path=>{window.removed.push(path);await new Promise(r=>setTimeout(r,60));if(path==='C:/fail.md'&&window.failRemoval)throw Error('Synthetic preference failure');window.recentPrefs.recentFiles=window.recentPrefs.recentFiles.filter(p=>p!==path);window.recentPrefs.pinnedRecentFiles=window.recentPrefs.pinnedRecentFiles.filter(p=>p!==path);return window.recentPrefs;};
+  window.quilliteMarkdown.openRecentFile=async path=>{window.opened.push(path);return{path,name:path.split('/').at(-1),directory:'C:/',content:'# Original',revision:'a'.repeat(64)};};
+  window.quilliteMarkdown.reportErrorLog=async()=>{};
+  window.recentAudit.seed(window.recentPrefs);
+ });
+ const row=name=>page.locator('.file-item').filter({has:page.locator('strong',{hasText:name})});
+ await row('pinned.md').click({modifiers:['Control']});
+ await row('keep.md').click({modifiers:['Meta']});
+ assert.equal(await page.locator('.bulk-selected').count(),2);
+ assert.deepEqual(await page.evaluate(()=>window.opened),[]);
+ await row('keep.md').click({modifiers:['Meta']});assert.equal(await page.locator('.bulk-selected').count(),1);
+ await row('pinned.md').press('Escape');assert.equal(await page.locator('.bulk-selected').count(),0);
+ await row('keep.md').press('Control+Space');assert.equal(await page.locator('.bulk-selected').count(),1);
+ await row('pinned.md').click();await page.locator('#markdownContent h1').waitFor();
+ assert.equal(await page.locator('.bulk-selected').count(),0);
+ await page.locator('#editButton').click();await page.locator('[data-editor-presentation="source"]').click();
+ await page.locator('#markdownEditor > .cm-editor > .cm-scroller > .cm-content').fill('# Unsaved original');
+ const before=await page.evaluate(()=>window.recentAudit.snapshot());assert.equal(before.dirty,true);
+ for(const name of ['pinned.md','missing.md','fail.md'])await row(name).click({modifiers:['Control']});
+ assert.equal(await page.locator('.bulk-selected').count(),3);
+ page.once('dialog',d=>d.dismiss());await page.locator('#clearSelectedRecent').click();
+ assert.deepEqual(await page.evaluate(()=>window.removed),[]);
+ page.once('dialog',d=>{assert.ok(d.message().includes('3'));return d.accept();});
+ await page.locator('#clearSelectedRecent').click();
+ await page.waitForFunction(()=>!document.querySelector('#clearSelectedRecent').disabled);
+ assert.deepEqual(await page.evaluate(()=>window.removed),['C:/pinned.md','C:/missing.md','C:/fail.md']);
+ assert.equal(await page.locator('.file-item').count(),2);assert.equal(await page.locator('.bulk-selected').count(),1);
+ const after=await page.evaluate(()=>window.recentAudit.snapshot());
+ assert.equal(after.text,before.text);assert.equal(after.dirty,true);assert.equal(after.current,before.current);
+ assert.deepEqual(after.favorites,['C:/pinned.md']);assert.deepEqual(after.pins,[]);
+ await page.locator('#favoritesTab').click();assert.equal(await page.locator('#recentSelectionActions').isVisible(),false);
+ assert.equal(await page.locator('.file-item').count(),1);
+ await page.locator('#recentTab').click();assert.equal(await page.locator('.bulk-selected').count(),0);
+ await row('fail.md').click({modifiers:['Control']});await row('fail.md').click({button:'right'});
+ await page.evaluate(()=>window.failRemoval=false);page.once('dialog',d=>d.accept());
+ await page.locator('#recentRemoveAction').click();await page.waitForFunction(()=>document.querySelectorAll('.file-item').length===1);
+ assert.equal(await page.locator('.file-item strong').textContent(),'keep.md');
+ await row('keep.md').click({modifiers:['Control']});page.once('dialog',d=>d.accept());await row('keep.md').press('Delete');
+ await page.locator('.empty-list').waitFor();
+ assert.equal((await page.evaluate(()=>window.recentAudit.snapshot())).text,before.text);
+ await page.locator('#recentTab').click();assert.equal(await page.locator('.file-item').count(),0);
+ assert.deepEqual(errors,[]);
+ console.log('PASS: Ctrl/Meta toggle, keyboard, no accidental open/drag, cancel, partial failure/retry, pinned/missing records, favorites and dirty document preserved, empty-list persistence');
+}finally{await browser?.close();await server.close();}

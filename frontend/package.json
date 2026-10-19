@@ -1,7 +1,7 @@
 {
   "name": "quillite-markdown-wails-frontend",
   "private": true,
-  "version": "2.7.8",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "prepare:mermaid": "node scripts/prepare-mermaid.mjs",
@@ -21,6 +21,7 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.1",
     "@lezer/highlight": "^1.2.1",
+    "@lezer/markdown": "1.7.2",
     "codemirror": "^6.0.2",
     "dictionary-en": "^4.0.0",
     "dictionary-en-gb": "^3.0.0",

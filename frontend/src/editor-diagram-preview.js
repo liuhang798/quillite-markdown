@@ -1,9 +1,13 @@
 import { Lexer, Marked, Tokenizer } from 'marked';
-import { Facet, Prec, StateEffect, StateField } from '@codemirror/state';
+import { EditorSelection, Facet, Prec, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap } from '@codemirror/view';
 import { isolateHistory } from '@codemirror/commands';
 import { findEditableDiagramFenceAt } from './diagram-editing.js';
 import { mathBlockExtension } from './math-rendering.js';
+import { mediaOwnedByInnerEditor } from './media-ownership.js';
+import { markdownParser } from './markdown-parser.js';
+import { blockDropPrefix } from './block-drop-context.js';
+import { scanMarkdownFormulas } from './formula-editing.js';
 
 export const diagramPreviewContext = Facet.define({ combine: values => values[0] || {} });
 export const toggleDiagramSource = StateEffect.define();
@@ -39,8 +43,42 @@ const blockTokens = source => new Lexer({ ...grammar.defaults, tokenizer: new Di
 const mounts = new WeakMap();
 const sameRange = (a, b) => a.from === b.from && a.to === b.to;
 
-// Only parser-confirmed, complete top-level fences are replaced. HTML, examples,
-// unfinished fences and ambiguous container mappings retain editable source.
+// Only parser-confirmed complete fences are replaced. Container fences retain
+// their outer prefixes in the document and carry them into in-place edits.
+function nestedDiagramRanges(raw, limit) {
+  const ranges=[];
+  const formulas=/\$\$|\\\[/.test(raw)?scanMarkdownFormulas(raw):[];
+  const visit=node=>{
+    if(ranges.length>=limit||formulas.some(formula=>node.from>=formula.from&&node.to<=formula.to))return;
+    if(node.name==='FencedCode') {
+      const parts=[];for(let child=node.firstChild;child;child=child.nextSibling)parts.push(child);
+      const marks=parts.filter(child=>child.name==='CodeMark'),info=parts.find(child=>child.name==='CodeInfo');
+      if(marks.length!==2||!info||!/^(mermaid|echarts)$/i.test(raw.slice(info.from,info.to).trim()))return;
+      const prefix=blockDropPrefix(raw,node.from);
+      if(!prefix)return;
+      // Lezer's CodeText excludes enclosing quote/list markers, but preserves
+      // the chart's own indentation. Math and HTML remain outside this scan.
+      const pieces=parts.filter(child=>child.name==='CodeText');
+      const body=pieces.map(piece=>raw.slice(piece.from,piece.to)).join('');
+      const language=raw.slice(info.from,info.to).trim(),marker=raw.slice(marks[0].from,marks[0].to);
+      const projected=marker+language+'\n'+body+'\n'+raw.slice(marks[1].from,marks[1].to);
+      const range=findEditableDiagramFenceAt(projected,0);
+      if(range) {
+        const originalLines=raw.slice(node.from,node.to).split('\n');
+        const projectedLines=projected.split('\n');
+        if(originalLines.length!==projectedLines.length||originalLines.some((line,i)=>!line.endsWith(projectedLines[i])))return;
+        const projectionPrefixes=originalLines.map((line,i)=>line.slice(0,line.length-projectedLines[i].length));
+        ranges.push({...range,from:node.from,to:node.to,projectionPrefix:prefix,projectionPrefixes});
+      }
+      return;
+    }
+    if(['CodeBlock','HTMLBlock','CommentBlock'].includes(node.name))return;
+    for(let child=node.firstChild;child;child=child.nextSibling)visit(child);
+  };
+  visit(markdownParser.parse(raw).topNode);return ranges;
+}
+
+// HTML, examples, unfinished fences and ambiguous mappings retain source.
 export function editorDiagramItems(doc) {
   if (doc.length > DIAGRAM_PREVIEW_DOCUMENT_LIMIT) return [];
   const source = doc.toString(), crlf = [];
@@ -69,6 +107,11 @@ export function editorDiagramItems(doc) {
             oversized: range.source.length > DIAGRAM_SOURCE_LIMIT, failed: false });
         }
       }
+      if(['blockquote','list'].includes(token.type))for(const range of nestedDiagramRanges(token.raw,DIAGRAM_PREVIEW_LIMIT-items.length)) {
+        if(items.length>=DIAGRAM_PREVIEW_LIMIT)break;
+        const from=originalPosition(offset+range.from),to=originalPosition(offset+range.to),original=source.slice(from,to);
+        items.push({...range,from,to,original,lineEnding:original.includes('\r\n')?'\r\n':'\n',oversized:range.source.length>DIAGRAM_SOURCE_LIMIT,failed:false});
+      }
       offset += token.raw.length;
     }
     return offset < normalized.length && blockTokens(normalized.slice(offset)).some(token => token.type !== 'space') ? [] : items;
@@ -92,8 +135,56 @@ export function deleteRenderedDiagram(view, item, doc) {
   const current = currentItem(view, item, doc);
   if (!current || view.state.readOnly) return false;
   view.dispatch({ changes: { from: current.from, to: current.to, insert: '' }, selection: { anchor: current.from },
-    annotations: isolateHistory.of('full'), userEvent: 'delete.diagram' });
+    annotations: isolateHistory.of('full'), userEvent: 'delete.diagram', scrollIntoView: true });
   view.focus(); return true;
+}
+
+export function activeDiagramSourceItem(view) {
+  if(view.destroyed||view.state.readOnly)return null;
+  const field=view.state.field(editorDiagramField,false);
+  if(!field?.enabled)return null;
+  const items=field.items.filter(item=>item.open&&!item.failed&&!item.oversized&&!mediaOwnedByInnerEditor(view.state,item));
+  const head=view.state.selection.main.head;
+  return items.find(item=>head>=item.from&&head<=item.to)||items.at(-1)||null;
+}
+
+export function insertDiagramSourceNewline(view) {
+  const {state}=view,field=state.field(editorDiagramField,false);
+  if(view.composing||state.readOnly||!field?.enabled)return false;
+  const plans=state.selection.ranges.map(selection=>{
+    const item=field.items.find(item=>item.open&&selection.from>item.from&&selection.to<item.to&&!mediaOwnedByInnerEditor(state,item));
+    if(!item)return null;
+    const line=state.doc.lineAt(selection.from),row=line.number-state.doc.lineAt(item.from).number;
+    const endLine=state.doc.lineAt(selection.to),endRow=endLine.number-state.doc.lineAt(item.from).number;
+    const body=item.source.split('\n');
+    if(row<1||row>body.length||endRow>body.length)return null;
+    let prefix=item.projectionPrefixes?.[row]??item.indent;
+    const endPrefix=item.projectionPrefixes?.[endRow]??item.indent;
+    // A selection may replace code, but must not silently consume part of an
+    // enclosing quote/list marker or either fence. Derive from the ordered
+    // start, not the selection head, so backward selections behave identically.
+    if(selection.from<line.from+prefix.length||selection.to<endLine.from+endPrefix.length)return null;
+    const indent=/^[\t ]*/.exec(body[row-1])[0].slice(0,selection.from-line.from-prefix.length);
+    if(prefix.endsWith('>')&&indent)prefix+=' ';
+    prefix+=indent;
+    return '\n'+prefix;
+  });
+  if(plans.some(plan=>plan===null))return false;
+  let index=0;
+  const change=state.changeByRange(range=>{const insert=plans[index++];return {changes:{from:range.from,to:range.to,insert},range:EditorSelection.cursor(range.from+insert.length)};});
+  view.dispatch({...change,userEvent:'input',annotations:isolateHistory.of('full'),scrollIntoView:true});return true;
+}
+
+export function returnDiagramSourceToRendered(view, item=activeDiagramSourceItem(view)) {
+  if(view.destroyed||view.state.readOnly||!item)return false;
+  const found=currentItem(view,item,view.state.doc);
+  if(!found?.open||found.failed||found.oversized)return false;
+  const field=view.state.field(editorDiagramField);
+  // Source can be exposed by either the explicit toggle or an inner caret.
+  // Clear only this toggle and select the rendered atom at its boundaries.
+  const effects=field.openRanges.some(range=>sameRange(range,found))?[toggleDiagramSource.of({from:found.from,to:found.to})]:[];
+  view.dispatch({effects,selection:{anchor:found.to,head:found.from},scrollIntoView:true});
+  view.focus();return true;
 }
 
 class DiagramWidget extends WidgetType {
@@ -140,7 +231,8 @@ class DiagramWidget extends WidgetType {
         event.stopPropagation();
         if (action === 'edit') edit();
         else { const found = current(); if (!found) return;
-          view.dispatch({ effects: toggleDiagramSource.of({ from: found.from, to: found.to }), selection: { anchor: found.to }, scrollIntoView: true }); view.focus(); }
+          if(found.open)returnDiagramSourceToRendered(view,found);
+          else { view.dispatch({ effects: toggleDiagramSource.of({ from: found.from, to: found.to }), selection: { anchor: found.to }, scrollIntoView: true }); view.focus(); } }
       };
       tools.append(button);
     }
@@ -205,10 +297,19 @@ class DiagramWidget extends WidgetType {
 function decorate(items, state, enabled, openRanges = [], theme = 0) {
   const decorations = [], atoms = [];
   if (enabled) for (const item of items) {
+    if (mediaOwnedByInnerEditor(state, item)) continue;
     item.open = item.failed || item.oversized || openRanges.some(range => sameRange(range, item))
       || state.selection.ranges.some(range => range.head > item.from && range.head < item.to || range.anchor > item.from && range.anchor < item.to);
     const widget = new DiagramWidget(item, state, theme);
-    if (item.open) decorations.push(Decoration.widget({ widget, block: true, side: -1 }).range(item.from));
+    if (item.open) {
+      const first=state.doc.lineAt(item.from),last=state.doc.lineAt(item.to);
+      // Keep the complete opening prefix on one source line below the toolbar.
+      decorations.push(Decoration.widget({ widget, block: true, side: -1 }).range(first.from));
+      for(let number=first.number;number<=last.number;number++) {
+        const active=state.selection.ranges.some(range=>range.empty&&state.doc.lineAt(range.head).number===number);
+        decorations.push(Decoration.line({class:'cm-diagram-source-line'+(active?' cm-activeLine':'')}).range(state.doc.line(number).from));
+      }
+    }
     else { const replacement = Decoration.replace({ widget, block: true, inclusive: false }).range(item.from, item.to);
       decorations.push(replacement); atoms.push(replacement); }
   }
@@ -249,4 +350,4 @@ export const editorDiagramField = StateField.define({
 });
 export const editorDiagramPreview = [editorDiagramField,
   EditorView.atomicRanges.of(view => view.state.field(editorDiagramField).atoms),
-  Prec.highest(keymap.of([{ key: 'Enter', run: editSelectedDiagram }]))];
+  Prec.highest(keymap.of([{ key: 'Enter', run: editSelectedDiagram }, { key: 'Enter', run: insertDiagramSourceNewline }]))];

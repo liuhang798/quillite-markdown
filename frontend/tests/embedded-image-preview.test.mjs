@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { EditorState, Compartment } from '@codemirror/state';
 import { history, undo } from '@codemirror/commands';
 import { embeddedImageItems, alignedImageSource, imageAlignment, imagePreviewField, toggleImageSource, refreshImagePreviews, imagePreviewPhrases, imagePreviewContext, updateImagePreviewDirectory } from '../src/embedded-image-preview.js';
@@ -8,6 +9,39 @@ import { editorImageGroups } from '../src/image-layout.js';
 const data = 'data:image/png;base64,iVBORw0KGgo=';
 const image = `![图片](${data} "title")`;
 const create = source => EditorState.create({ doc: source, extensions: [imagePreviewField, history()] });
+
+test('single-image actions wrap together without turning the image into a scroll container', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.cm-embedded-image \{[^}]*overflow: clip;/);
+  assert.match(css, /\.cm-image-tools \{[^}]*flex-wrap: wrap;/);
+  assert.match(css, /\.cm-embedded-image:is\(:hover, :focus-within\) \{ overflow: visible;/);
+  const source = readFileSync(new URL('../src/embedded-image-preview.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(!this\.item\.row\) \{ toolbar\.append\(tools, sizeTools\); \}/);
+  assert.match(source, /toolbar\.querySelectorAll\(':scope > button'\)/);
+  assert.match(source, /const controlRoot = group\.row \? toolbar\.querySelectorAll\('\.cm-image-item-tools'\)\[index\] : toolbar/);
+  assert.match(source, /if \(!current\.open\) view\.requestMeasure/);
+  assert.match(source, /!root\.isConnected \|\| !this\.current\(view\)\?\.open/);
+});
+
+test('image groups share a bounded toolbar and keyboard-accessible image picker', () => {
+  const source=readFileSync(new URL('../src/embedded-image-preview.js',import.meta.url),'utf8');
+  const css=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
+  for(const fragment of ["picker.onchange = () => selectImageControls", "panel.hidden = i !== index", "['Enter', ' ', 'Escape']", "Math.min(innerWidth - 8", "toolbar.style.cssText = ''"] ) assert.ok(source.includes(fragment),fragment);
+  assert.match(css,/\.cm-image-item-tools\[hidden\] \{ display: none;/);
+  const liveCSS=readFileSync(new URL('../src/editor-live-preview.css',import.meta.url),'utf8');
+  assert.match(liveCSS,/\.cm-live-inner:has\(\.cm-embedded-image\.is-image-row[^\n]+z-index: 3;/);
+  assert.equal(imagePreviewPhrases['Edit image'],'操作图片');
+});
+
+test('expanded image source keeps an in-flow, always-visible return control', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const rule = css.match(/\.cm-embedded-image\.is-source-open > \.cm-image-tools\s*\{([^}]+)\}/)?.[1];
+  assert.ok(rule);
+  for (const declaration of ['position: static', 'opacity: 1', 'visibility: visible', 'pointer-events: auto', 'transform: none']) {
+    assert.ok(rule.includes(declaration), declaration);
+  }
+  assert.equal(imagePreviewPhrases['Hide source'], '收起源码');
+});
 
 test('Save As updates local image directory and async session without changing source or undo history', () => {
   let state = EditorState.create({ doc: '![a](assets/a.jpg)', extensions: [history(), imagePreviewField, imagePreviewContext.of({ directory: '/old', readImageData: () => '' })] });

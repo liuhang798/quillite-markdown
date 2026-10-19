@@ -6,25 +6,43 @@ import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { DIAGRAM_TEMPLATES, diagramTemplateSource } from '../src/diagram-templates.js';
-import { FORMULA_TEMPLATES, buildFormulaExpression, formulaValues } from '../src/formula-templates.js';
+import { DIAGRAM_CATEGORIES, DIAGRAM_TEMPLATES, diagramTemplateSource } from '../src/diagram-templates.js';
+import { FORMULA_GROUP_LABELS, FORMULA_TEMPLATES, buildFormulaExpression, formulaValues } from '../src/formula-templates.js';
 import { prepareFootnotes } from '../src/markdown-formats.js';
 import { marked } from 'marked';
+import { REFERENCE_ADDITIONS } from '../../scripts/reference-additions.mjs';
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
 const docs = resolve(root, 'docs', 'reference');
+
+test('reference rendering can pin dates without changing new-diagram defaults', () => {
+  const template = { source: { zh: '任务 {{date}}', en: 'Task {{date}}' } };
+  assert.equal(diagramTemplateSource(template, 'zh', '2026-08-21'), '任务 2026-08-21');
+  assert.equal(diagramTemplateSource(template, 'en', '2030-02-03'), 'Task 2030-02-03');
+  const before = new Date().toISOString().slice(0, 10);
+  const source = diagramTemplateSource(template, 'en');
+  const after = new Date().toISOString().slice(0, 10);
+  assert.ok([`Task ${before}`, `Task ${after}`].includes(source));
+});
 
 test('generated reference documents cover every current chart and formula template', t => {
   const generated = mkdtempSync(resolve(tmpdir(), 'quillite-reference-test-'));
   t.after(() => rmSync(generated, { recursive: true, force: true }));
   execFileSync(process.execPath, [resolve(root, 'scripts', 'generate-reference-docs.mjs'), generated], { cwd: root });
   const charts = readFileSync(resolve(generated, '图表案例.MD'), 'utf8');
+  assert.ok(charts.includes('需求分析 :done, plan, 2026-08-21, 2d'), 'reference dates are stable across generation days');
   const formulas = readFileSync(resolve(generated, '科学公式案例.MD'), 'utf8');
+
+  // The desktop embeds these tracked files, not the generator's in-memory result.
+  // A template change must regenerate the actual shipped reference documents.
+  for (const [name, content] of [['图表案例.MD', charts], ['科学公式案例.MD', formulas]]) {
+    assert.equal(readFileSync(resolve(docs, name), 'utf8').replaceAll('\r\n', '\n'), content.replaceAll('\r\n', '\n'), `${name} is stale; run node scripts/generate-reference-docs.mjs`);
+  }
 
   assert.ok(!formulas.includes('undefined'), 'formula reference contains an undefined template value');
 
-  assert.equal((charts.match(/^## \d+\./gm) || []).length, DIAGRAM_TEMPLATES.length);
+  assert.equal((charts.match(/^### \d+\./gm) || []).length, DIAGRAM_TEMPLATES.length);
   assert.equal((formulas.match(/^### \d+\./gm) || []).length, FORMULA_TEMPLATES.length);
   for (const template of DIAGRAM_TEMPLATES) {
     assert.ok(charts.includes(template.name.zh), `missing diagram heading: ${template.id}`);
@@ -34,6 +52,29 @@ test('generated reference documents cover every current chart and formula templa
   for (const template of FORMULA_TEMPLATES) {
     const expression = buildFormulaExpression(template, formulaValues(template));
     assert.ok(formulas.includes(expression), `missing formula expression: ${template.id}`);
+  }
+  for (const [kind, templates, content, level, expectedCount] of [
+    ['diagrams', DIAGRAM_TEMPLATES, charts, '###', 4],
+    ['formulas', FORMULA_TEMPLATES, formulas, '###', 16],
+  ]) {
+    const additions = REFERENCE_ADDITIONS[kind];
+    assert.equal(additions.size, expectedCount);
+    for (const id of additions) assert.ok(templates.some(template => template.id === id), `unknown new template ${id}`);
+    assert.doesNotMatch(content, /本次新增|新增 \/ New|New additions/);
+    const headings = content.split('\n').filter(line => line.startsWith(`${level} `) && /^#+ \d+\./.test(line));
+    for (const template of templates) {
+      const heading = headings.find(line => line.replace(/^#+ \d+\. /, '').replace(/ <span class="reference-new-badge">NEW<\/span>$/, '') === template.name.zh);
+      assert.ok(heading, `missing heading ${template.id}`);
+      assert.equal(heading.endsWith(' <span class="reference-new-badge">NEW</span>'), additions.has(template.id), `incorrect new marker ${template.id}`);
+      const expectedGroup = kind === 'diagrams'
+        ? DIAGRAM_CATEGORIES.find(category => category.id === template.category).name.zh
+        : FORMULA_GROUP_LABELS[template.group].zh;
+      const precedingGroups = content.slice(0, content.indexOf(heading)).split('\n').filter(line => line.startsWith('## '));
+      assert.equal(precedingGroups.at(-1), `## ${expectedGroup}`, `wrong reference category ${template.id}`);
+    }
+    assert.equal(headings.filter(line => line.endsWith(' <span class="reference-new-badge">NEW</span>')).length, expectedCount);
+    assert.ok(marked.parse(content).includes('<span class="reference-new-badge">NEW</span></h3>'), 'new badge must survive standard Markdown rendering');
+    assert.doesNotMatch(content, /🆕|✨/);
   }
 });
 

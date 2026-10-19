@@ -38,9 +38,10 @@ const (
 )
 
 type imageUploadProgress struct {
-	Phase string `json:"phase"`
-	Done  int64  `json:"done"`
-	Total int64  `json:"total"`
+	OperationID string `json:"operationId"`
+	Phase       string `json:"phase"`
+	Done        int64  `json:"done"`
+	Total       int64  `json:"total"`
 }
 
 type uploadProgressReader struct {
@@ -71,14 +72,32 @@ func newUploadProgressReader(reader io.Reader, total int64, onProgress func(done
 	return &uploadProgressReader{reader: reader, total: total, onProgress: onProgress}
 }
 
-func (a *App) emitImageUploadProgress(phase string, done, total int64) {
+func imageUploadReporter(operationID string, emit func(imageUploadProgress)) func(string, int64, int64) {
+	return func(phase string, done, total int64) {
+		emit(imageUploadProgress{OperationID: operationID, Phase: phase, Done: done, Total: total})
+	}
+}
+
+func validImageUploadOperationID(id string) bool {
+	if len(id) == 0 || len(id) > 64 {
+		return false
+	}
+	for _, c := range id {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *App) emitImageUploadProgress(progress imageUploadProgress) {
 	a.mu.RLock()
 	ctx := a.ctx
 	a.mu.RUnlock()
 	if ctx == nil {
 		return
 	}
-	wailsruntime.EventsEmit(ctx, imageUploadProgressEvent, imageUploadProgress{Phase: phase, Done: done, Total: total})
+	wailsruntime.EventsEmit(ctx, imageUploadProgressEvent, progress)
 }
 
 type ImageUploadSettings struct {
@@ -460,17 +479,17 @@ func picGoCloudStatus(ctx context.Context, client *http.Client, apiBase, token s
 }
 
 func (a *App) TestPicGoCloud() (PicGoCloudStatus, error) {
-	token := a.readPicGoCloudToken()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	client := picGoCloudHTTPClient(15 * time.Second)
 	defer client.CloseIdleConnections()
-	status, err := picGoCloudStatus(ctx, client, picGoCloudAPIBaseURL, token)
-	var apiErr *picGoCloudAPIError
-	if errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized {
-		_ = a.writePicGoCloudToken("")
-	}
-	return status, err
+	return a.checkPicGoCloudConnection(ctx, client, picGoCloudAPIBaseURL)
+}
+
+func (a *App) checkPicGoCloudConnection(ctx context.Context, client *http.Client, apiBase string) (PicGoCloudStatus, error) {
+	// A slow check may finish after a new login. Connection checks are read-only:
+	// only an explicit login/logout may replace or clear the stored credential.
+	return picGoCloudStatus(ctx, client, apiBase, a.readPicGoCloudToken())
 }
 
 func randomBase64URL(byteCount int) (string, error) {
@@ -887,6 +906,28 @@ func uploadImageToPicGoCloud(ctx context.Context, client *http.Client, apiBase, 
 }
 
 func (a *App) UploadImageToPicGoCloud(currentFile, imagePath string) (string, error) {
+	return a.uploadImageToPicGoCloud(currentFile, imagePath, "")
+}
+
+func (a *App) UploadImageToPicGoCloudWithProgress(currentFile, imagePath, operationID string) (string, error) {
+	if !validImageUploadOperationID(operationID) {
+		return "", errors.New("invalid image upload operation ID")
+	}
+	return a.uploadImageToPicGoCloud(currentFile, imagePath, operationID)
+}
+
+func (a *App) uploadImageToPicGoCloud(currentFile, imagePath, operationID string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client := picGoCloudHTTPClient(2 * time.Minute)
+	defer client.CloseIdleConnections()
+	return a.uploadImageToPicGoCloudWithClient(ctx, client, picGoCloudAPIBaseURL, currentFile, imagePath, operationID)
+}
+
+// Keep the complete upload path testable against an isolated HTTP service.
+// Production callers always supply the official API and bounded client above.
+func (a *App) uploadImageToPicGoCloudWithClient(ctx context.Context, client *http.Client, apiBase, currentFile, imagePath, operationID string) (string, error) {
+	reportProgress := imageUploadReporter(operationID, a.emitImageUploadProgress)
 	prefs, err := a.readPreferences()
 	if err != nil {
 		return "", err
@@ -902,28 +943,34 @@ func (a *App) UploadImageToPicGoCloud(currentFile, imagePath string) (string, er
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	client := picGoCloudHTTPClient(2 * time.Minute)
-	defer client.CloseIdleConnections()
 	total := int64(len(data))
-	a.emitImageUploadProgress("preparing", 0, total)
-	uploadedURL, err := uploadImageToPicGoCloud(ctx, client, picGoCloudAPIBaseURL, token, name, data, contentType, func(done, total int64) {
-		a.emitImageUploadProgress("uploading", done, total)
+	reportProgress("preparing", 0, total)
+	uploadedURL, err := uploadImageToPicGoCloud(ctx, client, apiBase, token, name, data, contentType, func(done, total int64) {
+		reportProgress("uploading", done, total)
 	})
 	if err == nil {
-		a.emitImageUploadProgress("complete", total, total)
+		reportProgress("complete", total, total)
 	} else {
-		a.emitImageUploadProgress("failed", 0, total)
+		reportProgress("failed", 0, total)
 	}
-	var apiErr *picGoCloudAPIError
-	if errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized {
-		_ = a.writePicGoCloudToken("")
-	}
+	// Uploads own a credential snapshot, not the current login. A delayed 401
+	// must not clear a newer login; only explicit login/logout changes credentials.
 	return uploadedURL, err
 }
 
 func (a *App) UploadImageToPicGo(currentFile, imagePath string) (string, error) {
+	return a.uploadImageToPicGo(currentFile, imagePath, "")
+}
+
+func (a *App) UploadImageToPicGoWithProgress(currentFile, imagePath, operationID string) (string, error) {
+	if !validImageUploadOperationID(operationID) {
+		return "", errors.New("invalid image upload operation ID")
+	}
+	return a.uploadImageToPicGo(currentFile, imagePath, operationID)
+}
+
+func (a *App) uploadImageToPicGo(currentFile, imagePath, operationID string) (string, error) {
+	reportProgress := imageUploadReporter(operationID, a.emitImageUploadProgress)
 	prefs, err := a.readPreferences()
 	if err != nil {
 		return "", err
@@ -960,9 +1007,9 @@ func (a *App) UploadImageToPicGo(currentFile, imagePath string) (string, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	payloadSize := int64(payload.Len())
-	a.emitImageUploadProgress("preparing", 0, payloadSize)
+	reportProgress("preparing", 0, payloadSize)
 	requestBody := newUploadProgressReader(bytes.NewReader(payload.Bytes()), payloadSize, func(done, total int64) {
-		a.emitImageUploadProgress("uploading", done, total)
+		reportProgress("uploading", done, total)
 	})
 	request, err := newPicGoRequest(ctx, http.MethodPost, serverURL, "/upload", a.readPicGoSecret(), requestBody)
 	if err != nil {
@@ -974,29 +1021,29 @@ func (a *App) UploadImageToPicGo(currentFile, imagePath string) (string, error) 
 	defer client.CloseIdleConnections()
 	response, err := client.Do(request)
 	if err != nil {
-		a.emitImageUploadProgress("failed", 0, payloadSize)
+		reportProgress("failed", 0, payloadSize)
 		return "", errors.New("unable to connect to the local PicGo server")
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		a.emitImageUploadProgress("failed", 0, payloadSize)
+		reportProgress("failed", 0, payloadSize)
 		return "", fmt.Errorf("PicGo upload returned HTTP %d", response.StatusCode)
 	}
 	var result picGoResponse
 	if err := json.NewDecoder(io.LimitReader(response.Body, maxPicGoResponseSize)).Decode(&result); err != nil {
-		a.emitImageUploadProgress("failed", 0, payloadSize)
+		reportProgress("failed", 0, payloadSize)
 		return "", errors.New("PicGo returned an invalid upload response")
 	}
 	if !result.Success || len(result.Result) == 0 {
-		a.emitImageUploadProgress("failed", 0, payloadSize)
+		reportProgress("failed", 0, payloadSize)
 		return "", errors.New("PicGo did not return an uploaded image URL")
 	}
 	uploadedURL := strings.TrimSpace(result.Result[0])
 	parsed, err := url.Parse(uploadedURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		a.emitImageUploadProgress("failed", 0, payloadSize)
+		reportProgress("failed", 0, payloadSize)
 		return "", errors.New("PicGo returned an unsafe image URL")
 	}
-	a.emitImageUploadProgress("complete", payloadSize, payloadSize)
+	reportProgress("complete", payloadSize, payloadSize)
 	return uploadedURL, nil
 }

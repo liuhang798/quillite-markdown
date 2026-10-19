@@ -19,6 +19,7 @@
       <span data-i18n="appName">轻阅 Markdown</span>
     </div>
     <div class="toolbar no-drag">
+      <button id="reviewRecovery" class="toolbar-button hidden" type="button" data-i18n="recoveryReview">恢复草稿</button>
       <button id="newFileButton" class="toolbar-button primary" data-i18n-title="newFileTitle" title="新建 Markdown 文件 (Ctrl+N)">
         <svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4v13H6v-17Z"/><path d="M14 3.5v4h4M12 11v6M9 14h6"/></svg>
         <span data-i18n="newDocumentButton">新建文档</span>
@@ -95,6 +96,12 @@
         <button id="recentTab" class="sidebar-tab active" type="button" role="tab" aria-selected="true" data-i18n="recentReading">最近阅读</button>
         <button id="favoritesTab" class="sidebar-tab" type="button" role="tab" aria-selected="false" data-i18n="favoritesTab">收藏</button>
         <button id="explorerTab" class="sidebar-tab" type="button" role="tab" aria-selected="false" data-i18n="resourceExplorer" data-i18n-title="explorerTabTitle" title="打开资源浏览器；再次点击可更改文件夹">资源浏览器</button>
+      </div>
+      <div id="recentSelectionHint" class="recent-selection-hint" data-i18n="recentSelectHint">Ctrl / ⌘ + 单击可多选</div>
+      <div id="recentSelectionActions" class="recent-selection-actions hidden" role="group" data-i18n-aria-label="recentBatchActions" aria-label="最近阅读批量操作">
+        <span id="recentSelectionCount" role="status" aria-live="polite"></span>
+        <button id="clearSelectedRecent" type="button" data-i18n="recentClearSelected">清除所选</button>
+        <button id="cancelRecentSelection" type="button" data-i18n="cancel">取消</button>
       </div>
       <div id="fileList" class="file-list"></div>
       <section class="reference-library" aria-labelledby="referenceLibraryLabel">
@@ -288,7 +295,8 @@
               <button id="renameDocumentButton" class="document-name-button" type="button" data-i18n-title="renameDocument" title="修改文件名"><strong id="editorFileName">未命名文档</strong><span aria-hidden="true">✎</span></button>
               <button id="editorDocumentLocation" class="document-location-button" type="button" data-i18n-title="revealFileTitle" title="打开所在文件夹"></button>
             </div>
-            <div class="editor-status">
+            <div class="editor-header-actions">
+              <div class="editor-status">
               <span id="editorSaveState">已保存</span>
               <button id="saveAsButton" class="text-button" data-i18n="saveAs">另存为</button>
               <button id="restoreLivePreviewButton" class="text-button" type="button" data-i18n="restoreLivePreview">恢复预览</button>
@@ -297,12 +305,30 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6"/><path d="M12 8v4l2.7 1.7"/></svg>
                 <span data-i18n="documentHistory">历史版本</span>
               </button>
+              </div>
+              <div class="editor-presentation-switch" role="group" data-i18n-aria-label="editorPresentationLabel" aria-label="编辑显示方式" data-i18n-title="liveEditingHint" title="直接点击文字、表格单元格或代码编辑；查看语法请切换源码">
+                <button type="button" data-editor-presentation="live" aria-pressed="true" class="active">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>
+                  <span data-i18n="liveEditing">即时渲染</span>
+                </button>
+                <button type="button" data-editor-presentation="source" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 8-4 4 4 4m8-8 4 4-4 4M14 5l-4 14"/></svg>
+                  <span data-i18n="sourceEditing">源码</span>
+                </button>
+              </div>
             </div>
           </div>
           <div id="editorFormatBar" class="editor-format-bar" role="toolbar" data-i18n-aria-label="formatToolbar">
             <button id="editorUndoButton" type="button" data-i18n-title="undoTitle" title="撤回 (Ctrl+Z)" disabled><svg viewBox="0 0 24 24"><path d="m9 8-5 4 5 4"/><path d="M5 12h8a6 6 0 0 1 6 6"/></svg></button>
+            <button id="aiToolbarButton" class="ai-toolbar-button" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-title="aiToolbarTitle" title="打开 AI 工具">
+              <span>AI</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+            </button>
             <span class="format-divider" data-divider-before="heading"></span>
-            <select id="headingSelect" data-format-overflow="heading" data-format-group="heading" data-overflow-priority="100" data-i18n-title="heading" title="标题">
+            <span class="heading-style-control" data-format-overflow="heading" data-format-group="heading" data-overflow-priority="100">
+              <svg class="heading-style-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h12v3M9 4v16M6 20h6M17 10h4M17 15h4M17 20h4"/></svg>
+              <svg class="heading-style-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+              <select id="headingSelect" data-i18n-title="textStyle" data-i18n-aria-label="textStyle" title="文字样式（正文／标题）" aria-label="文字样式（正文／标题）">
               <option value="" data-i18n="paragraph">正文</option>
               <option value="# " data-i18n="heading1">标题 1</option>
               <option value="## " data-i18n="heading2">标题 2</option>
@@ -310,11 +336,8 @@
               <option value="#### " data-i18n="heading4">标题 4</option>
               <option value="##### " data-i18n="heading5">标题 5</option>
               <option value="###### " data-i18n="heading6">标题 6</option>
-            </select>
-            <button id="aiToolbarButton" class="ai-toolbar-button" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-title="aiToolbarTitle" title="打开 AI 工具">
-              <span>AI</span>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
-            </button>
+              </select>
+            </span>
             <span class="format-divider" data-divider-before="inline"></span>
             <button type="button" data-format="bold" data-format-overflow="bold" data-format-label="boldTitle" data-format-group="inline" data-overflow-priority="90" data-i18n-title="boldTitle" title="加粗 (Ctrl+B)"><strong>B</strong></button>
             <button type="button" data-format="italic" data-format-overflow="italic" data-format-label="italicTitle" data-format-group="inline" data-overflow-priority="85" data-i18n-title="italicTitle" title="斜体 (Ctrl+I)"><em>I</em></button>
@@ -516,7 +539,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>2.7.8</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.0.0</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -649,13 +672,13 @@
       </div>
       <span class="eyebrow" data-i18n="recoveryLabel">异常恢复</span>
       <h2 id="recoveryTitle" data-i18n="recoveryTitle">发现未保存的编辑内容</h2>
-      <p id="recoveryDescription" data-i18n="recoveryDescription">轻阅在上次异常结束前保存了一份恢复副本。你可以继续编辑，或放弃副本并以磁盘文件为准。</p>
+      <p id="recoveryDescription" data-i18n="recoverySafeDescription">上次未保存的内容已保留为独立备份。请先保存当前编辑，再恢复草稿；也可稍后处理，或在“更多 → 文档工具 → 文档安全”另存恢复副本。</p>
       <div class="recovery-dialog-details">
         <span><small data-i18n="recoveryDocument">恢复文档</small><strong id="recoveryFileName"></strong></span>
         <span><small data-i18n="recoverySavedAt">快照时间</small><strong id="recoveryUpdatedAt"></strong></span>
       </div>
       <div class="recovery-dialog-actions">
-        <button id="discardRecovery" class="large-button secondary" type="button" data-i18n="recoveryDiscard">放弃恢复内容</button>
+        <button id="discardRecovery" class="large-button secondary" type="button" data-i18n="recoveryLater">稍后处理</button>
         <button id="restoreRecovery" class="large-button primary" type="button" data-i18n="recoveryRestore">恢复并继续编辑</button>
       </div>
     </section>
@@ -718,7 +741,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 2.7.8</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 3.0.0</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -951,7 +974,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">2.7.8</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.0.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -973,9 +996,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">2.7.8</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.0.0</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">2.7.8</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.0.0</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>
@@ -1193,6 +1216,45 @@
     </section>
   </div>
 
+  <dialog id="footnoteDialog" class="table-dialog link-dialog no-drag" aria-labelledby="footnoteDialogTitle" aria-describedby="footnoteEditorHint">
+    <h2 id="footnoteDialogTitle" data-i18n="footnoteEditor">编辑脚注</h2>
+    <p id="footnoteEditorHint" data-i18n="footnoteEditorHint">修改正文会同步所有相同编号的引用；删除引用不会删除脚注内容。</p>
+    <form id="footnoteForm">
+      <div class="image-dialog-fields">
+        <label><span data-i18n="footnoteIdentifier">脚注标识（保留不变）</span><input id="footnoteLabel" type="text" readonly></label>
+        <label><span data-i18n="footnoteContent">脚注内容（支持 Markdown）</span><textarea id="footnoteBody" rows="6"></textarea></label>
+      </div>
+      <p id="footnoteError" role="alert" aria-live="polite"></p>
+      <div class="table-dialog-actions">
+        <button id="cancelFootnote" type="button" class="large-button secondary" data-i18n="cancel">取消</button>
+        <button type="submit" class="large-button primary" data-i18n="footnoteApply">应用脚注</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="linkDialog" class="table-dialog link-dialog no-drag" aria-labelledby="linkDialogTitle" aria-describedby="linkEditorHint">
+    <button id="closeLinkDialog" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+      <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+    </button>
+    <span class="eyebrow" data-i18n="markdownTool">MARKDOWN 工具</span>
+    <h2 id="linkDialogTitle" data-i18n="linkEditor">编辑链接</h2>
+    <p id="linkEditorHint" data-i18n="linkEditorHint">填写链接文字和地址；在已有链接中按 Ctrl+K 可再次编辑。</p>
+    <form id="linkForm" novalidate>
+      <div class="image-dialog-fields">
+        <label><span data-i18n="linkLabel">链接文字（支持 Markdown）</span><input id="linkLabel" type="text" autocomplete="off" required></label>
+        <label><span data-i18n="linkDestination">链接地址</span><input id="linkDestination" type="text" autocomplete="off" spellcheck="false" required aria-describedby="linkDestinationHint linkError"></label>
+        <small id="linkDestinationHint" data-i18n="linkDestinationHint">支持 http://、https://、文档相对路径和 #章节锚点。</small>
+        <label><span data-i18n="linkTooltipTitle">提示文字（可选）</span><input id="linkTitle" type="text" autocomplete="off"></label>
+      </div>
+      <p id="linkReferenceHint" data-i18n="linkReferenceHint" hidden>这是引用式链接：修改地址或提示文字会影响所有使用同一引用的链接。</p>
+      <p id="linkError" role="alert" aria-live="polite"></p>
+      <div class="table-dialog-actions">
+        <button id="cancelLink" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
+        <button class="large-button primary" type="submit" data-i18n="linkApply">应用链接</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="imageDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="imageDialogTitle">
     <section class="table-dialog image-dialog">
       <button id="closeImageDialog" class="about-close" type="button" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
@@ -1305,6 +1367,7 @@
       </div>
       <div id="localAssetsSummary" class="local-assets-summary"><strong data-i18n="localAssetsReadyTitle">本地模式已就绪</strong><span data-i18n="localAssetsReadyHint">图片会复制到文档旁的 assets，便于离线阅读和移动。</span></div>
       <div id="embeddedImagesSummary" class="local-assets-summary hidden"><strong data-i18n="embeddedImagesMode">内嵌 Base64</strong><span data-i18n="embeddedImagesDetail">单张最多 25 MiB，文档最多 64 MiB；不会自动下载在线图片。</span></div>
+      <p id="imageUploadSettingsStatus" class="picgo-test-status hidden" role="status" aria-live="polite" aria-atomic="true"></p>
       <div class="image-upload-settings-actions">
         <span></span>
         <button id="cancelImageUploadSettings" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
@@ -1412,6 +1475,7 @@
       <div class="formula-dialog-layout diagram-dialog-layout">
         <aside class="formula-template-panel" aria-label="图表模板">
           <div class="formula-catalog-heading" data-i18n="diagramCategory">图表分类</div>
+          <div class="diagram-search"><input id="diagramSearch" type="search" maxlength="120" data-i18n-placeholder="diagramSearch" data-i18n-aria-label="diagramSearch" placeholder="搜索名称、用途或图表类型" aria-label="搜索名称、用途或图表类型"></div>
           <div id="diagramCategoryTabs" class="formula-discipline-tabs" role="tablist" aria-label="图表分类"></div>
           <div id="diagramTemplateList" class="formula-template-list"></div>
         </aside>
@@ -1430,6 +1494,7 @@
             <div class="flowchart-toolbar">
               <button id="toggleDiagramFullscreen" class="diagram-fullscreen-button" type="button" data-i18n-title="diagramFullscreen" data-i18n-aria-label="diagramFullscreen" title="全屏绘图" aria-label="全屏绘图" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="diagram-enter-fullscreen-icon" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="diagram-exit-fullscreen-icon" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg><span>全屏绘图</span></button>
               <div class="flowchart-add-buttons" role="group" data-i18n-aria-label="flowchartAddAria" aria-label="添加流程图节点">
+                <button type="button" data-flowchart-add="input-output" data-i18n-title="flowchartAddInputOutput" title="添加输入／输出（平行四边形）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h16l-4 12H2Z"/><path d="M12 9v6M9 12h6"/></svg><span data-i18n="flowchartInputOutput">输入／输出</span></button>
                 <button type="button" data-flowchart-add="process" data-i18n-title="flowchartAddProcess" title="添加处理步骤"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M12 9v6M9 12h6"/></svg><span data-i18n="flowchartProcess">步骤</span></button>
                 <button type="button" data-flowchart-add="decision" data-i18n-title="flowchartAddDecision" title="添加判断分支"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 9-9 9-9-9 9-9Z"/><path d="M12 8v8M8 12h8"/></svg><span data-i18n="flowchartDecision">判断</span></button>
                 <button type="button" data-flowchart-add="terminal" data-i18n-title="flowchartAddTerminal" title="添加开始或结束"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="5"/><path d="M12 9.5v5M9.5 12h5"/></svg><span data-i18n="flowchartTerminal">开始／结束</span></button>
@@ -1451,7 +1516,7 @@
             </div>
             <div class="flowchart-workspace">
               <div id="flowchartCanvasViewport" class="flowchart-canvas-viewport">
-                <svg id="flowchartCanvas" viewBox="0 0 920 560" role="application" tabindex="0" data-i18n-aria-label="flowchartCanvasAria" aria-label="可编辑流程图画布">
+                <svg id="flowchartCanvas" viewBox="0 0 920 560" role="application" tabindex="0" aria-describedby="flowchartCanvasHint" data-i18n-aria-label="flowchartCanvasAria" aria-label="可编辑流程图画布">
                   <defs>
                     <marker id="flowchartArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z"/></marker>
                     <marker id="flowchartArrowSmall" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z"/></marker>
@@ -1459,7 +1524,7 @@
                   <g id="flowchartEdgeLayer"></g>
                   <g id="flowchartNodeLayer"></g>
                 </svg>
-                <p class="flowchart-canvas-hint" data-i18n="flowchartCanvasHint">拖动空白处移动画布；全选后拖动任一节点可整体移动；双击空白处添加步骤。</p>
+                <p id="flowchartCanvasHint" class="flowchart-canvas-hint" data-i18n="flowchartCanvasHint">拖动空白处移动画布；全选后拖动任一节点可整体移动；双击空白处添加步骤。</p>
               </div>
               <aside class="flowchart-properties">
                 <strong data-i18n="flowchartProperties">所选元素</strong>
@@ -1478,6 +1543,17 @@
           </section>
           <section id="structuredDiagramEditor" class="structured-diagram-editor hidden" data-i18n-aria-label="structuredDiagramEditorAria" aria-label="可视化图表数据编辑器">
             <div id="structuredDiagramSettings" class="structured-diagram-settings"></div>
+            <div id="diagramSeriesActions" class="structured-diagram-actions hidden">
+              <button id="addDiagramSeries" type="button" data-i18n="diagramAddSeries">添加系列</button>
+              <button id="removeDiagramSeries" type="button" data-i18n="diagramRemoveSeries">删除末尾系列</button>
+            </div>
+            <details id="diagramPastePanel" class="diagram-paste-panel">
+              <summary data-i18n="diagramPaste">粘贴表格数据</summary>
+              <p data-i18n="diagramPasteHint">按上方列顺序粘贴 Excel / TSV / CSV 数据，应用后替换当前数据行。</p>
+              <textarea id="diagramPasteText" rows="4" maxlength="500000" data-i18n-aria-label="diagramPaste" aria-label="粘贴表格数据"></textarea>
+              <label><input id="diagramPasteHeader" type="checkbox"><span data-i18n="diagramPasteHeader">第一行是标题</span></label>
+              <div class="structured-diagram-actions"><button id="applyDiagramPaste" type="button" data-i18n="diagramPasteApply">应用到表格</button></div>
+            </details>
             <p id="structuredDiagramError" class="structured-diagram-error hidden" role="status"></p>
             <div class="structured-diagram-table-wrap">
               <table class="structured-diagram-table">

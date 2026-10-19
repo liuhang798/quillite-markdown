@@ -6,13 +6,14 @@ import config from '../vite.config.js';
 
 test('the build plugin handles the actual minified CSS import', () => {
   const css = readFileSync(new URL('../node_modules/katex/dist/katex.min.css', import.meta.url), 'utf8');
-  const result = config.plugins[0].transform(css, 'C:/project/node_modules/katex/dist/katex.min.css');
+  const plugin = config.plugins.find(plugin => plugin.name === 'katex-woff2-only');
+  const result = plugin.transform(css, 'C:/project/node_modules/katex/dist/katex.min.css');
   assert.ok(result);
   assert.doesNotMatch(result.code, /\.(?:ttf|woff)\)/);
   const withoutSources = value => value.replace(/src:\s*[^;}]+;?/g, 'src:FONT');
   assert.equal(withoutSources(result.code), withoutSources(css), 'font optimization must preserve every non-src rule in minified CSS');
   assert.match(result.code, /\.katex\{font:normal 1\.21em KaTeX_Main,Times New Roman,serif;/);
-  assert.equal(config.plugins[0].transform(css, '/unrelated.css'), null);
+  assert.equal(plugin.transform(css, '/unrelated.css'), null);
 });
 
 test('font optimization preserves every KaTeX face and its WOFF2 asset', () => {

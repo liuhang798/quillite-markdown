@@ -109,6 +109,9 @@ window.quilliteMarkdown = {
     try { return resolved(JSON.parse(sessionStorage.getItem(browserRecoveryKey) || 'null')); }
     catch { return resolved(null); }
   },
+  getStartupRecoverySnapshot: () => desktopRuntime ? Backend.GetStartupRecoverySnapshot() : window.quilliteMarkdown.getRecoverySnapshot(),
+  listRecoveryArchives: () => desktopRuntime ? Backend.ListRecoveryArchives() : resolved([]),
+  readRecoveryArchive: id => desktopRuntime ? Backend.ReadRecoveryArchive(id) : resolved(null),
   clearRecoverySnapshot: () => {
     if (desktopRuntime) return Backend.ClearRecoverySnapshot();
     sessionStorage.removeItem(browserRecoveryKey);
@@ -134,9 +137,9 @@ window.quilliteMarkdown = {
   loginPicGoCloud: () => desktopRuntime ? Backend.LoginPicGoCloud() : Promise.reject(new Error('PicGo Cloud sign-in is unavailable in browser preview')),
   logoutPicGoCloud: () => desktopRuntime ? Backend.LogoutPicGoCloud() : resolved({ mode: 'local', serverUrl: 'http://127.0.0.1:36677', hasSecret: false, hasCloudToken: false }),
   testPicGoCloud: () => desktopRuntime ? Backend.TestPicGoCloud() : Promise.reject(new Error('PicGo Cloud is unavailable in browser preview')),
-  uploadImageToPicGoCloud: (filePath, imagePath) => desktopRuntime ? Backend.UploadImageToPicGoCloud(filePath, imagePath) : Promise.reject(new Error('PicGo Cloud is unavailable in browser preview')),
+  uploadImageToPicGoCloud: (filePath, imagePath, operationId) => desktopRuntime ? (operationId ? Backend.UploadImageToPicGoCloudWithProgress(filePath, imagePath, operationId) : Backend.UploadImageToPicGoCloud(filePath, imagePath)) : Promise.reject(new Error('PicGo Cloud is unavailable in browser preview')),
   testPicGo: input => desktopRuntime ? Backend.TestPicGo(input) : Promise.reject(new Error('PicGo is unavailable in browser preview')),
-  uploadImageToPicGo: (filePath, imagePath) => desktopRuntime ? Backend.UploadImageToPicGo(filePath, imagePath) : Promise.reject(new Error('PicGo is unavailable in browser preview')),
+  uploadImageToPicGo: (filePath, imagePath, operationId) => desktopRuntime ? (operationId ? Backend.UploadImageToPicGoWithProgress(filePath, imagePath, operationId) : Backend.UploadImageToPicGo(filePath, imagePath)) : Promise.reject(new Error('PicGo is unavailable in browser preview')),
   readImageData: (imagePath, documentDirectory) => desktopRuntime ? Backend.ReadImageData(imagePath, documentDirectory) : resolved(''),
   setDirty: dirty => desktopRuntime ? Backend.SetDirty(dirty) : resolved(),
   listFolder: root => desktopRuntime ? Backend.ListFolder(root) : resolved({ root, files: [] }),
@@ -215,12 +218,12 @@ window.quilliteMarkdown = {
   onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   onAIProgress: callback => desktopRuntime ? EventsOn('ai:progress', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '2.7.8', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.0.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   getWindowsInstallSafety: () => desktopRuntime
     ? Backend.GetWindowsInstallSafety()
-    : resolved({ applicable: false, safe: true, currentVersion: '2.7.8', downloadUrl: 'https://qm.ssssa.cn/#download' }),
+    : resolved({ applicable: false, safe: true, currentVersion: '3.0.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
@@ -228,14 +231,14 @@ window.quilliteMarkdown = {
           checked: true,
           available: true,
           currentVersion: '2.4.4',
-          latestVersion: '2.7.8',
-          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 2.7.8' : '轻阅 Markdown 2.7.8',
+          latestVersion: '3.0.0',
+          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 3.0.0' : '轻阅 Markdown 3.0.0',
           releaseNotes: localStorage.getItem('language') === 'en'
             ? 'Added visual table editing, rich paste, and spell checking\nAdded PicGo image hosting with upload progress\nAdded a 12-format Export Center and crisp A4 image pages'
             : '新增可视化表格、富文本粘贴与拼写检查\n新增 PicGo 图床和上传进度\n新增 12 种格式导出中心与 A4 高清图片分页',
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '2.7.8', latestVersion: '2.7.8' }),
+      : { checked: true, available: false, currentVersion: '3.0.0', latestVersion: '3.0.0' }),
   snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},

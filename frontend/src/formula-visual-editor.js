@@ -1,5 +1,5 @@
 import { MathfieldElement, convertLatexToMathMl, convertLatexToMarkup } from 'mathlive';
-import { canLoadVisualFormula, visualFormulaValue } from './formula-visual-policy.js';
+import { canLoadVisualFormula, visualFormulaValue, isMatrixCellPosition } from './formula-visual-policy.js';
 import { renderLatexResult } from './math-rendering.js';
 
 // Fully offline: never use the package's CDN font/audio defaults or URL menu.
@@ -53,7 +53,13 @@ export function createFormulaVisualEditor(host, onChange) {
       if (!supported) return;
       field.focus(); field.insert(latex, { format: 'latex', selectionMode: 'placeholder' });
     },
-    command(command) { if (supported) { field.focus(); field.executeCommand(command); } },
+    command(command) {
+      if (!supported) return false;
+      if (['addRowAfter', 'addColumnAfter', 'removeRow', 'removeColumn'].includes(command)
+        && !isMatrixCellPosition(field)) return false;
+      field.focus(); field.executeCommand(command);
+      return true;
+    },
     blur() { field.blur(); window.mathVirtualKeyboard?.hide(); },
   };
 }

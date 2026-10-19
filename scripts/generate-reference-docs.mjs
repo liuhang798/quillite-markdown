@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { REFERENCE_ADDITIONS } from './reference-additions.mjs';
 
 import {
   FORMULA_GROUP_LABELS,
@@ -25,23 +26,28 @@ const writeReference = (name, content) => {
   console.log(`generated ${name} (${normalized.length} characters)`);
 };
 
-const categoryName = id => DIAGRAM_CATEGORIES.find(category => category.id === id)?.name?.zh || id;
+const newLabel = (kind, template) => REFERENCE_ADDITIONS[kind].has(template.id) ? ' <span class="reference-new-badge">NEW</span>' : '';
 
-const diagramSections = DIAGRAM_TEMPLATES.map((template, index) => {
+let diagramIndex = 0;
+const diagramSections = DIAGRAM_CATEGORIES.filter(category => category.id !== 'all').map(category => {
+  const entries = DIAGRAM_TEMPLATES.filter(template => template.category === category.id).map(template => {
+  diagramIndex += 1;
   const language = template.engine === 'echarts' ? 'echarts' : 'mermaid';
-  const source = diagramTemplateSource(template, 'zh-CN').replaceAll('{{date}}', '2026-08-21');
+  const source = diagramTemplateSource(template, 'zh-CN', '2026-08-21');
   return [
-    `## ${index + 1}. ${template.name.zh}`,
+    `### ${diagramIndex}. ${template.name.zh}${newLabel('diagrams', template)}`,
     '',
-    `- 分类：${categoryName(template.category)}`,
     `- 用途：${template.description.zh}`,
     `- 引擎：${language === 'echarts' ? 'ECharts' : 'Mermaid'}`,
     '',
     `\`\`\`${language}`,
     source,
-    '\`\`\`'
+    '\`\`\`',
+    ...(template.examples || []).flatMap(example => ['', `#### ${example.name.zh}`, '', '平行四边形表示输入／输出，可通过流程图画布的“输入／输出”按钮添加，也可修改已有节点的形状。', '', '```mermaid', example.source.zh, '```'])
   ].join('\n');
-}).join('\n\n---\n\n');
+  }).join('\n\n');
+  return entries ? `## ${category.name.zh}\n\n${entries}` : '';
+}).filter(Boolean).join('\n\n---\n\n');
 
 writeReference('图表案例.MD', `# 图表案例大全
 
@@ -62,7 +68,10 @@ ${diagramSections}
 
 let formulaIndex = 0;
 const formulaSections = Object.entries(FORMULA_GROUP_LABELS).map(([group, labels]) => {
-  const templates = FORMULA_TEMPLATES.filter(template => template.group === group);
+  // Keep introductory formulas first, with the additional topics in their
+  // own discipline rather than a separate release-oriented section.
+  const templates = FORMULA_TEMPLATES.filter(template => template.group === group)
+    .sort((a, b) => Number(REFERENCE_ADDITIONS.formulas.has(a.id)) - Number(REFERENCE_ADDITIONS.formulas.has(b.id)));
   if (!templates.length) return '';
   const entries = templates.map(template => {
     formulaIndex += 1;
@@ -70,7 +79,7 @@ const formulaSections = Object.entries(FORMULA_GROUP_LABELS).map(([group, labels
     const expression = buildFormulaExpression(template, values);
     const fields = template.fields.map(field => `- ${field.label.zh}：\`${values[field.key]}\``).join('\n');
     return [
-      `### ${formulaIndex}. ${template.name.zh}`,
+      `### ${formulaIndex}. ${template.name.zh}${newLabel('formulas', template)}`,
       '',
       fields,
       '',

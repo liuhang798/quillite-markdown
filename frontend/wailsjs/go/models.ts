@@ -706,6 +706,24 @@ export namespace main {
 		}
 	}
 
+	export class RecoveryArchive {
+	    id: string;
+	    name: string;
+	    updatedAt: string;
+	    size: number;
+
+	    static createFrom(source: any = {}) {
+	        return new RecoveryArchive(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.updatedAt = source["updatedAt"];
+	        this.size = source["size"];
+	    }
+	}
 	export class RecoverySnapshot {
 	    baseRevision?: string;
 	    conflict?: boolean;

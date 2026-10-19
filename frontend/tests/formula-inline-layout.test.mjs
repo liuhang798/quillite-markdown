@@ -71,7 +71,7 @@ test('actual layout handler updates only the current inline draft and rejects mu
   for (const [mode, initial, change] of [['inline', '$\\frac{1}{n}$', true], ['block', '$$\nx\n$$', false], ['inline', '$x%comment\n+y$', false]]) {
     let updates = 0;
     const context = { formulaWizardState: { mode }, els: { formulaMarkdownSource: { value: initial } },
-      parseFormulaMarkdown, applyFormulaInlineLayout, formulaInlineHasNewline, buildFormulaMarkdown,
+      parseFormulaMarkdown, formulaInlineLayout, applyFormulaInlineLayout, formulaInlineHasNewline, buildFormulaMarkdown,
       updateFormulaPreviewFromMarkdown() { updates++; }, showToast() {}, t: key => key };
     vm.runInNewContext(handler + '\nchooseFormulaInlineLayout("large");', context);
     assert.equal(updates, change ? 1 : 0);

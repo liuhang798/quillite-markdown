@@ -5,12 +5,34 @@ import {
   addFlowchartNode,
   findCanvasDiagramFenceAt,
   findFlowchartFenceAt,
+  flowchartNodeSize,
   layoutFlowchart,
   parseFlowchartSource,
   removeFlowchartEdge,
   removeFlowchartNode,
+  removeMindmapSelection,
   serializeFlowchart
 } from '../src/flowchart-designer.js';
+
+test('mindmap deletions preserve a rooted tree, surviving descendants and the root', () => {
+  const nodes = ['root', 'a', 'b', 'c', 'sibling'].map(id => ({ id, label: id, mindmapRoot: id === 'root' }));
+  const edges = [['root', 'a'], ['a', 'b'], ['b', 'c'], ['a', 'sibling']].map(([from, to], i) => ({ id: `e${i}`, from, to, style: 'line' }));
+  const model = { canvasType: 'mindmap', nodes, edges }, snapshot = JSON.stringify(model);
+  const deleted = removeMindmapSelection(model, { type: 'node', id: 'b' });
+  assert.equal(deleted.edges.find(edge => edge.to === 'c').from, 'a');
+  assert.equal(deleted.edges.find(edge => edge.to === 'sibling').from, 'a');
+  const multi = removeMindmapSelection(model, { type: 'nodes', ids: ['root', 'a', 'b'] });
+  assert.deepEqual(multi.nodes.map(node => node.id), ['root', 'c', 'sibling']);
+  assert.ok(multi.edges.every(edge => edge.from === 'root'));
+  assert.deepEqual(removeMindmapSelection(model, { type: 'node', id: 'root' }), model);
+  const promoted = removeMindmapSelection(model, { type: 'edge', id: 'e1' });
+  assert.equal(promoted.edges.find(edge => edge.to === 'b').from, 'root');
+  assert.equal(promoted.edges.find(edge => edge.to === 'c').from, 'b');
+  const all = removeMindmapSelection(model, { type: 'nodes', ids: nodes.map(node => node.id) });
+  assert.deepEqual(all.nodes.map(node => node.id), ['root']);
+  assert.deepEqual(all.edges, []);
+  assert.equal(JSON.stringify(model), snapshot);
+});
 
 test('canvas fence lookup recognises flowcharts, state diagrams, and mindmaps', () => {
   for (const [templateId, diagram] of [['flowchart', 'flowchart LR\n A --> B'], ['state', 'stateDiagram-v2\n A --> B'], ['mindmap', 'mindmap\n  root((A))']]) {
@@ -132,4 +154,36 @@ test('automatic layout respects all four flow directions', () => {
   assert.ok(rl.nodes[0].x > rl.nodes[1].x);
   assert.ok(td.nodes[0].y < td.nodes[1].y);
   assert.ok(bt.nodes[0].y > bt.nodes[1].y);
+});
+
+test('automatic layout does not squeeze long chains or wide levels into overlapping nodes', () => {
+  const nodes = Array.from({ length: 16 }, (_, index) => ({ id: `N${index}`, label: `节点 ${index}`, shape: index % 2 ? 'decision' : 'process', x: 0, y: 0 }));
+  for (const direction of ['LR', 'RL', 'TD', 'BT']) for (const kind of ['chain', 'fanout', 'disconnected', 'cycle']) {
+    const edges = kind === 'disconnected' ? [] : nodes.slice(1).map((node, index) => ({ id: `e${index}`, from: kind === 'fanout' ? 'N0' : `N${index}`, to: node.id }));
+    if (kind === 'cycle') edges.push({ id: 'cycle', from: 'N15', to: 'N0' });
+    const original = { direction, nodes, edges }, snapshot = JSON.stringify(original);
+    const result = layoutFlowchart(original);
+    assert.equal(JSON.stringify(original), snapshot, 'layout must not mutate the graph');
+    assert.equal(serializeFlowchart(result), serializeFlowchart(original), 'layout must preserve graph semantics');
+    for (let i = 0; i < result.nodes.length; i++) for (const other of result.nodes.slice(i + 1)) {
+      const node = result.nodes[i];
+      assert.ok(Math.abs(node.x - other.x) >= 200 || Math.abs(node.y - other.y) >= 120, `${direction}/${kind}: ${node.id} overlaps ${other.id}`);
+    }
+    assert.deepEqual(layoutFlowchart(result), result, 'automatic layout is deterministic');
+  }
+});
+
+test('shared layout leaves real shape bounds separated for flow, state and mindmap canvases', () => {
+  for (const canvasType of ['flowchart', 'state', 'mindmap']) for (const direction of ['LR', 'RL', 'TD', 'BT']) {
+    const shapes = ['process', 'decision', 'terminal', 'round', 'subroutine', 'database', 'circle'];
+    const nodes = Array.from({ length: 30 }, (_, i) => ({ id: `N${i}`, label: `N${i}`, shape: shapes[i % shapes.length],
+      ...(canvasType === 'state' ? { diagramNodeType: 'state', stateToken: i === 0 ? '[*]' : '' } : {}),
+      ...(canvasType === 'mindmap' && i === 0 ? { mindmapRoot: true } : {}) }));
+    const edges = nodes.slice(1).map(node => ({ from: 'N0', to: node.id }));
+    const result = layoutFlowchart({ canvasType, direction, nodes, edges }, 320, 240);
+    for (let i = 0; i < result.nodes.length; i++) for (const b of result.nodes.slice(i + 1)) {
+      const a = result.nodes[i], as = flowchartNodeSize(a), bs = flowchartNodeSize(b);
+      assert.ok(Math.abs(a.x - b.x) >= (as.width + bs.width) / 2 + 39 || Math.abs(a.y - b.y) >= (as.height + bs.height) / 2 + 39, `${canvasType}/${direction}/${a.id}/${b.id}`);
+    }
+  }
 });

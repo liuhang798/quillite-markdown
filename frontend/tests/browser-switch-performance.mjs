@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {createServer} from 'vite';
+const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error'});
+let browser;
+try{
+ await server.listen();browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE||undefined});
+ const page=await browser.newPage({viewport:{width:1600,height:950}});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+ await page.goto(server.resolvedUrls.local[0]);
+ const source='# First heading\n\n[**Link**][r]\nReference[^n]\n\n'+Array.from({length:40},(_,i)=>`## Section ${i}\n\n| Name | Value |\n|---|---|\n| Item ${i} | Text |\n\n`).join('')+'## Last heading\n\nLast text\n\n[r]: https://example.com\n[^n]: Footnote with [reference][r]';
+ const open=async(name,text)=>{
+  await page.evaluate(async({name,text})=>{await import('/src/main.js');window.quilliteMarkdown.openFile=async()=>({path:name,name,directory:'.',content:text,revision:'a'.repeat(64)});window.quilliteMarkdown.reportErrorLog=async()=>{};window.quilliteMarkdown.saveFile=async()=>{throw Error('unexpected write');};},{name,text});
+  await page.locator('#openFileButton').click();
+  await page.locator('#markdownContent h1').waitFor();
+ };
+ await open('large.md',source);
+ assert.equal(await page.locator('#markdownContent [data-line]').count(),0,'reading must not create source-map spans');
+ assert.equal(await page.locator('#editorPreviewContent *').count(),0,'hidden preview must remain empty');
+ assert.equal(await page.locator('#markdownContent a[href="https://example.com"]').count(),2,'body and footnote share references');
+ await page.locator('#toc a').filter({hasText:'Last heading'}).click();
+ await page.waitForFunction(()=>{const el=[...document.querySelectorAll('#markdownContent h2')].find(el=>el.textContent==='Last heading');const a=el.getBoundingClientRect(),b=document.querySelector('.reader-pane').getBoundingClientRect();return a.top>=b.top&&a.top<b.bottom;},null,{timeout:5000});
+ const location=await page.locator('#markdownContent h2').filter({hasText:'Last heading'}).evaluate(el=>{const a=el.getBoundingClientRect(),reader=document.querySelector('.reader-pane'),b=reader.getBoundingClientRect();return {top:a.top,bottom:a.bottom,readerTop:b.top,readerBottom:b.bottom,scrollTop:reader.scrollTop};});
+ assert.ok(location.top>=location.readerTop&&location.top<location.readerBottom,JSON.stringify(location));
+ await page.locator('#editButton').click();
+ await page.locator('#editorPreviewContent [data-line]').first().waitFor();
+ await page.locator('#editorPreviewContent a[href="https://example.com"]').first().click({button:'right'});
+ assert.equal(await page.locator('#markdownEditor > .cm-editor').evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const v=EditorView.findFromDOM(el);return v.state.doc.lineAt(v.state.selection.main.head).number;}),3);
+ await open('new.md','# New document\n\nUnchanged new text');
+ assert.equal(await page.locator('#editorPreviewContent *').count(),0);
+ await page.locator('#editButton').click();
+ await page.locator('#editorPreviewContent').getByText('Unchanged new text',{exact:true}).waitFor();
+ await page.locator('#markdownEditor > .cm-editor').evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const v=EditorView.findFromDOM(el);v.focus();});
+ await page.keyboard.press('Control+z');
+ assert.equal(await page.locator('#markdownEditor > .cm-editor').evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');return EditorView.findFromDOM(el).state.doc.toString();}),'# New document\n\nUnchanged new text');
+ assert.deepEqual(errors,[]);
+ console.log('PASS: no hidden render/source map, shared footnote links, TOC navigation, edit pointer mapping, document switch and undo isolation');
+}finally{await browser?.close();await server.close();}

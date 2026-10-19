@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -26,6 +27,209 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 )
+
+func TestEmptyTableCellKeepsBoundaryAndCaret(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/live-editable-block.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, needle := range []string{"export function emptyTableCellBoundary", "if (cellBoundary) transaction.changes.push(cellBoundary)", "field.from===field.to&&selection.ranges.length===1&&caret.empty"} {
+		if !strings.Contains(string(data), needle) {
+			t.Errorf("missing table cell guard: %s", needle)
+		}
+	}
+}
+
+func TestImageInsertionPreservesTableBoundary(t *testing.T) {
+	for file, needles := range map[string][]string{
+		"frontend/src/renderer.js":               {"separateImageFromTable(content, target.from, markdown)", "userEvent: 'input.image'"},
+		"frontend/src/image-insertion-target.js": {"export function separateImageFromTable", "findMarkdownTables(source)", "table.tableTo", "prefix"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range needles {
+			if !strings.Contains(string(data), needle) {
+				t.Errorf("%s missing %s", file, needle)
+			}
+		}
+	}
+}
+
+func TestImageFollowingHeadingBoundaryRegression(t *testing.T) {
+	data, err := os.ReadFile("frontend/tests/image-following-format.test.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invariant := range []string{"selectedLineFormat", "undo(view)", "redo(view)", "do not rewrite non-image-only HTML or code"} {
+		if !strings.Contains(string(data), invariant) {
+			t.Fatalf("missing image-following formatting regression: %s", invariant)
+		}
+	}
+}
+
+func TestSourceImageFoldingKeepsOriginalData(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/source-image-folding.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"Decoration.replace", "EditorView.atomicRanges", "iterChangedRanges", "Image data hidden; copying and saving preserve the complete source"} {
+		if !strings.Contains(string(data), required) {
+			t.Fatalf("missing source image folding invariant: %s", required)
+		}
+	}
+	regression, err := os.ReadFile("frontend/tests/browser-source-image-folding.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"ClipboardEvent('copy'", "ClipboardEvent('cut'", "Control+Shift+KeyZ", "data-image-action"} {
+		if !strings.Contains(string(regression), required) {
+			t.Fatalf("missing browser source image regression: %s", required)
+		}
+	}
+}
+
+func TestFlowchartInputOutputShapeAvailable(t *testing.T) {
+	for path, required := range map[string]string{
+		"frontend/index.html":                `data-flowchart-add="input-output"`,
+		"frontend/src/flowchart-designer.js": "FLOWCHART_IO_SKEW",
+		"frontend/src/renderer.js":           "flowchartAddInputOutput",
+		"docs/reference/图表案例.MD":             "B[/输入两个数 a、b/]",
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), required) {
+			t.Fatalf("missing input/output support in %s", path)
+		}
+	}
+}
+
+func TestEditorPresentationSwitchBelowStatus(t *testing.T) {
+	data, err := os.ReadFile("frontend/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(data)
+	actions := strings.Index(html, `class="editor-header-actions"`)
+	history := strings.Index(html, `id="documentHistoryButton"`)
+	mode := strings.Index(html, `class="editor-presentation-switch"`)
+	toolbar := strings.Index(html, `id="editorFormatBar"`)
+	if actions < 0 || history < actions || mode < history || toolbar < mode {
+		t.Fatal("presentation switch must follow status/history and precede the format toolbar")
+	}
+	css, err := os.ReadFile("frontend/src/editor-live-preview.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rule := range []string{"grid-template-columns: repeat(2, 1fr)", "translateX(100%)", "prefers-reduced-motion", "button:focus-visible"} {
+		if !strings.Contains(string(css), rule) {
+			t.Fatalf("missing segmented switch rule: %s", rule)
+		}
+	}
+}
+
+func TestTextStyleIconFollowsAIAndRetainsNativeSelect(t *testing.T) {
+	menu, err := os.ReadFile("frontend/src/text-style-menu.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(menu), "menu.id='textStyleMenu'") || !strings.Contains(string(menu), "event.key==='Escape'") {
+		t.Fatal("independent accessible text style menu missing")
+	}
+	data, err := os.ReadFile("frontend/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(data)
+	ai, style := strings.Index(html, `id="aiToolbarButton"`), strings.Index(html, `class="heading-style-control"`)
+	if ai < 0 || style < ai {
+		t.Fatal("text style must follow AI")
+	}
+	for _, needle := range []string{`class="heading-style-icon"`, `id="headingSelect" data-i18n-title="textStyle" data-i18n-aria-label="textStyle"`, `data-overflow-priority="100"`} {
+		if !strings.Contains(html, needle) {
+			t.Errorf("missing accessible style control: %s", needle)
+		}
+	}
+}
+
+func TestBlockSourceSurfaceUsesThemedLineDecorations(t *testing.T) {
+	for file, needles := range map[string][]string{
+		"frontend/src/live-editable-block.js":  {"if(event.detail>0)preserveSourceBlockPosition", "else {open();revealSourceReturnCaret(view);}"},
+		"frontend/src/source-return-panel.js":  {"root.dom.append(dom)", "root.requestMeasure", "pointermove"},
+		"frontend/src/editor-live-preview.js":  {"classes.add('cm-live-source-line')", "classes.add('cm-live-source-first')", "classes.add('cm-live-source-last')"},
+		"frontend/src/editor-live-preview.css": {".cm-line.cm-live-source-line", "background: var(--panel, #f5f8f6)", ".cm-live-source-first.cm-live-source-last"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range needles {
+			if !strings.Contains(string(data), needle) {
+				t.Errorf("%s missing %s", file, needle)
+			}
+		}
+	}
+}
+
+func TestCodeBodyCaretCannotDriftIntoHiddenFence(t *testing.T) {
+	for file, needles := range map[string][]string{
+		"frontend/vite.config.js":                        {"patchCodeMirrorNestedFocus(patchCodeMirrorDOMRange(code))"},
+		"frontend/scripts/codemirror-nested-focus.mjs":   {"next.contains(parent.ownerDocument.activeElement)", "this.children.some(retained => retained.dom == next)", "parent.insertBefore(child.dom, next)", "review the nested focus patch"},
+		"frontend/tests/browser-repeated-code-click.mjs": {"Input.imeSetComposition", "typing must never detach or blur the clicked editor", "AUDIT_DIST", "undo restores exact source"},
+		"frontend/src/editor-live-preview.js":            {"A collapsed caret in a projected code editor", "head < item.contentFrom || head > item.contentTo"},
+		"frontend/src/renderer.js":                       {"event.target.closest('.cm-live-inner, .cm-live-editable-block')"},
+		"frontend/tests/browser-code-click-input.mjs":    {"Input.imeSetComposition", "native selection handoff must not move input before opening fence"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range needles {
+			if !strings.Contains(string(data), needle) {
+				t.Errorf("%s missing %s", file, needle)
+			}
+		}
+	}
+}
+
+func TestCodeInputScrollIsScopedToEditingAndPreservesMeasuredBlocks(t *testing.T) {
+	for file, needles := range map[string][]string{
+		"frontend/src/live-editable-block.js":          {"holdsCodeInputScroll(active, options)", "sameFootnotePresentation(this.footnotes, other.footnotes)", "handleCodeTextInput(event, inner)", "clearNativeCodeInputScroll(editor)"},
+		"frontend/src/code-input-scroll.js":            {"event.isComposing", "view.state.readOnly", "'wheel','pointerdown','keydown','touchstart'", "root.destroyed||view.destroyed||!view.hasFocus"},
+		"frontend/tests/browser-code-input-scroll.mjs": {"trace.frames.every", "Input.imeSetComposition", "manual wheel scrolling remains available", "AUDIT_DIST"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range needles {
+			if !strings.Contains(string(data), needle) {
+				t.Errorf("%s missing %s", file, needle)
+			}
+		}
+	}
+}
+
+func TestProductionLogRegressionGuardsAreWired(t *testing.T) {
+	for file, needles := range map[string][]string{
+		"frontend/src/renderer.js":                  {"tokenizer: { lheading: largeHeadingTokenizer }", "openExternalSafely(url", "markdownLinkAttribute(href || '')"},
+		"frontend/scripts/codemirror-dom-range.mjs": {"if (reader.invalidRange)", "this.bounds = null;", "this.newSel = null;"},
+		"frontend/vite.config.js":                   {"patchCodeMirrorDOMRange(code)", "'@codemirror/view'"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, needle := range needles {
+			if !strings.Contains(string(data), needle) {
+				t.Errorf("%s missing %s", file, needle)
+			}
+		}
+	}
+}
 
 func TestDocumentAccessDeniedRecoveryIsLimitedToMacOSPermissions(t *testing.T) {
 	permissionError := fmt.Errorf("open document: %w", &os.PathError{Op: "open", Path: "/Users/demo/Documents/guide.md", Err: syscall.EPERM})
@@ -461,6 +665,13 @@ func TestUploadImageToPicGoUsesMultipartAndFallsBackOnlyAtTheFrontend(t *testing
 	if uploadedURL != "https://img.example.test/uploaded.png" {
 		t.Fatalf("unexpected uploaded URL: %q", uploadedURL)
 	}
+	trackedURL, err := app.UploadImageToPicGoWithProgress(documentPath, "assets/pasted.png", "synthetic-operation-1")
+	if err != nil || trackedURL != uploadedURL {
+		t.Fatalf("tracked upload changed transport: %q, %v", trackedURL, err)
+	}
+	if _, err := app.UploadImageToPicGoWithProgress(documentPath, filepath.Join(documentRoot, "outside.png"), "synthetic-operation-2"); err == nil {
+		t.Fatal("tracked uploads must retain the asset boundary")
+	}
 	if _, err := app.UploadImageToPicGo(documentPath, filepath.Join(documentRoot, "outside.png")); err == nil {
 		t.Fatal("an image outside the document assets folder must not be uploaded")
 	}
@@ -507,6 +718,49 @@ func TestPicGoCloudCredentialsStayOutOfPreferencesAndPKCEIsValid(t *testing.T) {
 	}
 	if loggedOut.Mode != imageUploadModeLocal || loggedOut.HasCloudToken {
 		t.Fatalf("logging out did not disable PicGo Cloud: %#v", loggedOut)
+	}
+}
+
+func TestPicGoCloudDelayedUnauthorizedCheckPreservesNewLogin(t *testing.T) {
+	app := testApp(t)
+	if err := app.writePicGoCloudToken("old-synthetic-token"); err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer old-synthetic-token" {
+			t.Error("the request must use its original credential snapshot")
+		}
+		close(started)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		http.Error(w, `{"message":"expired"}`, http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := app.checkPicGoCloudConnection(ctx, server.Client(), server.URL)
+		result <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("connection check did not start")
+	}
+	if err := app.writePicGoCloudToken("new-synthetic-token"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-result; err == nil {
+		t.Fatal("the expired request must still report failure")
+	}
+	if token := app.readPicGoCloudToken(); token != "new-synthetic-token" {
+		t.Fatal("a delayed connection failure cleared the newer login")
 	}
 }
 
@@ -710,6 +964,32 @@ func TestReadSaveAndRecent(t *testing.T) {
 	app.mu.RUnlock()
 	if !dirty {
 		t.Fatal("save cleared dirty state before frontend snapshot acknowledgement")
+	}
+}
+
+func TestLiveEditingSaveRetainsMarkdownSourceAndReceipts(t *testing.T) {
+	app := testApp(t)
+	filePath := filepath.Join(t.TempDir(), "live-editing.md")
+	original := "# 标题\n\n**粗体** 与 ==高亮==\n\n- [ ] 任务\n\n| A | B |\n| --- | --- |\n| 中文 | $x_i^2$ |\n\n```js\nconst x = 1;\n```\n\n![图片](assets/a.png)\n"
+	if err := os.WriteFile(filePath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.ReadFile(filePath); err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(original, "- [ ] 任务", "- [x] 任务", 1)
+	updated = strings.Replace(updated, "| 中文 |", "| **中文原位编辑**与转义\\|竖线 |", 1)
+	updated = strings.Replace(updated, "const x = 1;", "const x = 2; // 原位代码编辑", 1)
+	saved, err := app.SaveFile(filePath, updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disk, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Content != updated || string(disk) != updated {
+		t.Fatal("live editing must save exact Markdown, not rendered HTML or normalized table content")
 	}
 }
 
@@ -1681,6 +1961,50 @@ func TestFolderListingAndRecentRemoval(t *testing.T) {
 	}
 }
 
+func TestBulkRecentRemovalPreservesFilesFavoritesAndDrafts(t *testing.T) {
+	app := testApp(t)
+	root := t.TempDir()
+	paths := []string{filepath.Join(root, "one.md"), filepath.Join(root, "two.md"), filepath.Join(root, "keep.md")}
+	for _, path := range paths {
+		if err := os.WriteFile(path, []byte("original document"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := app.ReadFile(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := app.SetRecentPinned(paths[0], true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.AddFavorite(paths[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.updatePreferences(func(prefs *Preferences) { prefs.DraftFiles = []string{paths[1]} }); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths[:2] {
+		if _, err := app.RemoveRecent(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prefs, err := app.GetPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prefs.RecentFiles) != 1 || prefs.RecentFiles[0] != paths[2] || len(prefs.PinnedRecentFiles) != 0 {
+		t.Fatalf("recent records: %#v", prefs.RecentFiles)
+	}
+	if len(prefs.FavoriteFiles) != 1 || prefs.FavoriteFiles[0] != paths[0] || len(prefs.DraftFiles) != 1 || prefs.DraftFiles[0] != paths[1] {
+		t.Fatal("favorites or drafts changed")
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != "original document" {
+			t.Fatalf("original file changed: %v", err)
+		}
+	}
+}
+
 func TestLanguagePersistenceAndArgumentDetection(t *testing.T) {
 	app := testApp(t)
 	markerPath := app.languageSelectionMarkerPath()
@@ -2393,6 +2717,491 @@ func TestOpenReferenceDocumentMaterialisesAllBundledExamples(t *testing.T) {
 	}
 	if len(prefs.RecentFiles) != 0 || prefs.LastFile != "" {
 		t.Fatalf("built-in references entered Recent: recent=%#v last=%q", prefs.RecentFiles, prefs.LastFile)
+	}
+}
+
+func TestBundledReferencesIncludeNewTemplateMarkers(t *testing.T) {
+	for _, tc := range []struct {
+		kind  string
+		count int
+		want  string
+	}{
+		{"charts", 4, "**41 种图表**"},
+		{"formulas", 16, "**95 种公式**"},
+	} {
+		_, content, err := referenceDocument(tc.kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(content, tc.want) || strings.Count(content, `<span class="reference-new-badge">NEW</span>`) != tc.count || strings.Contains(content, "本次新增") || strings.Contains(content, "新增 / New") {
+			t.Fatalf("%s embedded reference is stale or missing new markers", tc.kind)
+		}
+	}
+}
+
+func TestBundledHistogramIncludesReadingDurationUnits(t *testing.T) {
+	_, content, err := referenceDocument("charts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(content, `"name": "阅读时长（分钟）"`) || !strings.Contains(content, `"nameLocation": "middle"`) {
+		t.Fatal("embedded histogram example must include the horizontal-axis units")
+	}
+}
+
+func TestNestedMediaEditsRetainDocumentSessionSafety(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, guard := range []string{
+		"resolveEditableTable(view, table)",
+		"findEditableTableAt(source, selection.head) || findEditableTableAt(source, selection.from)",
+		"insertionRange: {from:selection.from,to:selection.to}",
+		"tableInsertion(tableDesignerState.source,from,to,markdown)",
+		"codeEditor.dispatch({...edit,annotations:isolateHistory.of('full'),scrollIntoView:true})",
+		"!state.editing || codeEditor.state.readOnly || tableDesignerState.editor !== codeEditor",
+		"codeEditor !== existing.editor || !state.editing || state.documentSession !== session || state.currentFile?.path !== path",
+		"resolveEditableOwner(view, formula, true)",
+		"resolveEditableOwner(view, diagram, true)",
+		"codeEditor === owner.view && state.editing && state.documentSession === session && state.currentFile?.path === path",
+		"projectionPrefix:owner.projectionPrefix",
+		"tableDesignerState.editor !== codeEditor",
+		"tableDesignerState.documentSession !== state.documentSession",
+		"tableDesignerState.path !== state.currentFile?.path",
+		"tableDesignerState.source !== codeEditor.state.doc.toString()",
+	} {
+		if !strings.Contains(source, guard) {
+			t.Fatalf("table editor is missing stale-target guard: %s", guard)
+		}
+	}
+}
+
+func TestFootnoteReferenceRenderingRetainsSanitizationAndLinkSnapshotGuards(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, guard := range []string{
+		"renderPreparedFootnotes(prepared, marked, t('footnotes'))",
+		"DOMPurify.sanitize(renderPreparedFootnotes(prepared, marked, t('footnotes'))",
+		"html = DOMPurify.sanitize(renderedMath.html, { ADD_ATTR: ['target', 'rel', 'data-md-color'] })",
+		"context.doc !== codeEditor.state.doc || context.session !== state.documentSession",
+		"annotations: isolateHistory.of('full')",
+	} {
+		if !strings.Contains(source, guard) {
+			t.Fatalf("footnote reference path lost safety guard: %s", guard)
+		}
+	}
+}
+
+func TestFootnoteReferenceConsumersShareOneDefinitionIndex(t *testing.T) {
+	for _, path := range []string{"frontend/src/portable-images.js", "frontend/src/link-editing.js", "frontend/src/footnote-rendering.js"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "markdownReferenceDefinitions") || !strings.Contains(string(data), "./reference-definitions.js") {
+			t.Fatalf("reference consumer lost the shared definition index: %s", path)
+		}
+	}
+}
+
+func TestPortableImagesIncludeProjectedFootnotes(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/portable-images.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"function documentImageRanges(source)", "footnoteProjection(source,note)", "from:fieldPosition(range,item.from)", "const ranges = documentImageRanges(source)", "for (const item of documentImageRanges(source))"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("portable/save-as image traversal lost guard: %s", guard)
+		}
+	}
+}
+
+func TestNestedHistoryRestoresOnlyLostEditorFocus(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/live-editable-block.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"runEditableHistory(view, command)", "target.dom.contains(doc.activeElement)", "handled && hadFocus && !target.destroyed", "doc.activeElement === doc.body"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("nested history focus guard missing: %s", guard)
+		}
+	}
+}
+
+func TestEditableBoundaryNavigationRetainsInputGuards(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/live-editable-block.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, guard := range []string{"!controller.valid() || inner.composing", "inner.state.selection.ranges.length !== 1 || !selection.empty", "editableBoundaryTarget({ length: view.state.doc.length"} {
+		if !strings.Contains(source, guard) {
+			t.Fatalf("boundary navigation missing guard: %s", guard)
+		}
+	}
+}
+
+func TestCrossBlockInputUsesActualTextAndRetainsCompositionGuards(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editor-live-preview.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"handleCrossBlockTextInput", "view.composing || event.isComposing", "!event.cancelable", "view.state.replaceSelection(event.data)", "transaction.annotation(editableForwardedChange)", "transaction.annotation(editableProjectionSync)"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("cross-block input is missing guard: %s", guard)
+		}
+	}
+	// A change-only dispatch maps the old placeholder selection onto the new
+	// text, causing every later keystroke to replace it. Keep caret collapse.
+	if strings.Contains(string(data), "changes: { from: selection.from, to: selection.to, insert: event.data }") {
+		t.Fatal("single-range text input must collapse the replacement selection")
+	}
+}
+
+func TestRichPasteIsCapturedAndScopedToItsEditor(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"addEventListener('paste', handleEditorPaste, true)", "resolveEditorPasteTarget(codeEditor, event.target)", "destination.plainText", "codeEditor.state.readOnly", "userEvent: 'input.paste', annotations: isolateHistory.of('full')"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("clipboard routing is missing guard: %s", guard)
+		}
+	}
+}
+
+func TestImageOverlayActionsRetainSessionAndHistoryGuards(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/embedded-image-preview.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"field.session !== this.session", "const current = this.current(view); if (!current) return;", "annotations: isolateHistory.of('full')", "toolbar.querySelectorAll(':scope > button')", "const controlRoot = group.row ? toolbar.querySelectorAll('.cm-image-item-tools')[index] : toolbar"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("image overlay action is missing ownership/routing guard: %s", guard)
+		}
+	}
+}
+
+func TestCrossBlockDragRetainsOwnershipAndLifecycleGuards(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editable-drag-selection.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"resolveEditableOwner(view)?.view !== view", "view.state.doc === original", "!view.composing && !view.state.readOnly", "initial.from && start.position <= initial.to", "removeEventListener('mousemove', move, true)", "removeEventListener('mouseup', up, true)", "removeEventListener('blur', cancel)", "removeEventListener('mousedown', down, true)", "cancelAnimationFrame(frame)", "removeEventListener('keydown', key, true)"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("cross-block drag is missing guard: %s", guard)
+		}
+	}
+}
+
+func TestQuotedHTMLKeepsLosslessEditableProjection(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/html-block-editing.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"quotedHtmlProjection", "composeProjections(local,projection)", "protectedLocal", "fieldOffset(field,range.from)"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("quoted HTML projection guard missing: %s", guard)
+		}
+	}
+	data, err = os.ReadFile("frontend/src/editor-live-preview.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "body.projection?.text") || !strings.Contains(string(data), "project(range.projection||fieldProjection") {
+		t.Fatal("nested HTML fields must compose their existing projection, not raw container prefixes")
+	}
+}
+
+func TestEditorHeaderKeepsPrimaryActionsAvailable(t *testing.T) {
+	data, err := os.ReadFile("frontend/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start := strings.Index(source, `<div class="editor-header">`)
+	end := strings.Index(source, `<div id="editorFormatBar"`)
+	if start < 0 || end <= start {
+		t.Fatal("editor header missing")
+	}
+	for _, id := range []string{"renameDocumentButton", "editorDocumentLocation", "editorSaveState", "saveAsButton", "restoreLivePreviewButton", "exitEditButton", "documentHistoryButton"} {
+		if strings.Count(source[start:end], `id="`+id+`"`) != 1 {
+			t.Fatalf("editor action missing or duplicated: %s", id)
+		}
+	}
+}
+
+func TestEditorSplitResizeDoesNotReplaceDocumentState(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start := strings.Index(source, "function editorSplitBounds(")
+	end := strings.Index(source, "function openAbout()")
+	if start < 0 || end <= start {
+		t.Fatal("split sizing functions missing")
+	}
+	for _, forbidden := range []string{"dispatch(", "setState(", "replaceEditorContent(", "saveFile("} {
+		if strings.Contains(source[start:end], forbidden) {
+			t.Fatalf("pane resizing must not rewrite document state: %s", forbidden)
+		}
+	}
+}
+
+func TestSourceReturnPanelRejectsStaleOwnersAndStopsDelayedScroll(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/source-return-panel.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"resolveEditableOwner(view)?.view!==root", "candidates().includes(target)", "root.state.doc===expectedDoc", "root.state.selection.eq(expectedSelection)", "attempt<3", "removeEventListener(type,finish,true)", "sources.clear()"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("source-return lifecycle guard missing: %s", guard)
+		}
+	}
+}
+
+func TestFootnoteBlockDropsPreserveDestinationParagraphsAndProjection(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editable-text-drag.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"'footnote-definition'", "fieldOffset(destination,position)", "projection:block.projection", "content = normalize(content)"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("footnote drop guard missing: %s", guard)
+		}
+	}
+	data, err = os.ReadFile("frontend/src/live-editable-block.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "owner?.projectionPrefix") {
+		t.Fatal("nested drop normalization must include ancestor projection prefixes")
+	}
+}
+
+func TestEditableTextDropKeepsDocumentIdentityAndExternalFileRouting(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editable-text-drag.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"drag.doc !== view.state.doc", "drag.invalid = true", "matchesTextDrag(event, drag)", "resolveEditableOwner(view)?.view !== view", "isolateHistory.of('full')", "pending?.doc === view.state.doc", "source.inner.focus()", "removeEventListener('mousedown',down,true)", "removeEventListener('mouseup',up,true)"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("text drag is missing guard: %s", guard)
+		}
+	}
+	renderer, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []string{"dragenter", "dragleave", "drop"} {
+		pattern := regexp.MustCompile(`(?s)document\.addEventListener\('` + event + `', (?:async )?event => \{\s*if \(!isFileDrag\(event\)\) return;`)
+		if !pattern.Match(renderer) {
+			t.Fatalf("file drag routing must ignore text before %s", event)
+		}
+	}
+}
+
+func TestLiveCodeFenceProtectionIsWiredToAuthoritativeTransactions(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editor-live-preview.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"codeFenceRepairs(tr, renderedEditableBlocks(tr.startState))", "[tr, {changes, sequential:true}]"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("code fence protection is missing: %s", guard)
+		}
+	}
+}
+
+func TestWholeBlockDropUsesPostRemovalContainerContext(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editable-text-drag.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "blockDropPrefix(remaining, at)") {
+		t.Fatal("whole-block drop must resolve the container after source removal")
+	}
+}
+
+func TestProjectedCodeEditingUsesMappedSourcePositions(t *testing.T) {
+	for file, guards := range map[string][]string{
+		"frontend/src/live-editable-block.js": {"fieldPosition(range,from)", "fieldInsertion(range,text.toString() + suffix)", "changedFieldPosition(range,changes,sourceChanges,offset)"},
+		"frontend/src/editor-live-preview.js": {"codeProjection(source,pieces", "projection:mapProjection(item.projection,restore)", "projection:project(item.projection)", "composeProjections(projection,parentProjection)"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, guard := range guards {
+			if !strings.Contains(string(data), guard) {
+				t.Fatalf("%s must retain projected-code mapping: %s", file, guard)
+			}
+		}
+	}
+}
+
+func TestIndentedCodeKeepsProjectionAndFocusRecovery(t *testing.T) {
+	for file, guards := range map[string][]string{
+		"frontend/src/editor-live-preview.js": {"indentedCodeProjection(source,node)", "if (to <= node.from) return", "indented:true"},
+		"frontend/src/live-editable-block.js": {"const wasFocused = inner.hasFocus", "wasFocused && inner.destroyed && owner && !owner.destroyed", "owner.focus(); focusEditableBlock(owner)"},
+		"frontend/src/code-fence-editing.js":  {"block.indented"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, guard := range guards {
+			if !strings.Contains(string(data), guard) {
+				t.Fatalf("%s is missing indented-code protection: %s", file, guard)
+			}
+		}
+	}
+}
+
+func TestContainerTableEditingPreservesSourcePrefixes(t *testing.T) {
+	for file, guards := range map[string][]string{
+		"frontend/src/renderer.js":            {"serializeTableReplacement(tableDesignerState.model,tableDesignerState.range)", "documentSession !== state.documentSession"},
+		"frontend/src/editor-live-preview.js": {"tableProjection(source,node)", "fieldPosition({projection},cell.from)", "const from=layout?.hasWidthMetadata?layout.from:node.from"},
+		"frontend/src/live-editable-block.js": {"this.item.renderSource ?? this.item.raw", "applyTablePresentation(root,this.item)"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, guard := range guards {
+			if !strings.Contains(string(data), guard) {
+				t.Fatalf("%s is missing container-table protection: %s", file, guard)
+			}
+		}
+	}
+}
+
+func TestLiveContainerHighlightingIsPresentationScoped(t *testing.T) {
+	renderer, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css, err := os.ReadFile("frontend/src/editor-live-preview.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"tag: tags.quote, class: 'cm-source-quote'", "tag: tags.list, class: 'cm-source-list'"} {
+		if !strings.Contains(string(renderer), guard) {
+			t.Fatalf("missing scoped syntax style: %s", guard)
+		}
+	}
+	for _, guard := range []string{".cm-source-quote { color: var(--syntax-quote); font-style: italic; }", ".cm-source-list { color: var(--syntax-list); font-weight: 700; }", ".cm-editor.cm-live-preview :is(.cm-source-quote, .cm-source-list)", "--live-quote-depth", "--live-list-depth"} {
+		if !strings.Contains(string(css), guard) {
+			t.Fatalf("missing container presentation guard: %s", guard)
+		}
+	}
+}
+
+func TestTableWhitespaceRenderingDoesNotRewriteDocuments(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "stripTableWidthMetadata(tableRenderSource(frontmatterRenderSource(content)))") != 2 {
+		t.Fatal("reading and export must both normalize table delimiters only in rendering input")
+	}
+	if !strings.Contains(string(data), "extensions: [tableWhitespace]") {
+		t.Fatal("editor language must share the whitespace-aware table parser")
+	}
+}
+
+func TestTableMediaDialogChecksStructureBeforeCommit(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/renderer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start := strings.Index(source, "function insertGeneratedFormula()")
+	if start < 0 {
+		t.Fatal("formula commit entry is missing")
+	}
+	end := strings.Index(source[start:], "const diagramWizardState")
+	if end < 0 {
+		t.Fatal("formula commit entry is missing")
+	}
+	commit := source[start : start+end]
+	guard := strings.Index(commit, "tableFormulaConstraint(source, range, output)")
+	write := strings.Index(commit, "codeEditor.dispatch({")
+	if guard < 0 || write < 0 || guard >= write || !strings.Contains(commit, "if (tableConstraint) { showToast(t(tableConstraint), 'warning'); return; }") {
+		t.Fatal("table formula validation must preserve the draft before committing")
+	}
+}
+
+func TestNestedImageReferencesShareAuthoritativeDefinitions(t *testing.T) {
+	for file, guards := range map[string][]string{
+		"frontend/src/live-editable-block.js":    {"this.references === other.references", "inheritedImageDefinitions.of(this.references)", "updateImageDefinitions.of(this.widget.references)"},
+		"frontend/src/embedded-image-preview.js": {"imageDefinitionsFor(transaction.startState) !== imageDefinitionsFor(transaction.state)", "imageDefinitionsFor(this.view.state)"},
+	} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, guard := range guards {
+			if !strings.Contains(string(data), guard) {
+				t.Fatalf("%s must retain shared image definitions: %s", file, guard)
+			}
+		}
+	}
+}
+
+func TestCellImageLayoutRetainsOuterCellOwnership(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/live-editable-block.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"for (const row of table.rows) for (const cell of row.cells)", "singleLineMedia.of(isTable)"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("table image ownership guard missing: %s", guard)
+		}
+	}
+}
+
+func TestImageGroupControlsRetainExplicitTargetAndViewportBounds(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/embedded-image-preview.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"panel.hidden = i !== index", "picker.onchange = () => selectImageControls", "root.classList.toggle('is-tools-offscreen'", "Math.min(innerWidth - 8"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("image toolbar guard missing: %s", guard)
+		}
+	}
+	styles, err := os.ReadFile("frontend/src/styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, selector := range []string{".cm-embedded-image > .cm-image-tools {", ".cm-embedded-image:focus-within > .cm-image-tools {"} {
+		_, after, found := strings.Cut(string(styles), selector)
+		if !found {
+			t.Fatalf("image control style missing: %s", selector)
+		}
+		body, _, _ := strings.Cut(after, "}")
+		if strings.Contains(body, "transform:") || strings.Contains(body, "translate:") {
+			t.Fatalf("image controls must not move during pointer entry: %s", selector)
+		}
+	}
+}
+
+func TestCrossBlockReplacementPreservesMappedCodeStructure(t *testing.T) {
+	data, err := os.ReadFile("frontend/src/editable-cross-selection.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guard := range []string{"block.projection?.headers", "fieldInsertion(field,", "changes.push({from:cursor", "return {changes,selection:"} {
+		if !strings.Contains(string(data), guard) {
+			t.Fatalf("cross-block code replacement must retain structural mapping: %s", guard)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import {isolateHistory} from '@codemirror/commands';
 
 const source = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const saveSource = source.slice(source.indexOf('async function saveDocument('), source.indexOf('function exportPreviewContainer('));
@@ -180,6 +181,19 @@ test('AI replacement rejects matching text from another document session', () =>
   assert.equal(context.els.aiRewriteStatus.textContent, 'aiSelectionChanged');
 });
 
+test('AI review settings response cannot reopen a stale document or editor', async () => {
+  for(const change of ['session','editor','exit'])for(const fail of [false,true]){
+    const pending=deferred();const state={documentSession:1,editing:true};
+    const context=vm.createContext({state,codeEditor:{},window:{quilliteMarkdown:{getAISettings:()=>pending.promise}}});
+    vm.runInContext(source.slice(source.indexOf('async function openAIDocumentReview('),source.indexOf('function cancelActiveAIDocumentReview(')),context);
+    const opening=context.openAIDocumentReview();
+    if(change==='session')state.documentSession++;else if(change==='editor')context.codeEditor={};else state.editing=false;
+    if(fail)pending.reject(new Error('Synthetic settings failure'));else pending.resolve({hasApiKey:true});
+    // UI dependencies intentionally absent: any stale continuation would throw.
+    await opening;
+  }
+});
+
 test('AI generation inserts its result at the captured cursor position', () => {
   let transaction;
   let closed = false;
@@ -188,6 +202,7 @@ test('AI generation inserts its result at the captured cursor position', () => {
     state: { documentSession: 3, editing: true },
     aiRewriteSelection: { documentSession: 3, from: 5, to: 5, markdown: '', mode: 'insert' },
     aiRewriteDiffSegments: [],
+    isolateHistory,
     codeEditor: { state: { doc: { sliceString: () => '', length: 10 } }, dispatch: value => { transaction = value; } },
     els: { aiRewriteStatus: {}, aiResultText: { value: 'generated text' } },
     changedAITextSegments: () => [], applyAITextDiff: () => '',
@@ -200,6 +215,7 @@ test('AI generation inserts its result at the captured cursor position', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(transaction.changes)), { from: 5, to: 5, insert: 'generated text' });
   assert.deepEqual(JSON.parse(JSON.stringify(transaction.selection)), { anchor: 19 });
   assert.equal(transaction.userEvent, 'input.ai');
+  assert.equal(transaction.annotations.value, 'full');
   assert.equal(closed, true);
   assert.deepEqual(JSON.parse(JSON.stringify(toast)), ['aiContentInserted', 'success', 3600]);
 });
