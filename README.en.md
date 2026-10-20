@@ -109,13 +109,27 @@ Preview builds on CommonMark/GFM with extensions such as highlights and footnote
 
 ## Screenshots
 
+Actual V3.0.0 interface captured with sample documents. Images follow the browser's light/dark preference.
+
+Live-rendered editing: type directly in rendered prose, lists and tables.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/en/dark/04-live-editor.png">
+  <img src="screenshots/en/04-live-editor.png" alt="V3.0.0 live editing with full-width content, an in-place table and the Live editing / Source switch">
+</picture>
+
 | Home | Reader |
 |---|---|
-| ![Home](screenshots/en/01-home.png) | ![Reader](screenshots/en/02-reader.png) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/en/dark/01-home.png"><img src="screenshots/en/01-home.png" alt="V3.0.0 home with chart, equation and formatting examples"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/en/dark/02-reader.png"><img src="screenshots/en/02-reader.png" alt="V3.0.0 reader with a searchable document outline"></picture> |
 
-![Editing with split preview](screenshots/en/03-split-editor.png)
+Source editing with split preview: clicking Source restores the preview, and either pane orientation is available.
 
-Screenshots illustrate the layout; see Quick start above for current mode and preview behavior.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/en/dark/03-split-editor.png">
+  <img src="screenshots/en/03-split-editor.png" alt="V3.0.0 Markdown source editing beside an independent reading preview">
+</picture>
+
+See Quick start for mode and preview behavior. The [full screenshot gallery and capture notes](screenshots/README.md) include Chinese/English and light/dark variants.
 
 ## Development
 

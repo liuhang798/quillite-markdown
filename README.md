@@ -109,13 +109,27 @@
 
 ## 项目截图
 
+V3.0.0 实际界面，使用示例文档拍摄；截图会随浏览器的明暗偏好选择对应版本。
+
+即时渲染编辑：直接在排版后的正文、列表和表格中输入。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/dark/04-live-editor.png">
+  <img src="screenshots/04-live-editor.png" alt="V3.0.0 即时渲染编辑：全宽正文、原位表格与即时渲染／源码切换器">
+</picture>
+
 | 首页 | 阅读界面 |
 |---|---|
-| ![首页](screenshots/01-home.png) | ![阅读界面](screenshots/02-reader.png) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/dark/01-home.png"><img src="screenshots/01-home.png" alt="V3.0.0 首页与图表、公式、格式范例入口"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="screenshots/dark/02-reader.png"><img src="screenshots/02-reader.png" alt="V3.0.0 阅读界面与可搜索标题目录"></picture> |
 
-![编辑与分栏预览](screenshots/03-split-editor.png)
+源码编辑与分栏预览：点击“源码”自动恢复分栏，也可交换左右位置。
 
-截图展示界面布局；当前模式联动与按钮操作见上方“快速上手”。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/dark/03-split-editor.png">
+  <img src="screenshots/03-split-editor.png" alt="V3.0.0 源码编辑与独立阅读预览分栏">
+</picture>
+
+模式联动与按钮操作见“快速上手”；[完整截图与拍摄说明](screenshots/README.md)包含中英文和明暗主题版本。
 
 ## 本地开发
 
