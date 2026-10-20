@@ -21,9 +21,10 @@ try{
   await open();assert.equal(await app.locator('#formulaDialogTitle').textContent(),'选择并生成公式');await app.locator('#cancelFormula').click();assert.equal((await read()).doc,source);
   await open();await app.locator('[data-formula-mode="inline"]').click();const markdown=(await app.locator('#formulaMarkdownSource').inputValue()).trim();assert.equal(markdown,'$'+raw+'$');await shot(kind+'-02-dialog');
   await app.locator('#insertFormula').click();await app.locator('#formulaDialog').waitFor({state:'hidden'});const expected=source.replace(raw,markdown);assert.equal((await read()).doc,expected);
-  const formula=editor.locator('.cm-formula-render').first();await formula.waitFor({state:'visible'});await shot(kind+'-03-converted');
+  // Also guards against inherited list indents collapsing the formula hit box.
+  const formula=app.locator('#markdownEditor .cm-formula-render:visible').first();await formula.waitFor({state:'visible'});await shot(kind+'-03-converted');
   // An existing formula's untouched save must remain a genuine no-op.
-  await formula.focus();await page.keyboard.press('Enter');await app.locator('#formulaDialog').waitFor({state:'visible'});await app.locator('#insertFormula').click();await app.locator('#formulaDialog').waitFor({state:'hidden'});
+  await formula.click();await page.keyboard.press('Enter');await app.locator('#formulaDialog').waitFor({state:'visible'});await app.locator('#insertFormula').click();await app.locator('#formulaDialog').waitFor({state:'hidden'});
   await content.focus();await page.keyboard.press('Control+z');assert.equal((await read()).doc,source,kind+' one undo after no-op');await page.keyboard.press('Control+Shift+KeyZ');assert.equal((await read()).doc,expected);
   // Ctrl+End inside a table intentionally stays in that cell. Explicitly click
   // the following paragraph to verify leaving the nested field and continuing.

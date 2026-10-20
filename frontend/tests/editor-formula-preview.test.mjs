@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { EditorState, Compartment } from '@codemirror/state';
 import { history, undo, redo, undoDepth } from '@codemirror/commands';
 import { editorFormulaField, formulaPreviewContext, toggleFormulaSource, refreshFormulaPreviews, setFormulaDisplay,
-  editSelectedEquation, deleteRenderedEquation, editorFormulaItems, FORMULA_PREVIEW_DOCUMENT_LIMIT, formulaPreviewPhrases } from '../src/editor-formula-preview.js';
+  editSelectedEquation, deleteRenderedEquation, editorFormulaItems, hydrateFormulaItems, hydrateFormulaPreviews, FORMULA_PREVIEW_DOCUMENT_LIMIT, formulaPreviewPhrases } from '../src/editor-formula-preview.js';
 const create = (doc, context = {}) => EditorState.create({ doc, extensions: [history(), editorFormulaField, formulaPreviewContext.of(context)] });
 function fakeView(state) { const view = { state, focus() {} }; view.dispatch = spec => { view.state = spec.state || view.state.update(spec).state; }; return view; }
 
@@ -20,6 +20,7 @@ test('formula actions stay attached to each equation without the duplicate float
   assert.match(source, /root\.ondblclick =/);
   assert.match(source, /event\.key === 'Enter'/);
   assert.match(styles, /\.cm-formula-tools \{[^}]*display: none;/);
+  assert.match(styles, /\.cm-formula-render \{[^}]*text-indent: 0;/);
   assert.match(styles, /\.cm-formula-render:hover \.cm-formula-tools, \.cm-formula-render:focus-within \.cm-formula-tools \{ display: inline-flex;/);
 });
 
@@ -96,9 +97,13 @@ test('language reconfiguration preserves content, open source and undo', () => {
   assert.equal(state.doc.toString(), '$x$');
   assert.equal(undoDepth(state), 0);
 });
-test('readonly, source-only and large documents preserve source and cannot delete widgets', () => {
+test('readonly/source-only preserve source; large documents defer scanning instead of truncating', () => {
   const source = 'x'.repeat(FORMULA_PREVIEW_DOCUMENT_LIMIT) + ' $x$';
   assert.equal(create(source).field(editorFormulaField).decorations.size, 0);
+  const items = editorFormulaItems(source);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].html, undefined);
+  assert.match(hydrateFormulaItems(items, [{from: 0, to: source.length}])[0].html, /katex/);
   const state = create('$x$', { enabled: false });
   assert.equal(state.field(editorFormulaField).atoms.size, 0);
   const view = fakeView(EditorState.create({ doc: '$x$', extensions: [editorFormulaField, EditorState.readOnly.of(true)] }));
@@ -108,20 +113,49 @@ test('readonly, source-only and large documents preserve source and cannot delet
 test('large embedded images do not disable formulas before or after the image', () => {
   const payload = 'A'.repeat(FORMULA_PREVIEW_DOCUMENT_LIMIT);
   const source = `$x$\n\n![photo](data:image/png;base64,${payload})\n\n$y$`;
-  const state = create(source), field = state.field(editorFormulaField);
+  const state = create(source);
+  const items = editorFormulaItems(source);
+  const rendered = hydrateFormulaItems(items, [{from:0,to:source.length}]);
+  const field = state.update({effects:refreshFormulaPreviews.of({doc:state.doc,items:rendered})}).state.field(editorFormulaField);
   assert.equal(field.items.length, 2);
   assert.deepEqual(field.items.map(item => item.raw), ['$x$', '$y$']);
   assert.equal(field.atoms.size, 2);
   for (const item of field.items) assert.equal(state.doc.sliceString(item.from, item.to), item.raw);
   assert.equal(state.doc.toString(), source);
 });
-test('quote/list/table formulas keep source offsets and bounded previews', () => {
+test('quote/list/table formulas keep source offsets; formula count is not truncated', () => {
   for (const source of ['> $$\n> x\n> $$', '- $x$\n- $y$', '| $x$ | $y$ |\n| --- | --- |']) {
     const state = create(source);
     for (const item of state.field(editorFormulaField).items) assert.equal(state.doc.sliceString(item.from, item.to), item.raw);
     assert.equal(state.doc.toString(), source);
   }
-  assert.equal(create(Array(300).fill('$x$').join(' ')).field(editorFormulaField).items.length, 256);
+  const field = create(Array(300).fill('$x$').join(' ')).field(editorFormulaField);
+  assert.equal(field.items.length, 300);
+  assert.equal(field.atoms.size, 0);
+  assert.ok(hydrateFormulaItems(field.items, [{from:1190,to:1200}]).some(item=>item.from===1196));
+});
+
+test('deferred hydration rejects stale documents and preserves source, source-open and undo', () => {
+  const source = Array(300).fill('$x$').join(' ');
+  let state = create(source);
+  const doc = state.doc;
+  const items = hydrateFormulaItems(state.field(editorFormulaField).items, [{from:1190,to:1200}]);
+  state = state.update({effects:hydrateFormulaPreviews.of({doc,items})}).state;
+  assert.ok(state.field(editorFormulaField).atoms.size);
+  state = state.update({effects:toggleFormulaSource.of({from:1196,to:1199})}).state;
+  assert.equal(state.field(editorFormulaField).items.at(-1).open,true);
+  assert.equal(state.doc.toString(),source);
+  assert.equal(undoDepth(state),0);
+  state = state.update({changes:{from:0,insert:'prefix '}}).state;
+  state = state.update({effects:hydrateFormulaPreviews.of({doc,items})}).state;
+  assert.equal(state.field(editorFormulaField).items.at(-1).from,1203);
+});
+
+test('large full-context scan beyond 2MB excludes fenced code, frontmatter and HTML', () => {
+  const source = '---\nvalue: $hidden$\n---\n\n```text\n'+'x'.repeat(2*1024*1024)+' $code$\n```\n\n<div>\n$html$\n</div>\n\n$$\nx^2\n$$';
+  const items = editorFormulaItems(source);
+  assert.deepEqual(items.map(item=>item.raw),['$$\nx^2\n$$']);
+  assert.equal(source.slice(items[0].from,items[0].to),items[0].raw);
 });
 
 test('deep Markdown initialization, refresh and display toggles retain editable source', () => {

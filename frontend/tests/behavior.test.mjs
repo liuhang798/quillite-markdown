@@ -262,7 +262,7 @@ test('software font presets update the interface and persist through preferences
   assert.match(renderer, /'\.cm-scroller': \{ overflow: 'auto', fontFamily: 'var\(--body-font-family, var\(--app-font-family\)\)' \}/);
   assert.match(renderer, /tag: tags\.monospace,[^\n]*fontFamily: '"Cascadia Code", Consolas, monospace'/);
   assert.match(styles, /\.plain-text \{[^}]*font-family: "Cascadia Code"/);
-  assert.match(styles, /\.markdown-body code:not\(\.hljs\) \{[^}]*font-family: "Cascadia Code"/);
+  assert.match(styles, /\.markdown-body :not\(pre\) > code:not\(\.hljs\) \{[^}]*font-family: "Cascadia Code"/);
 });
 
 test('font changes remeasure the existing editor without resetting its state or rendering a hidden preview', async () => {

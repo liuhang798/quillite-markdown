@@ -128,9 +128,9 @@ function details(source, from, to, expression, displayMode) {
   };
 }
 
-export function scanMarkdownFormulas(markdown = '') {
+export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_SCAN_DOCUMENT_LIMIT, maxTokens = SCAN_TOKEN_LIMIT } = {}) {
   const source = String(markdown);
-  if (source.length >= FORMULA_SCAN_DOCUMENT_LIMIT || exceedsContainerBudget(source)) return [];
+  if (source.length >= maxSourceLength || exceedsContainerBudget(source)) return [];
   if (!source.includes('$') && !source.includes('\\(') && !source.includes('\\[')) return [];
   const formulas = [], root = originalView(maskFrontmatter(source));
   let tokenCount = 0;
@@ -139,7 +139,7 @@ export function scanMarkdownFormulas(markdown = '') {
     if (depth > SCAN_DEPTH_LIMIT) throw new Error('FORMULA_SCAN_DEPTH');
     let cursor = 0;
     for (const token of tokens || []) {
-      if (++tokenCount > SCAN_TOKEN_LIMIT) throw new Error('FORMULA_SCAN_BUDGET');
+      if (++tokenCount > maxTokens) throw new Error('FORMULA_SCAN_BUDGET');
       if (!token.raw) continue;
       const start = view.text.indexOf(token.raw, cursor);
       if (start < 0) return;

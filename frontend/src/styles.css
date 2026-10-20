@@ -452,7 +452,7 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
   .document-summary-progress-track { grid-column: 1 / -1; grid-row: 2; }
 }
 
-.markdown-body { font-family: var(--body-font-family, var(--app-font-family)); font-size: calc(17px * var(--font-scale)); line-height: 1.86; letter-spacing: .02em; user-select: text; color: var(--text); overflow-wrap: break-word; }
+.markdown-body { font-family: var(--body-font-family, var(--app-font-family)); font-size: calc(17px * var(--font-scale)); line-height: var(--body-line-height, 1.86); letter-spacing: .02em; user-select: text; color: var(--text); overflow-wrap: break-word; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { font-family: inherit; scroll-margin-top: 24px; line-height: 1.35; color: var(--text); letter-spacing: -.025em; }
 .markdown-body h1 { font-size: calc(38px * var(--font-scale)); font-weight: 720; margin: 0 0 30px; }
 .markdown-body h2 { font-size: calc(25px * var(--font-scale)); font-weight: 690; margin: 2.2em 0 .8em; padding-bottom: .45em; border-bottom: 1px solid var(--line); }
@@ -569,7 +569,7 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .markdown-body th { background: var(--panel); font-weight: 650; }
 .markdown-table-scroll { max-width: 100%; margin: 1.8em 0; overflow-x: auto; border-radius: 8px; scrollbar-width: thin; }
 .markdown-table-scroll table { margin: 0; }
-.markdown-body code:not(.hljs) { font-family: "Cascadia Code", Consolas, monospace; background: transparent; color: var(--accent-strong); border-radius: 0; padding: 0; font-size: .86em; }
+.markdown-body :not(pre) > code:not(.hljs) { font-family: "Cascadia Code", Consolas, monospace; background: color-mix(in srgb, var(--text) 8%, var(--paper)); color: var(--text); border-radius: 4px; padding: 1px 3px; font-size: .92em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .markdown-body .math-inline { display: inline-block; max-width: 100%; vertical-align: -.08em; }
 .markdown-body .math-block { max-width: 100%; margin: 1.7em 0; padding: .6em 1em; overflow-x: auto; overflow-y: hidden; text-align: center; scrollbar-width: thin; }
 .markdown-body .math-block .katex-display { margin: 0; }
@@ -730,7 +730,8 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .editable-preview-formula { border-radius: 5px; cursor: pointer; transition: background .15s ease, box-shadow .15s ease; }
 .editable-preview-formula:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); }
 #markdownEditor .cm-content { cursor: text; user-select: text !important; pointer-events: auto; }
-.cm-formula-render { position: relative; box-sizing: border-box; font-size: calc(16px * var(--font-scale)); color: var(--text); border-radius: 4px; outline-offset: 2px; cursor: pointer; }
+/* List hanging indents belong to the outer line, not the equation's own box. */
+.cm-formula-render { position: relative; box-sizing: border-box; font-size: calc(16px * var(--font-scale)); color: var(--text); border-radius: 4px; outline-offset: 2px; cursor: pointer; text-indent: 0; }
 .cm-formula-render.is-inline { display: inline-block; vertical-align: -.08em; max-width: 100%; }
 .cm-formula-render.is-block { display: block; max-width: 100%; padding: 2.3em 1em; text-align: center; }
 .cm-formula-content { display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: middle; }

@@ -11,12 +11,13 @@ export const formulaPreviewContext = Facet.define({ combine: values => values[0]
 export const toggleFormulaSource = StateEffect.define();
 export const setFormulaDisplay = StateEffect.define();
 export const refreshFormulaPreviews = StateEffect.define();
+export const hydrateFormulaPreviews = StateEffect.define();
 export const formulaPreviewPhrases = {
   'Edit equation': '修改公式', 'Show equation source': '查看源码', 'Hide equation source': '收起源码',
   'Equation: Enter to edit; Delete to remove': '公式：回车修改，Delete 删除',
   'Equation could not be rendered; source is retained': '公式无法显示，已保留源码',
 };
-// Bound parsing/rendering work; large documents remain fully editable as source.
+// These thresholds select background / visible-first work, never truncation.
 export const FORMULA_PREVIEW_DOCUMENT_LIMIT = 300_000;
 export const FORMULA_PREVIEW_LIMIT = 256;
 const COMPACT_IMAGE_PAYLOAD = 'A';
@@ -69,13 +70,29 @@ export function editorFormulaItems(doc) {
   let scanSource = source, restorePosition = position => position;
   if (source.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT) {
     const compacted = compactEmbeddedImages(source);
-    if (!compacted || compacted.text.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT) return [];
-    scanSource = compacted.text; restorePosition = compacted.originalPosition;
+    if (compacted) { scanSource = compacted.text; restorePosition = compacted.originalPosition; }
   }
-  return scanMarkdownFormulas(scanSource).slice(0, FORMULA_PREVIEW_LIMIT).map(item => {
+  const formulas = scanMarkdownFormulas(scanSource, { maxSourceLength: Infinity, maxTokens: Infinity });
+  const deferred = source.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT || formulas.length > FORMULA_PREVIEW_LIMIT;
+  return formulas.map(item => {
     const from = restorePosition(item.from), to = restorePosition(item.to, true);
-    return { ...item, from, to, raw: source.slice(from, to), html: formulaHTML(item), open: false };
+    return { ...item, from, to, raw: source.slice(from, to), html: deferred ? undefined : formulaHTML(item), open: false };
   });
+}
+// One small rendering batch; subsequent frames finish the visible range even
+// when a single wrapped line contains more than 256 equations.
+export function hydrateFormulaItems(items, ranges) {
+  const changes = [];
+  const started = performance.now();
+  for (const item of items) {
+    if (item.html !== undefined || !ranges.some(range => item.to >= range.from && item.from <= range.to)) continue;
+    changes.push({ ...item, html: formulaHTML(item) });
+    if (changes.length >= 16 || performance.now() - started >= 8) break;
+  }
+  return changes;
+}
+function initialItems(doc) {
+  return doc.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT ? [] : editorFormulaItems(doc);
 }
 function sameRange(a, b) { return a.from === b.from && a.to === b.to; }
 function currentItem(view, item, doc) {
@@ -169,6 +186,7 @@ class FormulaWidget extends WidgetType {
 function decorate(items, state, enabled, openRanges = []) {
   const decorations = [], atoms = [];
   if (enabled) for (const item of items) {
+    if (item.html === undefined) continue;
     if (mediaOwnedByInnerEditor(state, item)) continue;
     item.open = !item.html || openRanges.some(range => sameRange(range, item))
       || state.selection.ranges.some(range => range.head > item.from && range.head < item.to || range.anchor > item.from && range.anchor < item.to);
@@ -184,7 +202,7 @@ function decorate(items, state, enabled, openRanges = []) {
 export const editorFormulaField = StateField.define({
   create(state) {
     const enabled = state.facet(formulaPreviewContext).enabled !== false;
-    return decorate(enabled ? editorFormulaItems(state.doc) : [], state, enabled);
+    return decorate(enabled ? initialItems(state.doc) : [], state, enabled);
   },
   update(value, transaction) {
     if (!transaction.docChanged && !transaction.selection && !transaction.effects.length && !transaction.reconfigured) return value;
@@ -195,11 +213,18 @@ export const editorFormulaField = StateField.define({
       openRanges = openRanges.map(map).filter(range => range.from <= range.to);
       items = items.filter(item => !touched.some(range => range.from < item.to && range.to > item.from
         || range.from === range.to && range.from > item.from && range.from < item.to)).map(item => ({ ...item, ...map(item) }));
-      if (transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = enabled ? editorFormulaItems(transaction.newDoc) : [];
+      if (transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = enabled ? initialItems(transaction.newDoc) : [];
     }
     for (const effect of transaction.effects) {
-      if (effect.is(setFormulaDisplay)) { enabled = effect.value !== 'source'; items = enabled ? editorFormulaItems(transaction.newDoc) : []; }
+      if (effect.is(setFormulaDisplay)) { enabled = effect.value !== 'source'; items = enabled ? initialItems(transaction.newDoc) : []; }
       if (effect.is(refreshFormulaPreviews) && effect.value.doc === transaction.newDoc && enabled) items = effect.value.items;
+      if (effect.is(hydrateFormulaPreviews) && effect.value.doc === transaction.newDoc && enabled) {
+        const hydrated = new Map(effect.value.items.map(item => [item.from, item]));
+        items = items.map(item => {
+          const replacement = hydrated.get(item.from);
+          return replacement && replacement.to === item.to && replacement.raw === item.raw ? replacement : item;
+        });
+      }
       if (effect.is(toggleFormulaSource)) {
         const range = effect.value;
         openRanges = openRanges.some(item => sameRange(item, range)) ? openRanges.filter(item => !sameRange(item, range)) : [...openRanges, range];
@@ -210,17 +235,68 @@ export const editorFormulaField = StateField.define({
   provide: field => EditorView.decorations.from(field, value => value.decorations),
 });
 const scanner = ViewPlugin.fromClass(class {
-  constructor(view) { this.view = view; this.timer = null; }
-  update(update) {
-    if (!update.docChanged) return;
-    clearTimeout(this.timer);
-    if (!update.state.field(editorFormulaField).enabled || update.transactions.some(transaction => transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo'))) return;
-    this.timer = setTimeout(() => {
-      const doc = this.view.state.doc;
-      this.view.dispatch({ effects: refreshFormulaPreviews.of({ doc, items: editorFormulaItems(doc) }) });
-    }, 250);
+  constructor(view) {
+    this.view = view; this.timer = null; this.worker = null; this.generation = 0;
+    this.schedule(view.state.doc.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT, 0);
   }
-  destroy() { clearTimeout(this.timer); }
+  schedule(scan, delay) {
+    clearTimeout(this.timer);
+    if (scan) { this.worker?.terminate(); this.worker = null; this.generation++; }
+    this.needsScan = this.needsScan || scan;
+    if (!this.view.state.field(editorFormulaField, false)?.enabled) return;
+    this.timer = setTimeout(() => {
+      const scan = this.needsScan; this.needsScan = false;
+      if (scan) this.scan();
+      else this.hydrate();
+    }, delay);
+  }
+  scan() {
+    const doc = this.view.state.doc, generation = this.generation;
+    const apply = items => {
+      if (generation !== this.generation || doc !== this.view.state.doc || !this.view.state.field(editorFormulaField, false)?.enabled) return;
+      this.view.dispatch({ effects: refreshFormulaPreviews.of({ doc, items }) });
+      this.hydrate();
+    };
+    if (doc.length < FORMULA_PREVIEW_DOCUMENT_LIMIT) { apply(editorFormulaItems(doc)); return; }
+    const fallback = () => {
+      if (generation !== this.generation) return;
+      this.worker?.terminate(); this.worker = null;
+      // A worker/CSP failure must not silently disable all valid formulas.
+      if (generation === this.generation && doc === this.view.state.doc) apply(editorFormulaItems(doc));
+    };
+    try {
+      this.worker = new Worker(new URL('./formula-scan-worker.js', import.meta.url), { type: 'module' });
+      this.worker.onmessage = event => {
+        if (generation !== this.generation) return;
+        if (event.data.error) { fallback(); return; }
+        this.worker?.terminate(); this.worker = null;
+        apply(event.data.items.map(item => ({ ...item, html: undefined, open: false })));
+      };
+      this.worker.onerror = event => { event.preventDefault(); fallback(); };
+      this.worker.postMessage(doc.toString());
+    } catch { fallback(); }
+  }
+  hydrate() {
+    const doc = this.view.state.doc, field = this.view.state.field(editorFormulaField, false);
+    if (!field?.enabled || this.view.composing) return;
+    const ranges = this.view.visibleRanges.map(range => ({ from: Math.max(0, range.from - 1000), to: range.to + 1000 }));
+    const items = hydrateFormulaItems(field.items.filter(item => !mediaOwnedByInnerEditor(this.view.state, item)), ranges);
+    if (items.length) {
+      this.view.dispatch({ effects: hydrateFormulaPreviews.of({ doc, items }) });
+      this.schedule(false, 16);
+    }
+  }
+  update(update) {
+    if (!update.state.field(editorFormulaField, false)?.enabled) {
+      clearTimeout(this.timer); this.worker?.terminate(); this.worker = null; this.generation++; this.needsScan = false;
+      return;
+    }
+    const toggled = update.transactions.some(transaction => transaction.effects.some(effect => effect.is(setFormulaDisplay)));
+    if (update.docChanged || toggled) this.schedule(true, update.docChanged ? 250 : 0);
+    else if (update.viewportChanged || update.selectionSet || update.transactions.some(transaction =>
+      transaction.reconfigured || transaction.effects.some(effect => !effect.is(hydrateFormulaPreviews) && !effect.is(refreshFormulaPreviews)))) this.schedule(false, 16);
+  }
+  destroy() { this.generation++; clearTimeout(this.timer); this.worker?.terminate(); }
 });
 export const editorFormulaPreview = [editorFormulaField, scanner,
   EditorView.atomicRanges.of(view => view.state.field(editorFormulaField).atoms),

@@ -508,6 +508,7 @@ const translations = {
     formulaStructure_fraction: '分数', formulaStructure_root: '根号', formulaStructure_power: '上标', formulaStructure_subscript: '下标', formulaStructure_integral: '积分', formulaStructure_sum: '求和', formulaStructure_parentheses: '括号', formulaStructure_matrix: '矩阵',
     formulaStructure_pi: 'π', formulaStructure_theta: 'θ', formulaStructure_infinity: '∞', formulaStructure_times: '×', formulaStructure_plusminus: '±', formulaStructure_undo: '撤销', formulaStructure_redo: '重做', formulaStructure_addRowAfter: '矩阵加行', formulaStructure_addColumnAfter: '矩阵加列',
     formulaSearchCount: '{count} 个模板', formulaSearchEmpty: '没有匹配的模板。试试其他关键词、选择“全部”或清除搜索。',
+    bodyLineSpacing: '正文行距', lineSpacingCompact: '紧凑（1.5 倍）', lineSpacingStandard: '标准（1.86 倍）', lineSpacingRelaxed: '舒展（2 倍）', lineSpacingLoose: '宽松（2.25 倍）',
     bodyStyle: '正文风格', bodyStyleDefault: '默认（跟随软件）', bodyStyleModern: '现代简洁', bodyStyleClear: '清晰易读', bodyStyleBook: '书籍阅读', bodyStyleClassic: '经典文档', bodyStyleLiterary: '文艺随笔', bodyStyleHandwritten: '手写气息', bodyStyleGentle: '柔和圆润', bodyStyleMagazine: '杂志风格', bodyStyleTechnical: '技术文档', bodyStyleMono: '等宽正文', bodyStyleLegacy: '原有自定义搭配',
 bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', bodyEnglishFont: '英文正文字体', fontFollowApp: '跟随软件字体', bodyFontSans: '无衬线（微软雅黑 / 苹方）', bodyFontArial: 'Arial（无衬线）', bodyFontGeorgia: 'Georgia（衬线）', bodyFontTimes: 'Times New Roman（衬线）', bodyFontVerdana: 'Verdana（无衬线）', formulaTextSize: '公式字号', formulaSizeSmall: '小', formulaSizeStandard: '标准', formulaSizeLarge: '大', typographyHint: '切换后直接预览当前文档；保存后记忆，取消恢复原设置。左右正文同步，界面与代码不变。', typographyFallbackHint: '使用本机字体，未安装时自动回退；公式保留 KaTeX 数学字体，仅调整大小。', typographySample: '混合文字与公式预览', typographyReset: '恢复默认', typographySaved: '正文与公式设置已保存', typographySaveFailed: '设置保存失败，已恢复原有显示，请重试。',
     documentTools: '文档工具',
@@ -600,6 +601,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     formulaStructure_fraction: 'Fraction', formulaStructure_root: 'Root', formulaStructure_power: 'Superscript', formulaStructure_subscript: 'Subscript', formulaStructure_integral: 'Integral', formulaStructure_sum: 'Sum', formulaStructure_parentheses: 'Brackets', formulaStructure_matrix: 'Matrix',
     formulaStructure_pi: 'π', formulaStructure_theta: 'θ', formulaStructure_infinity: '∞', formulaStructure_times: '×', formulaStructure_plusminus: '±', formulaStructure_undo: 'Undo', formulaStructure_redo: 'Redo', formulaStructure_addRowAfter: 'Matrix row', formulaStructure_addColumnAfter: 'Matrix column',
     formulaSearchCount: '{count} templates', formulaSearchEmpty: 'No matching templates. Try another keyword, select All, or clear the search.',
+    bodyLineSpacing: 'Body line spacing', lineSpacingCompact: 'Compact (1.5×)', lineSpacingStandard: 'Standard (1.86×)', lineSpacingRelaxed: 'Relaxed (2×)', lineSpacingLoose: 'Loose (2.25×)',
     bodyStyle: 'Body style', bodyStyleDefault: 'Default (follow app)', bodyStyleModern: 'Modern', bodyStyleClear: 'Clear & readable', bodyStyleBook: 'Book reading', bodyStyleClassic: 'Classic document', bodyStyleLiterary: 'Literary', bodyStyleHandwritten: 'Handwritten feel', bodyStyleGentle: 'Soft & rounded', bodyStyleMagazine: 'Magazine', bodyStyleTechnical: 'Technical', bodyStyleMono: 'Monospaced prose', bodyStyleLegacy: 'Previous custom pairing',
     bodyTypography: 'Body & math typography', bodyChineseFont: 'Chinese body font', bodyEnglishFont: 'English body font', fontFollowApp: 'Follow app font', bodyFontSans: 'Sans serif (YaHei / PingFang)', bodyFontArial: 'Arial (sans serif)', bodyFontGeorgia: 'Georgia (serif)', bodyFontTimes: 'Times New Roman (serif)', bodyFontVerdana: 'Verdana (sans serif)', formulaTextSize: 'Math size', formulaSizeSmall: 'Small', formulaSizeStandard: 'Standard', formulaSizeLarge: 'Large', typographyHint: 'Preview directly in your document. Save to remember; cancel to restore. Editor and preview stay in sync; UI and code are unchanged.', typographyFallbackHint: 'Uses local fonts with automatic fallback when unavailable. Formulas retain KaTeX math fonts; only their size changes.', typographySample: 'Mixed text and math preview', typographyReset: 'Reset defaults', typographySaved: 'Body and math settings saved', typographySaveFailed: 'Could not save settings. The previous display is unchanged; please retry.',
     documentTools: 'Document tools',
@@ -5268,7 +5270,10 @@ function syncBodyTypography(settings) {
 }
 
 function typographyFormSettings() {
-  return typographyForStyle($('#bodyStyle').value, $('#bodyFormulaSize').value, state.bodyTypography);
+  return normalizeBodyTypography({
+    ...typographyForStyle($('#bodyStyle').value, $('#bodyFormulaSize').value, state.bodyTypography),
+    lineSpacing: $('#bodyLineSpacing').value
+  });
 }
 
 function updateTypographySample() {
@@ -5282,6 +5287,7 @@ function fillTypographyForm(settings) {
   $('#bodyStyleLegacy').hidden = style !== 'legacy';
   $('#bodyStyle').value = style;
   $('#bodyFormulaSize').value = value.formulaSize;
+  $('#bodyLineSpacing').value = value.lineSpacing;
   updateTypographySample();
 }
 
@@ -5398,6 +5404,11 @@ function syncEditorLayoutOptions() {
 function setEditorPresentation(mode) {
   if (codeEditor?.composing) return;
   state.editorPresentation = mode === 'source' ? 'source' : 'live';
+  if (state.editorPresentation === 'live') {
+    state.formulaDisplay = 'preview';
+    localStorage.setItem('formulaDisplay', 'preview');
+    if (codeEditor?.state.field(editorFormulaField, false)) codeEditor.dispatch({ effects: setFormulaDisplayEffect.of('preview') });
+  }
   localStorage.setItem('editorPresentation', state.editorPresentation);
   if (codeEditor && editorPresentation) {
     codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
@@ -10991,7 +11002,7 @@ $('#closeTypography').addEventListener('click', closeTypographySettings);
 $('#cancelTypography').addEventListener('click', closeTypographySettings);
 $('#resetTypography').addEventListener('click', () => fillTypographyForm());
 $('#saveTypography').addEventListener('click', saveTypographySettings);
-['bodyStyle', 'bodyFormulaSize'].forEach(id => {
+['bodyStyle', 'bodyFormulaSize', 'bodyLineSpacing'].forEach(id => {
   $(`#${id}`).addEventListener('change', updateTypographySample);
 });
 $('#typographyDialog').addEventListener('cancel', event => {

@@ -9,7 +9,7 @@
 .editor-presentation-switch button:disabled { opacity: .5; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .editor-presentation-switch::before { transition: none; } }
 .cm-editor.cm-live-preview .cm-content { font-family: var(--body-font-family); }
-.cm-editor.cm-live-preview .cm-line { line-height: 1.86; }
+.cm-editor.cm-live-preview .cm-line { line-height: var(--body-line-height, 1.86); }
 #markdownEditor .cm-editor.cm-live-preview { font-size: calc(16px * var(--font-scale, 1)); letter-spacing: .02em; }
 /* Shared typography with the editing preview. Use padding, not vertical
    margins, in CodeMirror so its measured heights and mouse positions agree. */
@@ -80,7 +80,8 @@
 .cm-editor.cm-live-preview .cm-live-list-number span { color: inherit; font: inherit; }
 .cm-editor.cm-live-preview .cm-live-code-line { background: var(--panel, #f5f8f6); }
 .cm-editor.cm-live-preview .cm-live-code, .cm-editor.cm-live-preview .cm-live-inline-code { font-family: Consolas, 'SFMono-Regular', monospace; font-size: .92em; }
-.cm-editor.cm-live-preview .cm-live-inline-code { background: var(--accent-soft); border-radius: 4px; padding: 1px 3px; }
+.cm-editor.cm-live-preview .cm-live-inline-code { background: color-mix(in srgb, var(--text) 8%, var(--paper)); color: var(--text); border-radius: 4px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.cm-editor.cm-live-preview .cm-live-inline-code span { color: inherit; }
 .cm-editor.cm-live-preview .cm-live-code-language { color: var(--muted); font-size: .8em; }
 /* Exposed diagram source is code, not a styled quote/list descendant. Preserve
    syntax colors, but never inherit prose emphasis or hide its outer markers. */

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EditorState } from '@codemirror/state';
 import { editorLivePreview, livePreviewField, liveSourceBlock, buildLivePlan } from '../src/editor-live-preview.js';
-import { editorFormulaField } from '../src/editor-formula-preview.js';
+import { editorFormulaField, editorFormulaItems, hydrateFormulaItems, refreshFormulaPreviews } from '../src/editor-formula-preview.js';
 import { imagePreviewField, toggleImageSource } from '../src/embedded-image-preview.js';
 import { editorDiagramField } from '../src/editor-diagram-preview.js';
 import { renderedContainerRanges, singleLineMedia } from '../src/media-ownership.js';
@@ -40,6 +40,11 @@ test('table cells own direct Markdown and HTML images with formulas in every con
     for (const [intro,prefix,outro] of [['','',''],['','> ',''],['- 项目\n\n','  ',''],['<details open>\n<summary>标题</summary>\n\n','','\n\n</details>']]) {
       const source=intro+table.split('\n').map(line=>prefix+line).join('\n')+outro;
       let state=create(source);
+      // Large documents receive scanned/visible formulas asynchronously.
+      if (source.length >= 300000) {
+        const items=hydrateFormulaItems(editorFormulaItems(source),[{from:0,to:source.length}]);
+        state=state.update({effects:refreshFormulaPreviews.of({doc:state.doc,items})}).state;
+      }
       assert.deepEqual(counts(state),[0,0,0]);
       const owner=state.field(livePreviewField).plan.widgets.find(item=>['table','details'].includes(item.kind));
       assert.equal(owner.kind,intro.startsWith('<details')?'details':'table');

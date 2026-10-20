@@ -2088,13 +2088,13 @@ func TestLanguagePersistenceAndArgumentDetection(t *testing.T) {
 
 func TestBodyTypographyPersistenceAndValidation(t *testing.T) {
 	app := testApp(t)
-	defaults := BodyTypography{"follow", "follow", "standard"}
+	defaults := BodyTypography{"follow", "follow", "standard", "standard"}
 	prefs, err := app.GetPreferences()
 	if err != nil || prefs.BodyTypography != defaults {
 		t.Fatalf("legacy defaults: %#v, %v", prefs.BodyTypography, err)
 	}
-	input := BodyTypography{" SONGTI ", " GEORGIA ", " LARGE "}
-	expected := BodyTypography{"songti", "georgia", "large"}
+	input := BodyTypography{" SONGTI ", " GEORGIA ", " LARGE ", " LOOSE "}
+	expected := BodyTypography{"songti", "georgia", "large", "loose"}
 	saved, err := app.SetBodyTypography(input)
 	if err != nil || saved != expected {
 		t.Fatalf("save: %#v, %v", saved, err)
@@ -2110,7 +2110,7 @@ func TestBodyTypographyPersistenceAndValidation(t *testing.T) {
 	if err != nil || prefs.BodyTypography != expected {
 		t.Fatalf("app font cannot replace body preferences: %#v, %v", prefs.BodyTypography, err)
 	}
-	invalid := BodyTypography{"url(https://example.com)", "C:\\other.ttf", "999"}
+	invalid := BodyTypography{"url(https://example.com)", "C:\\other.ttf", "999", "999"}
 	saved, err = app.SetBodyTypography(invalid)
 	if err != nil || saved != defaults {
 		t.Fatalf("invalid presets: %#v, %v", saved, err)
@@ -2118,11 +2118,27 @@ func TestBodyTypographyPersistenceAndValidation(t *testing.T) {
 	for _, chinese := range []string{"follow", "sans", "songti", "kaiti", "rounded", "mono"} {
 		for _, english := range []string{"follow", "arial", "georgia", "times", "verdana", "mono"} {
 			for _, formula := range []string{"small", "standard", "large"} {
-				value := BodyTypography{chinese, english, formula}
+				value := BodyTypography{chinese, english, formula, "standard"}
 				if normaliseBodyTypography(value) != value {
 					t.Fatalf("valid combination rejected: %#v", value)
 				}
 			}
+		}
+	}
+}
+
+func TestBodyLineSpacingMigrationAndPresets(t *testing.T) {
+	if got := normaliseBodyTypography(BodyTypography{ChineseFont: "songti"}); got.LineSpacing != "standard" || got.ChineseFont != "songti" {
+		t.Fatalf("old font preferences lost: %#v", got)
+	}
+	for _, spacing := range []string{"compact", "standard", "relaxed", "loose"} {
+		app := testApp(t)
+		if _, err := app.SetBodyTypography(BodyTypography{LineSpacing: spacing}); err != nil {
+			t.Fatal(err)
+		}
+		prefs, err := app.GetPreferences()
+		if err != nil || prefs.BodyTypography.LineSpacing != spacing {
+			t.Fatalf("spacing %s did not persist: %#v, %v", spacing, prefs.BodyTypography, err)
 		}
 	}
 }

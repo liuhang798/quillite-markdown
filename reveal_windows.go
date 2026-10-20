@@ -3,128 +3,96 @@
 package main
 
 import (
-	"os/exec"
+	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
-const (
-	allowAnyProcess        = uintptr(0xFFFFFFFF)
-	windowTopmost          = ^uintptr(0)
-	windowNotTopmost       = ^uintptr(1)
-	showWindowRestore      = 9
-	setWindowNoSize        = 0x0001
-	setWindowNoMove        = 0x0002
-	setWindowShow          = 0x0040
-	explorerFocusTimeout   = 2 * time.Second
-	explorerFocusPollDelay = 75 * time.Millisecond
-)
-
+// These user32 helpers are also used to fit the application's startup window.
 var (
-	user32DLL                    = syscall.NewLazyDLL("user32.dll")
-	allowSetForegroundWindowProc = user32DLL.NewProc("AllowSetForegroundWindow")
-	enumWindowsProc              = user32DLL.NewProc("EnumWindows")
-	getClassNameProc             = user32DLL.NewProc("GetClassNameW")
-	getWindowTextProc            = user32DLL.NewProc("GetWindowTextW")
-	isWindowVisibleProc          = user32DLL.NewProc("IsWindowVisible")
-	setForegroundWindowProc      = user32DLL.NewProc("SetForegroundWindow")
-	setWindowPosProc             = user32DLL.NewProc("SetWindowPos")
-	showWindowProc               = user32DLL.NewProc("ShowWindow")
+	user32DLL        = syscall.NewLazyDLL("user32.dll")
+	enumWindowsProc  = user32DLL.NewProc("EnumWindows")
+	getClassNameProc = user32DLL.NewProc("GetClassNameW")
+	setWindowPosProc = user32DLL.NewProc("SetWindowPos")
+	shell32Reveal    = syscall.NewLazyDLL("shell32.dll")
+	ole32Reveal      = syscall.NewLazyDLL("ole32.dll")
+	parseRevealPath  = shell32Reveal.NewProc("SHParseDisplayName")
+	openRevealItem   = shell32Reveal.NewProc("SHOpenFolderAndSelectItems")
+	initRevealCOM    = ole32Reveal.NewProc("CoInitializeEx")
+	closeRevealCOM   = ole32Reveal.NewProc("CoUninitialize")
+	freeRevealItem   = ole32Reveal.NewProc("CoTaskMemFree")
 )
 
-// revealInFolder asks Explorer to select the file and explicitly gives the
-// Windows shell permission to become the foreground application. Windows can
-// otherwise reuse an existing Explorer window behind the Wails window.
+type revealShellAPI struct {
+	initialize func() uint32
+	close      func()
+	parse      func(*uint16) (uintptr, uint32)
+	free       func(uintptr)
+	open       func(uintptr) uint32
+}
+
+func nativeRevealShell() revealShellAPI {
+	return revealShellAPI{
+		initialize: func() uint32 {
+			hr, _, _ := initRevealCOM.Call(0, 2 /* COINIT_APARTMENTTHREADED */)
+			return uint32(hr)
+		},
+		close: func() { closeRevealCOM.Call() },
+		parse: func(path *uint16) (uintptr, uint32) {
+			var pidl uintptr
+			hr, _, _ := parseRevealPath.Call(uintptr(unsafe.Pointer(path)), 0, uintptr(unsafe.Pointer(&pidl)), 0, 0)
+			return pidl, uint32(hr)
+		},
+		free: func(pidl uintptr) { freeRevealItem.Call(pidl) },
+		open: func(pidl uintptr) uint32 {
+			// cidl=0: the absolute PIDL identifies the file, not its parent.
+			// Windows opens its parent and selects that exact item.
+			hr, _, _ := openRevealItem.Call(pidl, 0, 0, 0)
+			return uint32(hr)
+		},
+	}
+}
+
 func revealInFolder(filePath string) error {
-	cleanedPath := filepath.Clean(filePath)
-	targetDirectory := filepath.Dir(cleanedPath)
+	// COM initialization, use and cleanup must all run on the same thread.
+	// A dedicated goroutine avoids changing an existing UI thread's apartment.
+	done := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		done <- revealWithShell(filePath, nativeRevealShell())
+	}()
+	return <-done
+}
 
-	// The current foreground process may grant this permission. Explorer uses
-	// it when activating a reused folder window.
-	_, _, _ = allowSetForegroundWindowProc.Call(allowAnyProcess)
-
-	if err := exec.Command("explorer.exe", "/select,"+cleanedPath).Start(); err != nil {
-		return err
+func revealWithShell(filePath string, api revealShellAPI) error {
+	if strings.TrimSpace(filePath) == "" || !filepath.IsAbs(filePath) {
+		return fmt.Errorf("reveal requires an absolute file path")
 	}
-
-	// Some Windows 10/11 configurations still leave an already-open Explorer
-	// window behind the app. Poll briefly and activate the best matching shell
-	// window as a fallback, without delaying the frontend call.
-	go focusExplorerWindow(targetDirectory)
+	path, err := syscall.UTF16PtrFromString(filepath.Clean(filePath))
+	if err != nil {
+		return fmt.Errorf("invalid reveal path: %w", err)
+	}
+	if hr := api.initialize(); int32(hr) < 0 {
+		return fmt.Errorf("initialize folder selection: HRESULT 0x%08X", hr)
+	}
+	defer api.close() // S_OK and S_FALSE both require CoUninitialize.
+	pidl, hr := api.parse(path)
+	if pidl != 0 {
+		defer api.free(pidl)
+	}
+	if int32(hr) < 0 || pidl == 0 {
+		return fmt.Errorf("resolve folder selection: HRESULT 0x%08X", hr)
+	}
+	if hr = api.open(pidl); int32(hr) < 0 {
+		return fmt.Errorf("open folder selection: HRESULT 0x%08X", hr)
+	}
+	// No title matching or arbitrary Explorer window activation: same-named
+	// folders and Explorer tabs cannot redirect focus to an unrelated directory.
 	return nil
-}
-
-func focusExplorerWindow(targetDirectory string) {
-	startedAt := time.Now()
-	deadline := startedAt.Add(explorerFocusTimeout)
-	fallbackAt := startedAt.Add(500 * time.Millisecond)
-	time.Sleep(explorerFocusPollDelay)
-	for time.Now().Before(deadline) {
-		windows := enumerateExplorerWindows()
-		if len(windows) > 0 {
-			var target *explorerWindow
-			for _, candidate := range windows {
-				if explorerTitleMatchesDirectory(candidate.title, targetDirectory) {
-					matched := candidate
-					target = &matched
-					break
-				}
-			}
-			// Give Explorer time to create or navigate the requested window before
-			// falling back to its highest window in Z order. This avoids briefly
-			// activating an unrelated folder when several Explorer windows exist.
-			if target == nil && time.Now().After(fallbackAt) {
-				target = &windows[0]
-			}
-			if target != nil {
-				if bringExplorerWindowToFront(target.handle) {
-					return
-				}
-			}
-		}
-		time.Sleep(explorerFocusPollDelay)
-	}
-}
-
-func bringExplorerWindowToFront(hwnd uintptr) bool {
-	showWindowProc.Call(hwnd, showWindowRestore)
-
-	// SetForegroundWindow is intentionally restricted by Windows and can fail
-	// when a Wails binding runs outside the UI thread. A topmost -> not-topmost
-	// transition reliably moves Explorer above this app while immediately
-	// restoring Explorer's normal (non-always-on-top) behaviour.
-	flags := uintptr(setWindowNoSize | setWindowNoMove | setWindowShow)
-	raised, _, _ := setWindowPosProc.Call(hwnd, windowTopmost, 0, 0, 0, 0, flags)
-	restored, _, _ := setWindowPosProc.Call(hwnd, windowNotTopmost, 0, 0, 0, 0, flags)
-	setForegroundWindowProc.Call(hwnd)
-	return raised != 0 && restored != 0
-}
-
-type explorerWindow struct {
-	handle uintptr
-	title  string
-}
-
-func enumerateExplorerWindows() []explorerWindow {
-	var result []explorerWindow
-	callback := syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
-		visible, _, _ := isWindowVisibleProc.Call(hwnd)
-		if visible == 0 {
-			return 1
-		}
-
-		className := windowString(hwnd, getClassNameProc)
-		if !isExplorerWindowClass(className) {
-			return 1
-		}
-		result = append(result, explorerWindow{handle: hwnd, title: windowString(hwnd, getWindowTextProc)})
-		return 1
-	})
-	enumWindowsProc.Call(callback, 0)
-	return result
 }
 
 func windowString(hwnd uintptr, proc *syscall.LazyProc) string {
@@ -134,27 +102,4 @@ func windowString(hwnd uintptr, proc *syscall.LazyProc) string {
 		return ""
 	}
 	return syscall.UTF16ToString(buffer[:length])
-}
-
-func isExplorerWindowClass(className string) bool {
-	return className == "CabinetWClass" || className == "ExploreWClass"
-}
-
-func explorerTitleMatchesDirectory(title, directory string) bool {
-	directoryName := filepath.Base(filepath.Clean(directory))
-	if directoryName == "." || directoryName == string(filepath.Separator) || directoryName == "" {
-		return false
-	}
-	title = strings.TrimSpace(title)
-	foldedTitle := strings.ToLower(title)
-	foldedDirectory := strings.ToLower(directoryName)
-	if foldedTitle == foldedDirectory {
-		return true
-	}
-	for _, separator := range []string{" -", " ", " [", " ("} {
-		if strings.HasPrefix(foldedTitle, foldedDirectory+separator) {
-			return true
-		}
-	}
-	return false
 }

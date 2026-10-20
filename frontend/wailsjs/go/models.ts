@@ -217,6 +217,7 @@ export namespace main {
 	    chineseFont: string;
 	    englishFont: string;
 	    formulaSize: string;
+	    lineSpacing: string;
 
 	    static createFrom(source: any = {}) {
 	        return new BodyTypography(source);
@@ -227,6 +228,7 @@ export namespace main {
 	        this.chineseFont = source["chineseFont"];
 	        this.englishFont = source["englishFont"];
 	        this.formulaSize = source["formulaSize"];
+	        this.lineSpacing = source["lineSpacing"];
 	    }
 	}
 	export class DiagnosticFlags {

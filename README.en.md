@@ -69,6 +69,8 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### 41 chart types and 95 equation templates
 
+Live equations no longer disappear at 300,000 document characters or stop after 256 equations. Large documents are scanned locally in a background worker, and visible equations are typeset in small batches. Choosing Live restores rendered equations; More → Equation display → Equation source and each equation's source action remain available. Source fallback for other complex blocks and equation syntax safety limits are unchanged.
+
 - **22 Mermaid types + 19 ECharts data charts**: flowcharts, sequence diagrams, Gantt charts, mind maps, bar/line charts, pie charts, histograms, calendar heatmaps and more.
 - Common types provide canvas or data-table editing; complex syntax retains source editing and preview. Flowcharts include input/output parallelograms.
 - Charts render directly in the editor. Edit chart / View source updates the original engine and Markdown fence.
@@ -78,6 +80,8 @@ Switching modes preserves content, selection and undo history. The app remembers
 ### Reading and document management
 
 - Searchable, collapsible document outlines, document search, zoom, eight accent colors, light/dark themes and Chinese/English interfaces.
+- Body & math settings independently control body style, equation size and four body line-spacing presets. Preview before saving or cancel to restore; inline code uses a theme-aware neutral background in reading and live editing.
+- Windows Show in Folder selects the full file path without guessing the target from same-named window titles.
 - Recent, Favorites and a folder explorer. Recent supports pinning, ordering and `Ctrl / ⌘` multi-selection removal; removing records does not delete files.
 - Rename, Save As, history versions and crash recovery. Restored content first enters the editor and is written to disk only after saving.
 - Compare disk changes with current edits, save a separate copy or merge manually instead of silently overwriting another application's changes.

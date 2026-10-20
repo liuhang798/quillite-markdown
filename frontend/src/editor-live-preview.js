@@ -1503,8 +1503,10 @@ export const editorLivePreview = [imageDefinitionsField, footnotesField, livePre
     if (update.selectionSet || update.docChanged || searchChanged || update.viewportChanged || update.transactions.some(tr=>tr.effects.length)) queueMicrotask(() => {
       // Widget ranges update after the plugin callback. Reconcile again once
       // those ranges are current, including non-empty drag/copy selections.
-      if (view.destroyed) return;
-      syncEditableSelections(view, view.state.field(livePreviewField).searchSelection);
+      if (view.destroyed || view.state.doc !== update.state.doc) return;
+      const live = view.state.field(livePreviewField, false);
+      if (!live) return; // The mode may have changed before this microtask ran.
+      syncEditableSelections(view, live.searchSelection);
       syncEditableSearch(view);
       syncEditableSpelling(view);
       if (view.hasFocus && view.state.selection.ranges.length === 1 && view.state.selection.main.empty) focusEditableBlock(view);

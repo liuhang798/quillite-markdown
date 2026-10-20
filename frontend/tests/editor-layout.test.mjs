@@ -39,7 +39,7 @@ function harness(saved = null) {
     dataset: { editorLayout }, classList: { toggle() {} },
     setAttribute(name, value) { this[name] = value; },
   }));
-  const editor = { requestMeasure() {}, dispatch() {}, focus() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
+  const editor = { state: { field() { return null; } }, requestMeasure() {}, dispatch() {}, focus() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
   const context = vm.createContext({
     state: { editorPreviewWidth: 47, dirty: true, reviewResults: ['suggestion'] },
     document: { body: { dataset: {} }, querySelectorAll: selector => selector === '[data-editor-presentation]' ? [] : buttons },
@@ -48,6 +48,7 @@ function harness(saved = null) {
     codeEditor: editor, scheduleFormatToolbarLayout() {}, schedulePaneWidthRefresh() {},
     updatePaneResizerVisibility() {}, suspendEditorPreview() {}, renderEditorPreview() {}, editorContent: () => editor.content,
     editorPresentation: { reconfigure: extensions => extensions }, editorPresentationExtensions: () => [],
+    editorFormulaField: {},
   });
   vm.runInContext(functions, context);
   context.setEditorLayout(context.normalizeEditorLayout(storage.get('editorLayout')), true);
@@ -116,6 +117,7 @@ test('explicit mode actions hide or restore preview while manual visibility stay
     assert.equal(context.state.editorLayout,'editor-only');
     assert.equal(context.state.lastSplitLayout,layout);
     assert.equal(storage.get('editorPresentation'),'live');
+    assert.equal(storage.get('formulaDisplay'),'preview');
     context.setEditorLayout(layout); // Explicit restore does not change mode.
     assert.equal(context.state.editorPresentation,'live');
     context.syncEditorLayoutOptions();

@@ -6,6 +6,12 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- Windows“打开所在文件夹”改为按完整路径交由系统选中文件，移除按文件夹同名标题或任意窗口抢焦点的逻辑。
+- 阅读与即时编辑中的行内代码统一使用随明暗主题适配的柔和灰底，不影响代码块配色。
+- “正文与公式”设置新增四档正文行距，支持即时试看、取消恢复及持久保存；旧偏好保留标准行距，不修改 Markdown 内容和撤回历史。
+- 修复即时编辑中大文档公式不显示、超过 256 个公式被截断：后台保留全文语法上下文识别公式，按可见区域分批排版；点击“即时渲染”恢复公式排版，仍支持手动查看源码，保留原文和撤回历史。
+- 修复列表首行公式继承负缩进，导致短公式位置偏移、点击区域宽度为零的问题。
+
 - **新增：即时渲染编辑模式。** 直接在排版后的 Markdown 中编辑标题、正文、列表、引用、表格和代码，无需反复对照源码；可随时切换源码模式，保留文档内容和撤回历史。复杂语法、纯文本及超限文档继续提供源码回退。
 - 10 月 20 日同版本重新构建：修复退出编辑回顶部，恢复进入编辑前的阅读位置，并在短时资源加载期间保持定位；主动导航后停止位置校正。
 - 修复图片排队加载时系统打印可能漏图：等待读取与解码，失败时停止打印；切换文档或返回编辑取消旧打印请求。
@@ -20,6 +26,12 @@ All notable changes to Quillite Markdown are documented here.
 - 完整逐项变更记录见 [v3.0.0 详细更新](https://github.com/liuhang798/quillite-markdown/blob/v3.0.0/docs/releases/3.0.0-details.md)。
 
 ### English
+
+- Reveal Windows files using their full shell paths, without guessing Explorer windows from folder titles or activating an unrelated window.
+- Use a subtle, theme-aware neutral background for inline code in reading and live editing, without changing fenced code colors.
+- Add four body line-spacing presets to Body & math settings, with live preview, cancel/revert and persistence. Existing preferences retain standard spacing; Markdown and undo history remain unchanged.
+- Fix missing live equations in large documents and truncation after 256 equations. Scan with full-document context in a local worker and render visible equations in small batches. Explicitly choosing Live restores equation rendering; manual source viewing, original Markdown and undo remain available.
+- Prevent list hanging indents from shifting inline equations and collapsing their clickable width to zero.
 
 - **New: live-rendered editing mode.** Edit headings, prose, lists, quotes, tables and code directly in rendered Markdown. Switch to source at any time while preserving document content and undo history. Complex syntax, plain text and oversized documents retain source fallback.
 - October 20 same-version rebuild: restore the pre-edit reading position instead of jumping to the top, briefly compensate for late resource layout changes, and stop correcting on user navigation.

@@ -7,7 +7,7 @@ const renderer = readFileSync(new URL('../src/renderer.js', import.meta.url), 'u
 const css = readFileSync(new URL('../src/body-typography.css', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const defaults = { chineseFont: 'follow', englishFont: 'follow', formulaSize: 'standard' };
+const defaults = { chineseFont: 'follow', englishFont: 'follow', formulaSize: 'standard', lineSpacing: 'standard' };
 
 test('eleven distinct styles round-trip and migrate custom pairs without loss', () => {
   assert.equal(BODY_STYLES.length, 11);
@@ -15,12 +15,12 @@ test('eleven distinct styles round-trip and migrate custom pairs without loss', 
   for (const [id, chineseFont, englishFont] of BODY_STYLES) {
     for (const formulaSize of ['small', 'standard', 'large']) {
       const settings = typographyForStyle(id, formulaSize);
-      assert.deepEqual(settings, { chineseFont, englishFont, formulaSize });
+      assert.deepEqual(settings, { chineseFont, englishFont, formulaSize, lineSpacing: 'standard' });
       assert.equal(bodyStyleFor(settings), id);
       assert.match(html, new RegExp(`value="${id}"`));
     }
   }
-  const legacy = { chineseFont: 'kaiti', englishFont: 'arial', formulaSize: 'small' };
+  const legacy = { chineseFont: 'kaiti', englishFont: 'arial', formulaSize: 'small', lineSpacing: 'loose' };
   assert.equal(bodyStyleFor(legacy), 'legacy');
   assert.deepEqual(typographyForStyle('legacy', 'large', legacy), { ...legacy, formulaSize: 'large' });
   assert.deepEqual(typographyForStyle('__proto__', 'standard'), defaults);
@@ -66,7 +66,7 @@ test('body typography migrates missing, corrupt and arbitrary font input to safe
   }
   assert.deepEqual(readBodyTypography({ getItem: () => '{bad' }), defaults);
   assert.deepEqual(readBodyTypography({ getItem() { throw new Error('storage denied'); } }), defaults);
-  assert.deepEqual(normalizeBodyTypography({ chineseFont: ' SONGTI ', englishFont: ' GEORGIA ', formulaSize: ' LARGE ' }), { chineseFont: 'songti', englishFont: 'georgia', formulaSize: 'large' });
+  assert.deepEqual(normalizeBodyTypography({ chineseFont: ' SONGTI ', englishFont: ' GEORGIA ', formulaSize: ' LARGE ' }), { chineseFont: 'songti', englishFont: 'georgia', formulaSize: 'large', lineSpacing: 'standard' });
 });
 
 test('all Chinese/English combinations share one presentation-only stack and local fallback', () => {
@@ -97,7 +97,8 @@ test('applying typography updates CSS metrics only and preserves editor state', 
   applyBodyTypography({ chineseFont: 'kaiti', englishFont: 'arial', formulaSize: 'large' }, { setProperty: (key, value) => values.set(key, value) }, editor);
   assert.equal(measured, 1);
   assert.equal(values.get('--math-font-scale'), 1.35);
-  assert.equal(values.size, 2);
+  assert.equal(values.size, 3);
+  assert.equal(values.get('--body-line-height'), 1.86);
   assert.equal(values.get('--body-font-family'), '"Quillite Chinese kaiti", "Quillite English arial", var(--app-font-family)');
   assert.doesNotThrow(() => applyBodyTypography({}, { setProperty() {} }, null));
 });
@@ -118,12 +119,28 @@ test('nonmodal typography panel previews actual prose without persisting or rend
   assert.match(renderer, /syncBodyTypography\(prefs\.bodyTypography\)/);
   assert.match(renderer, /typographyDialog.*addEventListener\('cancel'/);
   assert.match(html, /<dialog id="typographyDialog"[^>]*aria-labelledby="typographyTitle"/);
-  for (const id of ['bodyStyle', 'bodyFormulaSize']) assert.match(html, new RegExp(`for="${id}"`));
+  for (const id of ['bodyStyle', 'bodyFormulaSize', 'bodyLineSpacing']) assert.match(html, new RegExp(`for="${id}"`));
   assert.doesNotMatch(html, /id="bodyChineseFont"|id="bodyEnglishFont"|id="typographySample"/);
   assert.match(renderer, /addEventListener\('close', \(\) => \{\s*applyBodyTypography\(state\.bodyTypography/);
   assert.match(styles, /\.markdown-body \.katex, \.formula-preview \.katex, \.typography-math-sample \.katex, \.cm-formula-render \.katex \{ font-size: calc\(1em \* var\(--math-font-scale, 1\.21\)\)/);
   assert.doesNotMatch(styles, /\.katex[^}]*font-family: var\(--body-font-family/);
   assert.match(renderer, /tags\.monospace[^\n]*Cascadia Code/);
+});
+
+test('line spacing migrates old settings and survives font/formula changes', () => {
+  for (const invalid of [undefined, null, 0, 2, '__proto__', 'url(x)', '']) {
+    assert.equal(normalizeBodyTypography({ lineSpacing: invalid }).lineSpacing, 'standard');
+  }
+  for (const [lineSpacing, height] of Object.entries({ compact: 1.5, standard: 1.86, relaxed: 2, loose: 2.25 })) {
+    const input = { ...defaults, lineSpacing };
+    assert.equal(readBodyTypography({ getItem: () => JSON.stringify(input) }).lineSpacing, lineSpacing);
+    assert.equal(typographyForStyle('book', 'large', input).lineSpacing, lineSpacing);
+    assert.equal(bodyTypographyStyles(input).lineHeight, height);
+    assert.match(html, new RegExp(`value="${lineSpacing}"`));
+  }
+  assert.match(styles, /\.markdown-body \{[^}]*line-height: var\(--body-line-height, 1\.86\)/);
+  const live = readFileSync(new URL('../src/editor-live-preview.css', import.meta.url), 'utf8');
+  assert.match(live, /\.cm-line \{ line-height: var\(--body-line-height, 1\.86\)/);
 });
 
 test('failed or pending saves retain the current typography and reject duplicate submissions', async () => {
