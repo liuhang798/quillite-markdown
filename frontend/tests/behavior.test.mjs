@@ -354,7 +354,7 @@ test('More Formats uses an immediate in-app menu instead of the delayed native m
 test('plain text files render without Markdown parsing and edit without Markdown syntax highlighting', () => {
   assert.match(renderer, /function isPlainTextFile\(path\)/);
   assert.match(renderer, /return \/\\\.txt\$\/i\.test\(path \|\| ''\)/);
-  assert.match(renderer, /if \(isPlainTextFile\(doc\.path\)\) \{\s*container\.innerHTML = `<div class="plain-text">\$\{escapeHtml\(content\)\}<\/div>`;/);
+  assert.match(renderer, /if \(isPlainTextFile\(doc\.path\)\) \{\s*releaseRenderedResources\(container\);\s*container\.innerHTML = `<div class="plain-text">\$\{escapeHtml\(content\)\}<\/div>`;/);
   assert.match(renderer, /const language = editorSourceFallback \|\| isPlainTextFile\(state\.currentFile\?\.path\)\s*\? \[\]\s*: \[markdown\(\{ base: markdownLanguage, extensions: \[tableWhitespace\] \}\), syntaxHighlighting\(markdownHighlightStyle\)\]/);
   assert.match(renderer, /function editorPresentationExtensions\(\) \{\s*if \(editorSourceFallback \|\| isPlainTextFile\(state.currentFile\?\.path\)\) return \[\];\s*if \(state.editorPresentation === 'source'\) return \[sourceImageFolding\];/);
   assert.doesNotMatch(renderer, /editorExtensions = \[\s*basicSetup,\s*markdown\(\)/);
@@ -485,7 +485,7 @@ test('Word, HTML, and PDF export are available through the unified Export docume
   assert.match(renderer, /async function exportPDFWithBookmarks\(options = \{\}/);
   assert.match(renderer, /window\.quilliteMarkdown\.exportPDF\(/);
   assert.match(renderer, /async function confirmPDFExport\(\)[\s\S]*await printCurrentDocument\(\)/);
-  assert.match(renderer, /async function printCurrentDocument\(options = \{\}\)[\s\S]*if \(state\.editing\) toggleEditor\(false\)[\s\S]*window\.quilliteMarkdown\.print\(\)/);
+  assert.match(renderer, /async function printCurrentDocument\(options = \{\}\)[\s\S]*if \(state\.editing\) await toggleEditor\(false\)[\s\S]*window\.quilliteMarkdown\.print\(\)/);
   assert.match(renderer, /\$\('#confirmPDFTutorial'\)\.addEventListener\('click', confirmPDFExport\)/);
   assert.match(renderer, /if \(action === 'export-center'\) openExportCenter\(\)/);
   assert.match(styles, /html\[data-platform="darwin"\] \.pdf-tutorial-windows \{ display: none; \}/);
@@ -876,7 +876,7 @@ test('export center groups formats and only exposes settings required by the sel
   assert.doesNotMatch(styles, /\.export-image-stage \{[^}]*(?:left: -100000px|z-index: -1)/);
   assert.match(renderer, /function exportPageBoxContent\(template\)[\s\S]*counter\(page\)/);
   assert.match(renderer, /function createPrintPageStyle\(options = \{\}\)[\s\S]*@top-center[\s\S]*@bottom-center/);
-  assert.match(renderer, /const pageStyle = createPrintPageStyle\(options\)[\s\S]*await window\.quilliteMarkdown\.print\(\)[\s\S]*pageStyle\?\.remove\(\)/);
+  assert.match(renderer, /pageStyle = createPrintPageStyle\(options\)[\s\S]*await window\.quilliteMarkdown\.print\(\)[\s\S]*pageStyle\?\.remove\(\)/);
   assert.match(renderer, /header: '',\s*footer: '',[\s\S]*imageScale: 2,\s*imageLayout: 'pages'/);
   assert.match(renderer, /const needsPandocSetup = pandocFormat && !state\.pandocStatus\.available;[\s\S]*pandocExportOptions\.classList\.toggle\('hidden', !needsPandocSetup && !customPandoc\)/);
   assert.match(renderer, /pandocArgumentsField'\)\.classList\.toggle\('hidden', !customPandoc\)/);

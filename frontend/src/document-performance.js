@@ -36,3 +36,25 @@ export function documentPerformanceProfile(length, hasDiagrams = false) {
 export function documentHasDiagrams(content) {
   return /(^|\n)\s*```(?:mermaid|echarts)\s*(\n|$)/i.test(String(content || ''));
 }
+
+// Preserve the reading-time convention (one CJK character or alphanumeric run
+// is one word), without allocating a document-sized replacement and match arrays.
+export function documentWordCount(content) {
+  let words = 0;
+  const cjk = /[\u3400-\u9fff\uf900-\ufaff]/;
+  for (const match of content.matchAll(/[\u3400-\u9fff\uf900-\ufaff\p{L}\p{N}]+/gu)) {
+    const word = match[0];
+    // Long Latin/base64 runs need no per-character JavaScript work.
+    if (!cjk.test(word)) { words++; continue; }
+    let inWord = false;
+    for (let i = 0; i < word.length; i++) {
+      const point = word.charCodeAt(i);
+      if (point >= 0x3400 && point <= 0x9fff || point >= 0xf900 && point <= 0xfaff) {
+        words++; inWord = false;
+      } else if (!inWord) {
+        words++; inWord = true;
+      }
+    }
+  }
+  return words;
+}

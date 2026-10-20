@@ -23,7 +23,8 @@ export function createReaderCache({ maxEntries = 4, maxBytes = 16 * 1024 * 1024 
       entries.set(key, { source, html, bytes: size }); bytes += size;
     },
     get size() { return entries.size; },
-    get bytes() { return bytes; }
+    get bytes() { return bytes; },
+    clear() { entries.clear(); bytes = 0; }
   };
 }
 
@@ -35,6 +36,7 @@ export function cancelReaderWork(container) {
   if (!session) return;
   session.observer?.disconnect();
   cancelAnimationFrame(session.frame);
+  session.queue.clear();
   sessions.delete(container);
 }
 

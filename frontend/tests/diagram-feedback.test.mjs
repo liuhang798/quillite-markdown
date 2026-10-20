@@ -8,7 +8,7 @@ const closeFunction=renderer.slice(renderer.indexOf('function closeDiagramDialog
 const element=()=>{const classes=new Set();return{dataset:{},style:{setProperty(){}},setAttribute(){},classList:{add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)}};};
 function fixture(){
  const toast=element(),dialog=element(),nodes=new Map(),placement={starts:0,stops:0,start(){this.starts++;},stop(){this.stops++;}};let timer;
- const context=vm.createContext({els:{toast,diagramDialog:dialog},diagramWizardState:{saveRequest:{},editRange:{}},diagramPreviewTimer:0,
+ const context=vm.createContext({els:{toast,diagramDialog:dialog,diagramPreview:{replaceChildren(){}}},releaseRenderedResources(){},diagramWizardState:{saveRequest:{},editRange:{}},diagramPreviewTimer:0,
   document:{body:element()},createToastPlacement:()=>placement,setDiagramFullscreen(){},updateDiagramActionLabels(){},focusCodeEditor(){},
   $:selector=>{if(!nodes.has(selector))nodes.set(selector,element());return nodes.get(selector);},t:x=>x,
   clearTimeout(){},setTimeout:fn=>{timer=fn;return 1;}});

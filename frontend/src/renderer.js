@@ -24,6 +24,7 @@ import './editor-live-preview.css';
 import { applyBodyTypography, normalizeBodyTypography, readBodyTypography, bodyStyleFor, typographyForStyle } from './body-typography.js';
 import hljs from 'highlight.js/lib/common';
 import { createReaderCache, READER_DEFER_THRESHOLD, cancelReaderWork, revealReaderLayout, finishReaderWork, scheduleReaderWork } from './reader-performance.js';
+import { cancelPreviewImages, loadPreviewImages, waitForPreviewImageReads } from './image-load-session.js';
 import { cancelMermaidRendering, convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
 import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory, searchDiagramTemplates } from './diagram-templates.js';
@@ -49,6 +50,7 @@ import { mathExtensions, renderLatexResult, collectFormulaRendering, formulaMark
 import { formulaFallbackSource } from './formula-export.js';
 import { FORMULA_STRUCTURES, hasFormulaPlaceholders } from './formula-visual-policy.js';
 import { createPreviewSourceMap, previewLineTarget, previewPointerTarget } from './preview-source-map.js';
+import { captureReadingPosition, restoreReadingPosition } from './reading-position.js';
 import { largeHeadingTokenizer } from './marked-large-heading.js';
 import { openExternalSafely } from './external-links.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
@@ -62,7 +64,7 @@ import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-te
 import { detectAISensitiveContent, redactAISensitiveContent, restoreAISensitiveContent, restoreAISuggestions } from './ai-privacy.js';
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
-import { documentHasDiagrams, documentPerformanceProfile } from './document-performance.js';
+import { documentHasDiagrams, documentPerformanceProfile, documentWordCount } from './document-performance.js';
 import { documentVersionLineDifference, historyPreviewText } from './version-history.js';
 import { createDocumentTools } from './document-tools.js';
 import { recordToolDiagnostic } from './document-tools-core.js';
@@ -706,6 +708,8 @@ Object.assign(translations['zh-CN'], {
   diagramVisualUnsupported: '当前源码包含循环、注释、元数据或其他高级配置，请继续使用源码模式，避免内容丢失。',
   pdfWithBookmarks: '标题书签',
   pdfExported: 'PDF 已导出并生成标题书签',
+  printImagesFailed: '部分图片未能加载完成，已停止打印。请检查图片或网络后重试',
+  printFailed: '无法启动打印，请稍后重试',
   pdfDirectFailed: 'PDF 直接导出失败',
   pdfEngineFallback: '未找到兼容的 Edge／Chrome，将改用系统打印',
   pdfEngineFailedFallback: 'PDF 引擎超时或失败，将改用系统打印；请在打印窗口中选择另存为 PDF',
@@ -761,6 +765,8 @@ Object.assign(translations.en, {
   diagramVisualUnsupported: 'This source contains loops, notes, metadata, or other advanced configuration. Keep using Source mode so no content is lost.',
   pdfWithBookmarks: 'Heading bookmarks',
   pdfExported: 'PDF exported with heading bookmarks',
+  printImagesFailed: 'Some images could not finish loading. Printing was stopped. Check the images or your connection and try again.',
+  printFailed: 'Unable to start printing. Please try again.',
   pdfDirectFailed: 'Direct PDF export failed',
   pdfEngineFallback: 'No compatible Edge or Chrome was found; falling back to system printing',
   pdfEngineFailedFallback: 'The PDF engine timed out or failed. Falling back to system printing; choose Save as PDF in the print dialog.',
@@ -1160,6 +1166,7 @@ function isPlainTextFile(path) {
 function editorPresentationExtensions() {
   if (editorSourceFallback || isPlainTextFile(state.currentFile?.path)) return [];
   if (state.editorPresentation === 'source') return [sourceImageFolding];
+  if (!state.editing) return [sourceImageFolding];
   const session = state.documentSession, path = state.currentFile?.path;
   const mediaExtensions = [embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
       editorFormulaPreview, formulaPreviewContext.of({ enabled: state.formulaDisplay !== 'source', sanitize: html => DOMPurify.sanitize(html),
@@ -3490,6 +3497,7 @@ function scheduleDiagramPreview(immediate = false) {
 async function updateDiagramPreview() {
   const source = els.diagramSource.value.trim();
   const template = diagramTemplateById(diagramWizardState.templateId);
+  releaseRenderedResources(els.diagramPreview);
   els.diagramPreview.replaceChildren();
   if (!source) {
     els.diagramPreview.textContent = t('diagramInvalid');
@@ -3689,6 +3697,8 @@ function closeDiagramDialog() {
   if (showToast.owner === diagramWizardState || showToast.owner === 'diagram-paste') hideToast();
   clearTimeout(diagramPreviewTimer);
   diagramWizardState.saveRequest = null;
+  releaseRenderedResources(els.diagramPreview);
+  els.diagramPreview.replaceChildren();
   setDiagramFullscreen(false);
   els.diagramDialog.classList.add('hidden');
   els.diagramDialog.classList.remove('editing-existing-flowchart');
@@ -6057,6 +6067,7 @@ function collectDocumentHeadings(container) {
 }
 
 function scrollReaderToHeading(target, behavior = 'smooth') {
+  cancelReadingPositionRestore();
   revealReaderLayout(els.content);
   const heading = typeof target === 'string'
     ? [...els.content.querySelectorAll('h1, h2, h3, h4, h5, h6')].find(item => item.id === target)
@@ -6304,10 +6315,19 @@ function cancelScheduledEditorPreview() {
   renderEditorPreview.idleHandle = 0;
 }
 
+// Every DOM replacement/close must retire both pending work and live charts.
+function releaseRenderedResources(container) {
+  cancelReaderWork(container);
+  cancelPreviewImages(container);
+  cancelMermaidRendering(container);
+  releaseEChartsDiagrams(container);
+}
+
 function suspendEditorPreview() {
   cancelScheduledEditorPreview();
   renderEditorPreview.generation = (renderEditorPreview.generation || 0) + 1;
   cancelMermaidRendering(els.editorPreview);
+  cancelPreviewImages(els.editorPreview);
   releaseEChartsDiagrams(els.editorPreview);
   els.editorPreview.replaceChildren();
 }
@@ -6538,7 +6558,9 @@ function applyMarkdownTableLayouts(container, layouts) {
 
 function renderMarkdownTo(container, doc, content) {
   cancelReaderWork(container);
+  cancelPreviewImages(container);
   if (isPlainTextFile(doc.path)) {
+    releaseRenderedResources(container);
     container.innerHTML = `<div class="plain-text">${escapeHtml(content)}</div>`;
     return Promise.resolve();
   }
@@ -6603,24 +6625,7 @@ function renderMarkdownTo(container, doc, content) {
     }
     element.style.color = value;
   });
-  container.querySelectorAll('img').forEach(img => {
-    const markdownSrc = img.dataset.markdownSrc || img.getAttribute('src') || '';
-    delete img.dataset.markdownSrc;
-    if (/^(https?:|data:)/i.test(markdownSrc)) return;
-    img.removeAttribute('src');
-    img.classList.add('local-image-loading');
-    window.quilliteMarkdown.readImageData(markdownSrc, doc.directory).then(dataUrl => {
-      if (!img.isConnected) return;
-      if (!dataUrl) throw new Error('Local image returned no data');
-      img.src = dataUrl;
-      img.classList.remove('local-image-loading', 'local-image-error');
-    }).catch(error => {
-      if (!img.isConnected) return;
-      img.classList.remove('local-image-loading');
-      img.classList.add('local-image-error');
-      console.error(`Unable to preview local image: ${markdownSrc}`, error);
-    });
-  });
+  loadPreviewImages(container, { directory: doc.directory, readImageData: window.quilliteMarkdown.readImageData });
   bindDocumentActions(container);
   if (container === els.editorPreview && state.editing && codeEditor?.state.doc.toString() === content) {
     const elements = renderedMath.formulas.map(item => {
@@ -6661,21 +6666,21 @@ function renderEditorPreview(content = state.currentFile?.content || '') {
     });
   } catch (error) {
     reportSilentError(error, 'preview.render-editor');
+    releaseRenderedResources(els.editorPreview);
     els.editorPreview.innerHTML = `<p class="preview-error">${t('previewError')}</p>`;
     console.error(error);
   }
 }
 
 function renderCurrentDocument() {
+  cancelReadingPositionRestore();
   const doc = state.currentFile;
   if (!doc) return;
   // Identity must follow the opened document even if rendering fails.
   els.breadcrumb.innerHTML = `<span>${escapeHtml(doc.directory)}</span><i>›</i><strong>${escapeHtml(doc.name)}</strong>`;
   try {
     renderMarkdownTo(els.content, doc, doc.content);
-    const cjkCount = (doc.content.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
-    const latinWords = (doc.content.replace(/[\u3400-\u9fff\uf900-\ufaff]/g, ' ').match(/[\p{L}\p{N}]+/gu) || []).length;
-    const words = cjkCount + latinWords;
+    const words = documentWordCount(doc.content);
     const minutes = Math.max(1, Math.ceil(words / 300));
     els.readingTime.textContent = t('readingTime', {
       minutes,
@@ -6684,7 +6689,7 @@ function renderCurrentDocument() {
     renderToc();
     renderFileList();
   } catch (error) {
-    releaseEChartsDiagrams(els.content);
+    releaseRenderedResources(els.content);
     els.content.innerHTML = `<p class="preview-error">${t('previewError')}</p>`;
     els.readingTime.textContent = '';
     renderToc();
@@ -6715,6 +6720,8 @@ function syncDocumentAccessControls() {
 
 function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
+  cancelReadingPositionRestore();
+  readingPosition = null;
   closeImageDialog();
   cancelImageInsertions();
   closeFormulaDialog(false);
@@ -6764,8 +6771,9 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
 }
 
 function closePreview() {
-  cancelReaderWork(els.content);
   if (!maybeDiscardChanges()) return;
+  cancelReadingPositionRestore();
+  readingPosition = null;
   closeImageDialog();
   cancelImageInsertions();
   closeFormulaDialog(false);
@@ -6786,7 +6794,9 @@ function closePreview() {
   resetAIDocumentReviewSession();
   closeSearch();
   closeDocumentActionsMenu();
-  releaseEChartsDiagrams(els.content);
+  releaseRenderedResources(els.content);
+  suspendEditorPreview();
+  readerHTMLCache.clear();
   state.currentFile = null;
   state.currentDocumentHasDiagrams = false;
   state.spellcheckIgnoredWords = new Set();
@@ -7067,6 +7077,9 @@ async function savePermissionCopyAndEdit() {
   await saveLibraryDocumentAs(filePath, { editAfterSave: true });
 }
 
+let readingPosition = null;
+let cancelReadingPositionRestore = () => {};
+
 async function toggleEditor(forceEditing) {
   if (!state.currentFile || editorModeSwitching) return;
   const nextEditing = typeof forceEditing === 'boolean' ? forceEditing : !state.editing;
@@ -7105,8 +7118,25 @@ async function toggleEditor(forceEditing) {
       }
       if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
     }
+    cancelReadingPositionRestore();
+    if (nextEditing) {
+      readingPosition = {
+        session: requestedSession,
+        ...captureReadingPosition($('.reader-pane'), els.content)
+      };
+    }
     state.editing = nextEditing;
-    if (nextEditing) cancelReaderWork(els.content);
+    // Retain the document, selection and undo history, but unmount live widgets
+    // while reading so hidden nested editors/images do not consume resources.
+    if (codeEditor && editorPresentation) {
+      codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
+    }
+    if (nextEditing) {
+      // Reading is rebuilt from current content on return. Do not keep a second
+      // hidden DOM tree with decoded images and live charts throughout editing.
+      releaseRenderedResources(els.content);
+      els.content.replaceChildren();
+    }
     if (!nextEditing) { closeImageDialog(); cancelImageInsertions(); }
     syncEditorLayoutOptions();
     syncEditorDiagramDisplay();
@@ -7132,13 +7162,18 @@ async function toggleEditor(forceEditing) {
     } else {
       resetAIDocumentReviewSession();
       state.currentFile.content = editorContent();
+      suspendEditorPreview();
       renderCurrentDocument();
       els.editorView.classList.add('hidden');
       els.documentView.classList.remove('hidden');
       els.editButton.classList.remove('active');
       els.editButtonLabel.textContent = t('edit');
       updatePaneResizerVisibility();
-      $('.reader-pane').scrollTo({ top: 0 });
+      cancelReadingPositionRestore = restoreReadingPosition(
+        $('.reader-pane'), els.content,
+        readingPosition?.session === requestedSession ? readingPosition : null,
+        () => state.documentSession === requestedSession && !state.editing
+      );
     }
   } finally {
     editorModeSwitching = false;
@@ -7501,14 +7536,25 @@ function exportPreviewContainer() {
 async function waitForPreviewImages(container, timeout = 3000) {
   const pending = [...container.querySelectorAll('img')].filter(image => !image.complete || image.classList.contains('local-image-loading'));
   if (!pending.length) return;
-  await Promise.race([
-    Promise.all(pending.map(image => new Promise(resolve => {
-      const finish = () => resolve();
-      image.addEventListener('load', finish, { once: true });
-      image.addEventListener('error', finish, { once: true });
-    }))),
-    new Promise(resolve => setTimeout(resolve, timeout))
-  ]);
+  const cleanups = [];
+  let timer;
+  try {
+    await Promise.race([
+      Promise.all(pending.map(image => new Promise(resolve => {
+        const finish = () => resolve();
+        image.addEventListener('load', finish, { once: true });
+        image.addEventListener('error', finish, { once: true });
+        cleanups.push(() => {
+          image.removeEventListener('load', finish);
+          image.removeEventListener('error', finish);
+        });
+      }))),
+      new Promise(resolve => { timer = setTimeout(resolve, timeout); })
+    ]);
+  } finally {
+    clearTimeout(timer);
+    cleanups.forEach(cleanup => cleanup());
+  }
 }
 
 function assertExportImagesReady(container) {
@@ -7646,6 +7692,9 @@ async function renderedHTMLForExport(header = '', footer = '') {
   if (state.editing && state.editorLayout === 'editor-only') {
     await renderMarkdownTo(container, state.currentFile, editorContent());
   }
+  // A bounded queue may still contain images without src. Finish those reads
+  // before the existing decode wait rather than exporting incomplete markup.
+  await waitForPreviewImageReads(container);
   await waitForPreviewImages(container);
   return addExportEdges(await cleanRenderedHTMLForExport(container), header, footer);
 }
@@ -7757,8 +7806,7 @@ async function exportPDFWithBookmarks(options = {}, { allowSystemFallback = true
         openPDFTutorial();
         return 'tutorial';
       }
-      await printCurrentDocument(options);
-      return 'print';
+      return await printCurrentDocument(options) ? 'print' : false;
     }
     if (isExportFileInUseError(error)) {
       showToast(t('exportFileInUse'), 'warning');
@@ -8200,23 +8248,49 @@ async function confirmPDFExport() {
   await printCurrentDocument();
 }
 
+let printRequest = 0;
 async function printCurrentDocument(options = {}) {
   if (!closeTypographySettings()) return;
-  if (state.editing) toggleEditor(false);
-  finishReaderWork(els.content, highlightReaderSource);
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  await renderMermaidDiagrams(els.content, {
-    diagramLabel: t('mermaidDiagram'),
-    errorTitle: t('mermaidRenderError'),
-    errorHint: t('mermaidRenderHint')
-  });
-  await renderEChartsDiagrams(els.content, {
-    errorTitle: t('dataChartRenderError'),
-    errorHint: t('dataChartRenderHint')
-  });
-  const pageStyle = createPrintPageStyle(options);
+  if (!state.currentFile) return false;
+  const request = ++printRequest, session = state.documentSession;
+  let renderedRoot, captured = false, pageStyle;
+  // Loading may take seconds. Never print a different document/render, or the
+  // empty hidden reader after the user resumes editing while we are waiting.
+  const current = () => request === printRequest && session === state.documentSession
+    && state.currentFile && !state.editing && (!captured || renderedRoot === els.content.firstChild);
   try {
+    if (state.editing) await toggleEditor(false);
+    if (!current()) return false;
+    renderedRoot = els.content.firstChild;
+    captured = true;
+    finishReaderWork(els.content, highlightReaderSource);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (!current()) return false;
+    await renderMermaidDiagrams(els.content, {
+      diagramLabel: t('mermaidDiagram'),
+      errorTitle: t('mermaidRenderError'),
+      errorHint: t('mermaidRenderHint')
+    });
+    if (!current()) return false;
+    await renderEChartsDiagrams(els.content, {
+      errorTitle: t('dataChartRenderError'),
+      errorHint: t('dataChartRenderHint')
+    });
+    if (!current()) return false;
+    await waitForPreviewImageReads(els.content);
+    if (!current()) return false;
+    await waitForPreviewImages(els.content);
+    if (!current()) return false;
+    assertExportImagesReady(els.content);
+    pageStyle = createPrintPageStyle(options);
     await window.quilliteMarkdown.print();
+    return true;
+  } catch (error) {
+    if (current()) {
+      reportSilentError(error, 'document.print');
+      showToast(t(isExportImageResourceError(error) ? 'printImagesFailed' : 'printFailed'), 'error');
+    }
+    return false;
   } finally {
     pageStyle?.remove();
   }
@@ -10642,6 +10716,8 @@ function closeDocumentHistory(restoreFocus = true) {
   documentVersions = [];
   selectedDocumentVersion = null;
   els.restoreDocumentHistory.disabled = true;
+  els.documentHistoryPreview.replaceChildren();
+  els.documentHistoryList.replaceChildren();
   if (els.aiSettingsDialog.classList.contains('hidden') && els.aiRewriteDialog.classList.contains('hidden') && els.aiReviewDialog.classList.contains('hidden')) document.body.classList.remove('dialog-open');
   if (restoreFocus) focusCodeEditor();
 }
@@ -10971,7 +11047,10 @@ els.accentMenu.addEventListener('click', event => {
   closeAccentMenu();
   $('#accentButton').focus();
 });
-els.backToTop.addEventListener('click', () => $('.reader-pane').scrollTo({ top: 0, behavior: 'smooth' }));
+els.backToTop.addEventListener('click', () => {
+  cancelReadingPositionRestore();
+  $('.reader-pane').scrollTo({ top: 0, behavior: 'smooth' });
+});
 els.editButton.addEventListener('click', () => toggleEditor());
 $('#renameDocumentButton').addEventListener('click', openRenameDocument);
 $('#editorDocumentLocation').addEventListener('click', () => { if (state.currentFile) window.quilliteMarkdown.showInFolder(state.currentFile.path).catch(error => showToast(t('renameFailed'), 'error')); });

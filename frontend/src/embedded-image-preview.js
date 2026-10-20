@@ -5,8 +5,9 @@ import { mediaOwnedByInnerEditor, singleLineMedia } from './media-ownership.js';
 import { editableProjectionSync } from './editable-owner.js';
 import { imageDefinitionsField, imageDefinitionsFor } from './editor-reference-context.js';
 import { imageDataDecorations, sourceImageFolding, sourceImagePhrases } from './source-image-folding.js';
+import { createImageLoadSession } from './image-load-session.js';
 export { sourceImageFolding, sourceImagePhrases };
-import { alignedImageSource, imageAlignment, editorImageItems, editorImageGroups, imageSourceKind, canJoinImageGroups, imageRowSource, separateImageChanges, alignImageChanges, imageDimensions, imageDimensionStyle, resizeImageChanges } from './image-layout.js';
+import { alignedImageSource, imageAlignment, editorImageItems, editorImageGroups, canJoinImageGroups, imageRowSource, separateImageChanges, alignImageChanges, imageDimensions, imageDimensionStyle, resizeImageChanges } from './image-layout.js';
 
 // Keep the public helpers available to existing regression fixtures.
 export { alignedImageSource, imageAlignment };
@@ -70,27 +71,7 @@ function positionImageControls(root) {
 // resolves them with the existing MIME/size/bookmark protections. At most four
 // reads run concurrently, repeated visible references share in-flight reads.
 function createSession(state, context = state.facet(imagePreviewContext)) {
-  const session = { active: true, context, pending: [], inFlight: new Map(), running: 0 };
-  const drain = () => {
-    while (session.active && session.running < 4 && session.pending.length) {
-      const task = session.pending.shift(); session.running++;
-      Promise.resolve().then(() => context.readImageData?.(task.ref, context.directory || '')).then(value => {
-        if (imageSourceKind(value || '') !== 'embedded') throw new Error('IMAGE_UNAVAILABLE');
-        task.resolve(value);
-      }).catch(task.reject).finally(() => { session.running--; session.inFlight.delete(task.ref); drain(); });
-    }
-  };
-  session.load = ref => {
-    if (!session.active) return Promise.reject(new Error('IMAGE_SESSION_CLOSED'));
-    if (session.inFlight.has(ref)) return session.inFlight.get(ref);
-    const promise = new Promise((resolve, reject) => session.pending.push({ ref, resolve, reject }));
-    session.inFlight.set(ref, promise); drain(); return promise;
-  };
-  session.dispose = () => {
-    session.active = false;
-    for (const task of session.pending.splice(0)) { session.inFlight.delete(task.ref); task.reject(new Error('IMAGE_SESSION_CLOSED')); }
-  };
-  return session;
+  return createImageLoadSession(context);
 }
 
 function sameGroup(first, second) {

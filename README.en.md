@@ -31,6 +31,8 @@ The current release is **V3.0.0**. This page describes current behavior; histori
 
 ## Quick start
 
+Leaving the editor restores the pre-edit reading position instead of jumping to the top. Newly opened documents still start at the top.
+
 1. Choose Open document to read a file, or New document to start editing. The first manual save asks for a name and location.
 2. Use Live editing / Source at the lower right of the editor header. The table below describes explicit mode actions.
 3. Insert tables, images, equations or charts from the toolbar; additional actions move into More formatting when space is limited.
@@ -183,5 +185,6 @@ See the [release guide](RELEASING.md) for publishing and website synchronization
 - [Changelog](CHANGELOG.md) · [Complete v3.0.0 record](docs/releases/3.0.0-details.md)
 - [Contributing](CONTRIBUTING.md) · [Testing notes](docs/testing.md) · [Security policy](SECURITY.md)
 - [AI technical guide](AGENTS.md) · [Release guide](RELEASING.md)
+- [Development-branch memory optimization, print-image readiness and validation](docs/resource-lifecycle.md)
 - [Website source](https://github.com/liuhang798/quillite-markdown-website)
 - [MIT License](LICENSE)

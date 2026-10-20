@@ -969,6 +969,28 @@ func (a *App) UploadImageToPicGoWithProgress(currentFile, imagePath, operationID
 	return a.uploadImageToPicGo(currentFile, imagePath, operationID)
 }
 
+// Frame the validated image without copying it into a second multipart buffer.
+// Only the small MIME header and closing boundary are allocated here.
+func picGoMultipartBody(name string, data []byte, contentType string) (io.Reader, int64, string, error) {
+	var framing bytes.Buffer
+	writer := multipart.NewWriter(&framing)
+	safeName := strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(name)
+	_, err := writer.CreatePart(map[string][]string{
+		"Content-Disposition": {fmt.Sprintf(`form-data; name="files"; filename="%s"`, safeName)},
+		"Content-Type":        {contentType},
+	})
+	if err != nil {
+		return nil, 0, "", err
+	}
+	headerSize := framing.Len()
+	if err := writer.Close(); err != nil {
+		return nil, 0, "", err
+	}
+	frame := framing.Bytes()
+	body := io.MultiReader(bytes.NewReader(frame[:headerSize]), bytes.NewReader(data), bytes.NewReader(frame[headerSize:]))
+	return body, int64(len(frame)) + int64(len(data)), writer.FormDataContentType(), nil
+}
+
 func (a *App) uploadImageToPicGo(currentFile, imagePath, operationID string) (string, error) {
 	reportProgress := imageUploadReporter(operationID, a.emitImageUploadProgress)
 	prefs, err := a.readPreferences()
@@ -987,28 +1009,15 @@ func (a *App) uploadImageToPicGo(currentFile, imagePath, operationID string) (st
 		return "", err
 	}
 
-	var payload bytes.Buffer
-	writer := multipart.NewWriter(&payload)
-	partHeader := make(map[string][]string)
-	safeName := strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(name)
-	partHeader["Content-Disposition"] = []string{fmt.Sprintf(`form-data; name="files"; filename="%s"`, safeName)}
-	partHeader["Content-Type"] = []string{contentType}
-	part, err := writer.CreatePart(partHeader)
+	body, payloadSize, multipartType, err := picGoMultipartBody(name, data, contentType)
 	if err != nil {
-		return "", err
-	}
-	if _, err := part.Write(data); err != nil {
-		return "", err
-	}
-	if err := writer.Close(); err != nil {
 		return "", err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	payloadSize := int64(payload.Len())
 	reportProgress("preparing", 0, payloadSize)
-	requestBody := newUploadProgressReader(bytes.NewReader(payload.Bytes()), payloadSize, func(done, total int64) {
+	requestBody := newUploadProgressReader(body, payloadSize, func(done, total int64) {
 		reportProgress("uploading", done, total)
 	})
 	request, err := newPicGoRequest(ctx, http.MethodPost, serverURL, "/upload", a.readPicGoSecret(), requestBody)
@@ -1016,7 +1025,7 @@ func (a *App) uploadImageToPicGo(currentFile, imagePath, operationID string) (st
 		return "", err
 	}
 	request.ContentLength = payloadSize
-	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Content-Type", multipartType)
 	client := picGoHTTPClient(30 * time.Second)
 	defer client.CloseIdleConnections()
 	response, err := client.Do(request)

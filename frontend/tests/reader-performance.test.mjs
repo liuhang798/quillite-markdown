@@ -39,3 +39,10 @@ test('highlight failure and oversized blocks keep complete copyable source', () 
   highlightReaderCode(large, () => { assert.fail('must not block a frame on huge code'); });
   assert.equal(large.textContent.length, READER_DEFER_THRESHOLD + 1);
 });
+
+test('closing the reader releases cached source and HTML', () => {
+  const cache = createReaderCache(); cache.set('document', 'source', '<p>source</p>');
+  cache.clear(); assert.equal(cache.size, 0); assert.equal(cache.bytes, 0);
+  assert.equal(cache.get('document', 'source'), null);
+  cache.set('next', 'next', '<p>next</p>'); assert.equal(cache.size, 1);
+});

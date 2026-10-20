@@ -7,6 +7,9 @@ All notable changes to Quillite Markdown are documented here.
 ### 简体中文
 
 - **新增：即时渲染编辑模式。** 直接在排版后的 Markdown 中编辑标题、正文、列表、引用、表格和代码，无需反复对照源码；可随时切换源码模式，保留文档内容和撤回历史。复杂语法、纯文本及超限文档继续提供源码回退。
+- 10 月 20 日同版本重新构建：修复退出编辑回顶部，恢复进入编辑前的阅读位置，并在短时资源加载期间保持定位；主动导航后停止位置校正。
+- 修复图片排队加载时系统打印可能漏图：等待读取与解码，失败时停止打印；切换文档或返回编辑取消旧打印请求。
+- 优化内存与资源回收：销毁旧图表、释放隐藏渲染内容、合并有界图片读取队列并清理缓存和监听器；减少字数统计与本机 PicGo 上传的临时分配，保留文档、选区和撤回历史。
 - 优化原位编辑体验：改善鼠标定位、中文输入、拖选、复制粘贴和撤回重做；修复代码块编辑跳动、表格清空单元格后退回源码，以及图片与标题、表格相邻时的编辑问题。
 - 重设计“即时渲染／源码”左右切换器，放在标题栏右下方；文字样式菜单更清晰，适配中英文、明暗主题和窄窗口。
 - 增强图片编辑：内嵌 Base64 编码在源码中显示为格式／大小短标签，复制与保存仍保留完整图片数据；保留尺寸、对齐、同排和表格内图片编辑。
@@ -19,6 +22,9 @@ All notable changes to Quillite Markdown are documented here.
 ### English
 
 - **New: live-rendered editing mode.** Edit headings, prose, lists, quotes, tables and code directly in rendered Markdown. Switch to source at any time while preserving document content and undo history. Complex syntax, plain text and oversized documents retain source fallback.
+- October 20 same-version rebuild: restore the pre-edit reading position instead of jumping to the top, briefly compensate for late resource layout changes, and stop correcting on user navigation.
+- Fix missing queued images in system printing: wait for reads and decoding, stop on failure, and cancel stale print requests when changing documents or returning to editing.
+- Reduce memory use through chart disposal, hidden-render cleanup, bounded shared image queues, cache/listener cleanup and fewer temporary allocations in word counting and local PicGo uploads. Preserve document content, selection and undo history.
 - Improve in-place editing, mouse positioning, IME input, selection, copy/paste and undo/redo. Fix code-block editing jumps, tables reverting to source after clearing cells, and image-adjacent heading/table editing.
 - Redesign the Live editing / Source control as a lower-right segmented switch. Refine the text-style menu across Chinese/English, light/dark themes and narrow panes.
 - Condense embedded Base64 image data to format/size labels in source while preserving complete data on copy and save; retain sizing, alignment, image rows and images inside tables.

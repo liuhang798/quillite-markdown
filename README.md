@@ -31,6 +31,8 @@
 
 ## 快速上手
 
+退出编辑会恢复进入编辑前的阅读位置，不再强制回到顶部；新打开的文档仍从顶部开始。
+
 1. 点击“打开文档”阅读文件，或点击“新建文档”直接开始编辑；首次手动保存时选择名称与位置。
 2. 在编辑标题栏右下方切换“即时渲染／源码”。下表说明点击后的行为。
 3. 用工具栏插入表格、图片、公式或图表；空间不足时从“更多格式”找到其他操作。
@@ -183,5 +185,6 @@ bash scripts/build-macos.sh darwin/universal
 - [更新日志](CHANGELOG.md) · [v3.0.0 逐项记录](docs/releases/3.0.0-details.md)
 - [贡献指南](CONTRIBUTING.md) · [测试说明](docs/testing.md) · [安全策略](SECURITY.md)
 - [AI 项目技术指南](AGENTS.md) · [发布指南](RELEASING.md)
+- [开发分支内存优化、打印图片完整性与复测记录](docs/resource-lifecycle.md)
 - [官网源代码](https://github.com/liuhang798/quillite-markdown-website)
 - [MIT 开源协议](LICENSE)
