@@ -20,8 +20,12 @@ try{
  const read=()=>editor.evaluate(async el=>{const{EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');const v=EditorView.findFromDOM(el),r=v.state.selection.main;return{text:v.state.doc.toString(),anchor:r.anchor,head:r.head,empty:r.empty};});
  const reset=async mode=>{await page.locator('[data-editor-presentation="source"]').click();await content.fill(prefix);await content.press('Control+End');await page.locator(`[data-editor-presentation="${mode}"]`).click();};
  for(const mode of ['live','source'])for(const [command,open,close] of [['italic','*','*'],['bold','**','**'],['strikethrough','~~','~~'],['highlight','==','=='],['underline','<u>','</u>'],['inline-code','`','`']]){
-  await reset(mode);const button=page.locator(`#editorFormatBar [data-format="${command}"]`);
-  if(await button.isVisible())await button.click();else{await page.locator('#moreFormatButton').click();await page.locator(`#moreFormatMenu [data-format-command="${command}"]:visible`).click();}
+  await reset(mode);
+  // Mode changes resize the toolbar in animation/ResizeObserver frames. Do not
+  // assume a temporarily hidden control stays in the overflow menu.
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const button=page.locator(`#editorFormatBar [data-format="${command}"]`);
+  if(await button.isVisible())await button.click();else{await page.locator('#moreFormatButton').click();await page.locator(`#editorFormatBar [data-format="${command}"]:visible, #moreFormatMenu [data-format-command="${command}"]:visible`).first().click();}
   const placeholder=await read();assert.equal(placeholder.empty,false,'toolbar selects placeholder');
   // No click or focus call after the toolbar. Each keystroke must append.
   let typed='';for(const char of 'abcdef'){
