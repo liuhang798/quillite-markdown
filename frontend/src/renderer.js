@@ -1406,13 +1406,14 @@ function focusCodeEditor() {
   // A newer click/dialog/document owns focus; never let an old layout callback
   // pull it back into the editor (or dereference an editor that was replaced).
   const canReturn = () => codeEditor === editor && state.editing && state.documentSession === session
+    && !editor.destroyed && !editorHasComposition(editor)
     && document.hasFocus()
     && !document.body.classList.contains('dialog-open')
     && [previousFocus, document.body, editor.contentDOM].includes(document.activeElement);
   requestAnimationFrame(() => {
     if (!canReturn()) return;
     editor.requestMeasure();
-    requestAnimationFrame(() => { if (canReturn()) editor.focus(); });
+    requestAnimationFrame(() => { if (canReturn() && !editor.hasFocus) editor.focus(); });
   });
 }
 
@@ -5407,7 +5408,7 @@ function syncEditorLayoutOptions() {
 }
 
 function setEditorPresentation(mode) {
-  if (codeEditor?.composing) return;
+  if (editorHasComposition(codeEditor)) return;
   state.editorPresentation = mode === 'source' ? 'source' : 'live';
   if (state.editorPresentation === 'live') {
     state.formulaDisplay = 'preview';

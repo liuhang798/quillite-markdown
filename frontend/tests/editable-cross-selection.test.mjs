@@ -124,8 +124,8 @@ test('native character replacement consumes only actual beforeinput data', () =>
   assert.equal(view.state.doc.toString(), source.replace('DEF', 'DEx').replace('后文\n\n', ''));
 });
 test('composition and uncancelable input are never hijacked by the cross-selection handler', () => {
-  for (const extra of [{ isComposing: true }, { cancelable: false }, { inputType: 'insertCompositionText' }]) {
-    const view = { state: create(source, source.indexOf('F'), source.indexOf('后文') + 2), dispatch() { assert.fail('must not dispatch'); } };
+  for (const extra of [{ isComposing: true }, { compositionStarted: true }, { cancelable: false }, { inputType: 'insertCompositionText' }]) {
+    const view = { state: create(source, source.indexOf('F'), source.indexOf('后文') + 2), compositionStarted:!!extra.compositionStarted, dispatch() { assert.fail('must not dispatch'); } };
     assert.equal(handleCrossBlockTextInput({ data: '字', inputType: 'insertText', cancelable: true, ...extra, preventDefault() { assert.fail('must not cancel'); } }, view), false);
   }
 });

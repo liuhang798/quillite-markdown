@@ -22,7 +22,21 @@ export function editorComposing(view) {
 }
 export function editorHasComposition(view) {
   if (editorComposing(view)) return true;
-  return [...(view?.dom?.querySelectorAll('.cm-editor') || [])].some(dom => editorComposing(EditorView.findFromDOM(dom)));
+  return [...(view?.dom?.querySelectorAll?.('.cm-editor') || [])].some(dom => editorComposing(EditorView.findFromDOM(dom)));
+}
+
+// Background work must not synchronize the native selection while an IME owns
+// it. Always enter through a timer (also safe from a parent view's updateDOM),
+// revalidate on delivery, and let the owner cancel on disposal/document change.
+export function afterComposition(view, callback, valid = () => true, clock = {schedule:(fn,ms)=>setTimeout(fn,ms), cancel:id=>clearTimeout(id)}) {
+  let timer, cancelled = false;
+  const run = () => {
+    if (cancelled || view.destroyed || !valid()) return;
+    if (editorHasComposition(view)) { timer = clock.schedule(run, 50); return; }
+    callback();
+  };
+  timer = clock.schedule(run, 0);
+  return () => { cancelled = true; clock.cancel(timer); };
 }
 export function compositionSession(view, notify, schedule = requestAnimationFrame) {
   const session = {active:false, generation:0};

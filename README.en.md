@@ -69,7 +69,7 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### 41 chart types and 95 equation templates
 
-Live editing records composition start without immediately updating the editor view or resetting the native selection. The first native input transaction adopts this state, and rendering resumes after commit. Nonessential focus synchronization, spelling and equation refreshes are deferred; a previous commit callback cannot unlock a new session. Native macOS Pinyin still needs device acceptance testing; Source mode remains a temporary workaround.
+Live editing records composition start without immediately updating the editor view or resetting the native selection. The first native input transaction adopts this state, and rendering resumes after commit. Nonessential focus, spelling, equation, image and diagram updates wait until composition ends. Nested-editor settings replay in order, and disposal cancels stale callbacks. Code blocks, cross-block input, dragging and mode switching also protect the first phonetic key. The reported macOS candidate-window interruption has been confirmed fixed by the user on their device; other OS/IME combinations still require ongoing regression testing.
 
 Live equations no longer disappear at 300,000 document characters or stop after 256 equations. Large documents are scanned locally in a background worker, and visible equations are typeset in small batches. Choosing Live restores rendered equations; More → Equation display → Equation source and each equation's source action remain available. Source fallback for other complex blocks and equation syntax safety limits are unchanged.
 

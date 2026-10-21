@@ -802,7 +802,7 @@ function perRangeCommand(state, commands) {
 
 export function editSelectedFootnote(view) {
   const state=view.state,live=state.field(livePreviewField,false),selection=state.selection.main;
-  if(!live||live.composing||view.composing||state.readOnly||selection.empty||state.selection.ranges.length!==1)return false;
+  if(!live||live.composing||editorHasComposition(view)||state.readOnly||selection.empty||state.selection.ranges.length!==1)return false;
   const item=live.plan.widgets.find(item=>item.kind==='footnote'&&item.from===selection.from&&item.to===selection.to);
   const edit=state.facet(livePreviewContext).editFootnote;
   if(!item||!edit)return false;edit(item,view);return true;
@@ -810,7 +810,7 @@ export function editSelectedFootnote(view) {
 
 export function insertLiveNewline(view) {
   const state = view.state, live = state.field(livePreviewField, false);
-  if (!live || live.composing || view.composing || state.readOnly || (view.dom?.classList.contains('cm-live-inner') && !view.dom.classList.contains('cm-live-prose'))) return false;
+  if (!live || live.composing || editorHasComposition(view) || state.readOnly || (view.dom?.classList.contains('cm-live-inner') && !view.dom.classList.contains('cm-live-prose'))) return false;
   let moved = false;
   let tree;
   const ranges = state.selection.ranges.map((range, index) => {
@@ -863,7 +863,7 @@ export function insertLiveNewline(view) {
 // semantic underline instead, retaining its container and paragraph boundary.
 export function deleteLiveHeadingBackward(view) {
   const state = view.state, live = state.field(livePreviewField, false);
-  if (!live || live.composing || view.composing || state.readOnly || view.dom?.classList.contains('cm-live-inner')) return false;
+  if (!live || live.composing || editorHasComposition(view) || state.readOnly || view.dom?.classList.contains('cm-live-inner')) return false;
   if (state.selection.ranges.length > 1) {
     // Generic character deletion must still treat hidden markers/media as
     // atomic, just as the actual EditorView does for a single caret.
@@ -1011,7 +1011,7 @@ function rangePrefersPlain(state, range, fields, tree, fieldTrees = new Map()) {
 // to each caret, including one left in trimmed table padding after deletion.
 export function deleteLiveFieldContent(view, direction, byWord = false) {
   const state=view.state, live=state.field(livePreviewField,false);
-  if(!live || live.composing || view.composing || state.readOnly || (view.dom?.classList.contains('cm-live-inner')&&!view.dom.classList.contains('cm-live-prose'))) return false;
+  if(!live || live.composing || editorHasComposition(view) || state.readOnly || (view.dom?.classList.contains('cm-live-inner')&&!view.dom.classList.contains('cm-live-prose'))) return false;
   const fields=editableFields(renderedEditableBlocks(state));
   const joinLines=!byWord&&direction>0&&!live.searchSelection;
   if(!state.selection.ranges.some(r=>fields.some(f=>editableFieldContains(state.doc,f,r.from,r.to,f.kind))||joinLines&&liveLineJoin(state,r))) return false;
@@ -1072,7 +1072,7 @@ export function deleteLiveFieldContent(view, direction, byWord = false) {
 // or list prefix into visible text. Only parser-confirmed containers qualify.
 export function deleteLiveLineForward(view) {
   const state=view.state,live=state.field(livePreviewField,false),range=state.selection.main;
-  if(!live||live.composing||live.searchSelection||view.composing||state.readOnly)return false;
+  if(!live||live.composing||live.searchSelection||editorHasComposition(view)||state.readOnly)return false;
   if(state.selection.ranges.length>1)return deleteLiveFieldContent(view,1);
   const spec=liveLineJoin(state,range);
   if(!spec)return false;
@@ -1153,7 +1153,7 @@ export function liveAIReplacement(state, from, to, text) {
 
 export function handleCrossBlockTextInput(event, view) {
   const selection = view.state.selection.main;
-  if (view.state.selection.ranges.length > 1 && !view.state.readOnly && !view.composing && !event.isComposing
+  if (view.state.selection.ranges.length > 1 && !view.state.readOnly && !editorHasComposition(view) && !event.isComposing
     && event.cancelable && event.inputType === 'insertText' && typeof event.data === 'string'
     && view.state.field(livePreviewField,false)?.plan.widgets.some(w=>view.state.selection.ranges.some(r=>overlaps(w,r)))) {
     // Native DOM has only one selection and cannot express selected text inside
@@ -1162,7 +1162,7 @@ export function handleCrossBlockTextInput(event, view) {
     view.dispatch({...replaceLiveSelections(view.state,event.data),userEvent:'input.type',scrollIntoView:true});
     return true;
   }
-  if (!view.state.field(crossSelectionField, false) || selection.empty || view.state.selection.ranges.length !== 1 || view.state.readOnly || view.composing || event.isComposing
+  if (!view.state.field(crossSelectionField, false) || selection.empty || view.state.selection.ranges.length !== 1 || view.state.readOnly || editorHasComposition(view) || event.isComposing
     || !event.cancelable || event.inputType !== 'insertText' || typeof event.data !== 'string') return false;
   // Use the actual input, not a DOM diff spanning noneditable widgets. The
   // latter can include hidden fence text around the native selection edge.

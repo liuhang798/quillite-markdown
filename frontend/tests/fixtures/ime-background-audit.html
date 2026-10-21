@@ -1,0 +1,38 @@
+<!doctype html><html><meta charset="utf-8"><title>Isolated IME background regression</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="../../src/editor-live-preview.css">
+<style>body{font:16px sans-serif}.cm-editor{height:600px}.cm-scroller{overflow:auto}</style>
+<div id="editor"></div><script type="module">
+import {EditorState, StateEffect} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+import {marked} from 'marked';
+import DOMPurify from 'dompurify';
+import {editorLivePreview, livePreviewContext} from '../../src/editor-live-preview.js';
+import {forwardEditableEffects} from '../../src/live-editable-block.js';
+import {embeddedImagePreview, refreshImagePreviews} from '../../src/embedded-image-preview.js';
+import {editorDiagramPreview, diagramPreviewContext, diagramRenderFailed} from '../../src/editor-diagram-preview.js';
+const effect=StateEffect.define();
+window.imeAudit={effect, forwardEditableEffects, refreshImagePreviews, diagramRenderFailed,
+ create(doc,diagramRender=()=>true){
+  this.view?.destroy();
+  this.view=new EditorView({parent:document.querySelector('#editor'),state:EditorState.create({doc,selection:{anchor:doc.length},extensions:[
+   editorLivePreview, livePreviewContext.of({render:source=>DOMPurify.sanitize(marked.parse(source))}),
+   embeddedImagePreview, editorDiagramPreview, diagramPreviewContext.of({render:diagramRender}),
+  ]})});
+  this.view.focus();return this.view;
+ },
+ inner(){return EditorView.findFromDOM(this.view.dom.querySelector('.cm-live-inner'));},
+ start(view){
+  view.dispatch({selection:{anchor:view.state.doc.length}});view.focus();
+  const line=[...view.contentDOM.querySelectorAll('.cm-line')].at(-1);
+  const node=line.firstChild,selection=getSelection();
+  selection.setBaseAndExtent(node,node.length-1,node,node.length);
+  view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true,data:''}));
+  this.watch={view,node,effects:[],dispatch:view.dispatchTransactions};
+  const watch=this.watch;
+  view.dispatchTransactions=(trs,...args)=>{watch.effects.push(...trs.flatMap(tr=>tr.effects));return watch.dispatch(trs,...args);};
+ },
+ snapshot(){const {node}=this.watch,s=getSelection();return {sameNode:s.anchorNode===node&&s.focusNode===node,anchor:s.anchorOffset,head:s.focusOffset};},
+ end(){this.watch.view.contentDOM.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:''}));},
+ stop(){const {view,dispatch}=this.watch;view.dispatchTransactions=dispatch;},
+};
+</script></html>

@@ -48,12 +48,19 @@ function harness(saved = null) {
     codeEditor: editor, scheduleFormatToolbarLayout() {}, schedulePaneWidthRefresh() {},
     updatePaneResizerVisibility() {}, suspendEditorPreview() {}, renderEditorPreview() {}, editorContent: () => editor.content,
     editorPresentation: { reconfigure: extensions => extensions }, editorPresentationExtensions: () => [],
-    editorFormulaField: {},
+    editorFormulaField: {}, editorHasComposition: view => !!(view?.compositionStarted || view?.composing),
   });
   vm.runInContext(functions, context);
   context.setEditorLayout(context.normalizeEditorLayout(storage.get('editorLayout')), true);
   return { context, storage, buttons, editor, current };
 }
+
+test('mode switching leaves the first native composition key untouched',()=>{
+ const h=harness();h.editor.compositionStarted=true;
+ const before=JSON.stringify(h.context.state);
+ h.context.setEditorPresentation('source');assert.equal(JSON.stringify(h.context.state),before);
+ assert.equal(h.storage.has('editorPresentation'),false);
+});
 
 test('editor layout defaults safely and restores the saved orientation', () => {
   for (const value of [undefined, null, '', 'invalid', 'preview-left']) {

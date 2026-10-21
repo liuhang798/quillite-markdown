@@ -38,6 +38,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/ime-playwright" --no-save playwright@1.62.1
           node "$RUNNER_TEMP/ime-playwright/node_modules/playwright/cli.js" install webkit
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/ime-playwright/node_modules/playwright" IME_BROWSER=webkit node frontend/tests/browser-ime-start-selection.mjs
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/ime-playwright/node_modules/playwright" IME_BROWSER=webkit node frontend/tests/browser-ime-background.mjs
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
       - name: Build universal application
@@ -54,7 +55,7 @@ jobs:
           ditto "$app_path" "$staging_dir/轻阅 Markdown.app"
           ln -s /Applications "$staging_dir/Applications"
           touch "$staging_dir/.metadata_never_index"
-          output='build/bin/ime-test/quillite-markdown-3.0.0-macos-ime-test-r2-universal.dmg'
+          output='build/bin/ime-test/quillite-markdown-3.0.0-macos-ime-test-r3-universal.dmg'
           hdiutil create -volname 'Quillite IME Test' -srcfolder "$staging_dir" -format UDZO "$output"
           hdiutil verify "$output"
           cd build/bin/ime-test
@@ -62,7 +63,7 @@ jobs:
           printf 'Test build only. No Release or version tag was created.\nCommit: %s\nAd-hoc signed; not Apple notarized.\nNative macOS Pinyin acceptance is still required.\n' "$GITHUB_SHA" > BUILD-INFO.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: quillite-macos-ime-test-r2-${{ github.sha }}
+          name: quillite-macos-ime-test-r3-${{ github.sha }}
           path: build/bin/ime-test/*
           if-no-files-found: error
           retention-days: 7

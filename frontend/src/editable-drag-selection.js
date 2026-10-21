@@ -1,3 +1,4 @@
+import {editorHasComposition} from './editor-composition.js';
 import { EditorView } from '@codemirror/view';
 import { crossSelection } from './editable-cross-selection.js';
 import { resolveEditableOwner } from './editable-owner.js';
@@ -19,7 +20,7 @@ export function installCrossBlockDrag(view) {
   let stop = null;
   const point = (target, x, y) => {
     const editor = target && EditorView.findFromDOM(target);
-    if (!editor || editor.destroyed || editor.composing) return null;
+    if (!editor || editor.destroyed || editorHasComposition(editor)) return null;
     const local = editor.posAtCoords({ x, y }, false);
     if (!Number.isInteger(local)) return null;
     const owner = resolveEditableOwner(editor, { from: local, to: local });
@@ -27,7 +28,7 @@ export function installCrossBlockDrag(view) {
   };
   const down = event => {
     stop?.();
-    if (event.button !== 0 || event.detail !== 1 || event.ctrlKey || event.metaKey || event.altKey || view.composing || view.state.readOnly
+    if (event.button !== 0 || event.detail !== 1 || event.ctrlKey || event.metaKey || event.altKey || editorHasComposition(view) || view.state.readOnly
       || resolveEditableOwner(view)?.view !== view || !event.target.closest?.('.cm-content')
       || event.target.closest('button, input, a, select, textarea')) return;
     const start = point(event.target, event.clientX, event.clientY);
@@ -37,7 +38,7 @@ export function installCrossBlockDrag(view) {
     if (!event.shiftKey && !initial.empty && start.position >= initial.from && start.position <= initial.to) return;
     let crossed = false, anchor = event.shiftKey ? initial.anchor : null;
     let pointer = null, frame = 0, previousTime = 0;
-    const valid = () => !view.destroyed && view.state.doc === original && !view.composing && !view.state.readOnly;
+    const valid = () => !view.destroyed && view.state.doc === original && !editorHasComposition(view) && !view.state.readOnly;
     const bounds = () => {
       const rect = view.scrollDOM.getBoundingClientRect();
       return { top: Math.max(0, rect.top), bottom: Math.min(win.innerHeight, rect.bottom),

@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compositionSession, editorComposing} from '../src/editor-composition.js';
+import {compositionSession, editorComposing, afterComposition} from '../src/editor-composition.js';
 import {EditorState} from '@codemirror/state';
 import {editorCompositionState,liveComposition,stateComposing} from '../src/editor-composition.js';
 import {editorLivePreview,livePreviewField} from '../src/editor-live-preview.js';
 import {editorFormulaField} from '../src/editor-formula-preview.js';
+import {imagePreviewField} from '../src/embedded-image-preview.js';
+import {editorDiagramField} from '../src/editor-diagram-preview.js';
 import {focusEditableBlock,syncEditableSelections,syncEditableSearch,syncEditableSpelling} from '../src/live-editable-block.js';
 
 test('the first phonetic key and commit frame remain protected', () => {
@@ -71,4 +73,39 @@ test('formula widgets survive adjacent composition until the final commit frame'
  state=state.update({effects:liveComposition.of(false)}).state;
  assert.notEqual(state.field(editorFormulaField).decorations.iter().value.spec.widget,widget);
  assert.equal(state.doc.toString(),'$x$ textni好');
+});
+
+test('background work waits through the first key and commit frame, then applies once',()=>{
+ const view={},frames=[],timers=new Map();let next=0,applied=0;
+ const clock={schedule(fn){timers.set(++next,fn);return next;},cancel(id){timers.delete(id);}};
+ const tick=()=>{const work=[...timers.values()];timers.clear();work.forEach(fn=>fn());};
+ const session=compositionSession(view,()=>{},fn=>frames.push(fn));session.start();
+ afterComposition(view,()=>applied++,()=>true,clock);
+ tick();tick();assert.equal(applied,0);session.end();tick();assert.equal(applied,0);
+ frames.shift()();tick();tick();assert.equal(applied,1);session.destroy();
+});
+
+test('background work is discarded on cancellation, disposal or stale identity',()=>{
+ for(const kind of ['cancel','destroy','stale']){
+  const view={compositionStarted:true},timers=new Map();let next=0,current=true;
+  const clock={schedule(fn){timers.set(++next,fn);return next;},cancel(id){timers.delete(id);}};
+  const cancel=afterComposition(view,()=>assert.fail(kind),()=>current,clock);
+  if(kind==='cancel')cancel();if(kind==='destroy')view.destroyed=true;if(kind==='stale')current=false;
+  view.compositionStarted=false;[...timers.values()].forEach(fn=>fn());
+ }
+});
+
+test('image and diagram widgets retain identity during composition and refresh after commit',()=>{
+ for(const [field,doc] of [[imagePreviewField,'![img](image.png)\n\ntext'],[editorDiagramField,'```mermaid\ngraph TD\nA-->B\n```\n\ntext']]){
+  let state=EditorState.create({doc,selection:{anchor:doc.length},extensions:[field,editorCompositionState]});
+  const widget=state.field(field).decorations.iter().value.spec.widget;
+  assert.ok(widget);state=state.update({effects:liveComposition.of(true)}).state;
+  for(const text of ['n','i','好']){
+   state=state.update({changes:{from:state.doc.length,insert:text},userEvent:'input.type.compose'}).state;
+   assert.equal(state.field(field).decorations.iter().value.spec.widget,widget);
+  }
+  state=state.update({effects:liveComposition.of(false)}).state;
+  assert.notEqual(state.field(field).decorations.iter().value.spec.widget,widget);
+  assert.equal(state.doc.toString(),doc+'ni好');
+ }
 });
