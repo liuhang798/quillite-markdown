@@ -1,0 +1,69 @@
+name: macOS IME test build (no release)
+
+on:
+  push:
+    branches: [codex/macos-ime-20261021]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-test:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend regression tests and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Backend checks
+        run: |
+          go test ./...
+          go vet ./...
+      - name: WebKit native-selection protocol regression
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ime-playwright" --no-save playwright@1.62.1
+          node "$RUNNER_TEMP/ime-playwright/node_modules/playwright/cli.js" install webkit
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/ime-playwright/node_modules/playwright" IME_BROWSER=webkit node frontend/tests/browser-ime-start-selection.mjs
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/ime-playwright/node_modules/playwright" IME_BROWSER=webkit node frontend/tests/browser-ime-background.mjs
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Build universal application
+        run: bash scripts/build-macos.sh darwin/universal
+      - name: Package test DMG and record checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path='build/bin/轻阅 Markdown.app'
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          lipo "$app_path/Contents/MacOS/QuilliteMarkdown" -verify_arch arm64 x86_64
+          mkdir -p build/bin/ime-test
+          staging_dir="$(mktemp -d)"
+          ditto "$app_path" "$staging_dir/轻阅 Markdown.app"
+          ln -s /Applications "$staging_dir/Applications"
+          touch "$staging_dir/.metadata_never_index"
+          output='build/bin/ime-test/quillite-markdown-3.0.0-macos-ime-test-r3-universal.dmg'
+          hdiutil create -volname 'Quillite IME Test' -srcfolder "$staging_dir" -format UDZO "$output"
+          hdiutil verify "$output"
+          cd build/bin/ime-test
+          shasum -a 256 *.dmg > SHA256SUMS.txt
+          printf 'Test build only. No Release or version tag was created.\nCommit: %s\nAd-hoc signed; not Apple notarized.\nNative macOS Pinyin acceptance is still required.\n' "$GITHUB_SHA" > BUILD-INFO.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quillite-macos-ime-test-r3-${{ github.sha }}
+          path: build/bin/ime-test/*
+          if-no-files-found: error
+          retention-days: 7
