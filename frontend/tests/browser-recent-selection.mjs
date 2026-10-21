@@ -3,6 +3,8 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 const playwright=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
+// On macOS a real Control-click is a context click, not a selection click.
+const primary=process.platform==='darwin'?'Meta':'Control';
 const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error',plugins:[{
  name:'isolated-recent-selection',enforce:'pre',transform(code,id){if(id.replaceAll('\\','/').endsWith('/src/renderer.js'))return code+`\nwindow.recentAudit={seed(prefs){applyLibraryPreferences(prefs);setSidebarMode('recent');},snapshot(){return {selection:state.recentSelection,dirty:state.dirty,current:state.currentFile?.path,text:codeEditor?editorContent():null,favorites:state.favoriteFiles.map(f=>f.path),pins:state.pinnedRecentFiles};}};`;}
 }]});
@@ -28,8 +30,8 @@ try{
  });
  const row=name=>page.locator('.file-item').filter({has:page.locator('strong',{hasText:name})});
  const selected=()=>page.evaluate(()=>recentAudit.snapshot().selection);
- await row('pinned.md').click({modifiers:['Control']});
- await row('missing.md').click({modifiers:['Control','Shift']});
+ await row('pinned.md').click({modifiers:[primary]});
+ await row('missing.md').click({modifiers:[primary,'Shift']});
  assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/missing.md']);
  assert.deepEqual(await page.evaluate(()=>window.opened),[]);
  // Shift alone replaces a range, keeping the original anchor for shrink/extend.
@@ -41,27 +43,27 @@ try{
  assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/missing.md']);
  await row('pinned.md').press('Escape');
  // Existing non-contiguous selection remains when adding a new range.
- await row('fail.md').click({modifiers:['Control']});
- await row('pinned.md').click({modifiers:['Control']});
- await row('keep.md').press('Control+Shift+Space');
+ await row('fail.md').click({modifiers:[primary]});
+ await row('pinned.md').click({modifiers:[primary]});
+ await row('keep.md').press(`${primary}+Shift+Space`);
  assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/fail.md']);
  await page.locator('#cancelRecentSelection').click();
- await row('missing.md').click({modifiers:['Control','Shift']});
+ await row('missing.md').click({modifiers:[primary,'Shift']});
  assert.deepEqual(await selected(),['C:/missing.md'],'cancel resets the range anchor');
  await row('missing.md').press('Escape');
- await row('pinned.md').click({modifiers:['Control']});
+ await row('pinned.md').click({modifiers:[primary]});
  await row('keep.md').click({modifiers:['Meta']});
  assert.equal(await page.locator('.bulk-selected').count(),2);
  assert.deepEqual(await page.evaluate(()=>window.opened),[]);
  await row('keep.md').click({modifiers:['Meta']});assert.equal(await page.locator('.bulk-selected').count(),1);
  await row('pinned.md').press('Escape');assert.equal(await page.locator('.bulk-selected').count(),0);
- await row('keep.md').press('Control+Space');assert.equal(await page.locator('.bulk-selected').count(),1);
+ await row('keep.md').press(`${primary}+Space`);assert.equal(await page.locator('.bulk-selected').count(),1);
  await row('pinned.md').click();await page.locator('#markdownContent h1').waitFor();
  assert.equal(await page.locator('.bulk-selected').count(),0);
  await page.locator('#editButton').click();await page.locator('[data-editor-presentation="source"]').click();
  await page.locator('#markdownEditor > .cm-editor > .cm-scroller > .cm-content').fill('# Unsaved original');
  const before=await page.evaluate(()=>window.recentAudit.snapshot());assert.equal(before.dirty,true);
- for(const name of ['pinned.md','missing.md','fail.md'])await row(name).click({modifiers:['Control']});
+ for(const name of ['pinned.md','missing.md','fail.md'])await row(name).click({modifiers:[primary]});
  assert.equal(await page.locator('.bulk-selected').count(),3);
  await page.locator('#clearSelectedRecent').click();
  await page.locator('#recentClearDialog').waitFor();
@@ -69,7 +71,7 @@ try{
  assert.ok((await page.locator('#recentClearDescription').textContent()).includes('3'));
  if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/recent-clear-${engine}.png`,animations:'disabled'});
  // Confirmation is modal; shortcut events must not act on the background.
- await page.locator('#cancelRecentClear').press('Control+e');
+ await page.locator('#cancelRecentClear').press(`${primary}+e`);
  assert.equal(await page.locator('#editorView').isVisible(),true);
  await page.locator('#cancelRecentClear').press('Escape');
  await page.waitForFunction(()=>!document.querySelector('#clearSelectedRecent').disabled);
@@ -92,12 +94,12 @@ try{
  await page.locator('#favoritesTab').click();assert.equal(await page.locator('#recentSelectionActions').isVisible(),false);
  assert.equal(await page.locator('.file-item').count(),1);
  await page.locator('#recentTab').click();assert.equal(await page.locator('.bulk-selected').count(),0);
- await row('fail.md').click({modifiers:['Control']});await row('fail.md').click({button:'right'});
+ await row('fail.md').click({modifiers:[primary]});await row('fail.md').click({button:'right'});
  await page.evaluate(()=>window.failRemoval=false);
  await page.locator('#recentRemoveAction').click();
  await page.locator('#confirmRecentClear').click();await page.waitForFunction(()=>document.querySelectorAll('.file-item').length===1);
  assert.equal(await page.locator('.file-item strong').textContent(),'keep.md');
- await row('keep.md').click({modifiers:['Control']});await row('keep.md').press('Delete');
+ await row('keep.md').click({modifiers:[primary]});await row('keep.md').press('Delete');
  await page.locator('#confirmRecentClear').click();
  await page.locator('.empty-list').waitFor();
  assert.equal((await page.evaluate(()=>window.recentAudit.snapshot())).text,before.text);
