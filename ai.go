@@ -57,8 +57,10 @@ const (
 // document review intentionally has no deadline and waits until the provider
 // returns a result or the network/API reports an actual failure.
 var (
-	aiHTTPClient    = &http.Client{}
-	errAIEmptyReply = errors.New("AI_EMPTY_REPLY: the AI service returned an empty message")
+	aiHTTPClient       = &http.Client{}
+	errAIEmptyReply    = errors.New("AI_EMPTY_REPLY: the AI service returned an empty message")
+	errAIRateLimited   = errors.New("AI_RATE_LIMITED: HTTP 429; provider request or plan limit reached")
+	errAIQuotaExceeded = errors.New("AI_QUOTA_EXCEEDED: provider credits or quota exhausted")
 )
 
 type aiCredentialStore interface {
@@ -1537,6 +1539,18 @@ func aiHTTPStatusError(response *http.Response) error {
 		Message string `json:"message"`
 	}
 	_ = json.Unmarshal(data, &message)
+	// Limits are provider-side rejections, not malformed model answers. Do not
+	// send the same billable request again through chunk/repair fallback paths.
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusPaymentRequired {
+		code := ""
+		if value, ok := message.Error.(map[string]any); ok {
+			code = strings.ToLower(fmt.Sprint(value["code"], " ", value["type"]))
+		}
+		if response.StatusCode == http.StatusPaymentRequired || strings.Contains(code, "insufficient_quota") || strings.Contains(code, "billing_hard_limit") || strings.Contains(code, "insufficient_balance") {
+			return errAIQuotaExceeded
+		}
+		return errAIRateLimited
+	}
 	detail := strings.TrimSpace(message.Message)
 	if detail == "" {
 		switch value := message.Error.(type) {

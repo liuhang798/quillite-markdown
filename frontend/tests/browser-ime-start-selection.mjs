@@ -35,6 +35,21 @@ try {
     return result;
   });
   assert.deepEqual(result,{updates:0,anchor:3,head:4,sameNode:true},'compositionstart must not redraw or overwrite the native marked-text selection');
+  await page.waitForTimeout(100);
+  const missingLine=await page.evaluate(()=>{
+    const view=liveAudit.view,rect=view.coordsAtPos(2);
+    const coords={x:rect.left,y:(rect.top+rect.bottom)/2};
+    const before=view.posAtCoords(coords),lineAt=view.docView.lineAt;
+    try {
+      // Fault injection for the reported height-map/DOM-tile race. Use the
+      // real public hit-test API and the same transformed engine as production.
+      view.docView.lineAt=()=>null;
+      return {before,precise:view.posAtCoords(coords),estimate:view.posAtCoords(coords,false)};
+    } finally {view.docView.lineAt=lineAt;}
+  });
+  assert.equal(typeof missingLine.before,'number');
+  assert.equal(missingLine.precise,null);
+  assert.ok(missingLine.estimate>=0&&missingLine.estimate<=4);
   assert.deepEqual(errors,[]);
   console.log('PASS',engine,'compositionstart preserves native selection without an editor update');
 } finally {await browser?.close();await server.close();}

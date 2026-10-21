@@ -21,6 +21,8 @@ import (
 
 const updateProgressEvent = "update:progress"
 
+var errUpdateDownloadInterrupted = errors.New("UPDATE_DOWNLOAD_INTERRUPTED")
+
 // updateAssetNameForPlatform returns the suffix of the release asset used by
 // the in-app updater on the given GOOS, or "" when self-update is unsupported.
 func updateAssetNameForPlatform(goos string) string {
@@ -118,7 +120,35 @@ func (a *App) downloadFile(url, destination string) error {
 }
 
 func (a *App) downloadFileFromURL(url, destination string, client *http.Client) error {
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	return a.downloadFileWithRetry(ctx, url, destination, client, 500*time.Millisecond)
+}
+
+// Only retry a failed network read. Each attempt truncates our private staging
+// file; never append potentially different releases or retry disk/verification errors.
+func (a *App) downloadFileWithRetry(ctx context.Context, url, destination string, client *http.Client, delay time.Duration) error {
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return updateDownloadError(err)
+		}
+		a.emitProgress(0, 0)
+		err := a.downloadFileAttempt(ctx, url, destination, client)
+		if err == nil || attempt == 2 || !errors.Is(err, errUpdateDownloadInterrupted) {
+			return err
+		}
+		timer := time.NewTimer(delay * time.Duration(attempt+1))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return updateDownloadError(ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func (a *App) downloadFileAttempt(ctx context.Context, url, destination string, client *http.Client) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -156,6 +186,9 @@ func (a *App) downloadFileFromURL(url, destination string, client *http.Client) 
 			}
 		}
 		if readErr == io.EOF {
+			if total >= 0 && written != total {
+				return updateDownloadError(io.ErrUnexpectedEOF)
+			}
 			break
 		}
 		if readErr != nil {
@@ -176,6 +209,10 @@ func updateDownloadError(err error) error {
 	var networkError net.Error
 	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &networkError) && networkError.Timeout() {
 		return fmt.Errorf("UPDATE_DOWNLOAD_TIMEOUT: %w", err)
+	}
+	var operationError *net.OpError
+	if errors.As(err, &operationError) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return fmt.Errorf("%w: %w", errUpdateDownloadInterrupted, err)
 	}
 	return fmt.Errorf("download update: %w", err)
 }

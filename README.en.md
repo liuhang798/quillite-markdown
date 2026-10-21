@@ -14,7 +14,7 @@
 
 Quillite Markdown is built with Go + Wails, without Electron. The Windows installer is about 13 MB. Read long documents, write READMEs, maintain technical notes and browse local Markdown folders; plain-text `.txt` files are supported too. Documents stay in local files, and no Quillite account is required.
 
-The current release is **V3.0.1**, combining the macOS Chinese-input fix, editing outline overlay, reading/editing position continuity and Shift range selection in Recent. See the [changelog](CHANGELOG.md) for this update and the [complete v3.0.0 record](docs/releases/3.0.0-details.md) for the previous major release.
+The current release is **V3.0.1**, combining the macOS Chinese-input fix, editing outline overlay, reading/editing position continuity and Shift range selection in Recent, plus editor null-node guards, interrupted-download retries and clearer AI rate-limit/quota guidance. See the [changelog](CHANGELOG.md) for this update and the [complete v3.0.0 record](docs/releases/3.0.0-details.md) for the previous major release.
 
 ## Download
 

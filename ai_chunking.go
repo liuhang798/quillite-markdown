@@ -214,7 +214,7 @@ func (a *App) rewriteAIChunks(ctx context.Context, settings AISettings, model st
 			if err == nil {
 				break
 			}
-			if errors.Is(err, context.Canceled) {
+			if stopAIChunkRetry(err) {
 				return "", err
 			}
 		}
@@ -248,7 +248,7 @@ func (a *App) summarizeAIChunks(ctx context.Context, settings AISettings, model 
 			if err == nil {
 				break
 			}
-			if errors.Is(err, context.Canceled) {
+			if stopAIChunkRetry(err) {
 				return "", err
 			}
 		}
@@ -299,6 +299,9 @@ func (a *App) reviewOneAIChunk(ctx context.Context, settings AISettings, model, 
 	}
 	repaired, repairErr := a.callOpenAICompatibleWithSystem(ctx, settings.Provider, settings.BaseURL, model, aiDocumentReviewSystemPrompt, buildAIDocumentReviewRepairPrompt(output))
 	if repairErr != nil {
+		if stopAIChunkRetry(repairErr) {
+			return AIDocumentReviewResponse{}, repairErr
+		}
 		return AIDocumentReviewResponse{}, parseErr
 	}
 	return parseAIDocumentReview(repaired, text)
@@ -323,7 +326,7 @@ func (a *App) reviewAIChunks(ctx context.Context, settings AISettings, model str
 			if err == nil {
 				break
 			}
-			if errors.Is(err, context.Canceled) {
+			if stopAIChunkRetry(err) {
 				return AIDocumentReviewResponse{}, err
 			}
 		}
@@ -360,4 +363,9 @@ func integerText(value int) string {
 		value /= 10
 	}
 	return string(reversed[position:])
+}
+
+func stopAIChunkRetry(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, errAIRateLimited) || errors.Is(err, errAIQuotaExceeded)
 }

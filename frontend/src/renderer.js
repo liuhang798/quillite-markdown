@@ -696,6 +696,9 @@ Object.assign(translations['zh-CN'], {
   editorSourceRecovery: '编辑器显示扩展异常，已切换为源码编辑。本次运行暂不显示行内图片、公式和图表；正文、保存及撤回仍可使用。',
   virtualFileDropUnsupported: '此拖放内容没有可用的本地文件路径。请先保存到本地后再拖入，图片也可以复制后粘贴。',
   updateTimedOut: '更新下载超时，当前版本未替换。请检查网络后重试，或点击“官网下载”获取完整安装包。',
+  updateInterrupted: '更新下载连接中断，自动重试后仍未完成，当前版本未替换。请检查网络后重试，或从官网下载完整安装包。',
+  aiRateLimitedHint: 'AI 服务商限制了本次请求（HTTP 429），已停止自动重试。请稍后再试，并检查 API 账户的免费额度、套餐和频率限制，或在设置中切换服务商。原文未修改。',
+  aiQuotaExceededHint: 'AI 账户额度或余额不足，已停止请求。请检查服务商账户的额度或账单，或在设置中切换服务商。原文未修改。',
   diagramSourceChanged: '文档或图表内容已变化，请重新打开图表后编辑。',
   tableSourceChanged: '文档或表格内容已变化，请关闭并重新打开表格后编辑。当前输入仍保留在此窗口。',
   diagramChecking: '正在检查…', diagramDraftChanged: '检查期间内容已变化，请再次保存。', diagramDataEmpty: '请至少保留一行有效数据。',
@@ -753,6 +756,9 @@ Object.assign(translations.en, {
   editorSourceRecovery: 'A display extension failed. Source editing is available for this session; inline image, formula and diagram previews are paused. Text, saving and undo remain available.',
   virtualFileDropUnsupported: 'This dropped item has no usable local file path. Save it locally before dropping it, or copy and paste the image.',
   updateTimedOut: 'The update timed out; the current version was not replaced. Check your network and retry, or download the full installer from the official website.',
+  updateInterrupted: 'The update connection was interrupted and automatic retries did not finish. The current version was not replaced. Check your network and retry, or download the full installer from the official website.',
+  aiRateLimitedHint: 'The AI provider limited this request (HTTP 429). Automatic retries stopped. Wait before retrying and check your API free allowance, plan and rate limits, or switch providers in Settings. The original text is unchanged.',
+  aiQuotaExceededHint: 'The AI account has insufficient quota or credits. Requests stopped. Check your provider allowance or billing, or switch providers in Settings. The original text is unchanged.',
   diagramSourceChanged: 'The document or diagram has changed. Reopen the diagram to edit it.',
   tableSourceChanged: 'The document or table has changed. Close and reopen the table to edit it. Your input is still kept in this dialog.',
   diagramChecking: 'Checking…', diagramDraftChanged: 'The draft changed during validation. Save again.', diagramDataEmpty: 'Keep at least one valid data row.',
@@ -8897,6 +8903,8 @@ function closeAbout() {
 
 function aiErrorMessage(error) {
   const message = diagnosticErrorMessage(error).replace(/^Error:\s*/i, '').trim();
+  if (/AI_QUOTA_EXCEEDED|insufficient_quota|billing_hard_limit/i.test(message)) return t('aiQuotaExceededHint');
+  if (/AI_RATE_LIMITED|HTTP 429|rate limit/i.test(message)) return t('aiRateLimitedHint');
   if (/AI_INPUT_TOO_LARGE|too long to (?:process|review) safely/i.test(message)) return t('aiInputTooLong');
   if (/AI_OUTPUT_TRUNCATED/i.test(message)) return t('aiTruncatedReplyHint');
   if (/AI_CONTENT_FILTERED/i.test(message)) return t('aiFilteredReplyHint');
@@ -10297,9 +10305,6 @@ function aiReviewErrorMessage(error) {
   if (lower.includes('unreadable response') || lower.includes('unsupported message format') || lower.includes('usable document review') || lower.includes('invalid response')) {
     return state.language === 'en' ? 'The model returned an incompatible result even after automatic repair. Retry or choose another model.' : '模型返回格式异常，自动修复后仍无法读取。请重试或更换模型。';
   }
-  if (lower.includes('http 429') || lower.includes('rate limit')) {
-    return state.language === 'en' ? 'The AI service is busy or rate-limited. Wait briefly and retry.' : 'AI 服务繁忙或已触发频率限制，请稍后重试。';
-  }
   if (lower.includes('api key')) {
     return state.language === 'en' ? 'The API Key is missing or invalid. Check it in Settings.' : 'API Key 缺失或无效，请在“设置”中检查。';
   }
@@ -11013,7 +11018,10 @@ async function startDownloadAndUpdate() {
     $('#openUpdatePage').disabled = false;
     $('#updateLater').disabled = false;
     $('#updateSnooze').disabled = false;
-    showToast(t(/timeout|timed out|deadline exceeded/i.test(String(error)) ? 'updateTimedOut' : 'updateFailed'), 'error');
+    const message = String(error);
+    const key = /UPDATE_DOWNLOAD_INTERRUPTED/i.test(message) ? 'updateInterrupted'
+      : /timeout|timed out|deadline exceeded/i.test(message) ? 'updateTimedOut' : 'updateFailed';
+    showToast(t(key), 'error', 12000);
   }
 }
 

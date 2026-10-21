@@ -4,6 +4,7 @@ import { woff2OnlyKaTeX } from './scripts/katex-fonts.mjs';
 import { patchMathliveMatrixHistory } from './scripts/mathlive-matrix-history.mjs';
 import { patchCodeMirrorDOMRange } from './scripts/codemirror-dom-range.mjs';
 import { patchCodeMirrorNestedFocus } from './scripts/codemirror-nested-focus.mjs';
+import { patchCodeMirrorTileBoundaries } from './scripts/codemirror-tile-boundaries.mjs';
 
 export default defineConfig({
   resolve: { alias: [{ find: /^mathlive$/, replacement: fileURLToPath(new URL('./node_modules/mathlive/mathlive.mjs', import.meta.url)) }] },
@@ -13,7 +14,7 @@ export default defineConfig({
     enforce: 'pre',
     transform(code, id) {
       if (!/\/@codemirror\/view\/dist\/index\.js(?:\?.*)?$/.test(id.replaceAll('\\', '/'))) return null;
-      return {code: patchCodeMirrorNestedFocus(patchCodeMirrorDOMRange(code)), map: null};
+      return {code: patchCodeMirrorTileBoundaries(patchCodeMirrorNestedFocus(patchCodeMirrorDOMRange(code))), map: null};
     },
   }, {
     name: 'katex-woff2-only',

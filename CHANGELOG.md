@@ -6,6 +6,9 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 更新下载遇到连接重置或截断时最多重试三次，每次重新下载并完成 SHA-256 校验后才允许安装；失败保留当前应用并提供官网下载提示。
+- AI 请求遇到 429 限流或额度不足时停止分段自动重试，摘要、改写和审校统一显示额度／套餐／频率限制说明，不修改原文。
+- 修复编辑器鼠标定位遇到缺失行节点、组合输入遇到缺失行或已脱离 DOM 的旧节点时的空指针异常；保留原生输入节点与文档状态，并回归已有 DOM 范围保护。
 - 修复编辑页目录箭头遮挡历史版本和预览关闭按钮：为右侧标题栏预留独立操作空间，兼容左右分栏和窄窗口。
 - 最近阅读支持 Shift 连续范围选择及 Ctrl / ⌘ + Shift 追加范围，包含首尾和中间项；按当前置顶／普通列表顺序选择，不打开文件或触发置顶拖动。
 - 阅读与编辑按当前段落双向接续位置，并在异步排版后进行有界校正；用户开始滚动或输入后立即停止校正，未保存内容与撤回历史保持不变。
@@ -17,6 +20,9 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Retry reset/truncated update downloads up to three attempts, restarting each download and requiring SHA-256 verification before installation. Failed downloads preserve the current application and offer manual-download guidance.
+- Stop automatic chunk retries on AI rate limits or exhausted quota. Summary, rewriting and review share actionable account/plan/rate-limit guidance without changing the source document.
+- Guard editor hit testing against missing line tiles and composition against missing lines or detached stale DOM, preserving native input nodes and document state alongside existing DOM-range protection.
 - Fixed the editing outline arrow overlapping version history and preview close controls by reserving a dedicated area in the rightmost header, including swapped panes and narrow windows.
 - Recent documents support inclusive Shift ranges and additive Ctrl / ⌘ + Shift ranges in the displayed pinned/ordinary order, without opening files or starting pin dragging.
 - Resume the current source-block position when entering or leaving editing, with bounded late-layout correction that stops on user input/navigation; preserve unsaved content and undo history.
