@@ -6,7 +6,7 @@
   <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
     <a href="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml"><img src="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml/badge.svg" alt="Build status"></a>
-    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.0.0-159A63" alt="Download V3.0.0"></a>
+    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.0.1-159A63" alt="Download V3.0.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/liuhang798/quillite-markdown" alt="MIT License"></a>
   </p>
   <p><a href="https://qm.ssssa.cn/">Official website</a> · <a href="https://qm.ssssa.cn/#download">Download</a> · <a href="#quick-start">Quick start</a> · <a href="#development">Build from source</a></p>
@@ -14,7 +14,7 @@
 
 Quillite Markdown is built with Go + Wails, without Electron. The Windows installer is about 13 MB. Read long documents, write READMEs, maintain technical notes and browse local Markdown folders; plain-text `.txt` files are supported too. Documents stay in local files, and no Quillite account is required.
 
-The current release is **V3.0.0**. This page describes current behavior; historical changes are available in the [changelog](CHANGELOG.md) and [complete v3.0.0 record](docs/releases/3.0.0-details.md).
+The current release is **V3.0.1**, combining the macOS Chinese-input fix, editing outline overlay, reading/editing position continuity and Shift range selection in Recent. See the [changelog](CHANGELOG.md) for this update and the [complete v3.0.0 record](docs/releases/3.0.0-details.md) for the previous major release.
 
 ## Download
 
@@ -27,7 +27,7 @@ The current release is **V3.0.0**. This page describes current behavior; histori
 - **[qm.ssssa.cn](https://qm.ssssa.cn/)** is the official website and the app's only update/download channel. GitHub retains source code, release records and build assets.
 - Windows installation shows the final destination before confirmation. A custom ordinary folder is treated as a parent for a dedicated product directory. Upgrades reuse only a validated installation directory; uninstalling preserves user documents.
 - Formal Windows Authenticode / Apple Developer ID certificates are not configured. SmartScreen or Gatekeeper may display warnings. Updates or file access may require authorization depending on the operating system; a prompt-free experience is not guaranteed.
-- Windows and macOS support in-app downloading, verification and updates. Use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**; users of an earlier V3.0.0 build can download the current V3.0.0 installer again.
+- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.0.1; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
 
 ## Quick start
 

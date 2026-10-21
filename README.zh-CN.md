@@ -2,7 +2,7 @@
 
 简体中文介绍已设为 GitHub 默认项目主页：
 
-当前发布版本：V3.0.0。
+当前发布版本：V3.0.1。
 
 - [查看简体中文完整介绍](README.md)
 - [Read the English documentation](README.en.md)

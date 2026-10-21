@@ -50,6 +50,16 @@ jobs:
       - run: go vet ./...
       - name: Release safety regression gate
         run: node scripts/test-release-safety.mjs
+      - name: WebKit IME selection and background-update regressions
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ime-playwright" --no-save playwright@1.62.1
+          node "$RUNNER_TEMP/ime-playwright/node_modules/playwright/cli.js" install webkit
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/ime-playwright/node_modules/playwright"
+          export IME_BROWSER=webkit
+          node frontend/tests/browser-ime-start-selection.mjs
+          node frontend/tests/browser-ime-background.mjs
   windows:
     needs: verify
     name: Windows x64

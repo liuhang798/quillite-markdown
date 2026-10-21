@@ -55,8 +55,8 @@ git push origin main
 创建与 `wails.json` 完全一致的 tag 并推送到 GitHub（`release.yml` 由 push tag 自动触发）：
 
 ```bash
-git tag -a v3.0.0 -m "Quillite Markdown v3.0.0"
-git push origin v3.0.0
+git tag -a v3.0.1 -m "Quillite Markdown v3.0.1"
+git push origin v3.0.1
 ```
 
 The `Build and Release` workflow validates the tag/version match, builds Windows, macOS, and Linux packages, uploads them to GitHub Release, then synchronizes the version and all platform assets to the official website. The Windows installer is published directly as an `.exe`; it is not wrapped in a ZIP. The Windows in-app asset is a standalone `.bin`, while the macOS in-app asset is a ZIP containing the complete verified `轻阅 Markdown.app`. Never publish a raw macOS executable for in-app updates: replacing only `Contents/MacOS/QuilliteMarkdown` breaks the application code seal and macOS terminates the next launch with `CODESIGNING / Invalid Page`.

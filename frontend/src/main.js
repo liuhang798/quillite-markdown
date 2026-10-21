@@ -218,12 +218,12 @@ window.quilliteMarkdown = {
   onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   onAIProgress: callback => desktopRuntime ? EventsOn('ai:progress', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.0.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.0.1', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   getWindowsInstallSafety: () => desktopRuntime
     ? Backend.GetWindowsInstallSafety()
-    : resolved({ applicable: false, safe: true, currentVersion: '3.0.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
+    : resolved({ applicable: false, safe: true, currentVersion: '3.0.1', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
@@ -231,14 +231,14 @@ window.quilliteMarkdown = {
           checked: true,
           available: true,
           currentVersion: '2.4.4',
-          latestVersion: '3.0.0',
-          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 3.0.0' : '轻阅 Markdown 3.0.0',
+          latestVersion: '3.0.1',
+          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 3.0.1' : '轻阅 Markdown 3.0.1',
           releaseNotes: localStorage.getItem('language') === 'en'
             ? 'Added visual table editing, rich paste, and spell checking\nAdded PicGo image hosting with upload progress\nAdded a 12-format Export Center and crisp A4 image pages'
             : '新增可视化表格、富文本粘贴与拼写检查\n新增 PicGo 图床和上传进度\n新增 12 种格式导出中心与 A4 高清图片分页',
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '3.0.0', latestVersion: '3.0.0' }),
+      : { checked: true, available: false, currentVersion: '3.0.1', latestVersion: '3.0.1' }),
   snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},

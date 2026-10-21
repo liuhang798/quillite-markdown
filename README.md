@@ -6,7 +6,7 @@
   <p><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
   <p>
     <a href="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml"><img src="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml/badge.svg" alt="构建状态"></a>
-    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/下载-V3.0.0-159A63" alt="下载 V3.0.0"></a>
+    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/下载-V3.0.1-159A63" alt="下载 V3.0.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/liuhang798/quillite-markdown" alt="MIT 许可证"></a>
   </p>
   <p><a href="https://qm.ssssa.cn/">官方网站</a> · <a href="https://qm.ssssa.cn/#download">下载安装</a> · <a href="#快速上手">快速上手</a> · <a href="#本地开发">从源码构建</a></p>
@@ -14,7 +14,7 @@
 
 轻阅 Markdown 使用 Go + Wails 构建，不依赖 Electron，Windows 安装包约 13 MB。适合阅读长文档、编写 README、维护技术笔记和管理本地 Markdown 文件夹；也支持纯文本 `.txt`。文档保存在本地，不要求注册轻阅账号。
 
-当前发布版本为 **V3.0.0**。本页说明当前软件的使用方式；历史修复和版本变化见 [更新日志](CHANGELOG.md) 与 [v3.0.0 详细记录](docs/releases/3.0.0-details.md)。
+当前发布版本为 **V3.0.1**。本次更新合并 Mac 中文输入修复、编辑目录浮层与阅读位置衔接，并支持最近阅读 Shift 连选。完整版本变化见 [更新日志](CHANGELOG.md)；上一大版本见 [v3.0.0 详细记录](docs/releases/3.0.0-details.md)。
 
 ## 下载
 
@@ -27,7 +27,7 @@
 - 官方网站为 **[qm.ssssa.cn](https://qm.ssssa.cn/)**；软件检查更新和下载安装包仅使用该站。GitHub 保留源码、版本记录与构建产物。
 - Windows 安装前会显示最终安装路径；普通自定义目录作为父目录，程序使用独立的产品子目录。升级沿用经过归属校验的安装位置；卸载保留用户文档。
 - 当前未配置正式 Windows Authenticode / Apple Developer ID 证书，首次安装可能触发 SmartScreen 或 Gatekeeper 提示。更新、文件访问是否需要再次授权取决于系统状态，不能保证完全免提示。
-- Windows、macOS 支持应用内下载、校验和更新；无法安全应用时请从官网下载完整安装包。**同版本覆盖不会触发更高版本的升级提示**：已安装旧 V3.0.0 时，可重新下载当前 V3.0.0 安装包。
+- Windows、macOS 支持应用内下载、校验和更新；V3.0.0 用户可检查更新升级至 V3.0.1，无法安全应用时请从官网下载完整安装包。**同版本覆盖不会触发更高版本的升级提示**。
 
 ## 快速上手
 
