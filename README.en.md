@@ -88,6 +88,7 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 - Body & math settings independently control body style, equation size and four body line-spacing presets. Preview before saving or cancel to restore; inline code uses a theme-aware neutral background in reading and live editing.
 - Windows Show in Folder selects the full file path without guessing the target from same-named window titles.
 - Recent, Favorites and a folder explorer. Recent supports pinning, ordering and `Ctrl / ⌘` multi-selection removal. `Shift + click` selects an inclusive range; `Ctrl / ⌘ + Shift + click` adds a range to the selection. Removing records does not delete files.
+- Bulk removal uses a macOS-compatible in-app confirmation dialog from the toolbar, context menu or Delete key. Cancel preserves the selection; failures remain retryable without affecting Favorites or the unsaved document.
 - Rename, Save As, history versions and crash recovery. Restored content first enters the editor and is written to disk only after saving.
 - Compare disk changes with current edits, save a separate copy or merge manually instead of silently overwriting another application's changes.
 - Deferred highlighting and preview optimizations for large documents. Hidden split previews stop automatic rendering and show fresh content when restored.

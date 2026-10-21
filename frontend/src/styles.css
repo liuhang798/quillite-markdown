@@ -1041,6 +1041,9 @@ html[lang="en"] #moreMenu .settings-submenu.popover button > span:first-child { 
 .unsaved-close-dialog > p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .unsaved-close-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
 .unsaved-close-actions .large-button { min-width: 96px; }
+.recent-clear-dialog { margin: auto; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.recent-clear-dialog > p { white-space: pre-line; }
+.recent-clear-dialog::backdrop { background: rgba(20, 25, 21, .42); backdrop-filter: blur(4px); }
 .unsaved-discard-button { color: #a84f49; }
 .unsaved-discard-button:hover { border-color: color-mix(in srgb, #b64c48 42%, var(--line)); background: color-mix(in srgb, #b64c48 8%, var(--panel)); }
 .about-dialog { position: relative; width: min(540px, 100%); padding: 34px; border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent)); border-radius: 20px; background: var(--paper-strong); box-shadow: 0 30px 90px rgba(18, 25, 20, .28); animation: dialog-rise .2s ease-out; }

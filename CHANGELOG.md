@@ -6,6 +6,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 修复 macOS 批量“清除所选”可能无响应：改用应用内确认窗口，统一支持上方按钮、右键菜单和 Delete；取消不改动记录，失败项保留供重试，只清除最近记录与置顶，不删除文件或影响收藏及未保存文档。
 - 更新下载遇到连接重置或截断时最多重试三次，每次重新下载并完成 SHA-256 校验后才允许安装；失败保留当前应用并提供官网下载提示。
 - AI 请求遇到 429 限流或额度不足时停止分段自动重试，摘要、改写和审校统一显示额度／套餐／频率限制说明，不修改原文。
 - 修复编辑器鼠标定位遇到缺失行节点、组合输入遇到缺失行或已脱离 DOM 的旧节点时的空指针异常；保留原生输入节点与文档状态，并回归已有 DOM 范围保护。
@@ -20,6 +21,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Fix unresponsive bulk Clear selected on macOS by using an in-app confirmation dialog for the toolbar, context menu and Delete key. Cancel preserves records and failed items remain retryable; only recent records and pins are removed, not files, favorites or unsaved documents.
 - Retry reset/truncated update downloads up to three attempts, restarting each download and requiring SHA-256 verification before installation. Failed downloads preserve the current application and offer manual-download guidance.
 - Stop automatic chunk retries on AI rate limits or exhausted quota. Summary, rewriting and review share actionable account/plan/rate-limit guidance without changing the source document.
 - Guard editor hit testing against missing line tiles and composition against missing lines or detached stale DOM, preserving native input nodes and document state alongside existing DOM-range protection.

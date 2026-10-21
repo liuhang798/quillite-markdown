@@ -2,15 +2,19 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
-const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
+const playwright=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
 const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error',plugins:[{
  name:'isolated-recent-selection',enforce:'pre',transform(code,id){if(id.replaceAll('\\','/').endsWith('/src/renderer.js'))return code+`\nwindow.recentAudit={seed(prefs){applyLibraryPreferences(prefs);setSidebarMode('recent');},snapshot(){return {selection:state.recentSelection,dirty:state.dirty,current:state.currentFile?.path,text:codeEditor?editorContent():null,favorites:state.favoriteFiles.map(f=>f.path),pins:state.pinnedRecentFiles};}};`;}
 }]});
 let browser;
 try{
- await server.listen();browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE||undefined});
+ const engine=process.env.RECENT_BROWSER||'chromium';
+ await server.listen();browser=await playwright[engine].launch({headless:true,...(engine==='chromium'?{executablePath:process.env.BROWSER_EXECUTABLE||undefined}:{})});
  const page=await browser.newPage({viewport:{width:1450,height:1000}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
+ // Model a desktop WebView without a JavaScript confirm delegate. No entry
+ // point may depend on native confirm, including retry and keyboard removal.
+ await page.addInitScript(()=>{window.confirm=()=>{throw Error('Native confirm unavailable');};});
  await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
  await page.goto(server.resolvedUrls.local[0]);await page.waitForFunction(()=>window.recentAudit&&window.quilliteMarkdown);
  await page.evaluate(()=>{
@@ -59,10 +63,26 @@ try{
  const before=await page.evaluate(()=>window.recentAudit.snapshot());assert.equal(before.dirty,true);
  for(const name of ['pinned.md','missing.md','fail.md'])await row(name).click({modifiers:['Control']});
  assert.equal(await page.locator('.bulk-selected').count(),3);
- page.once('dialog',d=>d.dismiss());await page.locator('#clearSelectedRecent').click();
- assert.deepEqual(await page.evaluate(()=>window.removed),[]);
- page.once('dialog',d=>{assert.ok(d.message().includes('3'));return d.accept();});
  await page.locator('#clearSelectedRecent').click();
+ await page.locator('#recentClearDialog').waitFor();
+ assert.equal(await page.locator('#cancelRecentClear').evaluate(el=>el===document.activeElement),true);
+ assert.ok((await page.locator('#recentClearDescription').textContent()).includes('3'));
+ if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/recent-clear-${engine}.png`,animations:'disabled'});
+ // Confirmation is modal; shortcut events must not act on the background.
+ await page.locator('#cancelRecentClear').press('Control+e');
+ assert.equal(await page.locator('#editorView').isVisible(),true);
+ await page.locator('#cancelRecentClear').press('Escape');
+ await page.waitForFunction(()=>!document.querySelector('#clearSelectedRecent').disabled);
+ assert.equal(await page.locator('.bulk-selected').count(),3);
+ assert.deepEqual(await page.evaluate(()=>window.removed),[]);
+ await page.locator('#clearSelectedRecent').click();
+ await page.locator('#cancelRecentClear').click();
+ await page.waitForFunction(()=>!document.querySelector('#clearSelectedRecent').disabled);
+ assert.deepEqual(await page.evaluate(()=>window.removed),[]);
+ await page.locator('#clearSelectedRecent').click();
+ // Reentrant action must not open a second dialog or duplicate writes.
+ await page.locator('#clearSelectedRecent').evaluate(el=>el.dispatchEvent(new MouseEvent('click',{bubbles:true})));
+ await page.locator('#confirmRecentClear').click();
  await page.waitForFunction(()=>!document.querySelector('#clearSelectedRecent').disabled);
  assert.deepEqual(await page.evaluate(()=>window.removed),['C:/pinned.md','C:/missing.md','C:/fail.md']);
  assert.equal(await page.locator('.file-item').count(),2);assert.equal(await page.locator('.bulk-selected').count(),1);
@@ -73,13 +93,15 @@ try{
  assert.equal(await page.locator('.file-item').count(),1);
  await page.locator('#recentTab').click();assert.equal(await page.locator('.bulk-selected').count(),0);
  await row('fail.md').click({modifiers:['Control']});await row('fail.md').click({button:'right'});
- await page.evaluate(()=>window.failRemoval=false);page.once('dialog',d=>d.accept());
- await page.locator('#recentRemoveAction').click();await page.waitForFunction(()=>document.querySelectorAll('.file-item').length===1);
+ await page.evaluate(()=>window.failRemoval=false);
+ await page.locator('#recentRemoveAction').click();
+ await page.locator('#confirmRecentClear').click();await page.waitForFunction(()=>document.querySelectorAll('.file-item').length===1);
  assert.equal(await page.locator('.file-item strong').textContent(),'keep.md');
- await row('keep.md').click({modifiers:['Control']});page.once('dialog',d=>d.accept());await row('keep.md').press('Delete');
+ await row('keep.md').click({modifiers:['Control']});await row('keep.md').press('Delete');
+ await page.locator('#confirmRecentClear').click();
  await page.locator('.empty-list').waitFor();
  assert.equal((await page.evaluate(()=>window.recentAudit.snapshot())).text,before.text);
  await page.locator('#recentTab').click();assert.equal(await page.locator('.file-item').count(),0);
  assert.deepEqual(errors,[]);
- console.log('PASS: Ctrl/Meta toggle, keyboard, no accidental open/drag, cancel, partial failure/retry, pinned/missing records, favorites and dirty document preserved, empty-list persistence');
+ console.log(`PASS ${engine}: Ctrl/Meta toggle, keyboard, no native confirm, modal cancel/Escape/reentrancy, toolbar/context menu/Delete, partial failure/retry, pinned/missing records, favorites and dirty document preserved, empty-list persistence`);
 }finally{await browser?.close();await server.close();}

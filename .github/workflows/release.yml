@@ -60,6 +60,8 @@ jobs:
           export IME_BROWSER=webkit
           node frontend/tests/browser-ime-start-selection.mjs
           node frontend/tests/browser-ime-background.mjs
+          export RECENT_BROWSER=webkit
+          node frontend/tests/browser-recent-selection.mjs
   windows:
     needs: verify
     name: Windows x64

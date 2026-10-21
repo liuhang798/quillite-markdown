@@ -684,6 +684,15 @@
     </section>
   </div>
 
+  <dialog id="recentClearDialog" class="unsaved-close-dialog recent-clear-dialog no-drag" aria-labelledby="recentClearTitle" aria-describedby="recentClearDescription">
+    <h2 id="recentClearTitle" data-i18n="recentClearSelected">清除所选</h2>
+    <p id="recentClearDescription"></p>
+    <form method="dialog" class="unsaved-close-actions">
+      <button id="cancelRecentClear" class="large-button secondary" value="cancel" autofocus data-i18n="cancel">取消</button>
+      <button id="confirmRecentClear" class="large-button primary" value="confirm" data-i18n="recentClearSelected">清除所选</button>
+    </form>
+  </dialog>
+
   <div id="unsavedCloseDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="unsavedCloseTitle" aria-describedby="unsavedCloseDescription">
     <section class="unsaved-close-dialog">
       <span class="eyebrow" data-i18n="unsavedCloseLabel">文档更改</span>

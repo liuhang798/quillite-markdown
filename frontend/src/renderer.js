@@ -6049,12 +6049,27 @@ function updateRecentSelectionUI() {
 
 async function clearSelectedRecentRecords() {
   if (state.sidebarMode !== 'recent' || state.removingRecentSelection || pinMutationInProgress) return;
-  const paths = retainRecentSelection(state.recentSelection, state.recentFiles);
-  if (!paths.length || !window.confirm(t('recentBatchConfirm', { count: paths.length }))) return;
+  let paths = retainRecentSelection(state.recentSelection, state.recentFiles);
+  if (!paths.length) return;
+  // Lock before the asynchronous prompt: repeated menu/keyboard actions must
+  // not start duplicate preference writes. This Wails macOS host does not
+  // implement WKWebView's JavaScript confirm delegate.
   state.removingRecentSelection = true;
   closeRecentContextMenu();
   updateRecentSelectionUI();
   try {
+    const dialog = $('#recentClearDialog');
+    $('#recentClearDescription').textContent = t('recentBatchConfirm', { count: paths.length });
+    dialog.returnValue = 'cancel';
+    const confirmed = await new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
+      dialog.showModal();
+    });
+    if (!confirmed || state.sidebarMode !== 'recent' || pinMutationInProgress) return;
+    // Background refresh may have removed records while confirmation was open.
+    // Never include records newly selected after the original request.
+    paths = retainRecentSelection(paths, state.recentFiles);
+    if (!paths.length) return;
     const { removed, failed } = await removeRecentSelection(paths, path => window.quilliteMarkdown.removeRecent(path));
     const remains = path => !removed.some(item => sameDocumentPath(item, path));
     applyRecentPartition(partitionRecentFiles(state.recentFiles.filter(file => remains(file.path)), state.pinnedRecentFiles.filter(remains)));
@@ -12355,7 +12370,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   // Native dialog traps focus; do not route typing/shortcuts to the background document.
-  if ($('#linkDialog').open || $('#footnoteDialog').open) return;
+  if ($('#linkDialog').open || $('#footnoteDialog').open || $('#recentClearDialog').open) return;
   if (!els.formulaDialog.classList.contains('hidden')) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); $('#formulaSearch').focus(); }
     else if (event.key === 'Escape') { event.preventDefault(); closeFormulaDialog(); }
