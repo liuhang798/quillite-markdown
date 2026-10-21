@@ -2,7 +2,7 @@ import { marked } from 'marked';
 import { installTextStyleMenu } from './text-style-menu.js';
 import { markdownLinkAttribute } from './markdown-link-attributes.js';
 import { frontmatterRenderSource } from './frontmatter.js';
-import { retainRecentSelection, toggleRecentSelection, removeRecentSelection } from './recent-selection.js';
+import { retainRecentSelection, toggleRecentSelection, rangeRecentSelection, removeRecentSelection } from './recent-selection.js';
 import { tableWhitespace, tableRenderSource } from './markdown-parser.js';
 import { isFileDrag } from './file-drag.js';
 import { createImageInsertionTarget, imageInsertionTargetCurrent, mapImageInsertionTargets, separateImageFromTable } from './image-insertion-target.js';
@@ -49,8 +49,9 @@ import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaRepla
 import { mathExtensions, renderLatexResult, collectFormulaRendering, formulaMarkdownMatches } from './math-rendering.js';
 import { formulaFallbackSource } from './formula-export.js';
 import { FORMULA_STRUCTURES, hasFormulaPlaceholders } from './formula-visual-policy.js';
-import { createPreviewSourceMap, previewLineTarget, previewPointerTarget } from './preview-source-map.js';
+import { createPreviewSourceMap, clearPreviewSourceMap, previewLineTarget, previewPointerTarget } from './preview-source-map.js';
 import { captureReadingPosition, restoreReadingPosition } from './reading-position.js';
+import { editorOutline, captureEditorPosition, restoreEditorPosition } from './editor-navigation.js';
 import { largeHeadingTokenizer } from './marked-large-heading.js';
 import { openExternalSafely } from './external-links.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
@@ -97,6 +98,7 @@ let codeEditor;
 let embeddedImagePreview;
 let sourceImageFolding;
 let editorLivePreview;
+let editorHasComposition = view => !!(view?.compositionStarted || view?.composing);
 let livePreviewContext;
 let buildLivePlan;
 let liveFormatSelection;
@@ -305,6 +307,7 @@ const state = {
   favoriteFiles: [],
   sidebarMode: normalizeSidebarMode(localStorage.getItem('sidebarMode')),
   recentSelection: [],
+  recentSelectionAnchor: '',
   removingRecentSelection: false,
   accentTheme: initialAppearance.accentTheme,
   colorMode: initialAppearance.colorMode,
@@ -662,7 +665,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
 };
 
 Object.assign(translations['zh-CN'], {
-  recentSelectHint: 'Ctrl / ⌘ + 单击可多选', recentBatchActions: '最近阅读批量操作', recentSelectedCount: '已选 {count} 项', recentClearSelected: '清除所选',
+  recentSelectHint: 'Ctrl / ⌘ 多选 · Shift 连选 · 组合可追加范围', recentBatchActions: '最近阅读批量操作', recentSelectedCount: '已选 {count} 项', recentClearSelected: '清除所选',
   recentBatchConfirm: '从最近阅读中清除所选的 {count} 条记录？\n仅移除记录及其置顶状态，不删除文件，不影响收藏或当前文档。',
   recentBatchRemoved: '已清除 {count} 条最近记录，原文件未删除', recentBatchFailed: '已清除 {count} 条，{failed} 条未成功；失败项已保留，可重试',
   aiToolbarTitle: '打开 AI 工具', aiToolbarMenuLabel: 'AI 工具', aiToolbarGenerate: 'AI生成', aiToolbarGenerateHint: '提示词写文档', aiToolbarEdit: 'AI编辑', aiToolbarProofread: 'AI校对', aiToolbarContinue: 'AI续写', aiToolbarTranslate: 'AI翻译', aiToolbarConcise: 'AI精简', aiToolbarExpand: 'AI扩写', aiToolbarCustom: 'AI自定义', aiContinueInstruction: '根据光标前的上下文自然续写。只返回需要插入的新 Markdown 内容，不要重复已有上下文。', aiContinueNeedContext: '请先在光标前输入一些内容，再使用 AI 续写', aiContinueDialogTitle: 'AI续写', aiTranslateDialogTitle: 'AI翻译', aiConciseDialogTitle: 'AI精简', aiExpandDialogTitle: 'AI扩写', aiCustomDialogTitle: 'AI自定义',
@@ -719,7 +722,7 @@ Object.assign(translations['zh-CN'], {
   exportDescriptionPdf: '直接生成 PDF，并根据 H1–H6 标题写入可点击的书签目录。'
 });
 Object.assign(translations.en, {
-  recentSelectHint: 'Ctrl / ⌘ + click to select multiple', recentBatchActions: 'Recent document bulk actions', recentSelectedCount: '{count} selected', recentClearSelected: 'Clear selected',
+  recentSelectHint: 'Ctrl / ⌘: toggle · Shift: range · combine to add', recentBatchActions: 'Recent document bulk actions', recentSelectedCount: '{count} selected', recentClearSelected: 'Clear selected',
   recentBatchConfirm: 'Clear {count} selected records from Recent?\nOnly recent records and their pins are removed. Files, Favorites and the current document are unchanged.',
   recentBatchRemoved: 'Cleared {count} recent records. Original files were not deleted.', recentBatchFailed: 'Cleared {count}; {failed} failed. Failed records are retained for retry.',
   aiToolbarTitle: 'Open AI tools', aiToolbarMenuLabel: 'AI TOOLS', aiToolbarGenerate: 'AI Generate', aiToolbarGenerateHint: 'Write from a prompt', aiToolbarEdit: 'AI Edit', aiToolbarProofread: 'AI Proofread', aiToolbarContinue: 'AI Continue', aiToolbarTranslate: 'AI Translate', aiToolbarConcise: 'AI Condense', aiToolbarExpand: 'AI Expand', aiToolbarCustom: 'AI Custom', aiContinueInstruction: 'Continue naturally from the context before the cursor. Return only the new Markdown to insert and do not repeat the existing context.', aiContinueNeedContext: 'Enter some content before the cursor before using AI Continue', aiContinueDialogTitle: 'AI Continue', aiTranslateDialogTitle: 'AI Translate', aiConciseDialogTitle: 'AI Condense', aiExpandDialogTitle: 'AI Expand', aiCustomDialogTitle: 'AI Custom',
@@ -1117,6 +1120,7 @@ function loadEditorDependencies() {
     markdownLanguage = markdownModule.markdownLanguage;
     editorPresentation = new Compartment();
     editorLivePreview = livePreviewModule.editorLivePreview;
+    editorHasComposition = livePreviewModule.editorHasComposition;
     livePreviewContext = livePreviewModule.livePreviewContext;
     buildLivePlan = livePreviewModule.buildLivePlan;
     liveFormatSelection = livePreviewModule.liveFormatSelection;
@@ -1238,7 +1242,10 @@ function initializeSpellcheckExtension() {
 
     schedule(delay) {
       clearTimeout(this.timer);
-      this.timer = setTimeout(() => refreshSpellcheckDecorations(this.view), delay);
+      this.timer = setTimeout(() => {
+        if (editorHasComposition(this.view)) { this.schedule(100); return; }
+        refreshSpellcheckDecorations(this.view);
+      }, delay);
     }
 
     destroy() {
@@ -1302,7 +1309,7 @@ async function loadSpellcheckDictionary(showFailure = false) {
 }
 
 function refreshSpellcheckDecorations(view = codeEditor, loadDictionary = true) {
-  if (!view || !spellcheckDecorationEffect || editorSourceFallback) return;
+  if (!view || view.destroyed || editorHasComposition(view) || !spellcheckDecorationEffect || editorSourceFallback) return;
   if (state.spellcheckEnabled && !activeSpellchecker && loadDictionary) loadSpellcheckDictionary();
   view.dispatch({ effects: spellcheckDecorationEffect.of(spellcheckDecorations(view)) });
 }
@@ -1401,13 +1408,14 @@ function focusCodeEditor() {
   // A newer click/dialog/document owns focus; never let an old layout callback
   // pull it back into the editor (or dereference an editor that was replaced).
   const canReturn = () => codeEditor === editor && state.editing && state.documentSession === session
+    && !editor.destroyed && !editorHasComposition(editor)
     && document.hasFocus()
     && !document.body.classList.contains('dialog-open')
     && [previousFocus, document.body, editor.contentDOM].includes(document.activeElement);
   requestAnimationFrame(() => {
     if (!canReturn()) return;
     editor.requestMeasure();
-    requestAnimationFrame(() => { if (canReturn()) editor.focus(); });
+    requestAnimationFrame(() => { if (canReturn() && !editor.hasFocus) editor.focus(); });
   });
 }
 
@@ -4692,6 +4700,8 @@ async function initializeCodeEditor() {
     scrollPastEnd(),
     EditorView.updateListener.of(update => {
       mapImageInsertionTargets(state.imageInsertionTargets, update);
+      if (update.docChanged) scheduleEditorOutline();
+      if (update.viewportChanged && state.editing && state.compactTocOpen) scheduleActiveTocRefresh();
       if (update.docChanged && !suppressEditorChanges && state.currentFile) {
         const performance = documentPerformanceProfile(update.state.doc.length, state.currentDocumentHasDiagrams);
         if (performance.deferContentSync) {
@@ -4708,6 +4718,7 @@ async function initializeCodeEditor() {
         scheduleRecoverySnapshot(performance);
       }
       if (update.docChanged || update.selectionSet) {
+        editorEntryPosition = null;
         updateEditorPosition();
         scrollPreviewToCursor();
         if (update.selectionSet) scheduleFormatPainterApply();
@@ -5095,7 +5106,10 @@ function openRecentContextMenu(event, filePath, missing) {
   event.preventDefault();
   event.stopPropagation();
   if (state.removingRecentSelection) return;
-  if (!state.recentSelection.some(path => sameDocumentPath(path, filePath))) state.recentSelection = [];
+  if (!state.recentSelection.some(path => sameDocumentPath(path, filePath))) {
+    state.recentSelection = [];
+    state.recentSelectionAnchor = '';
+  }
   updateRecentSelectionUI();
   els.moreMenu.classList.add('hidden');
   closeAccentMenu();
@@ -5402,7 +5416,7 @@ function syncEditorLayoutOptions() {
 }
 
 function setEditorPresentation(mode) {
-  if (codeEditor?.composing) return;
+  if (editorHasComposition(codeEditor)) return;
   state.editorPresentation = mode === 'source' ? 'source' : 'live';
   if (state.editorPresentation === 'live') {
     state.formulaDisplay = 'preview';
@@ -5648,7 +5662,10 @@ function updateLibraryHeading() {
 }
 
 function setSidebarMode(mode) {
-  if (normalizeSidebarMode(mode) !== state.sidebarMode) state.recentSelection = [];
+  if (normalizeSidebarMode(mode) !== state.sidebarMode) {
+    state.recentSelection = [];
+    state.recentSelectionAnchor = '';
+  }
   state.sidebarMode = normalizeSidebarMode(mode);
   localStorage.setItem('sidebarMode', state.sidebarMode);
   const explorer = state.sidebarMode === 'explorer';
@@ -5877,7 +5894,7 @@ function handlePinnedLostPointerCapture(event) {
 }
 
 function beginPinnedPointerReorder(event) {
-  if (event.button !== 0 || event.ctrlKey || event.metaKey || state.recentSelection.length || state.removingRecentSelection || pinMutationInProgress || pinnedPointerDrag) return;
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || state.recentSelection.length || state.removingRecentSelection || pinMutationInProgress || pinnedPointerDrag) return;
   const row = event.currentTarget;
   const handle = row.querySelector('.pin-drag-handle');
   const container = row.closest('[data-pinned-list]');
@@ -5962,14 +5979,15 @@ function renderFileList() {
     button.addEventListener('click', event => {
       const filePath = decodeURIComponent(button.dataset.path);
       if (state.sidebarMode === 'recent' && state.removingRecentSelection) return;
-      if (state.sidebarMode === 'recent' && (event.ctrlKey || event.metaKey)) {
+      if (state.sidebarMode === 'recent' && (event.ctrlKey || event.metaKey || event.shiftKey)) {
         event.preventDefault();
         if (pinMutationInProgress) return;
-        state.recentSelection = toggleRecentSelection(state.recentSelection, filePath, state.recentFiles);
+        selectRecentFile(filePath, event);
         updateRecentSelectionUI();
         return;
       }
       state.recentSelection = [];
+      state.recentSelectionAnchor = state.sidebarMode === 'recent' ? filePath : '';
       updateRecentSelectionUI();
       if (button.dataset.missing === 'true') return;
       if (suppressPinnedFileClickPath && performance.now() < suppressPinnedFileClickUntil && sameDocumentPath(suppressPinnedFileClickPath, filePath)) {
@@ -5991,8 +6009,21 @@ function renderFileList() {
   updateRecentSelectionUI();
 }
 
+function selectRecentFile(path, event) {
+  const { pinnedFiles, ordinaryFiles } = partitionRecentFiles(state.recentFiles, state.pinnedRecentFiles);
+  const files = [...pinnedFiles, ...ordinaryFiles];
+  if (event.shiftKey) {
+    state.recentSelection = rangeRecentSelection(state.recentSelection, state.recentSelectionAnchor, path, files, event.ctrlKey || event.metaKey);
+    if (!files.some(file => sameDocumentPath(file.path, state.recentSelectionAnchor))) state.recentSelectionAnchor = path;
+  } else {
+    state.recentSelection = toggleRecentSelection(state.recentSelection, path, files);
+    state.recentSelectionAnchor = path;
+  }
+}
+
 function updateRecentSelectionUI() {
   state.recentSelection = retainRecentSelection(state.recentSelection, state.recentFiles);
+  if (!state.recentFiles.some(file => sameDocumentPath(file.path, state.recentSelectionAnchor))) state.recentSelectionAnchor = '';
   const recent = state.sidebarMode === 'recent';
   const count = state.recentSelection.length;
   $('#recentSelectionHint').classList.toggle('hidden', !recent);
@@ -6145,11 +6176,12 @@ function highlightedTocTitle(text, query) {
 const compactTocMediaQuery = window.matchMedia?.('(max-width: 1120px)');
 
 function isCompactTocLayout() {
-  return compactTocMediaQuery?.matches ?? window.innerWidth <= 1120;
+  return state.editing || (compactTocMediaQuery?.matches ?? window.innerWidth <= 1120);
 }
 
 function syncCompactTocControls(tocAvailable = state.tocAvailable) {
-  state.tocAvailable = Boolean(tocAvailable && state.currentFile && !state.editing);
+  state.tocAvailable = Boolean(tocAvailable && state.currentFile);
+  els.appShell.classList.toggle('editor-outline-mode', state.editing);
   const compact = isCompactTocLayout();
   if (!compact || !state.tocAvailable) state.compactTocOpen = false;
   const open = compact && state.tocAvailable && state.compactTocOpen;
@@ -6169,6 +6201,7 @@ function syncCompactTocControls(tocAvailable = state.tocAvailable) {
 }
 
 function setCompactTocOpen(open, restoreFocus = false) {
+  if (open && state.editing) renderToc();
   state.compactTocOpen = Boolean(open && isCompactTocLayout() && state.tocAvailable);
   syncCompactTocControls();
   if (!state.compactTocOpen && restoreFocus && !els.compactTocButton.classList.contains('hidden')) {
@@ -6196,8 +6229,42 @@ function handleCompactTocLayoutChange() {
   applyPaneWidths();
 }
 
+let outlineDocument = null, outlineHeadings = [], outlineRefreshTimer;
+function currentEditorHeadings() {
+  if (!codeEditor) return [];
+  if (outlineDocument !== codeEditor.state.doc) {
+    outlineDocument = codeEditor.state.doc;
+    const label = document.createElement('span');
+    outlineHeadings = editorOutline(outlineDocument.toString()).map((heading, index) => {
+      label.innerHTML = DOMPurify.sanitize(marked.parseInline(heading.text));
+      return { ...heading, id: slugify(label.textContent, index), textContent: label.textContent, tagName: `H${heading.level}` };
+    });
+  }
+  return outlineHeadings;
+}
+
+function scheduleEditorOutline() {
+  clearTimeout(outlineRefreshTimer);
+  // Do not retain old ropes or reparse an outline on every hidden keystroke.
+  outlineDocument = null; outlineHeadings = [];
+  if (!state.editing || !state.compactTocOpen) return;
+  const session = state.documentSession;
+  outlineRefreshTimer = setTimeout(() => {
+    if (state.editing && state.compactTocOpen && state.documentSession === session) renderToc();
+  }, 300);
+}
+
+function scrollEditorToHeading(id) {
+  const heading = currentEditorHeadings().find(item => item.id === id);
+  if (!heading || !codeEditor) return false;
+  cancelReadingPositionRestore();
+  codeEditor.dispatch({ selection: { anchor: heading.from }, effects: EditorView.scrollIntoView(heading.from, { y: 'start', yMargin: 28 }) });
+  codeEditor.focus();
+  return true;
+}
+
 function renderToc() {
-  const headings = collectDocumentHeadings(els.content);
+  const headings = state.editing ? currentEditorHeadings() : collectDocumentHeadings(els.content);
   const allItems = headings.map(heading => ({
     id: heading.id,
     text: heading.textContent,
@@ -6223,10 +6290,10 @@ function renderToc() {
   }).join('')}</ul>`;
   els.toc.innerHTML = renderNodes(tree);
   els.toc.classList.toggle('is-flat', state.tocMode === 'flat');
-  els.tocEmpty.classList.toggle('hidden', !query || tree.length > 0);
+  els.tocEmpty.classList.toggle('hidden', tree.length > 0);
   els.clearTocSearch.classList.toggle('hidden', !query);
   document.querySelectorAll('[data-toc-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.tocMode === state.tocMode)));
-  const tocAvailable = headings.length >= 2;
+  const tocAvailable = state.editing || headings.length >= 2;
   els.tocPanel.classList.toggle('hidden', !tocAvailable);
   syncCompactTocControls(tocAvailable);
   updatePaneResizerVisibility();
@@ -6248,7 +6315,7 @@ function renderToc() {
   }));
   els.toc.querySelectorAll('a').forEach(link => link.addEventListener('click', event => {
     event.preventDefault();
-    if (!scrollReaderToHeading(link.dataset.target)) return;
+    if (!(state.editing ? scrollEditorToHeading(link.dataset.target) : scrollReaderToHeading(link.dataset.target))) return;
     els.toc.querySelectorAll('a').forEach(item => item.classList.toggle('active', item === link));
     if (isCompactTocLayout()) setCompactTocOpen(false);
   }));
@@ -6256,15 +6323,17 @@ function renderToc() {
 }
 
 function updateActiveToc() {
-  const headings = [...els.content.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+  if (state.editing && !state.compactTocOpen) return;
+  const headings = state.editing ? currentEditorHeadings() : [...els.content.querySelectorAll('h1, h2, h3, h4, h5, h6')];
   const reader = $('.reader-pane');
   const max = reader.scrollHeight - reader.clientHeight;
   const readerTop = reader.getBoundingClientRect().top;
   let active = headings[0];
+  const editorLine = state.editing && codeEditor ? captureEditorPosition(codeEditor).line : null;
   for (const heading of headings) {
-    if (heading.getBoundingClientRect().top <= readerTop + 42) active = heading;
+    if (editorLine ? codeEditor.state.doc.lineAt(heading.from).number <= editorLine : heading.getBoundingClientRect().top <= readerTop + 42) active = heading;
   }
-  if (max > 0 && reader.scrollTop >= max - 2) active = headings.at(-1);
+  if (!state.editing && max > 0 && reader.scrollTop >= max - 2) active = headings.at(-1);
   let activeLink = null;
   els.toc.querySelectorAll('.toc-node').forEach(node => node.classList.remove('contains-active'));
   els.toc.querySelectorAll('a').forEach(a => {
@@ -6279,16 +6348,17 @@ function updateActiveToc() {
   }
   if (activeLink && !activeLink.closest('.toc-children.hidden')) {
     const linkRect = activeLink.getBoundingClientRect();
-    const panelRect = els.tocPanel.getBoundingClientRect();
-    const viewportTop = panelRect.top + els.tocPanel.clientTop;
-    const viewportBottom = viewportTop + els.tocPanel.clientHeight;
+    const tocScroller = state.editing ? els.toc : els.tocPanel;
+    const panelRect = tocScroller.getBoundingClientRect();
+    const viewportTop = panelRect.top + tocScroller.clientTop;
+    const viewportBottom = viewportTop + tocScroller.clientHeight;
     const scrollDelta = scrollDeltaForBounds({
       itemTop: linkRect.top,
       itemBottom: linkRect.bottom,
       viewportTop,
       viewportBottom,
     });
-    if (scrollDelta) els.tocPanel.scrollTop += scrollDelta;
+    if (scrollDelta) tocScroller.scrollTop += scrollDelta;
   }
   const progress = max > 0 ? (reader.scrollTop / max) * 100 : 100;
   els.progressBar.style.width = `${progress}%`;
@@ -6328,6 +6398,7 @@ function cancelScheduledEditorPreview() {
 
 // Every DOM replacement/close must retire both pending work and live charts.
 function releaseRenderedResources(container) {
+  clearPreviewSourceMap(container);
   cancelReaderWork(container);
   cancelPreviewImages(container);
   cancelMermaidRendering(container);
@@ -6335,6 +6406,7 @@ function releaseRenderedResources(container) {
 }
 
 function suspendEditorPreview() {
+  clearPreviewSourceMap(els.editorPreview);
   cancelScheduledEditorPreview();
   renderEditorPreview.generation = (renderEditorPreview.generation || 0) + 1;
   cancelMermaidRendering(els.editorPreview);
@@ -6588,9 +6660,11 @@ function renderMarkdownTo(container, doc, content) {
   const cacheKey = JSON.stringify([doc.path, state.language, mermaidThemeKey, deferred]);
   const cachedHTML = container === els.content ? readerHTMLCache.get(cacheKey, content) : null;
   const prepared = cachedHTML === null ? prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(tableRenderSource(frontmatterRenderSource(content))))) : null;
-  // Source navigation belongs to the editing preview only. Reading/export
-  // renders need neither token indexing nor thousands of mapped text spans.
-  const sourceMap = container === els.editorPreview ? createPreviewSourceMap(marked, prepared.lineMap) : null;
+  // Reader navigation needs block anchors, not thousands of inline text spans.
+  // Cache only immutable metadata together with the sanitised HTML revision.
+  const sourceMap = container === els.editorPreview || container === els.content
+    ? createPreviewSourceMap(marked, prepared?.lineMap, { inline: container === els.editorPreview,
+      snapshot: cachedHTML === null ? '' : readerHTMLCache.getMapping(cacheKey, content) }) : null;
   let renderedMath;
   let html = cachedHTML;
   if (html === null) {
@@ -6602,7 +6676,7 @@ function renderMarkdownTo(container, doc, content) {
       });
       html = DOMPurify.sanitize(renderedMath.html, { ADD_ATTR: ['target', 'rel', 'data-md-color'] });
     } finally { deferReaderCode = previous; }
-    if (container === els.content) readerHTMLCache.set(cacheKey, content, html);
+    if (container === els.content) readerHTMLCache.set(cacheKey, content, html, sourceMap.snapshot());
   }
   // The reusable snapshots above are plain SVG strings. Release the live
   // ECharts instances and ResizeObservers before replacing the preview DOM,
@@ -6610,8 +6684,8 @@ function renderMarkdownTo(container, doc, content) {
   // detached observers and makes typing/scrolling feel sluggish.
   releaseEChartsDiagrams(container);
   container.innerHTML = html;
-  sourceMap?.apply(container);
   normalizeImageRows(container);
+  sourceMap?.apply(container);
   const documentHeadings = collectDocumentHeadings(container);
   renderDynamicTocs(container, documentHeadings);
   restoreReusableMermaidDiagrams(container, reusableMermaid, mermaidThemeKey);
@@ -6733,6 +6807,7 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
   if (!doc?.path) return;
   cancelReadingPositionRestore();
   readingPosition = null;
+  editorEntryPosition = null;
   closeImageDialog();
   cancelImageInsertions();
   closeFormulaDialog(false);
@@ -6785,6 +6860,7 @@ function closePreview() {
   if (!maybeDiscardChanges()) return;
   cancelReadingPositionRestore();
   readingPosition = null;
+  editorEntryPosition = null;
   closeImageDialog();
   cancelImageInsertions();
   closeFormulaDialog(false);
@@ -7018,14 +7094,17 @@ function scrollPreviewToCursor(force = false, behavior = 'smooth') {
   const scroller = $('.editor-preview-scroll');
   const preview = els.editorPreview;
   if (!scroller || !preview?.children.length) return;
-  const cursorLine = codeEditor.state.doc.lineAt(codeEditor.state.selection.main.head).number;
+  const cursorLine = editorEntryPosition?.line || codeEditor.state.doc.lineAt(codeEditor.state.selection.main.head).number;
   if (!force && cursorLine === scrollPreviewToCursor.lastLine) return;
   scrollPreviewToCursor.lastLine = cursorLine;
   const target = previewLineTarget(preview, cursorLine);
   if (!target) return;
   const rect = target.getBoundingClientRect();
   const scrollerRect = scroller.getBoundingClientRect();
-  const top = Math.max(0, scroller.scrollTop + rect.top - scrollerRect.top - 12);
+  const offset = editorEntryPosition
+    ? Number.isFinite(editorEntryPosition.fraction) ? -editorEntryPosition.fraction * rect.height : editorEntryPosition.offset
+    : 12;
+  const top = Math.max(0, scroller.scrollTop + rect.top - scrollerRect.top - offset);
   if (Math.abs(top - scroller.scrollTop) < 48) return;
   scroller.scrollTo({ top, behavior });
 }
@@ -7089,6 +7168,7 @@ async function savePermissionCopyAndEdit() {
 }
 
 let readingPosition = null;
+let editorEntryPosition = null;
 let cancelReadingPositionRestore = () => {};
 
 async function toggleEditor(forceEditing) {
@@ -7135,8 +7215,14 @@ async function toggleEditor(forceEditing) {
         session: requestedSession,
         ...captureReadingPosition($('.reader-pane'), els.content)
       };
+    } else if (codeEditor) {
+      readingPosition = { session: requestedSession, ...captureEditorPosition(codeEditor) };
     }
+    state.compactTocOpen = false;
+    clearTimeout(outlineRefreshTimer);
+    outlineDocument = null; outlineHeadings = [];
     state.editing = nextEditing;
+    editorEntryPosition = nextEditing && readingPosition?.line ? readingPosition : null;
     // Retain the document, selection and undo history, but unmount live widgets
     // while reading so hidden nested editors/images do not consume resources.
     if (codeEditor && editorPresentation) {
@@ -7157,13 +7243,14 @@ async function toggleEditor(forceEditing) {
       renderEditorPreview(state.currentFile.content);
       els.documentView.classList.add('hidden');
       els.editorView.classList.remove('hidden');
-      els.tocPanel.classList.add('hidden');
-      syncCompactTocControls(false);
+      renderToc();
       updatePaneResizerVisibility();
       els.backToTop.classList.remove('visible');
       els.editButton.classList.add('active');
       els.editButtonLabel.textContent = t('preview');
       focusCodeEditor();
+      cancelReadingPositionRestore = restoreEditorPosition(codeEditor, readingPosition, EditorView.scrollIntoView,
+        () => state.documentSession === requestedSession && state.editing);
       updateEditorPosition();
       const performance = documentPerformanceProfile(codeEditor.state.doc.length, state.currentDocumentHasDiagrams);
       if (performance.level !== 'normal' && largeDocumentNoticeSession !== state.documentSession) {
@@ -11077,6 +11164,7 @@ $('#clearSelectedRecent').addEventListener('click', clearSelectedRecentRecords);
 $('#cancelRecentSelection').addEventListener('click', () => {
   if (state.removingRecentSelection) return;
   state.recentSelection = [];
+  state.recentSelectionAnchor = '';
   updateRecentSelectionUI();
   els.recentTab.focus();
 });
@@ -11086,13 +11174,13 @@ function handleRecentSelectionKey(event) {
   if (button && (event.ctrlKey || event.metaKey) && event.key === ' ') {
     event.preventDefault(); event.stopPropagation();
     if (!pinMutationInProgress) {
-      state.recentSelection = toggleRecentSelection(state.recentSelection, decodeURIComponent(button.dataset.path), state.recentFiles);
+      selectRecentFile(decodeURIComponent(button.dataset.path), event);
       updateRecentSelectionUI();
     }
   } else if (state.recentSelection.length && (event.key === 'Escape' || event.key === 'Delete')) {
     event.preventDefault(); event.stopPropagation();
     if (event.key === 'Delete') void clearSelectedRecentRecords();
-    else { state.recentSelection = []; updateRecentSelectionUI(); els.recentTab.focus(); }
+    else { state.recentSelection = []; state.recentSelectionAnchor = ''; updateRecentSelectionUI(); els.recentTab.focus(); }
   }
 }
 els.fileList.addEventListener('keydown', handleRecentSelectionKey);

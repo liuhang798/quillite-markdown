@@ -7,6 +7,18 @@ import {highlightExtension, prepareFootnotes} from '../src/markdown-formats.js';
 import {renderPreparedFootnotes} from '../src/footnote-rendering.js';
 import {mathExtensions,collectFormulaRendering} from '../src/math-rendering.js';
 
+test('reader maps only blocks and restores trusted anchors from its cache snapshot', () => {
+  const map = createPreviewSourceMap(marked, null, {inline:false});
+  const html = map.parse('# Heading\n\n**Text** and `code`\n\n> Quote');
+  assert.doesNotMatch(html, /<span data-qm-source/);
+  const snapshot = map.snapshot();
+  const restored = createPreviewSourceMap(marked, null, {inline:false,snapshot});
+  const nodes = [...html.matchAll(/data-qm-source="([^"]+)"/g)].map(m => ({dataset:{},getAttribute:()=>m[1],removeAttribute(){}}));
+  nodes.push({dataset:{},getAttribute:()=> 'forged-source-id',removeAttribute(){}});
+  restored.apply({querySelectorAll:selector=>selector==='[data-line]'?[]:nodes});
+  assert.deepEqual(nodes.map(n=>n.dataset.line), ['1','3','5','5',undefined]);
+});
+
 test('registered renderer links use the current parser on first and repeated renders',()=>{
   const parser=new Marked({gfm:true,renderer:{link({href,tokens}){
     return `<a href="${href}">${this.parser.parseInline(tokens)}</a>`;

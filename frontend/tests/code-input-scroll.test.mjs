@@ -37,8 +37,8 @@ test('ordinary beforeinput retains literal code, multicarets and shared undo wit
   undo({state:view.state,dispatch:tr=>{view.state=tr.state;}});assert.equal(view.state.doc.toString(),original);
 });
 test('read-only, IME and unsupported native input events are not intercepted',()=>{
-  for(const scenario of [{readOnly:true},{composing:true},{isComposing:true},{cancelable:false},{inputType:'insertCompositionText'},{inputType:'insertReplacementText'},{data:null}]){
-    const view={state:EditorState.create({doc:'abc',extensions:scenario.readOnly?[EditorState.readOnly.of(true)]:[]}),composing:!!scenario.composing,dispatch(){assert.fail('must not dispatch');}};
+  for(const scenario of [{readOnly:true},{composing:true},{compositionStarted:true},{isComposing:true},{cancelable:false},{inputType:'insertCompositionText'},{inputType:'insertReplacementText'},{data:null}]){
+    const view={state:EditorState.create({doc:'abc',extensions:scenario.readOnly?[EditorState.readOnly.of(true)]:[]}),composing:!!scenario.composing,compositionStarted:!!scenario.compositionStarted,dispatch(){assert.fail('must not dispatch');}};
     const event={inputType:'insertText',data:'中',cancelable:true,...scenario,preventDefault(){assert.fail('must retain native input');}};
     assert.equal(handleCodeTextInput(event,view),false);
   }

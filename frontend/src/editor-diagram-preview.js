@@ -8,6 +8,7 @@ import { mediaOwnedByInnerEditor } from './media-ownership.js';
 import { markdownParser } from './markdown-parser.js';
 import { blockDropPrefix } from './block-drop-context.js';
 import { scanMarkdownFormulas } from './formula-editing.js';
+import {afterComposition, editorHasComposition, transactionComposing} from './editor-composition.js';
 
 export const diagramPreviewContext = Facet.define({ combine: values => values[0] || {} });
 export const toggleDiagramSource = StateEffect.define();
@@ -150,7 +151,7 @@ export function activeDiagramSourceItem(view) {
 
 export function insertDiagramSourceNewline(view) {
   const {state}=view,field=state.field(editorDiagramField,false);
-  if(view.composing||state.readOnly||!field?.enabled)return false;
+  if(editorHasComposition(view)||state.readOnly||!field?.enabled)return false;
   const plans=state.selection.ranges.map(selection=>{
     const item=field.items.find(item=>item.open&&selection.from>item.from&&selection.to<item.to&&!mediaOwnedByInnerEditor(state,item));
     if(!item)return null;
@@ -242,17 +243,23 @@ class DiagramWidget extends WidgetType {
       root.classList.add('is-error'); body.setAttribute('role', 'status');
     } else if (!item.open) {
       body.textContent = this.labels['Loading diagram'];
+      const finish = valid => {
+        record.cancelFinish?.();
+        record.cancelFinish = afterComposition(view, () => {
+          const found = current(); if (!found) return;
+          if (!valid) view.dispatch({ effects: diagramRenderFailed.of({ doc: record.doc, item: found }) });
+          view.requestMeasure();
+        }, () => record.active && root.isConnected);
+      };
       const render = async () => {
         if (!record.active || !root.isConnected || !current()) return;
         record.observer?.disconnect(); record.observer = null;
         try {
           const valid = await record.context.render?.(body, record.item);
           if (!record.active || !root.isConnected) return;
-          const found = current(); if (!found) return;
-          if (!valid) view.dispatch({ effects: diagramRenderFailed.of({ doc: record.doc, item: found }) });
-          view.requestMeasure();
+          finish(valid);
         } catch {
-          const found = current(); if (found && root.isConnected) view.dispatch({ effects: diagramRenderFailed.of({ doc: record.doc, item: found }) });
+          finish(false);
         }
       };
       // Run outside CodeMirror's DOM update. Only mounted, near-visible cards
@@ -289,7 +296,7 @@ class DiagramWidget extends WidgetType {
   }
   destroy(dom) {
     const record = mounts.get(dom); if (!record) return;
-    record.active = false; clearTimeout(record.timer); record.observer?.disconnect(); record.context.release?.(dom);
+    record.active = false; clearTimeout(record.timer); record.cancelFinish?.(); record.observer?.disconnect(); record.context.release?.(dom);
     mounts.delete(dom);
   }
 }
@@ -344,6 +351,8 @@ export const editorDiagramField = StateField.define({
         openRanges = openRanges.some(item => sameRange(item, range)) ? openRanges.filter(item => !sameRange(item, range)) : [...openRanges, range];
       }
     }
+    if (transactionComposing(transaction)) return {items, enabled, openRanges, theme,
+      decorations:value.decorations.map(transaction.changes), atoms:value.atoms.map(transaction.changes)};
     return decorate(items.map(item => ({ ...item })), transaction.state, enabled, openRanges, theme);
   },
   provide: field => EditorView.decorations.from(field, value => value.decorations),

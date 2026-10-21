@@ -16,6 +16,7 @@ import {emptyCodeSeparator} from './code-fence-editing.js';
 import {spellingDecorations, setSpellingDecorations, projectSpellingDecorations} from './spelling-decorations.js';
 import {trackCodeInputScroll, setCodeInputScroll, holdsCodeInputScroll, handleCodeTextInput, captureNativeCodeInputScroll, finishNativeCodeInputScroll, clearNativeCodeInputScroll} from './code-input-scroll.js';
 import {sameFootnotePresentation} from './editor-reference-context.js';
+import {editorHasComposition, afterComposition} from './editor-composition.js';
 
 // Include empty cells, but never invent missing cells or discard extra columns.
 export function tableCellRanges(raw, base = 0) {
@@ -68,7 +69,7 @@ export function mapEditableSelection(selection, position) {
 }
 
 export function insertSingleLineMultiBreak(view) {
-  if (view.state.selection.ranges.length < 2 || view.state.readOnly || view.composing) return false;
+  if (view.state.selection.ranges.length < 2 || view.state.readOnly || editorHasComposition(view)) return false;
   // Several carets cannot navigate as one. Normalize each break just as paste
   // does, keeping the single-line field and every insertion position intact.
   view.dispatch({ ...view.state.replaceSelection(' '), userEvent: 'input',
@@ -116,7 +117,7 @@ export function retainFootnoteCaretPadding(source, item, selection) {
 
 const controllers = new WeakMap();
 function editableTableGridTarget(inner) {
-  if(inner.destroyed||inner.state.readOnly||inner.state.selection.ranges.length!==1||inner.composing)return null;
+  if(inner.destroyed||inner.state.readOnly||inner.state.selection.ranges.length!==1||editorHasComposition(inner))return null;
   const direct=controllers.get(inner.dom.closest('.cm-live-table'));
   if(direct?.valid()&&direct.widget.item.kind==='table'){
     const index=direct.editors.indexOf(inner);if(index>=0)return{controller:direct,index};
@@ -160,9 +161,9 @@ export function normalizeEditableInsertion(inner, text) {
   return owner?.projectionPrefix ? text.replaceAll('\n','\n'+owner.projectionPrefix) : text;
 }
 export function extendPointerSelection(event, inner) {
-  if (!event.shiftKey || event.button !== 0 || inner.composing) return false;
+  if (!event.shiftKey || event.button !== 0 || editorHasComposition(inner)) return false;
   const owner = resolveEditableOwner(inner, { from: 0, to: inner.state.doc.length });
-  if (!owner || owner.view === inner || owner.view.composing || owner.view.state.selection.ranges.length !== 1) return false;
+  if (!owner || owner.view === inner || editorHasComposition(owner.view) || owner.view.state.selection.ranges.length !== 1) return false;
   const selection = owner.view.state.selection.main;
   if (inner.hasFocus && selection.from >= owner.from && selection.to <= owner.to) return false;
   const local = inner.posAtCoords({ x: event.clientX, y: event.clientY });
@@ -179,7 +180,7 @@ export const editableSearchSelection = StateEffect.define();
 const projectedSearchSelections = new WeakMap();
 const sourceSearchCache = new WeakMap();
 export function syncEditableSearch(view) {
-  if (view.destroyed || view.composing) return;
+  if (view.destroyed || editorHasComposition(view)) return;
   const children = [...view.dom.querySelectorAll('.cm-live-editable-block')].map(root=>controllers.get(root))
     .filter(c=>c?.view===view && c.valid());
   if (!children.length) return;
@@ -215,6 +216,7 @@ export function syncEditableSearch(view) {
   }
 }
 export function syncEditableSelections(view, searchSelection = false) {
+  if (editorHasComposition(view)) return;
   const selection = view.state.selection.main;
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
@@ -237,6 +239,7 @@ export function syncEditableSelections(view, searchSelection = false) {
   }
 }
 export function syncEditableSpelling(view) {
+  if (editorHasComposition(view)) return;
   const marks = view.state.field(spellingDecorations, false) || Decoration.none;
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
@@ -254,7 +257,7 @@ export function syncEditableSpelling(view) {
 }
 export function extendEditableSelection(view, direction, vertical = false) {
   const selection = view.state.selection.main;
-  if (view.composing || selection.empty || view.state.selection.ranges.length !== 1) return false;
+  if (editorHasComposition(view) || selection.empty || view.state.selection.ranges.length !== 1) return false;
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
     if (controller?.view !== view || !controller.valid()) continue;
@@ -284,11 +287,15 @@ export function forwardEditableEffects(view, effects) {
     const controller = controllers.get(root);
     if (controller?.view !== view || !controller.valid()) continue;
     controller.syncing = true;
-    try { for (const inner of controller.editors) if (!inner.destroyed) inner.dispatch({ effects }); }
+    try { for (const inner of controller.editors) if (!inner.destroyed) {
+      if (editorHasComposition(inner) || controller.pendingEffects.has(inner)) controller.deferEffects(inner, effects);
+      else inner.dispatch({ effects });
+    } }
     finally { controller.syncing = false; }
   }
 }
 export function focusEditableBlock(view, searchSelection = false) {
+  if (editorHasComposition(view)) return false;
   // A single child cannot own a document-wide multi-selection.
   if (view.state.selection.ranges.length !== 1) return false;
   const selection = view.state.selection.main;
@@ -304,7 +311,7 @@ export function focusEditableBlock(view, searchSelection = false) {
       inner.dispatch({ selection: { anchor: fieldOffset(range,selection.anchor), head: fieldOffset(range,selection.head) }, effects: editableSearchSelection.of(searchSelection) });
     }
     finally { controller.syncing = false; }
-    inner.focus(); return true;
+    if (!inner.hasFocus) inner.focus(); return true;
   }
   return false;
 }
@@ -416,7 +423,7 @@ export class EditableBlockWidget extends WidgetType {
     if(number){number.textContent=String(this.item.number);number.title=`${this.labels[10]} ${this.item.number} [${this.item.label}]`;}
     return true;
   }
-  destroy(root) { const controller = controllers.get(root); controller?.unregister.forEach(remove => remove()); controller?.editors.forEach(editor => {clearNativeCodeInputScroll(editor);editor.destroy();}); controllers.delete(root); }
+  destroy(root) { const controller = controllers.get(root); controller?.cancelSync?.(); controller?.pendingEffects.forEach(pending => pending.cancel()); controller?.unregister.forEach(remove => remove()); controller?.editors.forEach(editor => {clearNativeCodeInputScroll(editor);editor.destroy();}); controllers.delete(root); }
   toDOM(view) {
     const root = document.createElement('div');
     root.className = `cm-live-widget cm-live-${this.item.kind} cm-live-editable-block`;
@@ -424,6 +431,21 @@ export class EditableBlockWidget extends WidgetType {
     for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'paste', 'copy', 'cut', 'compositionstart', 'compositionupdate', 'compositionend']) root.addEventListener(type, event => event.stopPropagation());
     const controller = {
       widget: this, view, editors: [], unregister: [], syncing: false,
+      pendingEffects: new Map(), cancelSync: null,
+      deferEffects(inner, effects) {
+        let pending = this.pendingEffects.get(inner);
+        if (pending) { pending.effects.push(...effects); return; }
+        pending = {effects:[...effects]}; this.pendingEffects.set(inner, pending);
+        pending.cancel = afterComposition(inner, () => {
+          this.pendingEffects.delete(inner);
+          const syncing = this.syncing; this.syncing = true;
+          try { inner.dispatch({effects:pending.effects}); } finally { this.syncing = syncing; }
+        }, () => this.valid() && controllers.get(root) === this);
+      },
+      syncLater() {
+        if (this.cancelSync) return;
+        this.cancelSync = afterComposition(view, () => { this.cancelSync = null; this.sync(); }, () => this.valid() && controllers.get(root) === this);
+      },
       ranges() {
         const item=this.widget.item;
         if(item.kind==='table')return item.cells.map((field,index)=>this.editors[index]?.hasFocus
@@ -450,7 +472,9 @@ export class EditableBlockWidget extends WidgetType {
               editor.dispatch({ changes: { from, to: end, insert: text.slice(from, nextEnd) },
                 selection: { anchor: Math.min(editor.state.selection.main.head, text.length) }, effects, annotations: editableProjectionSync.of(true) });
             } else if (effects.length) {
-              editor.dispatch({effects,annotations:editableProjectionSync.of(true)});
+              // Re-read the latest definitions after commit, not an old snapshot.
+              if (editorHasComposition(editor)) this.syncLater();
+              else editor.dispatch({effects,annotations:editableProjectionSync.of(true)});
             }
           });
         } finally { this.syncing = false; }
@@ -501,7 +525,7 @@ export class EditableBlockWidget extends WidgetType {
       };
       const navigateBoundary = (direction, vertical = false) => inner => {
         const selection = inner.state.selection.main;
-        if (!controller.valid() || inner.composing || inner.state.selection.ranges.length !== 1 || !selection.empty) return false;
+        if (!controller.valid() || editorHasComposition(inner) || inner.state.selection.ranges.length !== 1 || !selection.empty) return false;
         // Let CodeMirror handle ordinary/wrapped text navigation. Intercept only
         // when it has no text left in the requested direction.
         if (selection.head !== (direction < 0 ? 0 : inner.state.doc.length)) return false;
@@ -524,7 +548,7 @@ export class EditableBlockWidget extends WidgetType {
       };
       const extendBoundary = (direction, vertical = false) => inner => {
         const selection = inner.state.selection.main;
-        if (!controller.valid() || inner.composing || inner.state.selection.ranges.length !== 1
+        if (!controller.valid() || editorHasComposition(inner) || inner.state.selection.ranges.length !== 1
           || selection.head !== (direction < 0 ? 0 : inner.state.doc.length)) return false;
         const ranges = controller.ranges();
         const target = editableBoundaryTarget({ length: view.state.doc.length, item: controller.widget.item, ranges, index, direction, vertical });

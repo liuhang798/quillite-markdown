@@ -46,3 +46,14 @@ test('closing the reader releases cached source and HTML', () => {
   assert.equal(cache.get('document', 'source'), null);
   cache.set('next', 'next', '<p>next</p>'); assert.equal(cache.size, 1);
 });
+
+test('reader source metadata is revision-bound and included in the cache budget', () => {
+  const cache = createReaderCache({maxBytes:40});
+  cache.set('a','a','a','[["id",2]]');
+  assert.equal(cache.getMapping('a','a'),'[["id",2]]');
+  assert.equal(cache.getMapping('a','new'),'');
+  assert.equal(cache.bytes,26);
+  cache.set('a','a','a','x'.repeat(30));
+  assert.equal(cache.size,0);
+  assert.equal(cache.getMapping('a','a'),'');
+});

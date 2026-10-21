@@ -2,6 +2,7 @@
 // Offsets stay local to each token; only line arrays are retained, including for
 // large embedded images. Container prefixes may disappear in child token raws.
 const mappedContainers = new WeakMap();
+export function clearPreviewSourceMap(container) { mappedContainers.delete(container); }
 function lineStarts(text) {
   const starts = [0];
   for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
@@ -16,8 +17,8 @@ function lineIndex(starts, offset) {
   return lo;
 }
 
-export function createPreviewSourceMap(markdown, sourceLineMap = null) {
-  const locations = new WeakMap(), anchors = new Map();
+export function createPreviewSourceMap(markdown, sourceLineMap = null, { inline = true, snapshot = '' } = {}) {
+  const locations = new WeakMap(), anchors = new Map(snapshot ? JSON.parse(snapshot) : []);
   const prefix = `qm-${globalThis.crypto.randomUUID()}-`;
   let serial = 0;
   const mark = (html, line, inline = false) => {
@@ -93,6 +94,7 @@ export function createPreviewSourceMap(markdown, sourceLineMap = null) {
       save('options');
       try {
       for (const name of ['paragraph', 'heading', 'blockquote', 'list', 'listitem', 'table', 'code', 'hr', 'html', 'image', 'codespan', 'text']) {
+        if (!inline && ['image', 'codespan', 'text'].includes(name)) continue;
         save(name);
         const original = base[name];
         renderer[name] = function(token) {
@@ -114,6 +116,7 @@ export function createPreviewSourceMap(markdown, sourceLineMap = null) {
         }
       }
     },
+    snapshot() { return JSON.stringify([...anchors]); },
     apply(container) {
       // Source HTML cannot supply navigation metadata. Only this render's
       // unguessable token IDs are accepted; never keep the temporary IDs.

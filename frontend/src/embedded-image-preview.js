@@ -6,6 +6,7 @@ import { editableProjectionSync } from './editable-owner.js';
 import { imageDefinitionsField, imageDefinitionsFor } from './editor-reference-context.js';
 import { imageDataDecorations, sourceImageFolding, sourceImagePhrases } from './source-image-folding.js';
 import { createImageLoadSession } from './image-load-session.js';
+import {afterComposition, transactionComposing} from './editor-composition.js';
 export { sourceImageFolding, sourceImagePhrases };
 import { alignedImageSource, imageAlignment, editorImageItems, editorImageGroups, canJoinImageGroups, imageRowSource, separateImageChanges, alignImageChanges, imageDimensions, imageDimensionStyle, resizeImageChanges } from './image-layout.js';
 
@@ -391,29 +392,32 @@ export const imagePreviewField = StateField.define({
         open:items.find(previous=>previous.from===item.from && previous.to===item.to)?.open || false}));
     }
     if (transaction.selection || transaction.effects.some(effect => effect.is(refreshImagePreviews))) items = items.map(item => transaction.newSelection.ranges.some(range => range.head > item.from && range.head < item.to || range.anchor > item.from && range.anchor < item.to) ? { ...item, open: true } : item);
+    if (transactionComposing(transaction)) return {items, session,
+      decorations:value.decorations.map(transaction.changes), atoms:value.atoms.map(transaction.changes)};
     return decorate(items, transaction.state, session);
   },
   provide: field => EditorView.decorations.from(field, value => value.decorations)
 });
 
 const imagePreviewScanner = ViewPlugin.fromClass(class {
-  constructor(view) { this.view = view; this.session = view.state.field(imagePreviewField).session; this.timer = null; }
+  constructor(view) { this.view = view; this.session = view.state.field(imagePreviewField).session; this.timer = null; this.cancelScan = null; }
   update(update) {
     if (update.geometryChanged || update.viewportChanged) requestAnimationFrame(() => {
       if (!this.view.destroyed) this.view.dom.querySelectorAll('.cm-embedded-image.is-image-row').forEach(positionImageControls);
     });
     const session = update.state.field(imagePreviewField).session;
     if (session !== this.session) { this.session.dispose(); this.session = session; }
-    if (update.transactions.some(transaction => transaction.effects.some(effect => effect.is(refreshImagePreviews) && effect.value.doc === update.state.doc))) { clearTimeout(this.timer); return; }
+    if (update.transactions.some(transaction => transaction.effects.some(effect => effect.is(refreshImagePreviews) && effect.value.doc === update.state.doc))) { clearTimeout(this.timer); this.cancelScan?.(); return; }
     if (!update.docChanged) return;
     clearTimeout(this.timer);
+    this.cancelScan?.();
     if (update.transactions.some(transaction => transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo'))) return;
-    this.timer = setTimeout(() => {
+    this.timer = setTimeout(() => { this.cancelScan = afterComposition(this.view, () => {
       const doc = this.view.state.doc, items = editorImageGroups(doc.toString(),imageDefinitionsFor(this.view.state));
       this.view.dispatch({ effects: refreshImagePreviews.of({ doc, items }) });
-    }, 250);
+    }); }, 250);
   }
-  destroy() { clearTimeout(this.timer); this.session.dispose(); }
+  destroy() { clearTimeout(this.timer); this.cancelScan?.(); this.session.dispose(); }
 });
 
 export const embeddedImagePreview = [imageDefinitionsField, imagePreviewField, imagePreviewScanner, EditorView.atomicRanges.of(view => view.state.field(imagePreviewField).atoms)];

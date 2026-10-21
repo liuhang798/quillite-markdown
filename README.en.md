@@ -52,6 +52,9 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### Live-rendered and source editing
 
+- Reading and editing resume at the current viewport in both directions, using source-block anchors instead of an old editing position. Unsaved content and undo history are preserved.
+- A collapsible editing outline offers heading search, tree/flat views and chapter navigation. It starts closed and overlays the page without reducing editor width.
+- The outline trigger has dedicated space in the rightmost header, keeping version history and preview close controls accessible in either split direction.
 - Headings, prose, emphasis, lists, quotes, tasks, code and tables render in the editing area. The text-style menu offers prose and H1–H6.
 - Click, select and type inside table cells and code without expanding an entire block into source. Code retains its background, and block controls appear on hover or keyboard focus.
 - View source / Return to rendered view operates on individual blocks. Complex or unfinished syntax keeps an editable source fallback.
@@ -69,6 +72,8 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### 41 chart types and 95 equation templates
 
+Live editing records composition start without immediately updating the editor view or resetting the native selection. The first native input transaction adopts this state, and rendering resumes after commit. Nonessential focus, spelling, equation, image and diagram updates wait until composition ends. Nested-editor settings replay in order, and disposal cancels stale callbacks. Code blocks, cross-block input, dragging and mode switching also protect the first phonetic key. The reported macOS candidate-window interruption has been confirmed fixed by the user on their device; other OS/IME combinations still require ongoing regression testing.
+
 Live equations no longer disappear at 300,000 document characters or stop after 256 equations. Large documents are scanned locally in a background worker, and visible equations are typeset in small batches. Choosing Live restores rendered equations; More → Equation display → Equation source and each equation's source action remain available. Source fallback for other complex blocks and equation syntax safety limits are unchanged.
 
 - **22 Mermaid types + 19 ECharts data charts**: flowcharts, sequence diagrams, Gantt charts, mind maps, bar/line charts, pie charts, histograms, calendar heatmaps and more.
@@ -82,7 +87,7 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 - Searchable, collapsible document outlines, document search, zoom, eight accent colors, light/dark themes and Chinese/English interfaces.
 - Body & math settings independently control body style, equation size and four body line-spacing presets. Preview before saving or cancel to restore; inline code uses a theme-aware neutral background in reading and live editing.
 - Windows Show in Folder selects the full file path without guessing the target from same-named window titles.
-- Recent, Favorites and a folder explorer. Recent supports pinning, ordering and `Ctrl / ⌘` multi-selection removal; removing records does not delete files.
+- Recent, Favorites and a folder explorer. Recent supports pinning, ordering and `Ctrl / ⌘` multi-selection removal. `Shift + click` selects an inclusive range; `Ctrl / ⌘ + Shift + click` adds a range to the selection. Removing records does not delete files.
 - Rename, Save As, history versions and crash recovery. Restored content first enters the editor and is written to disk only after saving.
 - Compare disk changes with current edits, save a separate copy or merge manually instead of silently overwriting another application's changes.
 - Deferred highlighting and preview optimizations for large documents. Hidden split previews stop automatic rendering and show fresh content when restored.

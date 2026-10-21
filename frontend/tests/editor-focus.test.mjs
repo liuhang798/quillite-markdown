@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import {editorHasComposition} from '../src/editor-composition.js';
 
 const renderer = readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const source = renderer.slice(renderer.indexOf('function focusCodeEditor('), renderer.indexOf('function replaceSelection('));
@@ -9,7 +10,7 @@ function harness() {
   const frames = [], body = { classList: { contains: () => false } };
   const document = { body, activeElement: {}, hasFocus: () => true };
   const editor = { measures: 0, focuses: 0, requestMeasure() { this.measures++; }, focus() { this.focuses++; }, contentDOM: {} };
-  const context = vm.createContext({ document, codeEditor: editor, state: { editing: true, documentSession: 1 }, requestAnimationFrame: callback => frames.push(callback) });
+  const context = vm.createContext({ document, editorHasComposition, codeEditor: editor, state: { editing: true, documentSession: 1 }, requestAnimationFrame: callback => frames.push(callback) });
   vm.runInContext(source, context);
   return { context, document, editor, frame: () => frames.shift()?.(), flush: () => { while (frames.length) frames.shift()(); } };
 }
@@ -19,6 +20,13 @@ test('deferred editor focus preserves normal return from a dismissed dialog', ()
     const h = harness(); h.context.focusCodeEditor();
     if (blur) h.document.activeElement = h.document.body;
     h.flush(); assert.equal(h.editor.focuses, 1); assert.equal(h.editor.measures, 1);
+  }
+});
+
+test('layout focus callbacks never interrupt a new IME session in either frame', () => {
+  for (const property of ['compositionStarted', 'composing', 'destroyed', 'hasFocus']) for (const afterMeasure of [false, true]) {
+    const h = harness(); h.context.focusCodeEditor(); if (afterMeasure) h.frame();
+    h.editor[property] = true; h.flush(); assert.equal(h.editor.focuses, 0, property);
   }
 });
 

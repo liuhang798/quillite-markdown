@@ -15,12 +15,16 @@ export function createReaderCache({ maxEntries = 4, maxBytes = 16 * 1024 * 1024 
       entries.delete(key); entries.set(key, entry);
       return entry.html;
     },
-    set(key, source, html) {
+    getMapping(key, source) {
+      const entry = entries.get(key);
+      return entry?.source === source ? entry.mapping : '';
+    },
+    set(key, source, html, mapping = '') {
       remove(key);
-      const size = 2 * (key.length + source.length + html.length);
+      const size = 2 * (key.length + source.length + html.length + mapping.length);
       if (size > maxBytes || maxEntries < 1) return;
       while (entries.size && (entries.size >= maxEntries || bytes + size > maxBytes)) remove(entries.keys().next().value);
-      entries.set(key, { source, html, bytes: size }); bytes += size;
+      entries.set(key, { source, html, mapping, bytes: size }); bytes += size;
     },
     get size() { return entries.size; },
     get bytes() { return bytes; },

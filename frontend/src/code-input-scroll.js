@@ -1,6 +1,7 @@
 // Typing in a rendered code projection must not ask its own or an ancestor
 // scroller to reveal the hidden Markdown range. Explicit navigation still can.
 import {resolveEditableOwner} from './editable-owner.js';
+import {editorHasComposition} from './editor-composition.js';
 export function codeInputScrollIntent(previous, transactions) {
   for (const tr of transactions) {
     if (tr.docChanged || tr.selection || tr.scrollIntoView || tr.effects.length) {
@@ -46,7 +47,7 @@ export function finishNativeCodeInputScroll(view) {
   snapshot.restore();
 }
 export function handleCodeTextInput(event, view) {
-  if (view.state.readOnly || view.composing || event.isComposing || !event.cancelable
+  if (view.state.readOnly || editorHasComposition(view) || event.isComposing || !event.cancelable
     || event.inputType !== 'insertText' || typeof event.data !== 'string') return false;
   // Native contenteditable insertText can scroll an ancestor before the DOM
   // observer runs. Apply ordinary text through the same CM document/history.

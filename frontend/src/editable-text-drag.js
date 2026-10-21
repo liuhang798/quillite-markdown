@@ -1,3 +1,4 @@
+import {editorHasComposition} from './editor-composition.js';
 import { ChangeSet, Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { isolateHistory } from '@codemirror/commands';
@@ -73,7 +74,7 @@ export function installEditableTextDrag(view, blocks) {
     const element = target?.nodeType === 1 ? target : target?.parentElement;
     if (!element) return null;
     const inner = EditorView.findFromDOM(element);
-    if (!inner || inner.destroyed || inner.composing) return null;
+    if (!inner || inner.destroyed || editorHasComposition(inner)) return null;
     const owner = resolveEditableOwner(inner, { from:0, to:inner.state.doc.length });
     return owner?.view === view ? { inner, owner } : null;
   };
@@ -94,7 +95,7 @@ export function installEditableTextDrag(view, blocks) {
   };
   const start = event => {
     const element = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
-    if (resolveEditableOwner(view)?.view !== view || view.composing || view.state.readOnly || !event.dataTransfer
+    if (resolveEditableOwner(view)?.view !== view || editorHasComposition(view) || view.state.readOnly || !event.dataTransfer
       || event.dataTransfer.files.length || view.state.selection.ranges.length !== 1
       || !element?.closest('.cm-content') || element.closest('img, a, button, input, select, textarea')) return;
     const source = resolve(event.target);
@@ -130,7 +131,7 @@ export function installEditableTextDrag(view, blocks) {
       drags.delete(view); return; // Preserve native moves within one editor.
     }
     event.preventDefault(); event.stopImmediatePropagation(); drags.delete(view);
-    if (drag.invalid || drag.doc !== view.state.doc || !target || view.composing || view.state.readOnly) return;
+    if (drag.invalid || drag.doc !== view.state.doc || !target || editorHasComposition(view) || view.state.readOnly) return;
     const local = target.inner.posAtCoords({x:event.clientX,y:event.clientY}, false);
     if (!Number.isInteger(local)) return;
     const position = resolveEditableOwner(target.inner,{from:local,to:local})?.from;

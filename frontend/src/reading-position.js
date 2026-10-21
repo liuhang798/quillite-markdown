@@ -1,3 +1,5 @@
+import { previewLineTarget } from './preview-source-map.js';
+
 // Keep only a small descriptor, never the detached reader DOM or document text.
 const signature = element => ({
   tag: element.tagName,
@@ -9,12 +11,28 @@ export function captureReadingPosition(reader, content) {
   const children = [...content.children];
   let index = children.findIndex(element => element.getBoundingClientRect().bottom > top + 1);
   if (index < 0) index = Math.max(0, children.length - 1);
-  const element = children[index];
+  let element = children[index];
+  // Prefer the deepest visible mapped block (lists/quotes may span many screens).
+  const mapped = [...(content.querySelectorAll?.('[data-line]') || [])].filter(el => {
+    const rect = el.getBoundingClientRect();
+    return rect.height > 0 && rect.bottom > top + 1;
+  });
+  if (mapped.length) {
+    element = mapped[0];
+    for (const candidate of mapped) {
+      if (candidate.getBoundingClientRect().top > top + 1) break;
+      element = candidate;
+    }
+  }
+  const rect = element?.getBoundingClientRect();
+  const offset = rect ? rect.top - top : 0;
   return {
     scrollTop: reader.scrollTop,
     index,
     anchor: element ? signature(element) : null,
-    offset: element ? element.getBoundingClientRect().top - top : 0
+    offset,
+    ...(offset < 0 && rect.height > 0 ? { fraction: Math.min(1, -offset / rect.height) } : {}),
+    ...(element?.dataset?.line ? { line: Number(element.dataset.line) } : {})
   };
 }
 
@@ -44,10 +62,13 @@ export function restoreReadingPosition(reader, content, position, isCurrent) {
     frame = 0;
     if (stopped) return;
     if (!isCurrent() || content.firstChild !== firstChild) { stop(); return; }
-    const anchor = findReadingAnchor([...content.children], position);
+    const anchor = (position.line ? previewLineTarget(content, position.line) : null)
+      || findReadingAnchor([...content.children], position);
+    const rect = anchor?.getBoundingClientRect();
+    const offset = Number.isFinite(position.fraction) && rect ? -position.fraction * rect.height : position.offset;
     const top = position.scrollTop === 0 ? 0 : anchor
-      ? reader.scrollTop + anchor.getBoundingClientRect().top - reader.getBoundingClientRect().top - position.offset
-      : position.scrollTop;
+      ? reader.scrollTop + rect.top - reader.getBoundingClientRect().top - offset
+      : (position.scrollTop || 0);
     reader.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
   };
   const schedule = () => { if (!stopped && !frame) frame = requestAnimationFrame(apply); };

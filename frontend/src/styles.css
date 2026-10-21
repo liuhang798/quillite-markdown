@@ -1739,7 +1739,29 @@ body.dialog-open .titlebar, body.dialog-open .app-shell { pointer-events: none; 
   .back-to-top { right: 24px; }
 }
 
-@media (prefers-reduced-motion: reduce) and (max-width: 1120px) {
+/* Editing always uses the compact overlay, even on wide monitors. Opening an
+   outline must not resize/reflow the editor or steal its reading position. */
+/* Reserve the floating trigger's 32px hit area plus a gap in the rightmost
+   header. Keep this space when the drawer opens to avoid reflowing the editor. */
+body[data-editor-layout="editor-left"] .editor-outline-mode .split-pane-header,
+body[data-editor-layout="preview-left"] .editor-outline-mode .editor-header,
+body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { padding-right: 54px; }
+.editor-outline-mode .toc-panel { display: flex; flex-direction: column; overflow: hidden; padding: 24px 18px; }
+.editor-outline-mode .toc-panel-header, .editor-outline-mode .toc-search-box { flex-shrink: 0; }
+.editor-outline-mode .toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.editor-outline-mode .reading-progress, .editor-outline-mode #readingTime { display: none; }
+@media (min-width: 1120.01px) {
+  .editor-outline-mode .compact-toc-button { z-index: 26; }
+  .editor-outline-mode .compact-toc-button.compact-open { right: calc(min(clamp(280px, var(--toc-width), 360px), calc(100% - 48px)) + 10px); }
+  .editor-outline-mode .compact-toc-button.compact-open svg { transform: rotate(180deg); }
+  .editor-outline-mode .compact-toc-backdrop { position: absolute; z-index: 24; inset: 0; display: block; padding: 0; border: 0; background: color-mix(in srgb, var(--text) 18%, transparent); cursor: default; opacity: 0; visibility: hidden; pointer-events: none; }
+  .editor-outline-mode .compact-toc-backdrop.compact-open { opacity: 1; visibility: visible; pointer-events: auto; }
+  .editor-outline-mode .toc-panel { position: absolute; z-index: 25; top: 0; right: 0; bottom: 0; width: min(clamp(280px, var(--toc-width), 360px), calc(100% - 48px)); max-width: none; flex: none; border-left: 1px solid var(--line); box-shadow: -14px 0 34px rgba(20, 28, 23, .12); visibility: hidden; pointer-events: none; transform: translateX(100%); }
+  .editor-outline-mode .toc-panel.compact-open { visibility: visible; pointer-events: auto; transform: translateX(0); }
+  .editor-outline-mode .toc-panel-close { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
   .toc-panel, .compact-toc-backdrop, .compact-toc-button, .compact-toc-button svg { transition-duration: .01ms; }
 }
 @media (max-width: 1180px) {

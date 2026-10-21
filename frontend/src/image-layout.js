@@ -235,6 +235,11 @@ export function normalizeImageRows(container) {
       cell.append(img);
     }
     if (['LI', 'TH', 'TD'].includes(paragraph.tagName)) paragraph.replaceChildren(table);
-    else paragraph.replaceWith(table);
+    else {
+      // Preserve the renderer's temporary anchor while replacing the block;
+      // source-map.apply validates it and removes untrusted navigation data.
+      if (paragraph.dataset.qmSource) table.dataset.qmSource = paragraph.dataset.qmSource;
+      paragraph.replaceWith(table);
+    }
   }
 }

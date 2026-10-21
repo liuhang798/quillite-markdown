@@ -2881,7 +2881,7 @@ func TestEditableBoundaryNavigationRetainsInputGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(data)
-	for _, guard := range []string{"!controller.valid() || inner.composing", "inner.state.selection.ranges.length !== 1 || !selection.empty", "editableBoundaryTarget({ length: view.state.doc.length"} {
+	for _, guard := range []string{"!controller.valid() || editorHasComposition(inner)", "inner.state.selection.ranges.length !== 1 || !selection.empty", "editableBoundaryTarget({ length: view.state.doc.length"} {
 		if !strings.Contains(source, guard) {
 			t.Fatalf("boundary navigation missing guard: %s", guard)
 		}
@@ -2893,7 +2893,7 @@ func TestCrossBlockInputUsesActualTextAndRetainsCompositionGuards(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, guard := range []string{"handleCrossBlockTextInput", "view.composing || event.isComposing", "!event.cancelable", "view.state.replaceSelection(event.data)", "transaction.annotation(editableForwardedChange)", "transaction.annotation(editableProjectionSync)"} {
+	for _, guard := range []string{"handleCrossBlockTextInput", "editorHasComposition(view) || event.isComposing", "!event.cancelable", "view.state.replaceSelection(event.data)", "transaction.annotation(editableForwardedChange)", "transaction.annotation(editableProjectionSync)"} {
 		if !strings.Contains(string(data), guard) {
 			t.Fatalf("cross-block input is missing guard: %s", guard)
 		}
@@ -2934,7 +2934,7 @@ func TestCrossBlockDragRetainsOwnershipAndLifecycleGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, guard := range []string{"resolveEditableOwner(view)?.view !== view", "view.state.doc === original", "!view.composing && !view.state.readOnly", "initial.from && start.position <= initial.to", "removeEventListener('mousemove', move, true)", "removeEventListener('mouseup', up, true)", "removeEventListener('blur', cancel)", "removeEventListener('mousedown', down, true)", "cancelAnimationFrame(frame)", "removeEventListener('keydown', key, true)"} {
+	for _, guard := range []string{"resolveEditableOwner(view)?.view !== view", "view.state.doc === original", "!editorHasComposition(view) && !view.state.readOnly", "initial.from && start.position <= initial.to", "removeEventListener('mousemove', move, true)", "removeEventListener('mouseup', up, true)", "removeEventListener('blur', cancel)", "removeEventListener('mousedown', down, true)", "cancelAnimationFrame(frame)", "removeEventListener('keydown', key, true)"} {
 		if !strings.Contains(string(data), guard) {
 			t.Fatalf("cross-block drag is missing guard: %s", guard)
 		}

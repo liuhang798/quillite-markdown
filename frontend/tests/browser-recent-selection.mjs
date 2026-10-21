@@ -23,6 +23,28 @@ try{
   window.recentAudit.seed(window.recentPrefs);
  });
  const row=name=>page.locator('.file-item').filter({has:page.locator('strong',{hasText:name})});
+ const selected=()=>page.evaluate(()=>recentAudit.snapshot().selection);
+ await row('pinned.md').click({modifiers:['Control']});
+ await row('missing.md').click({modifiers:['Control','Shift']});
+ assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/missing.md']);
+ assert.deepEqual(await page.evaluate(()=>window.opened),[]);
+ // Shift alone replaces a range, keeping the original anchor for shrink/extend.
+ await row('keep.md').click({modifiers:['Shift']});
+ assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md']);
+ await row('keep.md').press('Escape');
+ await row('missing.md').click({modifiers:['Meta']});
+ await row('pinned.md').click({modifiers:['Meta','Shift']});
+ assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/missing.md']);
+ await row('pinned.md').press('Escape');
+ // Existing non-contiguous selection remains when adding a new range.
+ await row('fail.md').click({modifiers:['Control']});
+ await row('pinned.md').click({modifiers:['Control']});
+ await row('keep.md').press('Control+Shift+Space');
+ assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/fail.md']);
+ await page.locator('#cancelRecentSelection').click();
+ await row('missing.md').click({modifiers:['Control','Shift']});
+ assert.deepEqual(await selected(),['C:/missing.md'],'cancel resets the range anchor');
+ await row('missing.md').press('Escape');
  await row('pinned.md').click({modifiers:['Control']});
  await row('keep.md').click({modifiers:['Meta']});
  assert.equal(await page.locator('.bulk-selected').count(),2);
