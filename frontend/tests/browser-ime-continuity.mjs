@@ -20,8 +20,8 @@ try {
   el.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
  });
  await page.waitForTimeout(50);
- assert.equal(await page.evaluate(()=>liveAudit.field().composing),true,'old end frame must not unfreeze a new composition');
- await rootContent.dispatchEvent('compositionend');await page.waitForFunction(()=>!liveAudit.field().composing);
+ assert.equal(await page.evaluate(async()=>{const m=await import('/src/editor-composition.js');return m.editorHasComposition(liveAudit.view);}),true,'old end frame must not unfreeze a new composition');
+ await rootContent.dispatchEvent('compositionend');await page.waitForFunction(async()=>{const m=await import('/src/editor-composition.js');return !m.editorHasComposition(liveAudit.view);});
  const cdp=await page.context().newCDPSession(page);
  for(const [kind,source,at] of [['plain','text',4],['heading','# text',6],['bold','**text**',6],['list','- text',6],['table','| H |\n| --- |\n| text |',22]]){
   await page.evaluate(async({source,at})=>{

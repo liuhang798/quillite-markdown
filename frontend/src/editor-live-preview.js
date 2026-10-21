@@ -23,7 +23,7 @@ import { blockDropPrefix } from './block-drop-context.js';
 import { findMarkdownTables, tableProjection } from './table-designer.js';
 import { renderedContainerRanges, mediaOwnedByInnerEditor } from './media-ownership.js';
 import { liveSelectionDisplay } from './live-selection-layer.js';
-import {compositionSession, editorHasComposition, liveComposition, editorCompositionState} from './editor-composition.js';
+import {compositionSession, editorHasComposition, liveComposition, editorCompositionState, stateComposing, transactionComposing} from './editor-composition.js';
 export {editorHasComposition} from './editor-composition.js';
 import { imageDefinitionsField, imageDefinitionsFor, updateImageDefinitions, footnotesField, footnotesFor, updateFootnotes, footnoteBodyContext } from './editor-reference-context.js';
 import { footnoteProjection } from './footnote-editing.js';
@@ -659,7 +659,7 @@ export function visibleLiveDecorations(state) {
 export const livePreviewField = StateField.define({
   create(state) { const plan = buildLivePlan(state.doc.toString(),footnotesFor(state),state.facet(footnoteBodyContext),imageDefinitionsFor(state)); return { plan, composing: false, sourceBlock: null, formatSelection: null, searchSelection: false, decorations: decorate(plan, state) }; },
   update(value, transaction) {
-    let composing = value.composing;
+    let composing = transactionComposing(transaction, value.composing);
     let formatSelection = transaction.docChanged || transaction.selection ? null : value.formatSelection;
     let sourceBlock = value.sourceBlock === null ? null : transaction.changes.mapPos(value.sourceBlock);
     for (const effect of transaction.effects) if (effect.is(liveSourceBlock)) sourceBlock = effect.value;
@@ -923,6 +923,7 @@ export function renderedSelectionCrossesField(live, selection) {
 }
 
 export function protectRenderedBlockSelection(transaction) {
+  if (stateComposing(transaction.startState)) return transaction;
   const state = transaction.startState, live = state.field(livePreviewField, false), selection = state.selection.main;
   // The root DOM cannot represent a caret inside another contenteditable. Its
   // asynchronous selection observer must not replace our exact source anchor.
@@ -1213,6 +1214,7 @@ function liveInlineWrappers(plan,source) {
 // Source/search edits, cross-boundary changes and emptied links keep their
 // existing handling. This repair shares the original transaction/history.
 export function preserveLiveReferenceLabels(tr) {
+  if (stateComposing(tr.startState)) return tr;
   const live=tr.startState.field(livePreviewField,false);
   if(!live||live.composing||live.searchSelection||tr.startState.readOnly||!tr.docChanged
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange)
@@ -1240,6 +1242,7 @@ export function preserveLiveReferenceLabels(tr) {
 // CommonMark padding at backtick/space edges without escaping the code body.
 // Apply repairs to the same history event; source and forwarded edits bypass it.
 export function protectLiveInlineCode(tr) {
+  if (stateComposing(tr.startState)) return tr;
   const live=tr.startState.field(livePreviewField,false);
   if(!live||live.composing||live.searchSelection||tr.startState.readOnly||!tr.docChanged
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange)
@@ -1294,6 +1297,7 @@ export function protectLiveInlineCode(tr) {
 // A mixed comment has visible source rather than an editable block projection.
 // Deleting one of its delimiters in live mode must not hide the rest of the file.
 export function unwrapLiveCommentBoundary(tr) {
+  if (stateComposing(tr.startState)) return tr;
   const live=tr.startState.field(livePreviewField,false);
   if(!live||live.composing||live.searchSelection||tr.startState.readOnly||!tr.docChanged||!tr.isUserEvent('delete')
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange))return tr;
@@ -1326,6 +1330,7 @@ export function unwrapLiveCommentBoundary(tr) {
 // its partner as well. Only unwrap that layer: enclosing styles, link targets
 // and shared reference definitions must remain untouched.
 export function unwrapLiveInlineBoundary(tr) {
+  if (stateComposing(tr.startState)) return tr;
   const live=tr.startState.field(livePreviewField,false);
   if(!live||live.composing||live.searchSelection||tr.startState.readOnly||!tr.docChanged||!tr.isUserEvent('delete')
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange))return tr;
@@ -1362,6 +1367,7 @@ export function unwrapLiveInlineBoundary(tr) {
 // HTML emphasis at these new seams avoids ambiguous runs such as **** or ***
 // without inserting visible whitespace or changing the pasted rich fragment.
 export function protectLiveInlineReplacement(tr) {
+  if (stateComposing(tr.startState)) return tr;
   const live=tr.startState.field(livePreviewField,false);
   if(!live||live.composing||tr.startState.readOnly||!tr.docChanged||tr.startState.selection.ranges.every(r=>r.empty)
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange)
@@ -1416,6 +1422,7 @@ export function protectLiveInlineReplacement(tr) {
 // after deletion/paste. Empty rendered wrappers (including links and HTML
 // styles) disappear together. Inner wrappers normalize first for nested styles.
 export function normalizeLiveInlineWhitespace(tr) {
+  if (stateComposing(tr.startState)) return tr;
   const live=tr.startState.field(livePreviewField,false);
   if(!live || live.composing || tr.startState.readOnly || !tr.docChanged
     || tr.annotation(editableProjectionSync) || tr.annotation(editableForwardedChange)
@@ -1483,7 +1490,7 @@ export const editorLivePreview = [editorCompositionState, imageDefinitionsField,
     view=>activeSourceItem(view)?returnSourceToRendered(view):returnDiagramSourceToRendered(view)),
   liveSelectionDisplay((view, range) => view.state.field(livePreviewField).plan.widgets.some(widget => overlaps(widget, range))),
   EditorState.transactionFilter.of(tr => {
-    if (!tr.docChanged || tr.startState.readOnly) return tr;
+    if (!tr.docChanged || tr.startState.readOnly || stateComposing(tr.startState)) return tr;
     const changes = codeFenceRepairs(tr, renderedEditableBlocks(tr.startState));
     return changes.length ? [tr, {changes, sequential:true}] : tr;
   }), EditorState.transactionFilter.of(protectRenderedBlockSelection),
@@ -1577,6 +1584,7 @@ export const editorLivePreview = [editorCompositionState, imageDefinitionsField,
     if (!view.destroyed && view.state.field(livePreviewField, false)) view.dispatch({effects:liveComposition.of(active)});
   }), {eventHandlers:{
     compositionstart() { this.start(); return false; },
+    compositionupdate() { this.start(); return false; },
     compositionend() { this.end(); return false; },
   }}),
 ];
