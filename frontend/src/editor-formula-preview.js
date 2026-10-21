@@ -6,6 +6,7 @@ import { editorImageItems } from './image-layout.js';
 import { renderLatexResult } from './math-rendering.js';
 import { mediaOwnedByInnerEditor } from './media-ownership.js';
 import { editableProjectionSync } from './editable-owner.js';
+import {editorHasComposition, transactionComposing} from './editor-composition.js';
 
 export const formulaPreviewContext = Facet.define({ combine: values => values[0] || {} });
 export const toggleFormulaSource = StateEffect.define();
@@ -230,6 +231,10 @@ export const editorFormulaField = StateField.define({
         openRanges = openRanges.some(item => sameRange(item, range)) ? openRanges.filter(item => !sameRange(item, range)) : [...openRanges, range];
       }
     }
+    // Replacing a neighbouring widget can abort WebKit's native composition.
+    // Keep its DOM until the commit frame, while still mapping source ranges.
+    if (transactionComposing(transaction)) return {items,enabled,openRanges,
+      decorations:value.decorations.map(transaction.changes),atoms:value.atoms.map(transaction.changes)};
     return decorate(items.map(item => ({ ...item })), transaction.state, enabled, openRanges);
   },
   provide: field => EditorView.decorations.from(field, value => value.decorations),
@@ -251,9 +256,11 @@ const scanner = ViewPlugin.fromClass(class {
     }, delay);
   }
   scan() {
+    if (editorHasComposition(this.view)) { this.schedule(true, 100); return; }
     const doc = this.view.state.doc, generation = this.generation;
     const apply = items => {
       if (generation !== this.generation || doc !== this.view.state.doc || !this.view.state.field(editorFormulaField, false)?.enabled) return;
+      if (editorHasComposition(this.view)) { this.schedule(true, 100); return; }
       this.view.dispatch({ effects: refreshFormulaPreviews.of({ doc, items }) });
       this.hydrate();
     };
@@ -278,7 +285,8 @@ const scanner = ViewPlugin.fromClass(class {
   }
   hydrate() {
     const doc = this.view.state.doc, field = this.view.state.field(editorFormulaField, false);
-    if (!field?.enabled || this.view.composing) return;
+    if (!field?.enabled) return;
+    if (editorHasComposition(this.view)) { this.schedule(false, 100); return; }
     const ranges = this.view.visibleRanges.map(range => ({ from: Math.max(0, range.from - 1000), to: range.to + 1000 }));
     const items = hydrateFormulaItems(field.items.filter(item => !mediaOwnedByInnerEditor(this.view.state, item)), ranges);
     if (items.length) {

@@ -16,6 +16,7 @@ import {emptyCodeSeparator} from './code-fence-editing.js';
 import {spellingDecorations, setSpellingDecorations, projectSpellingDecorations} from './spelling-decorations.js';
 import {trackCodeInputScroll, setCodeInputScroll, holdsCodeInputScroll, handleCodeTextInput, captureNativeCodeInputScroll, finishNativeCodeInputScroll, clearNativeCodeInputScroll} from './code-input-scroll.js';
 import {sameFootnotePresentation} from './editor-reference-context.js';
+import {editorHasComposition} from './editor-composition.js';
 
 // Include empty cells, but never invent missing cells or discard extra columns.
 export function tableCellRanges(raw, base = 0) {
@@ -179,7 +180,7 @@ export const editableSearchSelection = StateEffect.define();
 const projectedSearchSelections = new WeakMap();
 const sourceSearchCache = new WeakMap();
 export function syncEditableSearch(view) {
-  if (view.destroyed || view.composing) return;
+  if (view.destroyed || editorHasComposition(view)) return;
   const children = [...view.dom.querySelectorAll('.cm-live-editable-block')].map(root=>controllers.get(root))
     .filter(c=>c?.view===view && c.valid());
   if (!children.length) return;
@@ -215,6 +216,7 @@ export function syncEditableSearch(view) {
   }
 }
 export function syncEditableSelections(view, searchSelection = false) {
+  if (editorHasComposition(view)) return;
   const selection = view.state.selection.main;
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
@@ -237,6 +239,7 @@ export function syncEditableSelections(view, searchSelection = false) {
   }
 }
 export function syncEditableSpelling(view) {
+  if (editorHasComposition(view)) return;
   const marks = view.state.field(spellingDecorations, false) || Decoration.none;
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
@@ -289,6 +292,7 @@ export function forwardEditableEffects(view, effects) {
   }
 }
 export function focusEditableBlock(view, searchSelection = false) {
+  if (editorHasComposition(view)) return false;
   // A single child cannot own a document-wide multi-selection.
   if (view.state.selection.ranges.length !== 1) return false;
   const selection = view.state.selection.main;
@@ -304,7 +308,7 @@ export function focusEditableBlock(view, searchSelection = false) {
       inner.dispatch({ selection: { anchor: fieldOffset(range,selection.anchor), head: fieldOffset(range,selection.head) }, effects: editableSearchSelection.of(searchSelection) });
     }
     finally { controller.syncing = false; }
-    inner.focus(); return true;
+    if (!inner.hasFocus) inner.focus(); return true;
   }
   return false;
 }

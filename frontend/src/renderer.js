@@ -97,6 +97,7 @@ let codeEditor;
 let embeddedImagePreview;
 let sourceImageFolding;
 let editorLivePreview;
+let editorHasComposition = view => !!(view?.compositionStarted || view?.composing);
 let livePreviewContext;
 let buildLivePlan;
 let liveFormatSelection;
@@ -1117,6 +1118,7 @@ function loadEditorDependencies() {
     markdownLanguage = markdownModule.markdownLanguage;
     editorPresentation = new Compartment();
     editorLivePreview = livePreviewModule.editorLivePreview;
+    editorHasComposition = livePreviewModule.editorHasComposition;
     livePreviewContext = livePreviewModule.livePreviewContext;
     buildLivePlan = livePreviewModule.buildLivePlan;
     liveFormatSelection = livePreviewModule.liveFormatSelection;
@@ -1238,7 +1240,10 @@ function initializeSpellcheckExtension() {
 
     schedule(delay) {
       clearTimeout(this.timer);
-      this.timer = setTimeout(() => refreshSpellcheckDecorations(this.view), delay);
+      this.timer = setTimeout(() => {
+        if (editorHasComposition(this.view)) { this.schedule(100); return; }
+        refreshSpellcheckDecorations(this.view);
+      }, delay);
     }
 
     destroy() {
@@ -1302,7 +1307,7 @@ async function loadSpellcheckDictionary(showFailure = false) {
 }
 
 function refreshSpellcheckDecorations(view = codeEditor, loadDictionary = true) {
-  if (!view || !spellcheckDecorationEffect || editorSourceFallback) return;
+  if (!view || view.destroyed || editorHasComposition(view) || !spellcheckDecorationEffect || editorSourceFallback) return;
   if (state.spellcheckEnabled && !activeSpellchecker && loadDictionary) loadSpellcheckDictionary();
   view.dispatch({ effects: spellcheckDecorationEffect.of(spellcheckDecorations(view)) });
 }

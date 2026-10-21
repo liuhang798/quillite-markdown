@@ -23,6 +23,8 @@ import { blockDropPrefix } from './block-drop-context.js';
 import { findMarkdownTables, tableProjection } from './table-designer.js';
 import { renderedContainerRanges, mediaOwnedByInnerEditor } from './media-ownership.js';
 import { liveSelectionDisplay } from './live-selection-layer.js';
+import {compositionSession, editorHasComposition, liveComposition, editorCompositionState} from './editor-composition.js';
+export {editorHasComposition} from './editor-composition.js';
 import { imageDefinitionsField, imageDefinitionsFor, updateImageDefinitions, footnotesField, footnotesFor, updateFootnotes, footnoteBodyContext } from './editor-reference-context.js';
 import { footnoteProjection } from './footnote-editing.js';
 import { prepareFootnotes } from './markdown-formats.js';
@@ -37,7 +39,7 @@ export { pasteEditableTableGrid, canPasteEditableTableGrid } from './live-editab
 // Never round-trip rendered HTML back to Markdown or create a second undo stack.
 export const LIVE_PREVIEW_LIMIT = 300_000;
 export const livePreviewContext = Facet.define({ combine: values => values[0] || {} });
-export const liveComposition = StateEffect.define();
+export {liveComposition} from './editor-composition.js';
 export const liveSourceBlock = StateEffect.define();
 // A toolbar may retain its selection for stacking formats. Only that transient
 // selection should be preserved when Enter finishes formatting.
@@ -1470,7 +1472,7 @@ export function normalizeLiveInlineWhitespace(tr) {
   return repairs.empty?tr:[tr,{changes:repairs,selection,sequential:true}];
 }
 
-export const editorLivePreview = [imageDefinitionsField, footnotesField, livePreviewField, crossSelectionField,
+export const editorLivePreview = [editorCompositionState, imageDefinitionsField, footnotesField, livePreviewField, crossSelectionField,
   EditorState.transactionFilter.of(preserveLiveReferenceLabels),
   EditorState.transactionFilter.of(unwrapLiveInlineBoundary),
   EditorState.transactionFilter.of(unwrapLiveCommentBoundary),
@@ -1499,11 +1501,11 @@ export const editorLivePreview = [imageDefinitionsField, footnotesField, livePre
     if (effects.length) forwardEditableEffects(view, effects);
     const searchSelection = update.state.field(livePreviewField).searchSelection;
     const searchChanged = searchSelection !== update.startState.field(livePreviewField).searchSelection;
-    if (update.selectionSet || searchChanged) syncEditableSelections(view, searchSelection);
+    if (!editorHasComposition(view) && (update.selectionSet || searchChanged)) syncEditableSelections(view, searchSelection);
     if (update.selectionSet || update.docChanged || searchChanged || update.viewportChanged || update.transactions.some(tr=>tr.effects.length)) queueMicrotask(() => {
       // Widget ranges update after the plugin callback. Reconcile again once
       // those ranges are current, including non-empty drag/copy selections.
-      if (view.destroyed || view.state.doc !== update.state.doc) return;
+      if (view.destroyed || editorHasComposition(view) || view.state.doc !== update.state.doc) return;
       const live = view.state.field(livePreviewField, false);
       if (!live) return; // The mode may have changed before this microtask ran.
       syncEditableSelections(view, live.searchSelection);
@@ -1565,16 +1567,18 @@ export const editorLivePreview = [imageDefinitionsField, footnotesField, livePre
       if (event.target === view.contentDOM) queueMicrotask(() => {
         // Focus the editable projection for native typing while retaining the
         // search reveal intent throughout the focus handoff.
-        if (!view.destroyed && view.hasFocus) focusEditableBlock(view, view.state.field(livePreviewField).searchSelection);
+        const live = view.state.field(livePreviewField, false);
+        if (!view.destroyed && live && !editorHasComposition(view) && view.hasFocus) focusEditableBlock(view, live.searchSelection);
       });
       return false;
     },
-    compositionstart(_event, view) { view.dispatch({ effects: liveComposition.of(true) }); return false; },
-    compositionend(_event, view) {
-      requestAnimationFrame(() => { if (!view.destroyed && view.state.field(livePreviewField, false)) view.dispatch({ effects: liveComposition.of(false) }); });
-      return false;
-    },
   }),
+  ViewPlugin.define(view => compositionSession(view, active => {
+    if (!view.destroyed && view.state.field(livePreviewField, false)) view.dispatch({effects:liveComposition.of(active)});
+  }), {eventHandlers:{
+    compositionstart() { this.start(); return false; },
+    compositionend() { this.end(); return false; },
+  }}),
 ];
 
 // CodeMirror's default active-line decoration can split a replaced block when

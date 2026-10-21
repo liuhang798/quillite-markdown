@@ -69,6 +69,8 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### 41 chart types and 95 equation templates
 
+Live editing preserves the input node during IME composition and defers nonessential focus synchronization, spelling and equation refreshes. A previous commit callback cannot unlock a new composition session. If macOS Pinyin still misbehaves, temporarily use Source mode and report the OS version.
+
 Live equations no longer disappear at 300,000 document characters or stop after 256 equations. Large documents are scanned locally in a background worker, and visible equations are typeset in small batches. Choosing Live restores rendered equations; More → Equation display → Equation source and each equation's source action remain available. Source fallback for other complex blocks and equation syntax safety limits are unchanged.
 
 - **22 Mermaid types + 19 ECharts data charts**: flowcharts, sequence diagrams, Gantt charts, mind maps, bar/line charts, pie charts, histograms, calendar heatmaps and more.

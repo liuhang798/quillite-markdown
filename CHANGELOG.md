@@ -6,6 +6,8 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 加强即时编辑的中文输入法保护：连续组合输入按会话隔离结束回调，候选期间暂停焦点/选区同步、拼写刷新与公式重绘，避免干扰原生输入节点。macOS 系统拼音仍需实机验收。
+
 - Windows“打开所在文件夹”改为按完整路径交由系统选中文件，移除按文件夹同名标题或任意窗口抢焦点的逻辑。
 - 阅读与即时编辑中的行内代码统一使用随明暗主题适配的柔和灰底，不影响代码块配色。
 - “正文与公式”设置新增四档正文行距，支持即时试看、取消恢复及持久保存；旧偏好保留标准行距，不修改 Markdown 内容和撤回历史。
@@ -26,6 +28,8 @@ All notable changes to Quillite Markdown are documented here.
 - 完整逐项变更记录见 [v3.0.0 详细更新](https://github.com/liuhang798/quillite-markdown/blob/v3.0.0/docs/releases/3.0.0-details.md)。
 
 ### English
+
+- Harden live-editor IME handling: isolate consecutive composition sessions and defer focus/selection synchronization, spelling refreshes and equation redraws while composing. Native macOS Pinyin acceptance testing is still required.
 
 - Reveal Windows files using their full shell paths, without guessing Explorer windows from folder titles or activating an unrelated window.
 - Use a subtle, theme-aware neutral background for inline code in reading and live editing, without changing fenced code colors.
