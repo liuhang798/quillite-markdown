@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           app_path='build/bin/轻阅 Markdown.app'
           codesign --verify --deep --strict --verbose=2 "$app_path"
-          lipo -verify_arch arm64 x86_64 "$app_path/Contents/MacOS/QuilliteMarkdown"
+          lipo "$app_path/Contents/MacOS/QuilliteMarkdown" -verify_arch arm64 x86_64
           mkdir -p build/bin/ime-test
           staging_dir="$(mktemp -d)"
           ditto "$app_path" "$staging_dir/轻阅 Markdown.app"
