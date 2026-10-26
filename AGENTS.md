@@ -6,7 +6,7 @@
 
 - 项目名称：轻阅 Markdown / Quillite Markdown
 - 仓库：`https://github.com/liuhang798/quillite-markdown`
-- 当前版本：`3.0.1`
+- 当前版本：`3.0.2`
 - 开源协议：MIT
 - 产品定位：极度轻量、美观、跨平台的 Markdown 阅读与编辑工具
 - 支持平台：Windows x64、macOS Universal、Linux x64
@@ -85,6 +85,7 @@ app.go / updates.go（Go 后端）
 
 ### 阅读
 
+- 不得仅因文档字符数或 Base64 图片体积强制切换只读、分页源码或禁止编辑/打印/导出。大文档保留完整内容和原有能力，通过无标记解析快路径、公式有界前缀检查、视口外布局/高亮延迟和图片延迟解码减轻负担。显式目录跳转、全文搜索、打印/导出须恢复所需完整布局和图片加载；不得截断或改写源文件。
 - Markdown 渲染、代码高亮、表格、引用、列表和图片。
 - 自动生成右侧本页目录，支持标题搜索、层级／平铺切换、折叠记忆和准确章节定位；目录字号和默认宽度按显示器物理短边适配。
 - 正文独立一行的 `[TOC]` 在阅读页与编辑预览中生成动态可点击目录，并随标题变化刷新。
@@ -119,7 +120,7 @@ app.go / updates.go（Go 后端）
 
 ### 导出
 
-- 阅读页顶部和“更多”菜单只显示一个“导出文档”入口，打开统一导出界面；不得重新加入分散的 Word／HTML／PDF 快捷按钮。
+- 导出和打印入口保留在阅读页操作区及窄窗口的文档操作菜单；“更多”菜单不再重复提供这两个入口，仍保留文档工具。导出打开统一界面，不得重新加入分散的 Word／HTML／PDF 快捷按钮。
 - 统一导出界面原生提供 DOCX、带样式 HTML、无样式 HTML、带标题书签 PDF 与 PNG/JPEG 长图。
 - PDF 优先依次调用本机 Edge、Chrome 或 Chromium 无头打印并启用文档大纲；全部引擎不可用时前端回退系统打印，软件不捆绑浏览器。
 - 页眉页脚支持 `{title}`、`{date}`、`{page}`；PDF 为重复页眉页脚，其他格式放在文档首尾。
@@ -163,9 +164,12 @@ app.go / updates.go（Go 后端）
 - `lastUpdateCheck`：上次更新检查时间。
 - `suppressUpdateUntil`：暂停自动更新提醒的截止时间。
 - `usageAnalytics`：是否允许软件异常时自动回传已清理的错误日志；不控制每日活跃统计。
-- `imageUploadMode`：`local`、`embedded`、`picgo-cloud` 或 `picgo`；分别表示本地 `assets`、内嵌 Base64、PicGo Cloud API 直连和本机 PicGo Server，默认继续使用本地 `assets`。
+- `imageUploadMode`：`local`、`embedded`、`picgo-cloud`、`picgo` 或 `picgo-cli`；分别表示本地 `assets`、内嵌 Base64、PicGo Cloud API 直连、本机 PicGo Server 和按需 PicGo CLI，默认继续使用本地 `assets`。
 - `lastSaveDirectory`：上次用户选定的保存目录，仅用于选择器默认位置，不能授予删除或覆盖权限。
 - `picGoServerUrl`：PicGo 本地 HTTP 服务地址，仅允许 localhost／回环 IP；可选服务密钥独立保存在用户配置目录，不进入偏好 JSON。
+- `picGoCliPath`：可选 PicGo CLI 可执行文件绝对路径，空值自动检测；`imageUploadMode=picgo-cli` 独立于 Server 模式。`TestPicGoCLI` 仅检查版本，`UploadImageToPicGoCLI` 按需运行 `upload` 并复用用户 CLI 配置。Windows npm shim 通过 Node 直接执行，不使用 shell；只上传已验证图片的私有临时副本，HTTPS 结果严格校验，失败保留 assets 且不自动重试。
+- `picGoCliConfigPath`：可选 CLI 配置绝对路径，空值使用 `~/.picgo/config.json`；只保存路径，不把凭证读入前端。`LoginPicGoCLI` 经确认调用官方 CLI 浏览器登录，配置写入独立 profile、不覆盖默认配置；`TestPicGoCLIUpload` 只上传内置测试 PNG，必须确认且不得自动重试。CLI 设置保存必须验证最近 10 分钟内该执行文件与配置的成功测试指纹；版本检测和登录均不能代替上传验证。取消弹窗或异步过期结果不能启用配置；成功上传仍保留 assets，不自动迁移既有图片。
+- `PreparePicGoCLI(true)` 仅由用户确认后触发，从 `nodejs.org` 获取固定版本与 SHA-256 的便携 Node，从 `registry.npmjs.org` 按内嵌 lockfile 安装 PicGo；这是用户明确授权的可选第三方组件下载例外，不改变应用更新/官网域名规则。组件位于配置目录下独立随机目录，使用私有 Node，不改系统 PATH/global npm，也不执行 npm lifecycle scripts。准备只在隔离配置中验证版本，不上传图片、不修改用户 PicGo 配置或自动启用上传。只清理本次刚创建且未暴露的私有临时目录；成功组件保留。升级依赖必须重新审核 lockfile、校验值并运行隔离官方下载回归。
 - `exportSettings`：本机 Pandoc 路径与最多 24 条导出预设；旧偏好缺失时使用空设置。
 - `anonymousInstallId`：本地随机匿名标识，仅用于每日活跃按设备去重；服务器只保存不可逆哈希。
 - `lastActiveReport`：最近一次成功提交每日活跃的 UTC 日期，保证每台设备每天最多一次。
@@ -225,6 +229,8 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 
 ## 8. 前端状态与桥接
 
+PicGo CLI 准备通过 `PreparePicGoCLI(confirmed, operationID)` 与 `picgo-cli:prepare-progress` 事件关联：运行环境下载报告真实字节，未知总量/校验/解压/npm 安装/版本检查使用无百分比阶段。前端按操作 ID、弹窗修订及当前模式过滤旧事件，结束释放订阅与计时器，完成后仍须用户保存设置才启用。不能将下载百分比标为整体安装百分比，不能从 npm 日志泄露本地路径或令牌。
+
 前端禁止在多个文件中直接调用 `window.go.main.App`。所有后端调用统一通过 `frontend/src/main.js` 暴露的 `window.quilliteMarkdown`，这样浏览器预览和桌面运行可以共享代码。
 
 `renderer.js` 的 `state` 是当前唯一前端状态源：
@@ -278,7 +284,7 @@ ECharts 使用修复版 6.1+，预览和导出均显式使用 `echarts/theme/v5`
 1. `NewFile` 使用 `O_CREATE|O_EXCL` 创建带时间戳的唯一文件。
 2. 新文件路径同时记录到内存和 `Preferences.draftFiles`，因此重启后仍能识别。
 3. 自动保存只更新该草稿，不取消草稿身份。
-   首次手动保存走原生另存选择器，由用户确定名称和位置。跨目录另存时仅改新副本中的图片引用，原文件与附件不移动、不删除。`SaveDocumentCopy` 必须 create-only，重名拒绝而非覆盖。
+   手动保存（含首次 Ctrl/⌘+S）与自动保存均写入当前已创建的文件，不因草稿身份强制另存；只有显式“另存为”或安全保存无法继续时才选择新位置。跨目录另存时仅改新副本中的图片引用，原文件与附件不移动、不删除。`SaveDocumentCopy` 必须 create-only，重名拒绝而非覆盖。
 4. “另存为”成功且新旧路径不同时，只迁移草稿身份和最近记录；原草稿文件必须保留，由用户自行决定是否删除。
 5. 返回 `Document.replacedPath`，前端立即删除对应列表项。
 6. 普通已有文档永远不能被上述清理逻辑删除。

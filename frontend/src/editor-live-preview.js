@@ -14,7 +14,7 @@ import { editableForwardedChange, editableProjectionSync, resolveEditableOwner }
 import { protectedBlockReplacement, crossSelection, crossSelectionField } from './editable-cross-selection.js';
 import { structuredHtmlBlocks } from './html-block-editing.js';
 import { sourceReturnPanel, revealSourceReturnCaret } from './source-return-panel.js';
-import { activeDiagramSourceItem, returnDiagramSourceToRendered, editorDiagramField } from './editor-diagram-preview.js';
+import { activeDiagramSourceItem, returnDiagramSourceToRendered, editorDiagramField, isRenderedDiagramSelection } from './editor-diagram-preview.js';
 import { installCrossBlockDrag } from './editable-drag-selection.js';
 import { installEditableTextDrag } from './editable-text-drag.js';
 import { codeFenceRepairs } from './code-fence-editing.js';
@@ -498,7 +498,10 @@ class LiveWidget extends WidgetType {
     if (item.kind === 'toc') {
       const title = document.createElement('strong'); title.textContent = 'TOC'; root.append(title);
       for (const heading of item.headings) {
-        const link = document.createElement('button'); link.type = 'button'; link.textContent = heading.text;
+        const link = document.createElement('button'); link.type = 'button';
+        // Only the host's sanitized semantic title renderer may supply HTML.
+        if (this.context.renderTocTitle) link.innerHTML = this.context.renderTocTitle(heading.text);
+        else link.textContent = heading.text;
         link.style.paddingLeft = `${(heading.level - 1) * 12}px`;
         link.onclick = event => { event.stopPropagation(); if (valid()) { view.dispatch({ selection: { anchor: heading.from }, scrollIntoView: true }); view.focus(); } };
         root.append(link);
@@ -1488,7 +1491,8 @@ export const editorLivePreview = [editorCompositionState, imageDefinitionsField,
   EditorState.transactionFilter.of(protectLiveInlineCode),
   sourceReturnPanel(view=>activeSourceItem(view)||activeDiagramSourceItem(view),
     view=>activeSourceItem(view)?returnSourceToRendered(view):returnDiagramSourceToRendered(view)),
-  liveSelectionDisplay((view, range) => view.state.field(livePreviewField).plan.widgets.some(widget => overlaps(widget, range))),
+  liveSelectionDisplay((view, range) => view.state.field(livePreviewField).plan.widgets.some(widget => overlaps(widget, range)),
+    (view, range) => isRenderedDiagramSelection(view.state, range)),
   EditorState.transactionFilter.of(tr => {
     if (!tr.docChanged || tr.startState.readOnly || stateComposing(tr.startState)) return tr;
     const changes = codeFenceRepairs(tr, renderedEditableBlocks(tr.startState));

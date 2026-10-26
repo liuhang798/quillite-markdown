@@ -2,6 +2,34 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [3.0.2] - 2026-10-26
+
+### 简体中文
+
+- 新增 PicGo CLI 图片上传：按需启动，无需后台 Server，支持自动检测、自定义可执行文件和已有配置；上传失败保留本地附件，不自动重试或迁移既有图片。
+- 新增 PicGo CLI 一键准备及分阶段进度：经确认从 Node.js/npm 官方来源获取固定版本，校验运行时与锁定依赖，禁用依赖安装脚本，不修改系统 Node/npm 或 PATH；准备本身不上传图片。
+- PicGo CLI 支持浏览器登录及上传配置验证：登录使用独立配置，明确确认后仅上传内置测试图片；验证成功再确认“保存并启用”，取消不启用，过期异步结果不能覆盖当前设置。
+- 优化大文档阅读与加载，取消按文件体积强制进入只读安全模式；保留完整编辑、搜索、打印和导出，内嵌图片不再因编码体积限制功能。优化解析快路径、视口外排版和图片延迟加载，不截断或改写原文。
+- 打开文档超过 300 毫秒显示加载动画，超过 3 秒追加等待提示；保留当前页面，取消、失败或切换文档时清理提示，避免异步结果覆盖新操作。
+- 修复目录中的公式显示成重复纯文本：阅读目录、编辑目录和正文 [TOC] 正常渲染上下标、分式等公式，支持公式源码搜索，保留章节锚点和跳转。
+- 精简“更多”菜单：拼写检查集中到二级菜单，自动、美式和英式词典直接列出并勾选当前项；移除重复的导出、打印入口，保留阅读页入口、打印快捷键和文档工具。
+- 修复本地 Markdown/文本链接误打开 wails.localhost 错误页：按当前文档目录在软件内打开，支持中文、空格及章节锚点；目标缺失时不离开当前文档。
+- 修复新建文档自动保存后 Ctrl/⌘+S 弹出另存窗口：直接保存当前文件，显式另存及文件冲突保护保持不变。
+- 修复图表选中或返回渲染时出现顶部、左侧多余绿色选区条；整张图表仅显示边框，保留文字选区、复制、删除和撤回。
+
+### English
+
+- Added on-demand PicGo CLI image uploading without a background Server, with executable detection, custom paths and existing configurations. Failures retain local assets without automatic retries or migration of existing images.
+- Added one-click PicGo CLI preparation with staged progress, explicit consent, pinned official Node.js/npm downloads, runtime/dependency integrity checks and disabled lifecycle scripts. System Node/npm and PATH remain unchanged; preparation never uploads images.
+- Added CLI browser sign-in with isolated profiles and upload-settings verification using a built-in test image after explicit confirmation. Successful verification requires a separate Save & enable confirmation; cancellation and stale asynchronous results cannot enable or overwrite settings.
+- Improved large-document reading and loading without forcing read-only safe mode based on file size. Editing, search, printing and export remain available, including embedded images. Optimized parsing fast paths, offscreen layout and lazy image loading without truncating or rewriting source.
+- Added a loading indicator after 300 ms and a longer-wait hint after 3 seconds, preserving the current page. Cancellation, failures and document changes clear stale indicators and prevent old results from overwriting new actions.
+- Fixed duplicated plain-text equations in reading/editing outlines and inline [TOC]. Subscripts, fractions and other heading equations render correctly with source-text search and unchanged section anchors.
+- Simplified More: Spell check groups its controls in one submenu, with Auto/US/UK dictionaries directly listed and checked. Removed duplicate Export/Print entries while keeping reading-page actions, the print shortcut and Document tools.
+- Fixed local Markdown/text links opening a broken wails.localhost page. Links resolve relative to the document and open in the app, including Unicode, spaces and section anchors; missing targets preserve the current document.
+- Ctrl/⌘+S now saves an autosaved new document directly instead of forcing Save As, retaining explicit Save As and conflict safeguards.
+- Removed stray green selection bars above and beside selected charts. Whole-chart selection uses a border while retaining text selection, copying, deletion and undo.
+
 ## [3.0.1] - 2026-10-21
 
 ### 简体中文

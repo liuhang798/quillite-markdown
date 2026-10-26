@@ -18,7 +18,7 @@ try{
  const shot=async name=>{if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/${name}.png`});};
  const reset=async source=>{await app.locator('[data-editor-presentation="source"]').click();await content.fill(source);await content.press('Control+Home');await app.locator('[data-editor-presentation="live"]').click();await page.waitForTimeout(700);};
  const newDocument=async()=>{const accept=d=>d.accept();page.on('dialog',accept);try{await app.locator('#newFileButton').click();}finally{page.off('dialog',accept);}};
- const menu=async()=>{if(!await app.locator('#moreMenu').isVisible())await app.locator('#moreButton').click();};
+ const menu=async()=>{if(!await app.locator('#moreMenu').isVisible())await app.locator('#moreButton').click();await app.locator('[data-settings-submenu="spelling"]').click();};
  const marked=()=>root.locator('.cm-spelling-error').filter({hasText:/^wurld$/});
  const cases={plain:'Hello wurld.',emoji:'😀 Hello wurld.',bold:'Hello **wurld**.',quote:'> Hello wurld.',table:'| Word | Other |\n| --- | --- |\n| wurld | Hello |',details:'<details open>\n<summary>Hello</summary>\n\nHello wurld.\n\n</details>',summary:'<details open>\n<summary>Hello wurld</summary>\n\nHello world.\n\n</details>',footnote:'Hello[^n]\n\n[^n]: Hello wurld.',nested:'Hello[^n]\n\n[^n]: Hello\n    \n    | Word | Other |\n    | --- | --- |\n    | wurld | Hello |'};
  for(const[kind,source]of Object.entries(cases)){
@@ -47,7 +47,7 @@ try{
   await menu();await app.locator('[data-spellcheck-toggle]').click();await page.keyboard.press('Escape');await page.waitForTimeout(800);assert.equal(await marked().count(),2,'Re-enable restores cached dictionary marks without typing');console.log('PASS disable and re-enable');
   const ignored='Hello world.\n\n`wurld`\n\n```text\nwurld\n```\n\n> ```text\n> wurld\n> ```\n\n    wurld\n\n$wurld$\n\n[Hello](https://wurld.example)';await reset(ignored);assert.equal(await marked().count(),0,'Code, formulas and URLs are not spelling prose');assert.equal(await read(),ignored);console.log('PASS non-prose exclusions');
   await reset('Hello colour.');
-  for(const [language,count]of [['en-US',1],['en-GB',0]]){await menu();await app.locator('[data-settings-submenu="dictionary"]').click();await app.locator(`[data-spellcheck-language="${language}"]`).click();await page.keyboard.press('Escape');await page.waitForTimeout(1200);assert.equal(await root.locator('.cm-spelling-error').filter({hasText:/^colour$/}).count(),count,language);}
+  for(const [language,count]of [['en-US',1],['en-GB',0]]){await menu();await app.locator(`[data-spellcheck-language="${language}"]`).click();await page.keyboard.press('Escape');await page.waitForTimeout(1200);assert.equal(await root.locator('.cm-spelling-error').filter({hasText:/^colour$/}).count(),count,language);}
   await shot('dictionary-02-british');console.log('PASS US and UK dictionaries');
  }
  assert.deepEqual(errors,[]);

@@ -132,6 +132,19 @@ export function editSelectedDiagram(view) {
   if (!item || !edit) return false;
   edit(item, view); return true;
 }
+
+// Only a complete, currently collapsed atom owns a card selection. Source,
+// partial ranges and prose spanning a chart still use normal text highlights.
+export function isRenderedDiagramSelection(state, range) {
+  if (range.empty || range.from === range.to) return false;
+  const field = state.field(editorDiagramField, false);
+  if (!field?.enabled) return false;
+  let selected = false;
+  field.atoms.between(range.from, range.to, (from, to) => {
+    if (from === range.from && to === range.to) selected = true;
+  });
+  return selected;
+}
 export function deleteRenderedDiagram(view, item, doc) {
   const current = currentItem(view, item, doc);
   if (!current || view.state.readOnly) return false;
@@ -191,13 +204,14 @@ export function returnDiagramSourceToRendered(view, item=activeDiagramSourceItem
 class DiagramWidget extends WidgetType {
   constructor(item, state, theme) {
     super(); this.item = item; this.doc = state.doc; this.theme = theme;
+    this.selected = state.selection.ranges.some(range => !range.empty && sameRange(range, item));
     this.context = state.facet(diagramPreviewContext);
     this.labels = Object.fromEntries(Object.keys(diagramPreviewPhrases).map(key => [key, state.phrase(key)]));
     this.label = this.context.label?.(item) || (item.engine === 'echarts' ? 'ECharts' : 'Mermaid');
   }
   eq(other) { return this.doc === other.doc && sameRange(this.item, other.item) && this.item.original === other.item.original
     && this.item.open === other.item.open && this.item.failed === other.item.failed && this.theme === other.theme && this.context === other.context
-    && this.label === other.label && this.labels['Edit diagram'] === other.labels['Edit diagram']; }
+    && this.selected === other.selected && this.label === other.label && this.labels['Edit diagram'] === other.labels['Edit diagram']; }
   ignoreEvent() { return true; }
   updateDOM(dom, view) {
     const record = mounts.get(dom);
@@ -207,13 +221,13 @@ class DiagramWidget extends WidgetType {
     // Keep the live drawing, but refresh the immutable document/range used by
     // its actions after edits elsewhere. Never keep a stale widget callback.
     record.item = this.item; record.doc = this.doc;
-    dom.classList.toggle('is-selected', sameRange(view.state.selection.main, this.item) && !view.state.selection.main.empty);
+    dom.classList.toggle('is-selected', this.selected);
     return true;
   }
   toDOM(view) {
     const root = document.createElement('div'), item = this.item;
     root.className = `cm-diagram-card${item.open ? ' is-source-open' : ''}`;
-    root.classList.toggle('is-selected', sameRange(view.state.selection.main, item) && !view.state.selection.main.empty);
+    root.classList.toggle('is-selected', this.selected);
     root.contentEditable = 'false'; root.tabIndex = 0; root.setAttribute('role', 'group');
     root.setAttribute('aria-label', this.labels['Diagram: Enter to edit; Delete to remove']);
     const record = { item, doc: this.doc, context: this.context, theme: this.theme, label: this.label, phrase: this.labels['Edit diagram'], active: true, timer: null, observer: null };

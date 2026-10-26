@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {installDocumentLoadingFixture} from './document-loading-fixture.mjs';
 import {partitionRecentFiles} from '../src/library-state.js';
 const source=readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
@@ -20,6 +21,7 @@ function harness() {
  });
  for(const name of ['setAccentTheme','setColorMode','setFontScale','setFontFamily','syncBodyTypography','setDocumentWidth','setEditorLayout','scheduleMacWindowModeSync','applyImageUploadSettings','setLanguage','setSidebarMode','restoreExplorerAfterFirstPaint','openFirstRunLanguageDialog','scheduleAutomaticUpdateCheck'])context[name]=()=>{};
  context.reportSilentError=()=>calls.push('error');context.showToast=()=>calls.push('toast');context.t=k=>k;context.isMissingDocumentError=()=>false;
+ installDocumentLoadingFixture(context,source);
  vm.runInContext(between('function beginDocumentOpen(', 'function syncDocumentAccessControls(')+between('async function loadInitialDocument(', "$('#newFileButton').addEventListener"),context);
  return {context,state,prefs,initial,mode,calls};
 }

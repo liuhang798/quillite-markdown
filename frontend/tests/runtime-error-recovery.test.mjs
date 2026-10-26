@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
+import {installDocumentLoadingFixture} from './document-loading-fixture.mjs';
 import { guardFileDropResolver } from '../src/safe-file-drop.js';
 import { isMissingDocumentError } from '../src/library-state.js';
 import { createRuntimeDiagnostics } from '../src/runtime-diagnostics.js';
@@ -36,12 +37,13 @@ function documentHarness(bridge) {
   const notices = [], displayed = [], edits = [];
   const context = vm.createContext({
     window: { quilliteMarkdown: bridge }, state: { documentSession: 0, documentOpenRequest: 0, explorerRequest: 0 },
-    beginDocumentOpen: () => ({id: context.state.documentOpenRequest = ++request}), canApplyDocumentOpen: token => token.id === request,
+    beginDocumentOpen: () => ({id: context.state.documentOpenRequest = ++request, session: context.state.documentSession}), canApplyDocumentOpen: token => token.id === request,
     maybeDiscardChanges: () => true, setSidebarMode() {},
     displayDocument: doc => { displayed.push(doc); context.state.documentSession++; },
     toggleEditor: mode => edits.push(mode), reportSilentError() {},
     t: key => key, showToast: message => notices.push(message), isMissingDocumentError,
   });
+  installDocumentLoadingFixture(context,source);
   vm.runInContext(between('async function openFolder()', 'async function openReferenceDocument(')
     + between('async function loadInitialDocument(', 'async function initialize()'), context);
   return { context, notices, displayed, edits, supersede: () => { request++; context.state.documentSession++; } };

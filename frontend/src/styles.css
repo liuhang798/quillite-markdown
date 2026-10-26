@@ -338,6 +338,18 @@ body.resizing-panes .sidebar, body.resizing-panes .toc-panel { transition: none;
 .rail-button { position: absolute; left: 10px; top: 14px; z-index: 5; width: 32px; height: 32px; border: 1px solid var(--line); background: var(--paper); border-radius: 9px; display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow); }
 
 .reader-pane { flex: 1; min-width: 0; overflow: auto; background: var(--paper); scroll-behavior: smooth; }
+.document-loading { position: fixed; z-index: 35; display: grid; place-items: center; pointer-events: none; padding: 24px; box-sizing: border-box; }
+.document-loading[hidden] { display: none; }
+.document-loading.is-pending { opacity: 0; animation: document-loading-reveal 1ms linear 300ms forwards; }
+@keyframes document-loading-reveal { to { opacity: 1; } }
+.document-loading-card { display: flex; align-items: center; gap: 16px; max-width: 360px; padding: 20px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); color: var(--text); box-shadow: 0 12px 44px #0002; }
+.document-loading-card strong { display: block; font-size: 14px; font-weight: 600; line-height: 1.6; }
+.document-loading-hint { display: block; margin-top: 5px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.document-loading-hint[hidden] { display: none; }
+.document-loading-spinner { flex: 0 0 26px; width: 26px; height: 26px; box-sizing: border-box; border: 3px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: document-loading-spin .8s linear infinite; will-change: transform; }
+@keyframes document-loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .document-loading-spinner { animation: none; } }
+@media print { .document-loading { display: none !important; } }
 .welcome { min-height: 100%; padding: 16px clamp(24px, 4vw, 56px) 24px; background: var(--paper); }
 .welcome-shell { width: min(1180px, 100%); margin: 0 auto; }
 .welcome-hero { min-height: 218px; display: grid; grid-template-columns: 142px minmax(0, 1fr); align-items: center; gap: clamp(28px, 4vw, 54px); padding: 12px clamp(12px, 2vw, 28px) 20px; text-align: left; }
@@ -709,6 +721,7 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 #markdownEditor .cm-editor { position: relative; z-index: 1; height: 100%; outline: none; pointer-events: auto; font-size: calc(15px * var(--font-scale)); }
 .cm-diagram-card { position: relative; box-sizing: border-box; max-width: 100%; margin: 0 4px; padding: 16px 10px 22px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); font: 12px/1.6 var(--app-font-family); }
 .cm-diagram-card:focus, .cm-diagram-card:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cm-diagram-card.is-selected { border-color: var(--accent); }
 .cm-diagram-card, .cm-diagram-card * { user-select: none; -webkit-user-select: none; }
 .structured-diagram-error { color: var(--chart-validation-color, #b42318); margin: 8px 0; font-size: 13px; }
 .cm-diagram-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 32px; }
@@ -873,6 +886,9 @@ body:has(.toc-panel.hidden) .back-to-top { right: 24px; }
 .toc.is-flat .toc-node.level-6 > .toc-row { padding-left: calc(var(--toc-indent) * 3.5); }
 .toc a { min-width: 0; display: block; overflow: hidden; color: var(--muted); text-decoration: none; font-size: var(--toc-font-size); line-height: 1.5; padding: .28em .35em; transition: color .15s, background .15s, box-shadow .15s; border-radius: 6px; }
 .toc-link-text { min-width: 0; display: -webkit-box; max-height: 3em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.toc-link-text.has-math { display: block; max-height: none; -webkit-line-clamp: unset; line-clamp: unset; }
+.toc-math { display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: middle; padding: .15em .25em .15em .05em; }
+.toc .katex, .markdown-dynamic-toc .katex, .cm-live-toc .katex { font-size: 1.1em; }
 .toc-node.level-3 > .toc-row a { font-size: calc(var(--toc-level-3-font-size) * var(--toc-font-user-scale)); }
 .toc-node.level-4 > .toc-row a { font-size: calc(var(--toc-level-4-font-size) * var(--toc-font-user-scale)); }
 .toc-node.level-5 > .toc-row a { font-size: calc(var(--toc-level-5-font-size) * var(--toc-font-user-scale)); }
@@ -957,6 +973,7 @@ html[lang="en"] #moreMenu .popover-label { font-size: 10.5px; }
 .font-scale-control .font-scale-auto { border: 1px solid transparent; }
 .font-scale-control .font-scale-auto.active { border-color: color-mix(in srgb, var(--accent) 52%, var(--line)); background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
 .spellcheck-toggle { align-items: center; }
+#spellingSettingsMenu { width: 264px; max-width: calc(100vw - 16px); }
 .popover .spellcheck-toggle .spellcheck-check { opacity: 0; color: var(--accent-strong); font-size: 12px; font-weight: 800; }
 .popover .spellcheck-toggle.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
 .popover .spellcheck-toggle.active .spellcheck-check { opacity: 1; }
@@ -1382,7 +1399,7 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .picgo-advanced-settings[open] summary { margin-bottom: 9px; color: var(--accent-strong); }
 .picgo-settings-fields { display: grid; gap: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--panel) 55%, transparent); }
 .picgo-settings-fields > label:not(.clear-picgo-secret) { display: grid; gap: 6px; color: var(--muted); font-size: 10.5px; }
-.picgo-settings-fields input[type="url"], .picgo-settings-fields input[type="password"] { width: 100%; height: 39px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: var(--paper-strong); }
+.picgo-settings-fields input[type="url"], .picgo-settings-fields input[type="password"], .picgo-settings-fields input[type="text"] { width: 100%; height: 39px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: var(--paper-strong); }
 .picgo-settings-fields input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .picgo-settings-fields > small { color: var(--faint); font-size: 9.5px; line-height: 1.5; }
 .clear-picgo-secret { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10.5px; cursor: pointer; }
@@ -1390,6 +1407,52 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .picgo-test-status { min-height: 16px; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
 .picgo-test-status.success { color: var(--accent-strong); }
 .picgo-test-status.error { color: #cf4545; }
+.picgo-cli-panel { display: grid; gap: 18px; padding: 22px; }
+.picgo-cli-heading { display: grid; gap: 8px; }
+.picgo-cli-heading h3 { margin: 0; font-size: 16px; }
+.picgo-cli-heading p { font-size: 12px; line-height: 1.7; }
+.picgo-cli-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.picgo-cli-actions .large-button { min-width: 140px; height: 40px; }
+.picgo-cli-actions .large-button:disabled { cursor: wait; opacity: .65; }
+.picgo-cli-panel > .picgo-test-status { font-size: 12px; line-height: 1.65; }
+.picgo-cli-panel > .picgo-test-status:empty { display: none; }
+.picgo-cli-advanced { padding-top: 15px; border-top: 1px solid var(--line); }
+.picgo-cli-advanced summary { width: fit-content; color: var(--muted); font-size: 12px; cursor: pointer; line-height: 1.6; }
+.picgo-cli-advanced summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.picgo-cli-advanced .picgo-settings-fields { margin-top: 12px; }
+.picgo-cli-panel .picgo-cli-footnote { font-size: 11px; line-height: 1.65; }
+.picgo-prepare-progress { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 12px; background: var(--accent-soft); }
+.picgo-prepare-heading { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.picgo-prepare-heading strong { flex: 1; min-width: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+#picGoPreparePercent { color: var(--accent-strong); font-size: 16px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.picgo-prepare-indicator { flex: none; width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--accent) 20%, transparent); border-top-color: var(--accent-strong); border-radius: 50%; animation: picgo-prepare-spin .8s linear infinite; }
+.picgo-prepare-progress.is-complete .picgo-prepare-indicator { animation: none; border: 0; width: auto; height: auto; color: var(--accent-strong); }
+.picgo-prepare-progress.is-complete .picgo-prepare-indicator::after { content: '✓'; font-weight: 800; }
+.picgo-prepare-progress.is-failed { border-color: #cf4545; background: color-mix(in srgb, #cf4545 5%, var(--paper-strong)); }
+.picgo-prepare-progress.is-failed .picgo-prepare-indicator { animation: none; border-color: #cf4545; }
+#picGoPrepareBar { display: block; width: 100%; height: 8px; border: 0; border-radius: 6px; overflow: hidden; accent-color: var(--accent-strong); }
+#picGoPrepareBar::-webkit-progress-bar { background: color-mix(in srgb, var(--accent) 13%, var(--paper-strong)); border-radius: 6px; }
+#picGoPrepareBar::-webkit-progress-value { background: var(--accent-strong); border-radius: 6px; }
+#picGoPrepareBar:indeterminate { background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 45% 100% no-repeat, color-mix(in srgb, var(--accent) 13%, var(--paper-strong)); animation: picgo-prepare-travel 1.5s ease-in-out infinite alternate; }
+#picGoPrepareBar:indeterminate::-webkit-progress-bar { background: transparent; }
+.picgo-prepare-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 11px; color: var(--muted); line-height: 1.6; font-variant-numeric: tabular-nums; }
+#picGoPrepareElapsed { white-space: nowrap; }
+.picgo-prepare-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 2px 0 0; padding: 12px 0 0; border-top: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line)); list-style: none; }
+.picgo-prepare-steps li { display: flex; gap: 5px; align-items: baseline; min-width: 0; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+.picgo-prepare-steps b { flex: none; font-variant-numeric: tabular-nums; }
+.picgo-prepare-steps li.active, .picgo-prepare-steps li.complete { color: var(--accent-strong); }
+.picgo-prepare-steps li.active { font-weight: 750; }
+@keyframes picgo-prepare-spin { to { transform: rotate(360deg); } }
+@keyframes picgo-prepare-travel { from { background-position: -30% 0; } to { background-position: 130% 0; } }
+@media (max-width: 540px) {
+  .picgo-cli-panel { padding: 16px; gap: 16px; }
+  .picgo-cli-actions .large-button { flex: 1; min-width: 120px; }
+  .picgo-prepare-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .picgo-prepare-indicator, #picGoPrepareBar:indeterminate { animation: none; }
+  #picGoPrepareBar::-webkit-progress-value { transition: none; }
+}
 .picgo-cloud-setup { display: grid; gap: 10px; }
 .picgo-cloud-setup.hidden { display: none; }
 .picgo-cloud-account { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 11px; margin-top: 3px; padding: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 11px; background: var(--accent-soft); }
@@ -2185,3 +2248,12 @@ body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { pad
   .ai-review-empty.is-checking .ai-review-empty-icon::after,
   .ai-review-empty.is-checking .ai-review-empty-icon svg { animation: none; }
 }
+.picgo-cli-hosting { display: grid; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); min-width: 0; }
+.picgo-cli-hosting p { margin: 0; line-height: 1.6; }
+.picgo-cli-config-label { display: grid; gap: 8px; min-width: 0; font-size: 12px; }
+.picgo-cli-config-label input { width: 100%; min-width: 0; height: 39px; padding: 0 11px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: var(--paper-strong); }
+.picgo-cli-config-label input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.picgo-cli-hosting > button { justify-self: start; }
+.picgo-cli-test-note { font-size: 12px; color: var(--accent-strong); }
+#picGoCLIUploadStatus.is-success { padding: 14px 16px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); color: var(--text); font-size: 13px; line-height: 1.7; white-space: pre-line; }
+.picgo-cli-enable-dialog > .picgo-ready-icon { margin-bottom: 16px; }

@@ -954,6 +954,49 @@ func TestSnoozeUpdatesSuppressesAutomaticChecks(t *testing.T) {
 	}
 }
 
+func TestLinkedDocumentChinesePathAndMissingTarget(t *testing.T) {
+	app := testApp(t)
+	dir := filepath.Join(t.TempDir(), "综合 知识")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "网络新技术.md")
+	if err := os.WriteFile(path, []byte("# 中文章节"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := app.OpenRecentFile(filepath.ToSlash(path))
+	if err != nil || doc == nil || doc.Path != path || doc.Content != "# 中文章节" {
+		t.Fatalf("linked document not opened: %#v, %v", doc, err)
+	}
+	if _, err := app.OpenRecentFile(filepath.Join(dir, "missing.md")); err == nil {
+		t.Fatal("missing target unexpectedly opened")
+	}
+	prefs, err := app.GetPreferences()
+	if err != nil || len(prefs.RecentFiles) != 1 || prefs.RecentFiles[0] != path {
+		t.Fatalf("missing link changed recent records: %#v, %v", prefs, err)
+	}
+}
+
+func TestLargeDocumentReadKeepsCompleteSourceAndRevision(t *testing.T) {
+	app := testApp(t)
+	path := filepath.Join(t.TempDir(), "large.md")
+	content := "# Large\r\n\r\n" + strings.Repeat("ordinary paragraph\r\n\r\n", 600000) + "末尾😀"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := app.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Content != content || doc.Size != int64(len(content)) || doc.Revision != documentRevision([]byte(content)) {
+		t.Fatal("large document was truncated or its revision changed")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != content {
+		t.Fatal("reading changed original document")
+	}
+}
+
 func TestReadSaveAndRecent(t *testing.T) {
 	app := testApp(t)
 	dir := t.TempDir()
@@ -990,6 +1033,42 @@ func TestReadSaveAndRecent(t *testing.T) {
 	app.mu.RUnlock()
 	if !dirty {
 		t.Fatal("save cleared dirty state before frontend snapshot acknowledgement")
+	}
+}
+
+func TestDraftAutosaveThenManualSaveKeepsPathAndRevisionProtection(t *testing.T) {
+	app := testApp(t)
+	path := filepath.Join(t.TempDir(), "new-draft.md")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app.markDraft(path)
+	doc, err := app.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, content := range []string{"自动保存内容", "手动保存内容\n![图片](assets/a.png)"} {
+		doc, err = app.SaveFileWithRevision(path, content, doc.Revision)
+		if err != nil {
+			t.Fatal(err)
+		}
+		disk, readErr := os.ReadFile(path)
+		if readErr != nil || string(disk) != content || doc.Content != content || doc.Path != path || !doc.Draft || doc.ReplacedPath != "" {
+			t.Fatalf("draft save changed identity or content: %#v, %v", doc, readErr)
+		}
+	}
+	prefs, err := app.GetPreferences()
+	if err != nil || len(prefs.RecentFiles) != 1 || prefs.RecentFiles[0] != path {
+		t.Fatalf("draft save duplicated recent records: %#v, %v", prefs, err)
+	}
+	if err := os.WriteFile(path, []byte("external edit"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SaveFileWithRevision(path, "must not overwrite", doc.Revision); err == nil {
+		t.Fatal("draft save bypassed revision protection")
+	}
+	if disk, err := os.ReadFile(path); err != nil || string(disk) != "external edit" {
+		t.Fatal("external edit was not preserved", err)
 	}
 }
 

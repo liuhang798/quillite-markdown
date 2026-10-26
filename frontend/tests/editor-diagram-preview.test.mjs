@@ -8,11 +8,27 @@ import { DIAGRAM_TEMPLATES, diagramTemplateSource } from '../src/diagram-templat
 import { diagramReplacementMarkdown, projectedDiagramReplacement } from '../src/diagram-editing.js';
 import { editorDiagramItems, editorDiagramField, diagramPreviewContext, toggleDiagramSource, setDiagramDisplay,
   diagramRenderFailed, refreshDiagramPreviews, refreshDiagramTheme, editSelectedDiagram, deleteRenderedDiagram, activeDiagramSourceItem, returnDiagramSourceToRendered, insertDiagramSourceNewline,
-  DIAGRAM_PREVIEW_LIMIT, DIAGRAM_PREVIEW_DOCUMENT_LIMIT, DIAGRAM_SOURCE_LIMIT } from '../src/editor-diagram-preview.js';
+  DIAGRAM_PREVIEW_LIMIT, DIAGRAM_PREVIEW_DOCUMENT_LIMIT, DIAGRAM_SOURCE_LIMIT, isRenderedDiagramSelection } from '../src/editor-diagram-preview.js';
 
 const fence = (body = 'pie\n"One": 1', engine = 'mermaid') => `\`\`\`${engine}\n${body}\n\`\`\``;
 const create = (doc, context = {}) => EditorState.create({ doc, extensions: [history(), editorDiagramField, diagramPreviewContext.of(context)] });
 const viewFor = state => { const view = { state, focus() {} }; view.dispatch = spec => { view.state = view.state.update(spec).state; }; return view; };
+
+test('card selection painting only replaces an exact rendered atom, not source or surrounding text',()=>{
+  const state=create('Before\n\n'+fence()+'\n\nAfter'),item=state.field(editorDiagramField).items[0];
+  for(const range of [EditorSelection.range(item.from,item.to),EditorSelection.range(item.to,item.from)])
+    assert.equal(isRenderedDiagramSelection(state,range),true);
+  for(const range of [EditorSelection.cursor(item.from),EditorSelection.range(item.from+1,item.to),EditorSelection.range(0,state.doc.length)])
+    assert.equal(isRenderedDiagramSelection(state,range),false);
+  const range=EditorSelection.range(item.from,item.to);
+  const open=state.update({effects:toggleDiagramSource.of(item)}).state;
+  assert.equal(isRenderedDiagramSelection(open,range),false);
+  const failed=state.update({effects:diagramRenderFailed.of({doc:state.doc,item})}).state;
+  assert.equal(isRenderedDiagramSelection(failed,range),false);
+  const disabled=state.update({effects:setDiagramDisplay.of('source')}).state;
+  assert.equal(isRenderedDiagramSelection(disabled,range),false);
+  assert.equal(isRenderedDiagramSelection(EditorState.create({doc:state.doc}),range),false);
+});
 
 test('diagram deletion requests a visible caret and keeps one undo transaction',()=>{
  const source=fence(),view=viewFor(create(source));let request;

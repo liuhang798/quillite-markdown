@@ -44,23 +44,23 @@ test('missing recent and favorite documents stay visible but cannot be opened', 
 
 test('documents removed outside the app become unavailable without software-error reporting loops', () => {
   assert.match(renderer, /import \{[^}]*isMissingDocumentError[^}]*\} from '\.\/library-state\.js'/);
-  assert.match(renderer, /async function loadFile\(filePath\)[\s\S]*if \(isMissingDocumentError\(error\)\) \{[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.open'\)/);
+  assert.match(renderer, /async function loadFile\(filePath, \{ fragment = '' \} = \{\}\)[\s\S]*if \(isMissingDocumentError\(error\)\) \{[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.open'\)/);
   assert.match(renderer, /async function editRecentDocument\(filePath\)[\s\S]*if \(isMissingDocumentError\(error\)\) \{[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.open-recent'\)/);
   assert.match(renderer, /missingCurrentFilePath = requestedPath;[\s\S]*await refreshLibraryFileStatuses\(\);[\s\S]*if \(requestedSession === state.documentSession && firstMissingNotice\) showToast\(t\('currentDocumentMissing'\), 'warning'\);[\s\S]*return;[\s\S]*reportSilentError\(error, 'document\.refresh'\)/);
 });
 
 test('macOS recent documents recover protected-folder access through a user-authorized open panel', () => {
   assert.match(mainSource, /openRecentFile: filePath => desktopRuntime \? Backend\.OpenRecentFile\(filePath\)/);
-  assert.match(renderer, /async function loadFile\(filePath\)[\s\S]*window\.quilliteMarkdown\.openRecentFile\(filePath\)/);
+  assert.match(renderer, /async function loadFile\(filePath, \{ fragment = '' \} = \{\}\)[\s\S]*window\.quilliteMarkdown\.openRecentFile\(filePath\)/);
   assert.match(renderer, /async function editRecentDocument\(filePath\)[\s\S]*window\.quilliteMarkdown\.openRecentFile\(filePath\)/);
   assert.match(renderer, /if \(isMacAccessNotGrantedError\(error\)\) \{[\s\S]*showToast\(t\('macAccessNotGranted'\), 'warning'\);[\s\S]*return;/);
 });
 
 test('file-association opens are subscribed before startup and protect unsaved changes', () => {
-  const listenerIndex = renderer.indexOf('window.quilliteMarkdown.onOpenFile(doc =>');
+  const listenerIndex = renderer.indexOf('window.quilliteMarkdown.onOpenFile(async doc =>');
   const initializeIndex = renderer.indexOf('initialize();', listenerIndex);
   assert.ok(listenerIndex >= 0 && initializeIndex > listenerIndex);
-  assert.match(renderer, /window\.quilliteMarkdown\.onOpenFile\(doc => \{\s*if \(!doc\?\.path \|\| !maybeDiscardChanges\(\)\) return;/);
+  assert.match(renderer, /window\.quilliteMarkdown\.onOpenFile\(async doc => \{\s*if \(!doc\?\.path \|\| !maybeDiscardChanges\(\)\) return;/);
 });
 
 test('closing a dirty document offers save, discard, and cancel actions', () => {
@@ -296,9 +296,9 @@ test('large settings use adaptive cascading submenus without removing their exis
   assert.match(html, /id="interfaceLanguageCurrent"/);
   assert.match(html, /role="menuitemradio" data-language="zh-CN"/);
   assert.match(html, /role="menuitemradio" data-language="en"/);
-  assert.match(html, /data-settings-submenu="dictionary"[^>]*aria-haspopup="menu"/);
-  assert.match(html, /data-settings-submenu-panel="dictionary"[^>]*role="menu"/);
-  assert.match(html, /id="spellcheckLanguageCurrent"/);
+  assert.match(html, /data-settings-submenu="spelling"[^>]*aria-haspopup="menu"/);
+  assert.match(html, /data-settings-submenu-panel="spelling"[^>]*role="menu"/);
+  assert.doesNotMatch(html, /id="spellcheckLanguageSelect"/);
   assert.match(renderer, /function positionSettingsSubmenu\(trigger, panel\)/);
   assert.match(renderer, /rightSpace >= panelRect\.width \+ gap/);
   assert.match(renderer, /function openSettingsSubmenu\(name, focusSelected = false\)/);
@@ -398,8 +398,8 @@ test('images support links, asset imports, drag and paste, and display scaling',
   assert.match(html, /id="imageUrl"/);
   assert.match(html, /class="image-storage-callout"[\s\S]*data-i18n="imageStorageSupportTitle"[\s\S]*data-i18n="imageStorageSupportList"/);
   assert.match(html, /id="openImageUploadSettings"[\s\S]*data-i18n="imageUploadSettingsAction"/);
-  assert.match(renderer, /imageStorageSupportTitle: '支持 4 种图片存储方式'/);
-  assert.match(renderer, /imageStorageSupportList: '本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo'/);
+  assert.match(renderer, /imageStorageSupportTitle: '支持 5 种图片存储方式'/);
+  assert.match(renderer, /imageStorageSupportList: '本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo · PicGo CLI'/);
   assert.match(html, /id="imageAltInput"/);
   assert.match(html, /id="imageWidth" type="range" min="10" max="100" step="5"/);
   assert.match(html, /id="pickLocalImage"/);
@@ -460,7 +460,8 @@ test('the update dialog offers in-app download and apply with progress', () => {
 });
 
 test('Word, HTML, and PDF export are available through the unified Export document action', () => {
-  assert.match(html, /data-action="export-center"/);
+  assert.match(html, /data-document-action="export-center"/);
+  assert.doesNotMatch(html, /data-action="(?:export-center|print)"/);
   assert.doesNotMatch(html, /data-action="export-(?:word|html|pdf)"/);
   assert.match(html, /data-export-format="docx"/);
   assert.match(html, /data-export-format="html"/);
@@ -702,7 +703,8 @@ test('the document outline renders as a persistent searchable tree or flat list'
   assert.match(styles, /\.toc-children\.hidden \{ display: none; \}/);
   assert.match(styles, /\.toc-node\.collapsed > \.toc-row \.toc-toggle svg/);
   assert.match(styles, /\.toc\.is-flat \.toc-row \{ display: block; \}/);
-  assert.match(renderer, /class="toc-link-text"/);
+  assert.ok(renderer.includes('class="toc-link-text${node.title.hasMath'));
+  assert.match(styles, /\.toc-link-text\.has-math \{[^}]*max-height: none;/);
   assert.match(styles, /\.toc-link-text \{[^}]*display: -webkit-box;[^}]*max-height: 3em;[^}]*overflow: hidden;[^}]*-webkit-box-orient: vertical;[^}]*-webkit-line-clamp: 2;[^}]*line-clamp: 2;/);
   assert.match(styles, /\.toc-search-box:focus-within/);
 });
@@ -749,7 +751,8 @@ test('body [TOC] markers render a dynamic linked outline and PDF export requests
   assert.match(renderer, /replaceDynamicTocMarkers\(stripTableWidthMetadata\(tableRenderSource\(frontmatterRenderSource\(content\)\)\)\)/);
   assert.match(renderer, /function renderDynamicTocs\(container/);
   assert.match(renderer, /querySelectorAll\('\[data-dynamic-toc\]'\)/);
-  assert.match(renderer, /scrollPreviewContainerToHeading\(container, link\.dataset\.target\)/);
+  assert.match(renderer, /scrollDocumentLinkTarget\(container, target\.fragment\)/);
+  assert.match(renderer, /scrollPreviewContainerToHeading\(container, target\.id, 'auto'\)/);
   assert.match(styles, /\.markdown-dynamic-toc \{/);
   assert.match(mainSource, /Backend\.ExportPDF/);
   assert.match(renderer, /pdfWithBookmarks: '标题书签'/);
@@ -1039,9 +1042,9 @@ test('legacy Windows uninstaller remediation runs silently before automatic upda
 
 test('spell check marks English errors and offers correction, ignore, and personal dictionary actions', () => {
   assert.match(html, /data-spellcheck-toggle/);
-  assert.match(html, /data-spellcheck-language="auto"/);
-  assert.match(html, /data-spellcheck-language="en-US"/);
-  assert.match(html, /data-spellcheck-language="en-GB"/);
+  assert.match(html, /role="menuitemradio" data-spellcheck-language="auto"/);
+  assert.match(html, /role="menuitemradio" data-spellcheck-language="en-US"/);
+  assert.match(html, /role="menuitemradio" data-spellcheck-language="en-GB"/);
   assert.match(html, /id="spellcheckContextMenu"/);
   assert.match(renderer, /class: 'cm-spelling-error'/);
   assert.match(renderer, /activeSpellchecker\.suggest\(normalized\)\.slice\(0, 6\)/);
@@ -1070,7 +1073,7 @@ test('PicGo Cloud uploads directly while local PicGo remains compatible and ever
   assert.match(renderer, /if \(!imageSettingsResponseCurrent\(revision\)\) return;[\s\S]*if \(selectedImageUploadMode\(\) === 'picgo'\) testPicGoConnection\(\{ automatic: true \}\)/);
   assert.match(renderer, /PICGO_DOWNLOAD_URL = 'https:\/\/picgo\.app\/'/);
   assert.match(renderer, /selectedImageUploadMode\(\) === 'picgo' && !state\.picGoConnectionReady[\s\S]*await testPicGoConnection\(\)/);
-  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath, target\)[\s\S]*uploadImageToPicGoCloud\(target\.path, localPath, operationId\)[\s\S]*uploadImageToPicGo\(target\.path, localPath, operationId\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true \}/);
+  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath, target\)[\s\S]*uploadImageToPicGoCloud\(target\.path, localPath, operationId\)[\s\S]*uploadImageToPicGo\(target\.path, localPath, operationId\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true, cliError \}/);
   assert.match(html, /id="imageUploadProgress"[\s\S]*id="imageUploadProgressPercent"[\s\S]*id="imageUploadProgressBar"/);
   assert.match(renderer, /function beginImageUploadProgress\(mode\)[\s\S]*imageUploadPreparing[\s\S]*function updateImageUploadProgress\(progress\)[\s\S]*imageUploadFinalizing/);
   assert.match(renderer, /finally \{[\s\S]*finishImageUploadProgress\(uploadRun, succeeded\)/);

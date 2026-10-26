@@ -111,18 +111,56 @@ test('saving always re-enables the filename control after the save finishes',asy
  assert.equal(disabled,false);
 });
 
-test('first manual save opens naming dialog while autosave retains draft identity', async () => {
+test('manual save and autosave write a new draft to its existing path', async () => {
   for (const auto of [false, true]) {
     const { context, state, write, calls } = harness();
     state.currentFile.draft = true;
+    state.currentFile.revision = 'baseline';
+    let received;
+    context.window.quilliteMarkdown.saveFile = (...args) => { received = args; return write.promise; };
     const saving = context.saveDocument(false, { auto });
-    assert.equal(calls.includes('saveAs'), !auto);
-    write.resolve(null);
+    assert.equal(calls.includes('saveAs'), false);
+    assert.deepEqual(received, ['/a.md', 'old', 'baseline']);
+    write.resolve({ path: '/a.md', content: 'old', draft: true, revision: 'saved-revision' });
     await saving;
     assert.equal(state.currentFile.draft, true);
     assert.equal(state.currentFile.content, 'old');
-    assert.equal(state.dirty, true);
+    assert.equal(state.currentFile.path, '/a.md');
+    assert.equal(state.currentFile.revision, 'saved-revision');
+    assert.equal(state.dirty, false);
   }
+});
+
+test('manual save after draft autosave uses the latest content and revision without Save As', async () => {
+  for (const changed of [false, true]) {
+    const { context, state, calls } = harness();
+    state.currentFile.draft = true;
+    state.currentFile.revision = 'initial';
+    context.window.quilliteMarkdown.saveAs = async () => { calls.push('saveAs'); return null; };
+    const writes = [];
+    context.window.quilliteMarkdown.saveFile = async (path, content, revision) => {
+      writes.push([path, content, revision]);
+      return { path, content, draft: true, revision: `saved-${writes.length}` };
+    };
+    await context.saveDocument(false, { auto: true });
+    if (changed) { state.currentFile.content = 'new input'; state.dirty = true; }
+    await context.saveDocument();
+    assert.deepEqual(writes, [['/a.md', 'old', 'initial'], ['/a.md', changed ? 'new input' : 'old', 'saved-1']]);
+    assert.equal(calls.includes('saveAs'), false);
+    assert.equal(state.dirty, false);
+  }
+});
+
+test('explicit Save As on drafts still opens the chooser and cancel preserves content', async () => {
+  const { context, state, write, calls } = harness();
+  state.currentFile.draft = true;
+  const saving = context.saveDocument(true);
+  assert.equal(calls.includes('saveAs'), true);
+  write.resolve(null);
+  await saving;
+  assert.equal(state.currentFile.path, '/a.md');
+  assert.equal(state.currentFile.content, 'old');
+  assert.equal(state.dirty, true);
 });
 
 test('cross-directory copy rebases later edits but retains the committed baseline', async () => {
@@ -335,6 +373,7 @@ test('a late write permission result cannot open a dialog on another document', 
 test('document opening follows the latest request and rechecks newly typed content', () => {
   let confirmed = 0;
   const context = vm.createContext({
+    documentLoading: null,
     state: { documentOpenRequest: 0, documentSession: 1, currentFile: { content: 'original' } },
     maybeDiscardChanges: () => { confirmed++; return false; },
   });

@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "3.0.1"
+	appVersion      = "3.0.2"
 	maxRecent       = 10
 )
 
@@ -111,6 +111,8 @@ type Preferences struct {
 	UsageAnalytics       bool               `json:"usageAnalytics"`
 	ImageUploadMode      string             `json:"imageUploadMode,omitempty"`
 	PicGoServerURL       string             `json:"picGoServerUrl,omitempty"`
+	PicGoCLIPath         string             `json:"picGoCliPath,omitempty"`
+	PicGoCLIConfigPath   string             `json:"picGoCliConfigPath,omitempty"`
 	AIProvider           string             `json:"aiProvider,omitempty"`
 	AIBaseURL            string             `json:"aiBaseUrl,omitempty"`
 	AIBaseURLs           map[string]string  `json:"aiBaseUrls,omitempty"`
@@ -132,6 +134,8 @@ type App struct {
 	workspacePlan        *workspaceReplacePlan
 	historyMu            sync.Mutex
 	picGoCloudLoginMu    sync.Mutex
+	picGoCLIVerified     string
+	picGoCLIVerifiedAt   time.Time
 	securityBookmarksMu  sync.Mutex
 	draftsMu             sync.Mutex
 	aiRequestMu          sync.Mutex

@@ -152,6 +152,7 @@ export function serializeTableReplacement(model, table) {
 
 export function findMarkdownTables(source, syntaxTree) {
   const text = String(source || '');
+  if (!text.includes('|')) return [];
   if (!syntaxTree && text.includes('\r\n')) {
     const removed=[];
     for(const match of text.matchAll(/\r(?=\n)/g))removed.push(match.index-removed.length);
@@ -193,6 +194,7 @@ export function findMarkdownTableAt(source, offset) {
 
 export function stripTableWidthMetadata(source) {
   const text = String(source || '');
+  if (!/quillite-table-widths:/i.test(text)) return text;
   const characters = text.split(''); // Source ranges use UTF-16, including after emoji.
   findMarkdownTables(text).filter(table => table.hasWidthMetadata).forEach(table => {
     const lineEnd = text.indexOf('\n', table.from);

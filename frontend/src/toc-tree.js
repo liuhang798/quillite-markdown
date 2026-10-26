@@ -40,6 +40,9 @@ export function filterTocTree(nodes = [], query = '') {
 
 export function replaceDynamicTocMarkers(markdown = '') {
   const source = String(markdown);
+  // No marker means no structural parse is necessary, especially for images
+  // with multi-megabyte data URLs. This never changes the stored source.
+  if (!/\[toc\]/i.test(source)) return source;
   const lines = source.split('\n');
   const protectedRanges = [];
   const metadata = frontmatterRange(source);

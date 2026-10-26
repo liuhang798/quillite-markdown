@@ -7,7 +7,7 @@ const section=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.inde
 function setup(){
  let hidden=false,mode='embedded';const calls=[],applied=[],messages=[];let closed=0;
  const state={imageSettingsRevision:0,imageSettingsMutation:'',picGoCloudDetectionRun:0,picGoDetectionRun:0,picGoCloudConnectionReady:true,picGoConnectionReady:true};
- const context=vm.createContext({state,els:{imageUploadSettingsDialog:{classList:{contains:()=>hidden}}},updatePicGoSettingsAvailability(){},
+ const context=vm.createContext({state,$:()=>undefined,els:{imageUploadSettingsDialog:{classList:{contains:()=>hidden}}},updatePicGoSettingsAvailability(){},
   selectedImageUploadMode:()=>mode,currentImageUploadSettingsInput:()=>({mode}),setImageUploadSettingsStatus:m=>messages.push(m||''),t:x=>x,
   window:{quilliteMarkdown:{setImageUploadSettings:input=>new Promise((resolve,reject)=>calls.push({input,resolve,reject}))}},
   applyImageUploadSettings:settings=>applied.push(settings),closeImageUploadSettings:()=>{hidden=true;closed++;},showToast(){},console:{warn(){}},

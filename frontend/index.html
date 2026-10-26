@@ -513,33 +513,34 @@
       </div>
     </div>
     <hr>
-    <div class="popover-label" data-i18n="spellcheck">拼写检查</div>
-    <button type="button" class="spellcheck-toggle" role="menuitemcheckbox" data-spellcheck-toggle aria-checked="true">
-      <span class="menu-label" data-i18n="spellcheckEnabled">标记英文错词</span><span class="spellcheck-check" aria-hidden="true">✓</span>
-    </button>
     <div class="settings-submenu-group">
-      <button type="button" class="settings-submenu-trigger" data-settings-submenu="dictionary" aria-haspopup="menu" aria-expanded="false">
-        <span class="menu-label" data-i18n="spellcheckLanguage">词典语言</span>
-        <span class="settings-submenu-summary"><span id="spellcheckLanguageCurrent" data-i18n="spellcheckAuto">自动</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      <button type="button" class="settings-submenu-trigger" data-settings-submenu="spelling" aria-haspopup="menu" aria-expanded="false" aria-controls="spellingSettingsMenu">
+        <span class="menu-label" data-i18n="spellcheck">拼写检查</span>
+        <span class="settings-submenu-summary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
       </button>
-      <div class="settings-submenu popover hidden" data-settings-submenu-panel="dictionary" role="menu" data-i18n-aria-label="spellcheckLanguage" aria-label="词典语言">
-        <button type="button" role="menuitemradio" data-spellcheck-language="auto" aria-checked="true"><span data-i18n="spellcheckAuto">自动</span><span class="settings-option-check">✓</span></button>
-        <button type="button" role="menuitemradio" data-spellcheck-language="en-US" aria-checked="false"><span data-i18n="spellcheckUS">English (US)</span><span class="settings-option-check">✓</span></button>
-        <button type="button" role="menuitemradio" data-spellcheck-language="en-GB" aria-checked="false"><span data-i18n="spellcheckGB">English (UK)</span><span class="settings-option-check">✓</span></button>
+      <div id="spellingSettingsMenu" class="settings-submenu popover hidden" data-settings-submenu-panel="spelling" role="menu" data-i18n-aria-label="spellcheck" aria-label="拼写检查">
+        <button type="button" class="spellcheck-toggle" role="menuitemcheckbox" data-spellcheck-toggle aria-checked="true">
+          <span class="menu-label" data-i18n="spellcheckEnabled">标记英文错词</span><span class="spellcheck-check" aria-hidden="true">✓</span>
+        </button>
+        <hr>
+        <div class="popover-label" data-i18n="spellcheckLanguage">词典语言</div>
+        <div role="group" data-i18n-aria-label="spellcheckLanguage" aria-label="词典语言">
+          <button type="button" role="menuitemradio" data-spellcheck-language="auto" aria-checked="true"><span data-i18n="spellcheckAuto">自动</span><span class="settings-option-check" aria-hidden="true">✓</span></button>
+          <button type="button" role="menuitemradio" data-spellcheck-language="en-US" aria-checked="false"><span data-i18n="spellcheckUS">English (US)</span><span class="settings-option-check" aria-hidden="true">✓</span></button>
+          <button type="button" role="menuitemradio" data-spellcheck-language="en-GB" aria-checked="false"><span data-i18n="spellcheckGB">English (UK)</span><span class="settings-option-check" aria-hidden="true">✓</span></button>
+        </div>
+        <hr>
+        <button type="button" role="menuitem" data-spellcheck-clear><span class="menu-label" data-i18n="clearPersonalDictionary">清空个人词典</span><span id="personalDictionaryCount">0 个词</span></button>
       </div>
     </div>
-    <button type="button" data-spellcheck-clear><span class="menu-label" data-i18n="clearPersonalDictionary">清空个人词典</span><span id="personalDictionaryCount">0 个词</span></button>
     <hr>
-    <div class="popover-label" data-i18n="exportDocument">导出文档</div>
-    <button data-action="export-center"><span class="menu-label" data-i18n="exportDocument">导出文档</span> <span data-i18n="exportFormatsCount">12 种格式</span></button>
     <button data-action="document-tools"><span class="menu-label" data-i18n="documentTools">文档工具</span></button>
-    <button data-action="print"><span class="menu-label" data-i18n="printDocument">打印文档</span> <span>Ctrl P</span></button>
     <hr>
     <button data-action="image-upload-settings"><span class="menu-label" data-i18n="imageUploadSettings">图片存储与图床</span> <span data-i18n="imageStorageLabel">本地 / 内嵌 / 图床</span></button>
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.0.1</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.0.2</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -684,6 +685,16 @@
     </section>
   </div>
 
+  <dialog id="picGoCLIEnableDialog" class="unsaved-close-dialog recent-clear-dialog picgo-cli-enable-dialog no-drag" aria-labelledby="picGoCLIEnableTitle" aria-describedby="picGoCLIEnableDescription">
+    <span class="picgo-ready-icon" aria-hidden="true">✓</span>
+    <h2 id="picGoCLIEnableTitle" data-i18n="picGoCLIEnableTitle">验证通过，是否保存并启用？</h2>
+    <p id="picGoCLIEnableDescription" data-i18n="picGoCLIEnableDescription"></p>
+    <form method="dialog" class="unsaved-close-actions">
+      <button id="cancelPicGoCLIEnable" class="large-button secondary" value="cancel" autofocus data-i18n="picGoCLIEnableLater">暂不启用</button>
+      <button id="confirmPicGoCLIEnable" class="large-button primary" value="confirm" data-i18n="picGoCLIEnableNow">保存并启用</button>
+    </form>
+  </dialog>
+
   <dialog id="recentClearDialog" class="unsaved-close-dialog recent-clear-dialog no-drag" aria-labelledby="recentClearTitle" aria-describedby="recentClearDescription">
     <h2 id="recentClearTitle" data-i18n="recentClearSelected">清除所选</h2>
     <p id="recentClearDescription"></p>
@@ -756,7 +767,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 3.0.1</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 3.0.2</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -989,7 +1000,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.0.1</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.0.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -1011,9 +1022,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.0.1</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.0.2</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.0.1</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.0.2</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>
@@ -1280,7 +1291,7 @@
       <p data-i18n="imageDialogHint">选择本地图片，或粘贴在线图片链接。</p>
       <aside class="image-storage-callout" aria-labelledby="imageStorageSupportTitle">
         <span class="image-storage-callout-icon" aria-hidden="true">4</span>
-        <span><strong id="imageStorageSupportTitle" data-i18n="imageStorageSupportTitle">支持 4 种图片存储方式</strong><small data-i18n="imageStorageSupportList">本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo</small></span>
+        <span><strong id="imageStorageSupportTitle" data-i18n="imageStorageSupportTitle">支持 5 种图片存储方式</strong><small data-i18n="imageStorageSupportList">本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo · PicGo CLI</small></span>
       </aside>
       <div class="image-dialog-fields">
         <label><span data-i18n="imageUrlLabel">图片链接</span><input id="imageUrl" type="text" data-i18n-placeholder="imageUrlPlaceholder" placeholder="https://…"></label>
@@ -1289,7 +1300,7 @@
       </div>
       <div class="table-dialog-actions image-dialog-actions">
         <button id="pickLocalImage" class="large-button secondary" type="button" data-i18n="chooseImage">选择图片…</button>
-        <button id="openImageUploadSettings" class="large-button image-storage-settings-button" type="button" data-i18n="imageUploadSettingsAction">设置 4 种图片方式</button>
+        <button id="openImageUploadSettings" class="large-button image-storage-settings-button" type="button" data-i18n="imageUploadSettingsAction">设置 5 种图片方式</button>
         <button id="cancelImage" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
         <button id="confirmImage" class="large-button primary" type="button" data-i18n="insert">插入</button>
       </div>
@@ -1320,7 +1331,53 @@
         <label><input type="radio" name="imageUploadMode" value="embedded"><span><strong data-i18n="embeddedImagesMode">内嵌 Base64</strong><small data-i18n="embeddedImagesHint">图片直接存入 Markdown，编码约增加 33% 体积</small></span></label>
         <label><input type="radio" name="imageUploadMode" value="picgo-cloud"><span><strong data-i18n="picGoCloudMode">PicGo 在线图床</strong><small data-i18n="picGoCloudModeHint">浏览器登录，无需安装 PicGo</small></span></label>
         <label><input type="radio" name="imageUploadMode" value="picgo"><span><strong data-i18n="picGoMode">本机 PicGo</strong><small data-i18n="picGoModeHint">兼容已安装的 PicGo 与其他图床</small></span></label>
+        <label><input type="radio" name="imageUploadMode" value="picgo-cli"><span><strong data-i18n="picGoCLIMode">PicGo CLI（按需启动）</strong><small data-i18n="picGoCLIHint">无需后台 Server，复用 PicGo CLI 图床配置</small></span></label>
       </fieldset>
+      <div id="picGoCLISetup" class="picgo-setup-panel picgo-cli-panel hidden">
+        <div class="picgo-cli-heading">
+          <h3 data-i18n="picGoCLIMode">PicGo CLI（按需启动）</h3>
+          <p data-i18n="picGoCLISetup"></p>
+        </div>
+        <div class="picgo-cli-actions">
+          <button id="preparePicGoCLI" class="large-button primary" type="button" data-i18n="picGoCLIPrepare">一键准备 CLI</button>
+          <button id="testPicGoCLI" class="large-button secondary" type="button" data-i18n="picGoCLITest">检测已有 CLI</button>
+        </div>
+        <section id="picGoPrepareProgress" class="picgo-prepare-progress hidden" aria-labelledby="picGoPrepareTitle">
+          <div class="picgo-prepare-heading"><span class="picgo-prepare-indicator" aria-hidden="true"></span><strong id="picGoPrepareTitle" role="status" aria-live="polite"></strong><span id="picGoPreparePercent"></span></div>
+          <progress id="picGoPrepareBar" max="100" aria-labelledby="picGoPrepareTitle"></progress>
+          <div class="picgo-prepare-meta"><span id="picGoPrepareDetail"></span><span id="picGoPrepareElapsed"></span></div>
+          <ol class="picgo-prepare-steps">
+            <li data-prepare-step="0"><b>1</b><span data-i18n="picGoStepDownload">下载运行环境</span></li>
+            <li data-prepare-step="1"><b>2</b><span data-i18n="picGoStepVerify">校验解压</span></li>
+            <li data-prepare-step="2"><b>3</b><span data-i18n="picGoStepInstall">安装 CLI</span></li>
+            <li data-prepare-step="3"><b>4</b><span data-i18n="picGoStepCheck">检查就绪</span></li>
+          </ol>
+        </section>
+        <div id="picGoCLIStatus" class="picgo-test-status" role="status" aria-live="polite"></div>
+        <section class="picgo-cli-hosting" aria-labelledby="picGoCLIHostingTitle">
+          <h3 id="picGoCLIHostingTitle" data-i18n="picGoCLIHostingTitle">2 · 配置图床</h3>
+          <p data-i18n="picGoCLIHostingHint"></p>
+          <div class="picgo-cli-actions">
+            <button id="loginPicGoCLI" class="large-button secondary" type="button" data-i18n="picGoCLILogin">通过 CLI 登录 PicGo Cloud</button>
+            <button id="selectPicGoCLIConfig" class="large-button secondary" type="button" data-i18n="picGoCLISelectConfig">选择已有图床配置</button>
+          </div>
+          <label class="picgo-cli-config-label"><span data-i18n="picGoCLIConfigPath">CLI 配置文件（留空使用 ~/.picgo/config.json）</span><input id="picGoCLIConfigPath" type="text" spellcheck="false" autocomplete="off"></label>
+        </section>
+        <section class="picgo-cli-hosting" aria-labelledby="picGoCLIUploadTestTitle">
+          <h3 id="picGoCLIUploadTestTitle" data-i18n="picGoCLIUploadTestTitle">3 · 验证上传</h3>
+          <p data-i18n="picGoCLIUploadTestHint"></p>
+          <strong class="picgo-cli-test-note" data-i18n="picGoCLINoImageNeeded">无需选图 · 自动使用内置测试图</strong>
+          <button id="testPicGoCLIUpload" class="large-button primary" type="button" data-i18n="picGoCLIUploadTest">验证上传配置</button>
+          <div id="picGoCLIUploadStatus" class="picgo-test-status" role="status" aria-live="polite"></div>
+        </section>
+        <details id="picGoCLIAdvanced" class="picgo-cli-advanced">
+          <summary data-i18n="picGoCLIAdvanced">高级设置 · 手动指定 CLI 路径</summary>
+          <div class="picgo-settings-fields">
+            <label><span data-i18n="picGoCLIPath">PicGo 可执行文件绝对路径（留空自动检测）</span><input id="picGoCLIPath" type="text" spellcheck="false" autocomplete="off"></label>
+          </div>
+        </details>
+        <p class="picgo-cli-footnote" data-i18n="picGoCLINotice"></p>
+      </div>
       <div id="picGoCloudSetup" class="picgo-cloud-setup picgo-setup-panel hidden">
         <span class="picgo-step-label">PICGO CLOUD</span>
         <h3 data-i18n="picGoCloudSetupTitle">登录后直接上传</h3>

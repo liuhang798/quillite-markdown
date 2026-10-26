@@ -12,7 +12,7 @@ const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url
 let browser;const results=[];
 try{
  await server.listen();browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE||undefined});
- for(const mode of ['picgo','picgo-cloud'])for(const scenario of (mode==='picgo'?['same','switch']:['same','switch','relogin']))for(const failure of ['401','timeout','invalid-response']){
+ for(const mode of ['picgo','picgo-cloud','picgo-cli'])for(const scenario of (mode!=='picgo-cloud'?['same','switch']:['same','switch','relogin']))for(const failure of ['401','timeout','invalid-response']){
   const id=`${mode}-${scenario}-${failure}`,page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];
   page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.href==='https://example.test/retry.png')return r.fulfill({path:imagePath,contentType:'image/png'});if(u.hostname!=='127.0.0.1')return r.abort();if(u.pathname.startsWith('/assets/'))return r.fulfill({path:imagePath,contentType:'image/png'});return r.continue();});
@@ -30,16 +30,21 @@ try{
      setImageUploadSettings:async input=>({mode:input.mode,serverUrl:input.serverUrl,hasCloudToken:failureAudit.connected}),testPicGo:async()=>({connected:true}),
      loginPicGoCloud:async()=>{failureAudit.connected=true;return{connected:true,user:`Synthetic ${++failureAudit.logins}`};},testPicGoCloud:async()=>({connected:failureAudit.connected,user:`Synthetic ${failureAudit.logins}`}),
      logoutPicGoCloud:async()=>{failureAudit.connected=false;return{mode:'local',hasCloudToken:false};},
+     testPicGoCLI:async()=>'3.2.0',testPicGoCLIUpload:async()=>'https://example.test/builtin-test.png',uploadImageToPicGoCLI:upload,
      uploadImageToPicGo:upload,uploadImageToPicGoCloud:upload});
    },imageData);
    await page.locator('#openFileButton').click();await page.locator('#editButton').click();
    await settings();await page.locator(`[name="imageUploadMode"][value="${mode}"]`).check();
-   if(mode==='picgo')await page.locator('#picGoInstalledNext').click();else await page.locator('#loginPicGoCloud').click();
+   if(mode==='picgo')await page.locator('#picGoInstalledNext').click();else if(mode==='picgo-cli'){await page.locator('#testPicGoCLI').click();await page.locator('#testPicGoCLIUpload').click();await page.locator('#cancelPicGoCLIEnable').click();}else await page.locator('#loginPicGoCloud').click();
    await page.locator('#saveImageUploadSettings').click();await page.locator('#imageUploadSettingsDialog').waitFor({state:'hidden'});await dismiss();
    const insert=async()=>{const button=page.locator('[data-format="image"]');if(await button.isVisible())await button.click();else{await page.locator('#moreFormatButton').click();await page.locator('#moreFormatMenu [data-format-command="image"]:visible').click();}await page.locator('#pickLocalImage').click();};
    await content.focus();await page.keyboard.press('Control+End');await insert();await page.waitForFunction(()=>failureAudit.calls.length===1);await shot('01-pending');
    if(scenario==='switch'){
-    await page.evaluate(()=>{failureAudit.next={path:'B.md',name:'B.md',directory:'.',content:'BETA',revision:'b'.repeat(64)};});await page.locator('#openFileButton').click();await page.locator('#editButton').click();
+    await page.evaluate(()=>{failureAudit.next={path:'B.md',name:'B.md',directory:'.',content:'BETA',revision:'b'.repeat(64)};});await page.locator('#openFileButton').click();
+    // Document loading now yields between stages; wait for B, not A's still-visible Edit toggle.
+    await page.locator('#documentView').waitFor({state:'visible'});
+    await page.locator('#documentView').getByText('BETA',{exact:true}).waitFor();
+    await page.locator('#editButton').click();await editor.waitFor({state:'visible'});
    }else if(scenario==='relogin'){
     await settings();await page.locator('#logoutPicGoCloud').click();await page.locator('[name="imageUploadMode"][value="picgo-cloud"]').check();await page.locator('#loginPicGoCloud').click();await page.waitForFunction(()=>failureAudit.logins===2);
     await page.locator('#saveImageUploadSettings').click();await page.locator('#imageUploadSettingsDialog').waitFor({state:'hidden'});await dismiss();

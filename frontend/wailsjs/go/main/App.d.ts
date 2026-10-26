@@ -80,6 +80,8 @@ export function ListFolder(arg1:string):Promise<main.FolderResult>;
 
 export function ListRecoveryArchives():Promise<Array<main.RecoveryArchive>>;
 
+export function LoginPicGoCLI(arg1:string,arg2:boolean):Promise<string>;
+
 export function LoginPicGoCloud():Promise<main.PicGoCloudStatus>;
 
 export function LogoutPicGoCloud():Promise<main.ImageUploadSettings>;
@@ -99,6 +101,8 @@ export function OpenFolder():Promise<main.FolderResult>;
 export function OpenRecentFile(arg1:string):Promise<main.Document>;
 
 export function OpenReferenceDocument(arg1:string):Promise<main.Document>;
+
+export function PreparePicGoCLI(arg1:boolean,arg2:string):Promise<string>;
 
 export function PreviewWorkspaceReplace(arg1:main.WorkspaceQuery):Promise<main.WorkspacePreview>;
 
@@ -160,6 +164,8 @@ export function SelectImage(arg1:string):Promise<string>;
 
 export function SelectPandoc():Promise<main.PandocStatus>;
 
+export function SelectPicGoCLIConfig():Promise<string>;
+
 export function SetAISettings(arg1:main.AISettingsInput):Promise<main.AISettings>;
 
 export function SetBodyTypography(arg1:main.BodyTypography):Promise<main.BodyTypography>;
@@ -196,9 +202,15 @@ export function TestAIProviderConnection(arg1:string,arg2:string):Promise<void>;
 
 export function TestPicGo(arg1:main.ImageUploadSettingsInput):Promise<void>;
 
+export function TestPicGoCLI(arg1:string):Promise<string>;
+
+export function TestPicGoCLIUpload(arg1:string,arg2:string,arg3:boolean):Promise<string>;
+
 export function TestPicGoCloud():Promise<main.PicGoCloudStatus>;
 
 export function UploadImageToPicGo(arg1:string,arg2:string):Promise<string>;
+
+export function UploadImageToPicGoCLI(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UploadImageToPicGoCloud(arg1:string,arg2:string):Promise<string>;
 

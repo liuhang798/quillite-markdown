@@ -518,6 +518,8 @@ export namespace main {
 		}
 	}
 	export class ImageUploadSettings {
+	    cliConfigPath: string;
+	    cliPath: string;
 	    mode: string;
 	    serverUrl: string;
 	    hasSecret: boolean;
@@ -529,6 +531,8 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cliConfigPath = source["cliConfigPath"];
+	        this.cliPath = source["cliPath"];
 	        this.mode = source["mode"];
 	        this.serverUrl = source["serverUrl"];
 	        this.hasSecret = source["hasSecret"];
@@ -536,6 +540,8 @@ export namespace main {
 	    }
 	}
 	export class ImageUploadSettingsInput {
+	    cliConfigPath: string;
+	    cliPath: string;
 	    mode: string;
 	    serverUrl: string;
 	    secret: string;
@@ -547,6 +553,8 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cliConfigPath = source["cliConfigPath"];
+	        this.cliPath = source["cliPath"];
 	        this.mode = source["mode"];
 	        this.serverUrl = source["serverUrl"];
 	        this.secret = source["secret"];
@@ -647,6 +655,8 @@ export namespace main {
 	    usageAnalytics: boolean;
 	    imageUploadMode?: string;
 	    picGoServerUrl?: string;
+	    picGoCliPath?: string;
+	    picGoCliConfigPath?: string;
 	    aiProvider?: string;
 	    aiBaseUrl?: string;
 	    aiBaseUrls?: Record<string, string>;
@@ -679,6 +689,8 @@ export namespace main {
 	        this.usageAnalytics = source["usageAnalytics"];
 	        this.imageUploadMode = source["imageUploadMode"];
 	        this.picGoServerUrl = source["picGoServerUrl"];
+	        this.picGoCliPath = source["picGoCliPath"];
+	        this.picGoCliConfigPath = source["picGoCliConfigPath"];
 	        this.aiProvider = source["aiProvider"];
 	        this.aiBaseUrl = source["aiBaseUrl"];
 	        this.aiBaseUrls = source["aiBaseUrls"];

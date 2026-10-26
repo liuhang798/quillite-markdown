@@ -1,6 +1,7 @@
 import katex from 'katex';
 import { Marked } from 'marked';
 import 'katex/contrib/mhchem';
+import { mathBlockStart } from './markdown-performance.js';
 
 const blockDelimiters = [
   {
@@ -102,12 +103,11 @@ export function renderLatex(source, displayMode = false) {
 export const mathBlockExtension = {
   name: 'mathBlock',
   level: 'block',
-  start(source) {
-    const indexes = [source.search(/^ {0,3}\$\$/m), source.search(/^ {0,3}\\\[/m)]
-      .filter(index => index >= 0);
-    return indexes.length ? Math.min(...indexes) : undefined;
-  },
+  start: mathBlockStart,
   tokenizer(source) {
+    // WebKit can flatten the entire remaining string even for an anchored
+    // regexp mismatch. Reject ordinary paragraphs using a bounded prefix.
+    if (!/^ {0,3}(?:\$\$|\\\[)/.test(source.slice(0, 5))) return undefined;
     for (const delimiter of blockDelimiters) {
       const match = delimiter.multiline.exec(source) || delimiter.singleline.exec(source);
       if (!match) continue;

@@ -18,10 +18,10 @@ export function mergeSelectionRects(rectangles) {
   return result;
 }
 
-export function liveSelectionDisplay(hasWidget) {
+export function liveSelectionDisplay(hasWidget, skipRange = () => false) {
   const measured=view=>{
     const {ranges}=view.state.selection,range=ranges[0];
-    return ranges.length>1||!range.empty&&!hasWidget(view,range);
+    return ranges.length>1||!range.empty&&(skipRange(view,range)||!hasWidget(view,range));
   };
   return [
     EditorView.editorAttributes.of(view => ({ class: measured(view) ? 'cm-live-measured-selection' : '' })),
@@ -37,7 +37,9 @@ export function liveSelectionDisplay(hasWidget) {
         const baseLeft = (view.textDirection === Direction.LTR ? scroll.left : scroll.right - view.scrollDOM.clientWidth * view.scaleX) - view.scrollDOM.scrollLeft * view.scaleX;
         const baseTop = scroll.top - view.scrollDOM.scrollTop * view.scaleY;
         for (const range of view.state.selection.ranges) {
-          if (range.empty || range.to <= view.viewport.from || range.from >= view.viewport.to) continue;
+          // An atomic card draws its own border while retaining the real
+          // selection for copy/delete. Do not measure its hidden source DOM.
+          if (range.empty || skipRange(view,range) || range.to <= view.viewport.from || range.from >= view.viewport.to) continue;
           let rects = [];
           if (!hasWidget(view, range)) {
             for(const part of selectionLineRanges(view.state.doc,range,view.visibleRanges)){

@@ -21,6 +21,7 @@ try{
  const open=async(text=source)=>{
   await page.evaluate(text=>{window.quilliteMarkdown.openFile=async()=>({path:'large.md',name:'large.md',directory:'.',content:text,revision:'a'.repeat(64)});},text);
   await page.locator('#openFileButton').click();
+  await page.locator('.document-loading[hidden]').waitFor({state:'attached'});
   await page.locator('#markdownContent h1').waitFor();
  };
  await open();

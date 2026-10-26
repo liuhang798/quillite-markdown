@@ -100,7 +100,7 @@ test('format example and sidebar expose every requested built-in reference', () 
   assert.equal((index.match(/data-reference-document=/g) || []).length, 6);
   assert.equal((index.match(/data-home-reference-document=/g) || []).length, 3);
   assert.ok(index.indexOf('data-reference-document="formats"') < index.indexOf('id="folderCta"'));
-  assert.match(renderer, /displayDocument\(doc, \{ addToLibrary: false \}\)/);
+  assert.match(renderer, /readDocumentForOpen\(request, \(\) => window.quilliteMarkdown.openReferenceDocument\(kind\), \{addToLibrary: false\}\)/);
   assert.match(renderer, /state\.currentFile\.readOnly/);
   assert.match(renderer, /els\.editButton\.disabled = !state\.currentFile \|\| readOnly/);
   assert.match(renderer, /els\.documentView\.classList\.toggle\('reference-document', readOnly\)/);

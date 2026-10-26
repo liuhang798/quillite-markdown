@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import { picGoPrepareProgressModel, picGoPrepareBytes } from './picgo-prepare-progress.js';
 import { installTextStyleMenu } from './text-style-menu.js';
 import { markdownLinkAttribute } from './markdown-link-attributes.js';
 import { frontmatterRenderSource } from './frontmatter.js';
@@ -25,6 +26,7 @@ import { applyBodyTypography, normalizeBodyTypography, readBodyTypography, bodyS
 import hljs from 'highlight.js/lib/common';
 import { createReaderCache, READER_DEFER_THRESHOLD, cancelReaderWork, revealReaderLayout, finishReaderWork, scheduleReaderWork } from './reader-performance.js';
 import { cancelPreviewImages, loadPreviewImages, waitForPreviewImageReads } from './image-load-session.js';
+import { mountDocumentLoading } from './document-loading.js';
 import { cancelMermaidRendering, convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
 import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory, searchDiagramTemplates } from './diagram-templates.js';
@@ -54,6 +56,7 @@ import { captureReadingPosition, restoreReadingPosition } from './reading-positi
 import { editorOutline, captureEditorPosition, restoreEditorPosition } from './editor-navigation.js';
 import { largeHeadingTokenizer } from './marked-large-heading.js';
 import { openExternalSafely } from './external-links.js';
+import { resolveDocumentLink } from './document-links.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
 import { createTableModel, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, serializeTableReplacement, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
@@ -65,6 +68,7 @@ import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-te
 import { detectAISensitiveContent, redactAISensitiveContent, restoreAISensitiveContent, restoreAISuggestions } from './ai-privacy.js';
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
+import { createTocTitle, tocTitleHTML } from './toc-title.js';
 import { documentHasDiagrams, documentPerformanceProfile, documentWordCount } from './document-performance.js';
 import { documentVersionLineDifference, historyPreviewText } from './version-history.js';
 import { createDocumentTools } from './document-tools.js';
@@ -348,6 +352,12 @@ const state = {
   usageAnalytics: true,
   imageUploadMode: 'local',
   picGoServerURL: 'http://127.0.0.1:36677',
+  picGoCLIPath: '',
+  picGoCLIConfigPath: '',
+  picGoCLILastError: '',
+  picGoCLIReady: false,
+  picGoCLIChecking: false,
+  picGoCLIRun: 0,
   picGoHasSecret: false,
 	picGoCloudHasToken: false,
 	picGoCloudConnectionReady: false,
@@ -485,7 +495,7 @@ const translations = {
     recoveryCancel: '取消恢复', recoveryRestoring: '正在读取草稿…',
     tablePasteLimit: '粘贴超出表格容量（扩展最多 20 行、12 列，内容最多 500,000 字符），原内容未改变。',
     tablePasteShape: '无法按单元格粘贴：请使用列数一致、无合并单元格、图片或表格外正文的文字表格。原内容未改变。',
-    recoveryRestoredCopy: '原文件无法读取，已恢复为独立新草稿。首次保存时请选择名称和位置，原文件保持不变。',
+    recoveryRestoredCopy: '原文件无法读取，已恢复为独立新草稿。保存会写入当前草稿位置，也可另存为；原文件保持不变。',
     formulaEditStale: '文档或公式内容已变化。未写入任何修改，请关闭后重新打开公式。',
     formulaReplaceDraftConfirm: '重新生成公式会替换手动编辑的源码，是否继续？',
     formulaSyntaxError: '公式无法解析，请检查下方提示与源码；未写入文档。',
@@ -550,7 +560,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 3.0.1', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 3.0.2', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -563,7 +573,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     boldTitle: '加粗 (Ctrl+B)', italicTitle: '斜体 (Ctrl+I)', strikethroughTitle: '删除线 (Ctrl+Shift+X)', highlightTitle: '高亮 (Ctrl+Shift+H)', textColorTitle: '文字颜色', textColorMenu: '选择文字颜色', textColorDefault: '默认颜色', textColorOption: '颜色', coloredText: '彩色文字', linkTitle: '插入链接 (Ctrl+K)', inlineCode: '行内代码', codeBlock: '代码块', quote: '引用', unorderedList: '无序列表', orderedList: '有序列表', taskList: '任务列表', horizontalRule: '分隔线', insertTable: '插入表格', insertImage: '插入图片', imageAlt: '图片说明',
     moreFormats: '更多格式', toolbarOverflow: '折叠的工具栏格式', extendedFormats: '扩展格式', boldItalic: '粗斜体', underline: '下划线', superscript: '上标', subscript: '下标', formulaBuilder: '学科公式 🔥', formulaShort: '公式', diagramBuilder: '图表生成器 🔥', diagramShort: '图表', diagramGuide: '查看图表教程 ↗', mermaidFlowchart: 'Mermaid 流程图', mermaidSequence: 'Mermaid 时序图', mermaidGantt: 'Mermaid 甘特图', mermaidDiagram: 'Mermaid 图表', mermaidRenderError: '图表语法有误', mermaidRenderHint: '请检查 Mermaid 源码，文档其他内容不受影响。', dataChart: '数据图表', dataChartRenderError: '数据图表配置有误', dataChartRenderHint: '请检查 ECharts JSON 配置，文档其他内容不受影响。', inlineMath: '行内公式', mathBlock: '块级公式', chemicalFormula: '化学公式', mathGuide: '查看公式教程 ↗', numberedMath: '编号公式', mathExpression: 'LaTeX 公式', hardBreak: '强制换行', footnote: '脚注', referenceLink: '引用式链接', collapsible: '折叠区块', keyboardKey: '键盘按键', autolink: '自动链接', escapeSyntax: '转义符号', htmlBlock: 'HTML 区块', comment: '注释', footnotes: '脚注', footnoteText: '脚注内容', referenceName: '引用名称', collapsibleTitle: '折叠标题',
     markdownTool: 'MARKDOWN 工具', tableDialogHint: '直接填写单元格，拖动行列调整顺序或列宽，并设置每列对齐方式。', visualTableEditor: '可视化表格编辑', editTable: '编辑表格', insertTableAction: '插入表格', saveTable: '保存表格', rows: '行数', columns: '列数', columnNumber: '第 {number} 列', headerRow: '表头', rowNumber: '第 {number} 行', addRow: '添加行', addColumn: '添加列', deleteRow: '删除行', deleteColumn: '删除列', alignment: '对齐', alignLeft: '左对齐', alignCenter: '居中', alignRight: '右对齐', dragTableHint: '拖动手柄调整行列顺序', resizeTableHint: '拖动列边界调整宽度', tableCellPlaceholder: '填写内容', tableMinimumSize: 'Markdown 表格至少需要 2 行、1 列', cancel: '取消', insert: '插入', newFileFailed: '无法新建文档', imageSelectFailed: '无法导入图片', imageImported: '图片已复制到 assets 资源目录', imagePasteFailed: '无法粘贴图片', languageSaveFailed: '无法保存语言设置，请重试', imageDialogHint: '选择本地图片或粘贴在线链接；本地图片会自动复制到 assets 资源目录。', imageUrlLabel: '图片链接', imageUrlPlaceholder: 'https:// 或 http:// 链接', imageAltPlaceholder: '可选的图片说明', imageWidth: '显示宽度', imageWidthHint: '拖拽和粘贴图片也会使用此宽度', localImage: '本地图片…', imageUrlInvalid: '请输入有效的 http:// 或 https:// 链接',
-    chooseImage: '选择图片…', imageUploadSettings: '图床设置', imageUploadSettingsAction: '设置 4 种图片方式', imageStorageSupportTitle: '支持 4 种图片存储方式', imageStorageSupportList: '本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo', imageUploadSettingsHint: '可直接登录 PicGo 在线图床，无需安装额外软件；也可继续使用本地 assets 或已安装的 PicGo。', imageInsertMode: '图片插入方式', localAssetsMode: '本地 assets', localAssetsModeHint: '保存相对路径，离线可用', localAssetsReadyTitle: '本地模式已就绪', localAssetsReadyHint: '图片会复制到文档旁的 assets，便于离线阅读和移动。', picGoCloudMode: 'PicGo 在线图床', picGoCloudModeHint: '浏览器登录，无需安装 PicGo', picGoCloudSetupTitle: '登录后直接上传', picGoCloudSetupHint: '将在浏览器打开 PicGo Cloud 登录页。登录令牌仅保存在本机；免费账户提供 200 个文件、500 MB 存储空间，额度与计费以 PicGo Cloud 为准。', picGoCloudConnectedTitle: 'PicGo Cloud 已连接', loginPicGoCloud: '登录 PicGo Cloud', logoutPicGoCloud: '退出登录', testPicGoCloud: '检查连接', picGoCloudSigningIn: '请在浏览器完成 PicGo Cloud 登录…', picGoCloudChecking: '正在检查 PicGo Cloud 连接…', picGoCloudConnected: '连接正常，可以启用在线图床', picGoCloudLoginFailed: 'PicGo Cloud 登录失败，请重试', picGoCloudConnectionFailed: 'PicGo Cloud 连接失效，请重新登录', picGoCloudLoggedOut: '已退出 PicGo Cloud', picGoMode: '本机 PicGo', picGoModeHint: '兼容已安装的 PicGo 与其他图床', picGoSetupProgress: '本机 PicGo 配置进度', picGoSetupInstallShort: '安装 PicGo', picGoSetupConfigureShort: '配置并检测', picGoSetupReadyShort: '完成', picGoSetupStep1: '第 1 步', picGoSetupInstallTitle: '安装并启动 PicGo', picGoSetupInstallHint: '此兼容模式需要安装 PicGo。安装后打开，并让它保持在后台运行。', downloadPicGo: '打开 PicGo 下载页', picGoInstalledNext: '已经安装，下一步', picGoSetupStep2: '第 2 步', picGoSetupConfigureTitle: '配置图床并开启 Server', picGoSetupConfigureHost: '在 PicGo 中配置要使用的图床。', picGoSetupEnableServer: '打开“PicGo 设置 → PicGo-Server”，确认服务已开启，端口为 36677。', picGoSetupKeepRunning: '保持 PicGo 在后台运行，然后让轻阅自动检测。', picGoSetupBack: '上一步', autoDetectPicGo: '自动检测 PicGo', picGoSetupStep3: '第 3 步', picGoSetupReadyTitle: '本机 PicGo 已连接', picGoSetupReadyHint: '保存后，粘贴、拖拽和选择的图片将自动上传；失败时仍会安全使用本地 assets。', picGoAdvancedSettings: '高级设置', picGoServerURL: 'PicGo 服务地址', picGoSecret: '服务密钥（可选）', picGoSecretPlaceholder: '留空则保留已保存密钥', clearPicGoSecret: '清除已保存密钥', picGoSecurityHint: '默认无需修改。仅允许连接本机 localhost 地址；第三方图床密钥继续由 PicGo 管理。', testPicGo: '测试连接', saveSettings: '保存设置', enablePicGo: '启用在线图床', picGoTesting: '正在自动检测 PicGo…', picGoConnected: '检测成功，可以启用本机 PicGo', picGoConnectionFailed: '没有检测到 PicGo。请确认 PicGo 正在运行并已开启 36677 端口的 PicGo-Server；如改过地址或密钥，请在高级设置中核对。', imageUploadSettingsSaved: '图床设置已保存', imageUploadSettingsSaveFailed: '图床设置保存失败', imageUploaded: '图片已上传到在线图床', picGoUploadFailedFallback: '在线图床上传失败，已自动使用本地图片', imageUploadingTitle: '正在上传图片', imageUploadPreparing: '正在准备图片…', imageUploadingCloud: '正在上传到 PicGo Cloud…', imageUploadingLocalPicGo: '正在发送到本机 PicGo…', imageUploadFinalizing: '正在生成在线链接…', imageUploadComplete: '上传完成',
+    chooseImage: '选择图片…', imageUploadSettings: '图床设置', imageUploadSettingsAction: '设置 5 种图片方式', imageStorageSupportTitle: '支持 5 种图片存储方式', imageStorageSupportList: '本地 assets · 内嵌 Base64 · PicGo Cloud · 本机 PicGo · PicGo CLI', imageUploadSettingsHint: '可直接登录 PicGo 在线图床，无需安装额外软件；也可继续使用本地 assets 或已安装的 PicGo。', imageInsertMode: '图片插入方式', localAssetsMode: '本地 assets', localAssetsModeHint: '保存相对路径，离线可用', localAssetsReadyTitle: '本地模式已就绪', localAssetsReadyHint: '图片会复制到文档旁的 assets，便于离线阅读和移动。', picGoCloudMode: 'PicGo 在线图床', picGoCloudModeHint: '浏览器登录，无需安装 PicGo', picGoCloudSetupTitle: '登录后直接上传', picGoCloudSetupHint: '将在浏览器打开 PicGo Cloud 登录页。登录令牌仅保存在本机；免费账户提供 200 个文件、500 MB 存储空间，额度与计费以 PicGo Cloud 为准。', picGoCloudConnectedTitle: 'PicGo Cloud 已连接', loginPicGoCloud: '登录 PicGo Cloud', logoutPicGoCloud: '退出登录', testPicGoCloud: '检查连接', picGoCloudSigningIn: '请在浏览器完成 PicGo Cloud 登录…', picGoCloudChecking: '正在检查 PicGo Cloud 连接…', picGoCloudConnected: '连接正常，可以启用在线图床', picGoCloudLoginFailed: 'PicGo Cloud 登录失败，请重试', picGoCloudConnectionFailed: 'PicGo Cloud 连接失效，请重新登录', picGoCloudLoggedOut: '已退出 PicGo Cloud', picGoMode: '本机 PicGo', picGoModeHint: '兼容已安装的 PicGo 与其他图床', picGoSetupProgress: '本机 PicGo 配置进度', picGoSetupInstallShort: '安装 PicGo', picGoSetupConfigureShort: '配置并检测', picGoSetupReadyShort: '完成', picGoSetupStep1: '第 1 步', picGoSetupInstallTitle: '安装并启动 PicGo', picGoSetupInstallHint: '此兼容模式需要安装 PicGo。安装后打开，并让它保持在后台运行。', downloadPicGo: '打开 PicGo 下载页', picGoInstalledNext: '已经安装，下一步', picGoSetupStep2: '第 2 步', picGoSetupConfigureTitle: '配置图床并开启 Server', picGoSetupConfigureHost: '在 PicGo 中配置要使用的图床。', picGoSetupEnableServer: '打开“PicGo 设置 → PicGo-Server”，确认服务已开启，端口为 36677。', picGoSetupKeepRunning: '保持 PicGo 在后台运行，然后让轻阅自动检测。', picGoSetupBack: '上一步', autoDetectPicGo: '自动检测 PicGo', picGoSetupStep3: '第 3 步', picGoSetupReadyTitle: '本机 PicGo 已连接', picGoSetupReadyHint: '保存后，粘贴、拖拽和选择的图片将自动上传；失败时仍会安全使用本地 assets。', picGoAdvancedSettings: '高级设置', picGoServerURL: 'PicGo 服务地址', picGoSecret: '服务密钥（可选）', picGoSecretPlaceholder: '留空则保留已保存密钥', clearPicGoSecret: '清除已保存密钥', picGoSecurityHint: '默认无需修改。仅允许连接本机 localhost 地址；第三方图床密钥继续由 PicGo 管理。', testPicGo: '测试连接', saveSettings: '保存设置', enablePicGo: '启用在线图床', picGoTesting: '正在自动检测 PicGo…', picGoConnected: '检测成功，可以启用本机 PicGo', picGoConnectionFailed: '没有检测到 PicGo。请确认 PicGo 正在运行并已开启 36677 端口的 PicGo-Server；如改过地址或密钥，请在高级设置中核对。', imageUploadSettingsSaved: '图床设置已保存', imageUploadSettingsSaveFailed: '图床设置保存失败', imageUploaded: '图片已上传到在线图床', picGoUploadFailedFallback: '在线图床上传失败，已自动使用本地图片', imageUploadingTitle: '正在上传图片', imageUploadPreparing: '正在准备图片…', imageUploadingCloud: '正在上传到 PicGo Cloud…', imageUploadingLocalPicGo: '正在发送到本机 PicGo…', imageUploadFinalizing: '正在生成在线链接…', imageUploadComplete: '上传完成',
 formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式', formulaWizardHint: '按学科选择常用公式，填写参数后直接插入 Markdown。', formulaEditTitle: '修改当前公式', formulaEditHint: '直接修改参数、公式源码或插入方式，保存后会原位替换当前公式。', formulaPreviewEditHint: '双击修改此公式', formulaSubject: '学科分类', formulaOutput: '插入方式', selectedFormula: '已选公式', equationNumber: '公式编号', formulaPreview: '实时预览', generatedMarkdown: '生成的 Markdown', insertFormula: '插入公式', saveFormulaChanges: '保存修改', formulaModeInline: '行内公式', formulaModeBlock: '块级公式', formulaModeNumbered: '编号公式', formulaInvalid: '请填写有效的公式内容',
     diagramWizardLabel: 'MERMAID 图表', diagramWizardTitle: '选择并生成图表', diagramWizardHint: '带画布图标的常用图表支持可视化编辑；其他图表可编辑源码并实时预览。', diagramCategory: '图表分类', selectedDiagram: '已选图表', diagramSource: '图表源码', diagramPreview: '实时预览', insertDiagram: '插入图表', saveDiagramChanges: '保存修改', editFlowchartVisually: '在画布中编辑流程图', visualEditorAvailable: '支持可视化编辑', structuredDiagramEditorAria: '可视化图表数据编辑器', structuredDiagramAddRow: '添加一行', structuredDiagramHint: '直接修改字段，右侧预览会实时更新。', structuredDiagramRemoveRow: '删除此行', diagramInvalid: '请输入有效的 Mermaid 图表源码', diagramFullscreen: '全屏绘图', diagramExitFullscreen: '退出全屏',
     flowchartVisualMode: '可视化编辑', flowchartSourceMode: '源码模式', flowchartVisualSafeHint: '操作会自动生成兼容 Mermaid 的源码', flowchartEditModeAria: '流程图编辑方式', flowchartEditorAria: '可视化流程图编辑器', flowchartAddAria: '添加流程图节点', flowchartCanvasAria: '可编辑流程图画布', flowchartZoomAria: '画布缩放', flowchartZoomOut: '缩小画布', flowchartZoomIn: '放大画布', flowchartZoomReset: '恢复 100%', flowchartProcess: '步骤', flowchartDecision: '判断', flowchartTerminal: '开始／结束', flowchartAddProcess: '添加处理步骤', flowchartAddDecision: '添加判断分支', flowchartAddTerminal: '添加开始或结束', flowchartConnect: '连接节点', flowchartConnectHint: '依次点击两个节点创建连线', flowchartAutoLayout: '自动排列', flowchartAutoLayoutHint: '按照流程方向自动排列', flowchartDirection: '流程方向', flowchartDirectionLR: '左 → 右', flowchartDirectionTD: '上 → 下', flowchartDirectionRL: '右 → 左', flowchartDirectionBT: '下 → 上', flowchartCanvasHint: '双击空白处添加步骤；拖动节点调整位置；连接模式下依次点击两个节点。', flowchartProperties: '所选元素', flowchartNothingSelected: '点击节点或连线后，可在这里修改。', flowchartNodeText: '节点文字', flowchartNodeShape: '节点形状', flowchartEdgeText: '连线文字', flowchartEdgeStyle: '连线样式', flowchartEdgeSolid: '箭头', flowchartEdgeDashed: '虚线箭头', flowchartEdgeThick: '粗箭头', flowchartEdgeLine: '无箭头直线', flowchartDeleteSelection: '删除所选元素', flowchartConnectActive: '请点击起点节点', flowchartConnectTarget: '再点击终点节点', flowchartVisualUnsupported: '当前源码包含子图、样式或其他高级语法，请继续使用源码模式，避免内容丢失。', flowchartNodeDefault: '新步骤', flowchartDecisionDefault: '是否满足条件？', flowchartTerminalDefault: '开始／结束',
@@ -578,7 +588,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     recoveryCancel: 'Cancel recovery', recoveryRestoring: 'Reading draft…',
     tablePasteLimit: 'Paste exceeds table capacity (growth up to 20 rows, 12 columns; 500,000 characters). Existing content is unchanged.',
     tablePasteShape: 'Cannot paste this grid. Use a text table with consistent columns, no merged cells, media or outside prose. Existing content is unchanged.',
-    recoveryRestoredCopy: 'The source could not be read. Recovered into a separate new draft; choose a name and location when saving. The original is unchanged.',
+    recoveryRestoredCopy: 'The source could not be read. Recovered into a separate new draft. Save writes to its current location; use Save As to choose another. The original is unchanged.',
     formulaEditStale: 'The document or formula changed. Nothing was written. Close and reopen the formula.',
     formulaReplaceDraftConfirm: 'Regenerating replaces the formula source you edited. Continue?',
     formulaSyntaxError: 'Unable to parse the equation. Check the message and source; nothing was written.',
@@ -643,7 +653,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 3.0.1', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 3.0.2', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -656,7 +666,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     boldTitle: 'Bold (Ctrl+B)', italicTitle: 'Italic (Ctrl+I)', strikethroughTitle: 'Strikethrough (Ctrl+Shift+X)', highlightTitle: 'Highlight (Ctrl+Shift+H)', textColorTitle: 'Text color', textColorMenu: 'Choose text color', textColorDefault: 'Default', textColorOption: 'Color', coloredText: 'colored text', linkTitle: 'Insert link (Ctrl+K)', inlineCode: 'Inline code', codeBlock: 'Code block', quote: 'Quote', unorderedList: 'Bulleted list', orderedList: 'Numbered list', taskList: 'Task list', horizontalRule: 'Horizontal rule', insertTable: 'Insert table', insertImage: 'Insert image', imageAlt: 'Image description',
     moreFormats: 'More formats', toolbarOverflow: 'Collapsed toolbar formats', extendedFormats: 'Extended formats', boldItalic: 'Bold italic', underline: 'Underline', superscript: 'Superscript', subscript: 'Subscript', formulaBuilder: 'Academic formulas 🔥', formulaShort: 'Formula', diagramBuilder: 'Diagram builder 🔥', diagramShort: 'Diagram', diagramGuide: 'Diagram guide ↗', mermaidFlowchart: 'Mermaid flowchart', mermaidSequence: 'Mermaid sequence diagram', mermaidGantt: 'Mermaid Gantt chart', mermaidDiagram: 'Mermaid diagram', mermaidRenderError: 'Invalid diagram syntax', mermaidRenderHint: 'Check the Mermaid source. The rest of the document is unaffected.', dataChart: 'Data chart', dataChartRenderError: 'Invalid data chart configuration', dataChartRenderHint: 'Check the ECharts JSON. The rest of the document is unaffected.', inlineMath: 'Inline formula', mathBlock: 'Display formula', chemicalFormula: 'Chemical formula', mathGuide: 'Formula guide ↗', numberedMath: 'Numbered formula', mathExpression: 'LaTeX expression', hardBreak: 'Hard line break', footnote: 'Footnote', referenceLink: 'Reference link', collapsible: 'Collapsible section', keyboardKey: 'Keyboard key', autolink: 'Autolink', escapeSyntax: 'Escape syntax', htmlBlock: 'HTML block', comment: 'Comment', footnotes: 'Footnotes', footnoteText: 'Footnote text', referenceName: 'reference', collapsibleTitle: 'Section title',
     markdownTool: 'MARKDOWN TOOL', tableDialogHint: 'Edit cells directly, drag rows or columns to reorder or resize, and set alignment for each column.', visualTableEditor: 'Visual table editor', editTable: 'Edit table', insertTableAction: 'Insert table', saveTable: 'Save table', rows: 'Rows', columns: 'Columns', columnNumber: 'Column {number}', headerRow: 'Header', rowNumber: 'Row {number}', addRow: 'Add row', addColumn: 'Add column', deleteRow: 'Delete row', deleteColumn: 'Delete column', alignment: 'Alignment', alignLeft: 'Align left', alignCenter: 'Center', alignRight: 'Align right', dragTableHint: 'Drag handles to reorder rows or columns', resizeTableHint: 'Drag column borders to resize', tableCellPlaceholder: 'Enter content', tableMinimumSize: 'A Markdown table needs at least 2 rows and 1 column', cancel: 'Cancel', insert: 'Insert', newFileFailed: 'Unable to create the document', imageSelectFailed: 'Unable to import the image', imageImported: 'Image copied to the assets folder', imagePasteFailed: 'Unable to paste the image', languageSaveFailed: 'Unable to save the language setting. Please try again.', imageDialogHint: 'Pick a local image or paste an online link. Local images are copied to the assets folder automatically.', imageUrlLabel: 'Image URL', imageUrlPlaceholder: 'https:// or http:// link', imageAltPlaceholder: 'Optional image description', imageWidth: 'Display width', imageWidthHint: 'Dropped and pasted images use this width too', localImage: 'Local image…', imageUrlInvalid: 'Enter a valid http:// or https:// link',
-    chooseImage: 'Choose image…', imageUploadSettings: 'Image hosting', imageUploadSettingsAction: 'Set up 4 image methods', imageStorageSupportTitle: 'Supports 4 image storage methods', imageStorageSupportList: 'Local assets · Embedded Base64 · PicGo Cloud · Local PicGo', imageUploadSettingsHint: 'Sign in to PicGo Cloud directly without installing another app, or keep local assets or an existing PicGo installation.', imageInsertMode: 'Image insertion mode', localAssetsMode: 'Local assets', localAssetsModeHint: 'Portable relative paths that work offline', localAssetsReadyTitle: 'Local mode is ready', localAssetsReadyHint: 'Images are copied to an assets folder beside the document for offline use and portability.', picGoCloudMode: 'PicGo Cloud', picGoCloudModeHint: 'Browser sign-in; no PicGo installation', picGoCloudSetupTitle: 'Sign in and upload directly', picGoCloudSetupHint: 'Quillite opens PicGo Cloud in your browser. The login token stays on this device. Free accounts include 200 files and 500 MB of storage; current limits and billing are controlled by PicGo Cloud.', picGoCloudConnectedTitle: 'PicGo Cloud connected', loginPicGoCloud: 'Sign in to PicGo Cloud', logoutPicGoCloud: 'Sign out', testPicGoCloud: 'Check connection', picGoCloudSigningIn: 'Complete PicGo Cloud sign-in in your browser…', picGoCloudChecking: 'Checking the PicGo Cloud connection…', picGoCloudConnected: 'Connected. Online hosting is ready to enable.', picGoCloudLoginFailed: 'PicGo Cloud sign-in failed. Please try again.', picGoCloudConnectionFailed: 'The PicGo Cloud connection expired. Sign in again.', picGoCloudLoggedOut: 'Signed out of PicGo Cloud', picGoMode: 'Local PicGo', picGoModeHint: 'Use an installed PicGo and its other providers', picGoSetupProgress: 'Local PicGo setup progress', picGoSetupInstallShort: 'Install PicGo', picGoSetupConfigureShort: 'Configure & detect', picGoSetupReadyShort: 'Ready', picGoSetupStep1: 'Step 1', picGoSetupInstallTitle: 'Install and start PicGo', picGoSetupInstallHint: 'This compatibility mode requires PicGo. Open it after installation and keep it running in the background.', downloadPicGo: 'Open PicGo download page', picGoInstalledNext: 'Installed — continue', picGoSetupStep2: 'Step 2', picGoSetupConfigureTitle: 'Configure hosting and enable Server', picGoSetupConfigureHost: 'Configure the provider you want to use inside PicGo.', picGoSetupEnableServer: 'Open PicGo Settings → PicGo-Server, enable it, and keep port 36677.', picGoSetupKeepRunning: 'Keep PicGo running in the background, then let Quillite detect it.', picGoSetupBack: 'Back', autoDetectPicGo: 'Detect PicGo automatically', picGoSetupStep3: 'Step 3', picGoSetupReadyTitle: 'Local PicGo connected', picGoSetupReadyHint: 'After saving, chosen, dropped, and pasted images upload automatically. Failures still fall back safely to local assets.', picGoAdvancedSettings: 'Advanced settings', picGoServerURL: 'PicGo server address', picGoSecret: 'Server secret (optional)', picGoSecretPlaceholder: 'Leave blank to keep the saved secret', clearPicGoSecret: 'Clear the saved secret', picGoSecurityHint: 'No changes are normally needed. Only localhost connections are allowed, and third-party provider credentials remain managed by PicGo.', testPicGo: 'Test connection', saveSettings: 'Save settings', enablePicGo: 'Enable online hosting', picGoTesting: 'Detecting PicGo automatically…', picGoConnected: 'Detection succeeded. Local PicGo is ready to enable.', picGoConnectionFailed: 'PicGo was not detected. Make sure it is running with PicGo-Server enabled on port 36677. If you changed the address or secret, check Advanced settings.', imageUploadSettingsSaved: 'Image hosting settings saved', imageUploadSettingsSaveFailed: 'Unable to save image hosting settings', imageUploaded: 'Image uploaded to online hosting', picGoUploadFailedFallback: 'Online upload failed; the local image was used instead', imageUploadingTitle: 'Uploading image', imageUploadPreparing: 'Preparing the image…', imageUploadingCloud: 'Uploading to PicGo Cloud…', imageUploadingLocalPicGo: 'Sending to local PicGo…', imageUploadFinalizing: 'Generating the online link…', imageUploadComplete: 'Upload complete',
+    chooseImage: 'Choose image…', imageUploadSettings: 'Image hosting', imageUploadSettingsAction: 'Set up 5 image methods', imageStorageSupportTitle: 'Supports 5 image storage methods', imageStorageSupportList: 'Local assets · Embedded Base64 · PicGo Cloud · Local PicGo · PicGo CLI', imageUploadSettingsHint: 'Sign in to PicGo Cloud directly without installing another app, or keep local assets or an existing PicGo installation.', imageInsertMode: 'Image insertion mode', localAssetsMode: 'Local assets', localAssetsModeHint: 'Portable relative paths that work offline', localAssetsReadyTitle: 'Local mode is ready', localAssetsReadyHint: 'Images are copied to an assets folder beside the document for offline use and portability.', picGoCloudMode: 'PicGo Cloud', picGoCloudModeHint: 'Browser sign-in; no PicGo installation', picGoCloudSetupTitle: 'Sign in and upload directly', picGoCloudSetupHint: 'Quillite opens PicGo Cloud in your browser. The login token stays on this device. Free accounts include 200 files and 500 MB of storage; current limits and billing are controlled by PicGo Cloud.', picGoCloudConnectedTitle: 'PicGo Cloud connected', loginPicGoCloud: 'Sign in to PicGo Cloud', logoutPicGoCloud: 'Sign out', testPicGoCloud: 'Check connection', picGoCloudSigningIn: 'Complete PicGo Cloud sign-in in your browser…', picGoCloudChecking: 'Checking the PicGo Cloud connection…', picGoCloudConnected: 'Connected. Online hosting is ready to enable.', picGoCloudLoginFailed: 'PicGo Cloud sign-in failed. Please try again.', picGoCloudConnectionFailed: 'The PicGo Cloud connection expired. Sign in again.', picGoCloudLoggedOut: 'Signed out of PicGo Cloud', picGoMode: 'Local PicGo', picGoModeHint: 'Use an installed PicGo and its other providers', picGoSetupProgress: 'Local PicGo setup progress', picGoSetupInstallShort: 'Install PicGo', picGoSetupConfigureShort: 'Configure & detect', picGoSetupReadyShort: 'Ready', picGoSetupStep1: 'Step 1', picGoSetupInstallTitle: 'Install and start PicGo', picGoSetupInstallHint: 'This compatibility mode requires PicGo. Open it after installation and keep it running in the background.', downloadPicGo: 'Open PicGo download page', picGoInstalledNext: 'Installed — continue', picGoSetupStep2: 'Step 2', picGoSetupConfigureTitle: 'Configure hosting and enable Server', picGoSetupConfigureHost: 'Configure the provider you want to use inside PicGo.', picGoSetupEnableServer: 'Open PicGo Settings → PicGo-Server, enable it, and keep port 36677.', picGoSetupKeepRunning: 'Keep PicGo running in the background, then let Quillite detect it.', picGoSetupBack: 'Back', autoDetectPicGo: 'Detect PicGo automatically', picGoSetupStep3: 'Step 3', picGoSetupReadyTitle: 'Local PicGo connected', picGoSetupReadyHint: 'After saving, chosen, dropped, and pasted images upload automatically. Failures still fall back safely to local assets.', picGoAdvancedSettings: 'Advanced settings', picGoServerURL: 'PicGo server address', picGoSecret: 'Server secret (optional)', picGoSecretPlaceholder: 'Leave blank to keep the saved secret', clearPicGoSecret: 'Clear the saved secret', picGoSecurityHint: 'No changes are normally needed. Only localhost connections are allowed, and third-party provider credentials remain managed by PicGo.', testPicGo: 'Test connection', saveSettings: 'Save settings', enablePicGo: 'Enable online hosting', picGoTesting: 'Detecting PicGo automatically…', picGoConnected: 'Detection succeeded. Local PicGo is ready to enable.', picGoConnectionFailed: 'PicGo was not detected. Make sure it is running with PicGo-Server enabled on port 36677. If you changed the address or secret, check Advanced settings.', imageUploadSettingsSaved: 'Image hosting settings saved', imageUploadSettingsSaveFailed: 'Unable to save image hosting settings', imageUploaded: 'Image uploaded to online hosting', picGoUploadFailedFallback: 'Online upload failed; the local image was used instead', imageUploadingTitle: 'Uploading image', imageUploadPreparing: 'Preparing the image…', imageUploadingCloud: 'Uploading to PicGo Cloud…', imageUploadingLocalPicGo: 'Sending to local PicGo…', imageUploadFinalizing: 'Generating the online link…', imageUploadComplete: 'Upload complete',
     formulaWizardLabel: 'ACADEMIC FORMULAS', formulaWizardTitle: 'Choose and build a formula', formulaWizardHint: 'Choose a common formula by subject, fill in its values, and insert the generated Markdown.', formulaEditTitle: 'Edit current formula', formulaEditHint: 'Edit its values, source, or output mode; saving replaces the current formula in place.', formulaPreviewEditHint: 'Double-click to edit this formula', formulaSubject: 'Subjects', formulaOutput: 'Insert as', selectedFormula: 'Selected formula', equationNumber: 'Equation number', formulaPreview: 'Live preview', generatedMarkdown: 'Generated Markdown', insertFormula: 'Insert formula', saveFormulaChanges: 'Save changes', formulaModeInline: 'Inline', formulaModeBlock: 'Display', formulaModeNumbered: 'Numbered', formulaInvalid: 'Enter valid formula content',
     diagramWizardLabel: 'MERMAID DIAGRAMS', diagramWizardTitle: 'Choose and build a diagram', diagramWizardHint: 'Popular diagrams marked with the canvas icon support visual editing; the others retain source editing and live preview.', diagramCategory: 'Diagram categories', selectedDiagram: 'Selected diagram', diagramSource: 'Diagram source', diagramPreview: 'Live preview', insertDiagram: 'Insert diagram', saveDiagramChanges: 'Save changes', editFlowchartVisually: 'Edit flowchart on canvas', visualEditorAvailable: 'Visual editing available', structuredDiagramEditorAria: 'Visual diagram data editor', structuredDiagramAddRow: 'Add row', structuredDiagramHint: 'Edit fields directly; the preview updates as you type.', structuredDiagramRemoveRow: 'Remove this row', diagramInvalid: 'Enter valid Mermaid diagram source', diagramFullscreen: 'Full-screen drawing', diagramExitFullscreen: 'Exit full screen',
     flowchartVisualMode: 'Visual editor', flowchartSourceMode: 'Source mode', flowchartVisualSafeHint: 'Actions automatically generate compatible Mermaid source', flowchartEditModeAria: 'Flowchart editing mode', flowchartEditorAria: 'Visual flowchart editor', flowchartAddAria: 'Add flowchart nodes', flowchartCanvasAria: 'Editable flowchart canvas', flowchartZoomAria: 'Canvas zoom', flowchartZoomOut: 'Zoom out', flowchartZoomIn: 'Zoom in', flowchartZoomReset: 'Reset to 100%', flowchartProcess: 'Process', flowchartDecision: 'Decision', flowchartTerminal: 'Start / end', flowchartAddProcess: 'Add a process node', flowchartAddDecision: 'Add a decision node', flowchartAddTerminal: 'Add a start or end node', flowchartConnect: 'Connect nodes', flowchartConnectHint: 'Click two nodes in order to create a connection', flowchartAutoLayout: 'Auto layout', flowchartAutoLayoutHint: 'Arrange nodes in the selected flow direction', flowchartDirection: 'Flow direction', flowchartDirectionLR: 'Left → right', flowchartDirectionTD: 'Top → bottom', flowchartDirectionRL: 'Right → left', flowchartDirectionBT: 'Bottom → top', flowchartCanvasHint: 'Double-click empty space to add a process; drag nodes to move them; in Connect mode, click two nodes.', flowchartProperties: 'Selected element', flowchartNothingSelected: 'Select a node or connection to edit it here.', flowchartNodeText: 'Node text', flowchartNodeShape: 'Node shape', flowchartEdgeText: 'Connection text', flowchartEdgeStyle: 'Connection style', flowchartEdgeSolid: 'Arrow', flowchartEdgeDashed: 'Dashed arrow', flowchartEdgeThick: 'Thick arrow', flowchartEdgeLine: 'Line without arrow', flowchartDeleteSelection: 'Delete selected element', flowchartConnectActive: 'Click the starting node', flowchartConnectTarget: 'Now click the target node', flowchartVisualUnsupported: 'This source contains subgraphs, styling, or other advanced syntax. Keep using Source mode so no content is lost.', flowchartNodeDefault: 'New step', flowchartDecisionDefault: 'Condition met?', flowchartTerminalDefault: 'Start / end',
@@ -665,6 +675,40 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
 };
 
 Object.assign(translations['zh-CN'], {
+  picGoCLIMode: 'PicGo CLI（按需启动）', picGoCLIHint: '无需后台 Server，复用 PicGo CLI 图床配置',
+  picGoCLISetup: '自动下载并配置独立运行环境，无需手动安装 Node.js，不影响系统设置。',
+  picGoCLIAdvanced: '高级设置 · 手动指定 CLI 路径',
+  picGoCLINotice: '全程使用 PicGo CLI 上传，不启动后台 Server。配置文件可能包含密钥和插件，请仅选择可信配置。成功后使用 HTTPS 链接并保留本地备份；失败保留本地图片，不自动重试。已有图片不会自动上传。',
+  picGoCLIHostingTitle: '2 · 配置图床', picGoCLIHostingHint: '首次使用可通过 CLI 在浏览器登录 PicGo Cloud（使用独立配置，不覆盖原配置）。其他图床可选择已配置好的 PicGo CLI config.json；留空沿用默认配置。',
+  picGoCLILogin: '通过 CLI 登录 PicGo Cloud', picGoCLISelectConfig: '选择已有图床配置', picGoCLIConfigPath: 'CLI 配置文件（留空使用 ~/.picgo/config.json）',
+  picGoCLILoginConfirm: '将由 PicGo CLI 打开系统浏览器登录 PicGo Cloud，凭证仅由 CLI 保存到轻阅独立配置目录，不覆盖已有配置。是否继续？',
+  picGoCLILoggingIn: '请在浏览器完成 PicGo CLI 登录；最多等待 3 分钟。登录不会上传图片。', picGoCLILoggedIn: 'CLI 已登录，独立配置已填入。请继续上传测试图片；尚未启用上传。',
+  picGoCLIUploadTestTitle: '3 · 验证并启用', picGoCLIUploadTestHint: '自动上传软件内置的 1 像素 PNG 检查图床，不需要选择图片，也不会读取剪贴板或文档图片。验证通过后会询问是否保存并启用。',
+  picGoCLINoImageNeeded: '无需选图 · 自动使用内置测试图',
+  picGoCLIUploadTest: '验证上传配置', picGoCLIUploadConfirm: '将自动使用内置测试图验证 PicGo CLI 配置，无需选择图片。测试图可能占用图床额度，并留在图床供你自行删除；不会上传文档或剪贴板内容。是否开始验证？',
+  picGoCLIUploadTesting: '正在自动验证上传配置，无需选择图片…', picGoCLIUploadReady: '✓ 验证通过 · 尚未保存启用\n可点击下方“保存并启用”；验证有效期为 10 分钟，无需再次上传测试图。',
+  picGoCLIEnableTitle: '验证通过，是否保存并启用？', picGoCLIEnableDescription: '内置测试图已上传成功，图床返回了 HTTPS 链接。\n保存后，新插入的图片将通过 PicGo CLI 上传；已有图片和本地备份保持不变。',
+  picGoCLIEnableLater: '暂不启用', picGoCLIEnableNow: '保存并启用',
+  picGoCLIAuthRequired: '图床未登录或授权已失效。请通过 CLI 登录 PicGo Cloud，或检查所选图床配置中的凭证，再测试上传。',
+  picGoCLIConfigInvalid: '找不到有效的图床配置文件。请先登录，或选择已配置好的 CLI config.json。',
+  picGoCLIUploadFailed: '未确认上传成功，未启用设置。请检查图床配置、权限和网络。超时可能已上传，请先核对图床记录；本次不会自动重试。',
+  picGoCLIQuota: '图床额度不足或请求被限流，请检查图床账户后再测试。',
+  picGoCLITestRequired: '上传验证已过期或配置已改变，请重新测试上传后保存。',
+  picGoCLIPreparingButton: '正在准备…',
+  picGoStepDownload: '下载环境', picGoStepVerify: '校验解压', picGoStepInstall: '安装 CLI', picGoStepCheck: '检查就绪',
+  picGoPhaseStarting: '正在连接官方来源', picGoPhaseDownloading: '正在下载 Node.js 运行环境', picGoPhaseVerifying: '正在校验文件完整性', picGoPhaseExtracting: '正在解压运行环境', picGoPhaseInstalling: '正在下载并安装 PicGo CLI', picGoPhaseChecking: '正在检查 CLI 是否可用', picGoPhaseComplete: 'CLI 已准备就绪', picGoPhaseFailed: '准备未完成',
+  picGoPrepareElapsed: '已用时 {seconds} 秒', picGoPrepareDownloadHint: '来源：nodejs.org', picGoPrepareInstallHint: '来源：registry.npmjs.org · 此阶段不提供百分比', picGoPrepareWorkHint: '正在本机处理，请保持软件开启', picGoPrepareDoneHint: '点击“保存设置”启用', picGoPrepareFailedHint: '原上传设置未改变，可重试或使用已有 CLI',
+  picGoCLIPrepare: '一键准备 CLI',
+  picGoCLIPrepareConfirm: '将从 nodejs.org 和 registry.npmjs.org 下载固定版本的 Node.js 与 PicGo CLI（需要联网及数百 MB 可用空间），校验后安装到轻阅独立目录。不修改系统 Node.js、不启动 Server、不上传任何图片。是否继续？',
+  picGoCLIPreparing: '正在下载、校验并安装 CLI，通常需要几分钟，请勿退出软件…',
+  picGoCLIPrepared: '1 · CLI 已准备好。请继续配置图床并测试上传；安装完成不代表可以上传。',
+  picGoCLIPrepareFailed: '组件准备失败，未更改当前上传设置。请检查网络和磁盘空间后重试，或使用已有 CLI 路径。',
+  picGoCLIPrepareIntegrity: '组件完整性校验未通过，已停止安装。请检查网络后重新准备。',
+  picGoCLIPreparePlatform: '当前系统架构暂不支持一键准备，请指定已安装的 CLI。',
+  picGoCLIPath: 'PicGo 可执行文件绝对路径（留空自动检测）',
+  picGoCLITest: '检测已有 CLI', picGoCLIChecking: '正在检测 CLI…',
+  picGoCLIReady: '1 · 已检测到 PicGo CLI {version}。尚未验证图床，请继续配置并测试上传。',
+  picGoCLIFailed: '未能运行 PicGo CLI。请确认 Node.js 和 PicGo CLI 已安装，或填写 picgo / picgo.cmd 的完整路径（不要添加命令参数）。',
   recentSelectHint: 'Ctrl / ⌘ 多选 · Shift 连选 · 组合可追加范围', recentBatchActions: '最近阅读批量操作', recentSelectedCount: '已选 {count} 项', recentClearSelected: '清除所选',
   recentBatchConfirm: '从最近阅读中清除所选的 {count} 条记录？\n仅移除记录及其置顶状态，不删除文件，不影响收藏或当前文档。',
   recentBatchRemoved: '已清除 {count} 条最近记录，原文件未删除', recentBatchFailed: '已清除 {count} 条，{failed} 条未成功；失败项已保留，可重试',
@@ -725,6 +769,40 @@ Object.assign(translations['zh-CN'], {
   exportDescriptionPdf: '直接生成 PDF，并根据 H1–H6 标题写入可点击的书签目录。'
 });
 Object.assign(translations.en, {
+  picGoCLIMode: 'PicGo CLI (on demand)', picGoCLIHint: 'No background Server; uses your PicGo CLI configuration',
+  picGoCLISetup: 'Download a private runtime automatically. No manual Node.js installation or system changes.',
+  picGoCLIAdvanced: 'Advanced · Specify an existing CLI path',
+  picGoCLINotice: 'Uploads use PicGo CLI, not a background Server. Configurations may contain secrets and plugins: select only trusted files. Success inserts HTTPS and keeps a local backup; failure keeps the local image without retrying. Existing images are not uploaded automatically.',
+  picGoCLIHostingTitle: '2 · Configure hosting', picGoCLIHostingHint: 'Sign in to PicGo Cloud through the CLI using a separate profile, or select an existing configured PicGo CLI config.json for another host. Blank uses the default configuration.',
+  picGoCLILogin: 'Sign in to PicGo Cloud via CLI', picGoCLISelectConfig: 'Select existing hosting config', picGoCLIConfigPath: 'CLI config file (blank uses ~/.picgo/config.json)',
+  picGoCLILoginConfirm: 'Allow PicGo CLI to open your browser for PicGo Cloud sign-in? The CLI stores credentials in a separate Quillite profile without overwriting existing configurations.',
+  picGoCLILoggingIn: 'Complete PicGo CLI sign-in in your browser (up to 3 minutes). No images are uploaded during login.', picGoCLILoggedIn: 'CLI signed in; separate configuration selected. Upload the test image next. Uploading is not enabled yet.',
+  picGoCLIUploadTestTitle: '3 · Verify & enable', picGoCLIUploadTestHint: 'Automatically check hosting with a built-in one-pixel PNG. No image selection is needed; your clipboard and document images are not read. After verification, you will be asked to save and enable.',
+  picGoCLINoImageNeeded: 'No image selection · Built-in test image',
+  picGoCLIUploadTest: 'Verify upload settings', picGoCLIUploadConfirm: 'Verify PicGo CLI using the built-in test image automatically? No image selection is needed. The test may use hosting quota and remains on the host until you remove it. Documents and clipboard content are not uploaded.',
+  picGoCLIUploadTesting: 'Verifying upload settings automatically; no image selection needed…', picGoCLIUploadReady: '✓ Verification passed · Not saved or enabled yet\nClick “Save & enable” below within 10 minutes. No second test upload is needed.',
+  picGoCLIEnableTitle: 'Verification passed. Save & enable?', picGoCLIEnableDescription: 'The built-in test image uploaded successfully and returned an HTTPS link.\nAfter saving, newly inserted images will upload through PicGo CLI. Existing images and local backups stay unchanged.',
+  picGoCLIEnableLater: 'Not now', picGoCLIEnableNow: 'Save & enable',
+  picGoCLIAuthRequired: 'Hosting login or authorization is missing or expired. Sign in through CLI, or check credentials in your selected hosting configuration, then test again.',
+  picGoCLIConfigInvalid: 'No valid hosting configuration found. Sign in first or select a configured CLI config.json.',
+  picGoCLIUploadFailed: 'Upload success was not confirmed; settings are not enabled. Check hosting, permissions and network. A timed-out upload may have completed; check your host before retrying. No automatic retry.',
+  picGoCLIQuota: 'Hosting quota or rate limit reached. Check your account before testing again.',
+  picGoCLITestRequired: 'Upload verification expired or the configuration changed. Test uploading again before saving.',
+  picGoCLIPreparingButton: 'Preparing…',
+  picGoStepDownload: 'Download', picGoStepVerify: 'Verify / extract', picGoStepInstall: 'Install CLI', picGoStepCheck: 'Check',
+  picGoPhaseStarting: 'Connecting to official sources', picGoPhaseDownloading: 'Downloading Node.js runtime', picGoPhaseVerifying: 'Verifying file integrity', picGoPhaseExtracting: 'Extracting runtime', picGoPhaseInstalling: 'Downloading and installing PicGo CLI', picGoPhaseChecking: 'Checking CLI availability', picGoPhaseComplete: 'CLI is ready', picGoPhaseFailed: 'Preparation incomplete',
+  picGoPrepareElapsed: '{seconds}s elapsed', picGoPrepareDownloadHint: 'Source: nodejs.org', picGoPrepareInstallHint: 'Source: registry.npmjs.org · No percentage for this stage', picGoPrepareWorkHint: 'Processing locally. Keep the app open.', picGoPrepareDoneHint: 'Save settings to enable', picGoPrepareFailedHint: 'Upload settings unchanged. Retry or use an existing CLI.',
+  picGoCLIPrepare: 'Prepare CLI automatically',
+  picGoCLIPrepareConfirm: 'Download pinned Node.js and PicGo CLI versions from nodejs.org and registry.npmjs.org (internet and several hundred MB of free space required)? Components are verified and installed privately, without changing system Node.js, starting a Server, or uploading images.',
+  picGoCLIPreparing: 'Downloading, verifying and installing CLI. This may take a few minutes; keep the app open…',
+  picGoCLIPrepared: '1 · CLI prepared. Configure hosting and test uploading next; installation does not verify upload access.',
+  picGoCLIPrepareFailed: 'Preparation failed; upload settings were not changed. Check network and disk space, then retry, or use an existing CLI path.',
+  picGoCLIPrepareIntegrity: 'Component integrity verification failed. Installation stopped. Check your network before retrying.',
+  picGoCLIPreparePlatform: 'Automatic preparation is unavailable for this architecture. Specify an existing CLI instead.',
+  picGoCLIPath: 'Absolute PicGo executable path (blank for auto-detection)',
+  picGoCLITest: 'Detect existing CLI', picGoCLIChecking: 'Detecting CLI…',
+  picGoCLIReady: '1 · PicGo CLI {version} detected. Hosting has not been verified; configure it and test uploading next.',
+  picGoCLIFailed: 'Unable to run PicGo CLI. Install Node.js and PicGo CLI, or enter the full picgo / picgo.cmd path without command arguments.',
   recentSelectHint: 'Ctrl / ⌘: toggle · Shift: range · combine to add', recentBatchActions: 'Recent document bulk actions', recentSelectedCount: '{count} selected', recentClearSelected: 'Clear selected',
   recentBatchConfirm: 'Clear {count} selected records from Recent?\nOnly recent records and their pins are removed. Files, Favorites and the current document are unchanged.',
   recentBatchRemoved: 'Cleared {count} recent records. Original files were not deleted.', recentBatchFailed: 'Cleared {count}; {failed} failed. Failed records are retained for retry.',
@@ -892,11 +970,11 @@ function editorLanguageExtension() {
 }
 
 Object.assign(translations['zh-CN'], {
-  renameDocument: '修改文件名', renameDocumentHint: '仅修改文件名，不修改正文标题。不会覆盖同名文件；取消不影响文档。', documentFileName: '文件名（包含扩展名）', renameDone: '文件名已修改', renameFailed: '无法修改文件名，原内容已保留', nameInvalid: '请输入有效文件名，保留 .md 或 .txt 等支持的扩展名；不能包含路径或系统保留名称', nameUnchanged: '文件名未改变', copyExists: '目标文件已存在，请选择新名称；不会覆盖已有文件', documentLocation: '保存位置', draftLocation: '草稿位置 · 首次保存请选择名称和位置', authoringDesktop: '此操作需要桌面版',
+  renameDocument: '修改文件名', renameDocumentHint: '仅修改文件名，不修改正文标题。不会覆盖同名文件；取消不影响文档。', documentFileName: '文件名（包含扩展名）', renameDone: '文件名已修改', renameFailed: '无法修改文件名，原内容已保留', nameInvalid: '请输入有效文件名，保留 .md 或 .txt 等支持的扩展名；不能包含路径或系统保留名称', nameUnchanged: '文件名未改变', copyExists: '目标文件已存在，请选择新名称；不会覆盖已有文件', documentLocation: '保存位置', draftLocation: '保存位置', authoringDesktop: '此操作需要桌面版',
   embeddedImagesMode: '内嵌 Base64', embeddedImagesHint: '图片直接存入 Markdown，单文件分享；编码约增加 33% 体积', imageEmbedded: '图片已内嵌到文档', imageEmbedType: '内嵌支持 PNG、JPEG、WebP、GIF、BMP；请确认图片格式', exportFormatPortable: '便携 Markdown', exportDescriptionPortable: '把本地图片内嵌到新 .md 文件，保留原文档和附件。在线图片请先转为本地；部分阅读器可能不支持内嵌图片。', portableTooLarge: '内嵌后超过 64 MiB 上限，请压缩图片或拆分文档', portableRemote: '文档含在线图片或不支持的图片数据，无法生成独立副本。请先转为本地图片；不会自动下载', portableImageLimit: '单次最多内嵌 256 种本地图片，请拆分文档', portableMissing: '图片无法读取，已停止生成便携副本，请检查附件', portableUnsupported: '图片包含 srcset 等复杂引用，请先改为普通图片再导出', exportFormatsCount: '13 种导出格式', imageUploadSettings: '图片存储与图床', imageUploadSettingsHint: '选择图片保存方式；本地附件和内嵌图片无需配置图床。', imageDialogHint: '选择本地图片或粘贴在线链接；本地图片按“图片存储与图床”设置保存。'
 });
 Object.assign(translations.en, {
-  renameDocument: 'Rename file', renameDocumentHint: 'Changes only the file name, not headings. Existing files are never overwritten; Cancel leaves the document unchanged.', documentFileName: 'File name (including extension)', renameDone: 'File renamed', renameFailed: 'Unable to rename; document contents retained', nameInvalid: 'Enter a valid file name with a supported extension such as .md or .txt. Paths and reserved system names are not allowed.', nameUnchanged: 'The file name is unchanged', copyExists: 'The destination already exists. Choose a new name; existing files are never overwritten.', documentLocation: 'Saved in', draftLocation: 'Draft location · Choose name and location on first save', authoringDesktop: 'This action requires the desktop app.',
+  renameDocument: 'Rename file', renameDocumentHint: 'Changes only the file name, not headings. Existing files are never overwritten; Cancel leaves the document unchanged.', documentFileName: 'File name (including extension)', renameDone: 'File renamed', renameFailed: 'Unable to rename; document contents retained', nameInvalid: 'Enter a valid file name with a supported extension such as .md or .txt. Paths and reserved system names are not allowed.', nameUnchanged: 'The file name is unchanged', copyExists: 'The destination already exists. Choose a new name; existing files are never overwritten.', documentLocation: 'Saved in', draftLocation: 'Saved in', authoringDesktop: 'This action requires the desktop app.',
   embeddedImagesMode: 'Embedded Base64', embeddedImagesHint: 'Stores images inside Markdown for single-file sharing; encoding adds about 33% size.', imageEmbedded: 'Image embedded in the document', imageEmbedType: 'Embedding supports PNG, JPEG, WebP, GIF and BMP. Check the image format.', exportFormatPortable: 'Portable Markdown', exportDescriptionPortable: 'Embeds local images into a new .md file; originals and attachments stay intact. Convert online images to local files first. Some readers may not support embedded images.', portableTooLarge: 'The embedded document exceeds 64 MiB. Compress images or split the document.', portableRemote: 'Online images or unsupported image data prevent a standalone copy. Convert them to local images first. Nothing is downloaded automatically.', portableImageLimit: 'At most 256 distinct local images can be embedded per export. Split the document.', portableMissing: 'An image could not be read. Portable export stopped; check the attachments.', portableUnsupported: 'Complex image references such as srcset are not supported. Use ordinary images before exporting.', exportFormatsCount: '13 export formats', imageUploadSettings: 'Image storage and hosting', imageUploadSettingsHint: 'Choose how images are stored. Local attachments and embedded images need no image host.', imageDialogHint: 'Choose a local image or paste an online link. Local images follow your Image storage and hosting settings.'
 });
 
@@ -1046,7 +1124,9 @@ marked.use({
     image({ href, title, text }) {
       const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
       const safeHref = escapeHtml(href || '');
-      return `<img src="${safeHref}" data-markdown-src="${safeHref}" alt="${escapeHtml(text || '')}"${safeTitle}>`;
+      // getAttribute('src') preserves the original relative path. Do not copy
+      // multi-megabyte embedded image data into a second HTML attribute/cache.
+      return `<img src="${safeHref}" loading="lazy" decoding="async" alt="${escapeHtml(text || '')}"${safeTitle}>`;
     },
     code({ text, lang }) {
       const normalizedLanguage = (lang || '').trim().toLowerCase();
@@ -1196,6 +1276,11 @@ function editorPresentationExtensions() {
   return [...mediaExtensions, editorLivePreview, livePreviewContext.of({
         nestedExtensions: mediaExtensions,
         nestedEffects: [setFormulaDisplayEffect, setDiagramDisplayEffect, refreshDiagramThemeEffect, updateImagePreviewDirectory],
+        renderTocTitle: source => {
+          const label = document.createElement('span');
+          label.innerHTML = DOMPurify.sanitize(marked.parseInline(source));
+          return tocTitleHTML(createTocTitle(label));
+        },
         render: (source, item) => item.kind === 'code' ? DOMPurify.sanitize(`<pre><code>${hljs.getLanguage(item.language) ? hljs.highlight(item.text, { language: item.language }).value : escapeHtml(item.text)}</code></pre>`, { ALLOWED_TAGS: ['pre', 'code', 'span'], ALLOWED_ATTR: ['class'] }) : DOMPurify.sanitize(marked.parse(source, { gfm: true, breaks: true }), {
           ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'p', 'br', 'hr', 'div', 'span', 'strong', 'em', 'del', 's', 'u', 'sub', 'sup', 'mark', 'kbd', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
           ALLOWED_ATTR: ['align', 'colspan', 'rowspan', 'title'],
@@ -1326,8 +1411,6 @@ function syncSpellcheckOptions() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-checked', String(active));
   });
-  const currentLanguage = $('#spellcheckLanguageCurrent');
-  if (currentLanguage) currentLanguage.textContent = t({ auto: 'spellcheckAuto', 'en-US': 'spellcheckUS', 'en-GB': 'spellcheckGB' }[state.spellcheckLanguage]);
   const toggle = $('[data-spellcheck-toggle]');
   if (toggle) {
     toggle.classList.toggle('active', state.spellcheckEnabled);
@@ -3991,7 +4074,9 @@ function saveVisualTable() {
 }
 
 function applyImageUploadSettings(settings) {
-  state.imageUploadMode = ['embedded', 'picgo-cloud', 'picgo'].includes(settings?.mode) ? settings.mode : 'local';
+  state.imageUploadMode = ['embedded', 'picgo-cloud', 'picgo', 'picgo-cli'].includes(settings?.mode) ? settings.mode : 'local';
+  state.picGoCLIPath = String(settings?.cliPath || '');
+  state.picGoCLIConfigPath = String(settings?.cliConfigPath || '');
   state.picGoServerURL = String(settings?.serverUrl || 'http://127.0.0.1:36677');
   state.picGoHasSecret = Boolean(settings?.hasSecret);
 	state.picGoCloudHasToken = Boolean(settings?.hasCloudToken);
@@ -3999,12 +4084,14 @@ function applyImageUploadSettings(settings) {
 
 function selectedImageUploadMode() {
 	const mode = document.querySelector('input[name="imageUploadMode"]:checked')?.value;
-	return ['embedded', 'picgo-cloud', 'picgo'].includes(mode) ? mode : 'local';
+	return ['embedded', 'picgo-cloud', 'picgo', 'picgo-cli'].includes(mode) ? mode : 'local';
 }
 
 function currentImageUploadSettingsInput() {
   return {
     mode: selectedImageUploadMode(),
+    cliPath: $('#picGoCLIPath').value.trim(),
+    cliConfigPath: $('#picGoCLIConfigPath').value.trim(),
     serverUrl: els.picGoServerURL.value.trim(),
     secret: els.picGoSecret.value,
     clearSecret: els.clearPicGoSecret.checked,
@@ -4018,6 +4105,11 @@ function imageSettingsResponseCurrent(revision) {
 }
 
 function invalidateImageSettingsResponses() {
+  if ($('#picGoCLIEnableDialog')?.open) $('#picGoCLIEnableDialog').close('cancel');
+  $('#picGoCLIUploadStatus')?.classList?.remove('is-success');
+  state.picGoCLIRun += 1;
+  state.picGoCLIChecking = false;
+  state.picGoCLIReady = false;
   state.imageSettingsRevision += 1;
   state.picGoDetectionRun += 1;
   state.picGoCloudDetectionRun += 1;
@@ -4051,7 +4143,7 @@ function setPicGoWizardStep(step) {
   });
   const saveButton = $('#saveImageUploadSettings');
   const readyToEnable = selectedImageUploadMode() === 'picgo' && state.picGoConnectionReady;
-  const label = state.imageSettingsMutation ? 'imageSettingsWorking' : readyToEnable ? 'enablePicGo' : 'saveSettings';
+  const label = state.imageSettingsMutation ? 'imageSettingsWorking' : selectedImageUploadMode() === 'picgo-cli' && state.picGoCLIReady ? 'picGoCLIEnableNow' : readyToEnable ? 'enablePicGo' : 'saveSettings';
   saveButton.dataset.i18n = label;
   saveButton.textContent = t(label);
 }
@@ -4060,12 +4152,23 @@ function updatePicGoSettingsAvailability() {
 	const mode = selectedImageUploadMode();
 	const cloudEnabled = mode === 'picgo-cloud';
 	const localPicGoEnabled = mode === 'picgo';
+  const cliEnabled = mode === 'picgo-cli';
+  $('#picGoCLISetup').classList.toggle('hidden', !cliEnabled);
 	els.picGoCloudSetup.classList.toggle('hidden', !cloudEnabled);
 	els.picGoSetupWizard.classList.toggle('hidden', !localPicGoEnabled);
 	els.localAssetsSummary.classList.toggle('hidden', mode !== 'local');
   $('#embeddedImagesSummary').classList.toggle('hidden', mode !== 'embedded');
   const busy = Boolean(state.imageSettingsMutation);
-	$('#saveImageUploadSettings').disabled = busy || (cloudEnabled && !state.picGoCloudConnectionReady) || (localPicGoEnabled && !state.picGoConnectionReady);
+	$('#saveImageUploadSettings').disabled = busy || (cliEnabled && !state.picGoCLIReady) || (cloudEnabled && !state.picGoCloudConnectionReady) || (localPicGoEnabled && !state.picGoConnectionReady);
+  $('#testPicGoCLI').disabled = busy || state.picGoCLIChecking;
+  $('#preparePicGoCLI').disabled = busy || state.picGoCLIChecking;
+  const preparingLabel = state.imageSettingsMutation === 'prepare-cli' ? 'picGoCLIPreparingButton' : 'picGoCLIPrepare';
+  $('#preparePicGoCLI').dataset.i18n = preparingLabel;
+  $('#preparePicGoCLI').textContent = t(preparingLabel);
+  $('#picGoCLIPath').disabled = busy;
+  for (const id of ['loginPicGoCLI', 'selectPicGoCLIConfig', 'testPicGoCLIUpload', 'picGoCLIConfigPath']) {
+    $(`#${id}`).disabled = busy || state.picGoCLIChecking;
+  }
 	$('#loginPicGoCloud').disabled = busy;
 	$('#logoutPicGoCloud').disabled = busy;
 	$('#testPicGoCloud').disabled = busy || state.picGoCloudChecking;
@@ -4183,6 +4286,12 @@ function openImageUploadSettings() {
   setImageUploadSettingsStatus();
   document.querySelector(`input[name="imageUploadMode"][value="${state.imageUploadMode}"]`).checked = true;
   els.picGoServerURL.value = state.picGoServerURL;
+  $('#picGoCLIPath').value = state.picGoCLIPath;
+  $('#picGoCLIConfigPath').value = state.picGoCLIConfigPath;
+  $('#picGoCLIUploadStatus').textContent = state.picGoCLILastError ? picGoCLISetupError(state.picGoCLILastError) : '';
+  $('#picGoCLIStatus').textContent = '';
+  $('#picGoCLIAdvanced').open = false;
+  $('#picGoPrepareProgress').classList.add('hidden');
   els.picGoSecret.value = '';
   els.clearPicGoSecret.checked = false;
   els.clearPicGoSecretRow.classList.toggle('hidden', !state.picGoHasSecret);
@@ -4200,6 +4309,7 @@ function openImageUploadSettings() {
     if (!imageSettingsResponseCurrent(revision)) return;
     document.querySelector('input[name="imageUploadMode"]:checked')?.focus();
     if (selectedImageUploadMode() === 'picgo') testPicGoConnection({ automatic: true });
+    if (selectedImageUploadMode() === 'picgo-cli') testPicGoCLIConnection();
 		if (selectedImageUploadMode() === 'picgo-cloud' && state.picGoCloudHasToken) testPicGoCloudConnection({ quiet: true });
   });
 }
@@ -4241,9 +4351,170 @@ async function testPicGoConnection() {
   }
 }
 
+function renderPicGoPrepareProgress(progress, startedAt) {
+  const model = picGoPrepareProgressModel(progress);
+  const panel = $('#picGoPrepareProgress'), bar = $('#picGoPrepareBar');
+  panel.classList.remove('hidden');
+  panel.classList.toggle('is-complete', model.phase === 'complete');
+  panel.classList.toggle('is-failed', model.phase === 'failed');
+  panel.setAttribute('aria-busy', String(model.active));
+  const title = t(model.title);
+  if ($('#picGoPrepareTitle').textContent !== title) $('#picGoPrepareTitle').textContent = title;
+  $('#picGoPreparePercent').textContent = model.percent === null ? '' : `${model.percent}%`;
+  if (model.percent === null && model.active) bar.removeAttribute('value');
+  else bar.value = model.percent || 0;
+  $('#picGoPrepareElapsed').textContent = t('picGoPrepareElapsed').replace('{seconds}', Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+  let detail = t('picGoPrepareWorkHint');
+  if (model.phase === 'starting') detail = t('picGoPrepareDownloadHint');
+  if (model.phase === 'downloading') detail = `${picGoPrepareBytes(model.done)}${model.total > 0 ? ` / ${picGoPrepareBytes(model.total)}` : ''} · ${t('picGoPrepareDownloadHint')}`;
+  if (model.phase === 'installing') detail = t('picGoPrepareInstallHint');
+  if (model.phase === 'complete') detail = t('picGoPrepareDoneHint');
+  if (model.phase === 'failed') detail = t('picGoPrepareFailedHint');
+  $('#picGoPrepareDetail').textContent = detail;
+  panel.querySelectorAll('[data-prepare-step]').forEach(item => {
+    const step = Number(item.dataset.prepareStep), complete = model.step > step;
+    item.classList.toggle('active', model.active && step === model.step);
+    item.classList.toggle('complete', complete);
+    item.querySelector('b').textContent = complete ? '✓' : String(step + 1);
+    if (model.active && step === model.step) item.setAttribute('aria-current', 'step');
+    else item.removeAttribute('aria-current');
+  });
+}
+
+async function preparePicGoCLIComponent() {
+  if (state.imageSettingsMutation || selectedImageUploadMode() !== 'picgo-cli' || els.imageUploadSettingsDialog.classList.contains('hidden')) return;
+  if (!window.confirm(t('picGoCLIPrepareConfirm'))) return;
+  invalidateImageSettingsResponses();
+  const revision = beginImageSettingsMutation('prepare-cli');
+  if (revision === null) return;
+  const operationId = `picgo-prepare-${Date.now()}-${state.picGoCLIRun}`;
+  const startedAt = Date.now();
+  const current = () => imageSettingsResponseCurrent(revision) && selectedImageUploadMode() === 'picgo-cli';
+  let progress = { phase: 'starting' };
+  $('#picGoCLIStatus').textContent = '';
+  $('#picGoCLIAdvanced').open = false;
+  renderPicGoPrepareProgress(progress, startedAt);
+  let unsubscribe = () => {};
+  const timer = setInterval(() => { if (current()) renderPicGoPrepareProgress(progress, startedAt); }, 1000);
+  try {
+    unsubscribe = window.quilliteMarkdown.onPicGoPrepareProgress(event => {
+      if (!current() || event?.operationId !== operationId) return;
+      if (['complete', 'failed'].includes(progress.phase)) return;
+      progress = event;
+      renderPicGoPrepareProgress(progress, startedAt);
+    });
+    const path = await window.quilliteMarkdown.preparePicGoCLI(true, operationId);
+    if (!imageSettingsResponseCurrent(revision) || selectedImageUploadMode() !== 'picgo-cli') return;
+    $('#picGoCLIPath').value = path;
+    state.picGoCLIReady = false;
+    renderPicGoPrepareProgress({ phase: 'complete' }, startedAt);
+    $('#picGoCLIStatus').textContent = t('picGoCLIPrepared');
+  } catch (error) {
+    if (imageSettingsResponseCurrent(revision)) {
+      renderPicGoPrepareProgress({ phase: 'failed' }, startedAt);
+      const code = String(error?.message || error);
+      $('#picGoCLIStatus').textContent = t(code.includes('PICGO_PREPARE_INTEGRITY') ? 'picGoCLIPrepareIntegrity' : code.includes('PICGO_PREPARE_PLATFORM') ? 'picGoCLIPreparePlatform' : 'picGoCLIPrepareFailed');
+    }
+  } finally {
+    clearInterval(timer);
+    unsubscribe();
+    finishImageSettingsMutation();
+  }
+}
+
+async function testPicGoCLIConnection() {
+  if (state.imageSettingsMutation || selectedImageUploadMode() !== 'picgo-cli' || els.imageUploadSettingsDialog.classList.contains('hidden')) return false;
+  $('#picGoPrepareProgress')?.classList.add('hidden');
+  const revision = state.imageSettingsRevision, run = ++state.picGoCLIRun;
+  const current = () => imageSettingsResponseCurrent(revision) && run === state.picGoCLIRun;
+  state.picGoCLIReady = false;
+  state.picGoCLIChecking = true;
+  const uploadStatus = $('#picGoCLIUploadStatus');
+  if (uploadStatus) { uploadStatus.textContent = ''; uploadStatus.classList.remove('is-success'); }
+  $('#picGoCLIStatus').textContent = t('picGoCLIChecking');
+  updatePicGoSettingsAvailability();
+  try {
+    const version = await window.quilliteMarkdown.testPicGoCLI($('#picGoCLIPath').value.trim());
+    if (!current()) return false;
+    state.picGoCLIReady = false;
+    $('#picGoCLIStatus').textContent = t('picGoCLIReady').replace('{version}', version);
+    return true;
+  } catch {
+    if (current()) $('#picGoCLIStatus').textContent = t('picGoCLIFailed');
+    return false;
+  } finally {
+    if (current()) { state.picGoCLIChecking = false; updatePicGoSettingsAvailability(); }
+  }
+}
+
+function picGoCLISetupError(error) {
+  const code = String(error?.message || error || '');
+  if (code.includes('PICGO_CLI_AUTH_REQUIRED')) return t('picGoCLIAuthRequired');
+  if (code.includes('PICGO_CLI_CONFIG_INVALID')) return t('picGoCLIConfigInvalid');
+  if (code.includes('PICGO_CLI_QUOTA')) return t('picGoCLIQuota');
+  if (code.includes('PICGO_CLI_TEST_REQUIRED')) return t('picGoCLITestRequired');
+  if (/PICGO_CLI_(NOT_FOUND|NODE_MISSING|PATH_INVALID)/.test(code)) return t('picGoCLIFailed');
+  return t('picGoCLIUploadFailed');
+}
+
+async function configurePicGoCLIHosting(action) {
+  if (state.imageSettingsMutation || selectedImageUploadMode() !== 'picgo-cli' || els.imageUploadSettingsDialog.classList.contains('hidden')) return;
+  if (action === 'login' && !window.confirm(t('picGoCLILoginConfirm'))) return;
+  if (action === 'test' && !window.confirm(t('picGoCLIUploadConfirm'))) return;
+  invalidateImageSettingsResponses();
+  const revision = beginImageSettingsMutation(`cli-${action}`);
+  if (revision === null) return;
+  const current = () => imageSettingsResponseCurrent(revision) && selectedImageUploadMode() === 'picgo-cli';
+  let enableConfirmed = false;
+  const status = $('#picGoCLIUploadStatus');
+  status.textContent = action === 'login' ? t('picGoCLILoggingIn') : action === 'test' ? t('picGoCLIUploadTesting') : '';
+  try {
+    const path = $('#picGoCLIPath').value.trim();
+    if (action === 'test') {
+      await window.quilliteMarkdown.testPicGoCLIUpload(path, $('#picGoCLIConfigPath').value.trim(), true);
+      if (current()) {
+        state.picGoCLIReady = true;
+        state.picGoCLILastError = '';
+        if ($('#picGoCLIStatus')) $('#picGoCLIStatus').textContent = '';
+        status.textContent = t('picGoCLIUploadReady');
+        status.classList.add('is-success');
+        enableConfirmed = await confirmPicGoCLIEnable();
+      }
+    } else {
+      const config = action === 'login'
+        ? await window.quilliteMarkdown.loginPicGoCLI(path, true)
+        : await window.quilliteMarkdown.selectPicGoCLIConfig();
+      if (current() && config) {
+        $('#picGoCLIConfigPath').value = config;
+        status.textContent = action === 'login' ? t('picGoCLILoggedIn') : t('picGoCLIUploadTestHint');
+      }
+    }
+  } catch (error) {
+    if (current()) status.textContent = picGoCLISetupError(error);
+  } finally {
+    finishImageSettingsMutation();
+  }
+  // Release the verification mutation before saving and recheck the dialog
+  // session, so an old confirmation cannot save a new settings draft.
+  if (enableConfirmed && current() && state.picGoCLIReady) await saveImageUploadSettings();
+}
+
+function confirmPicGoCLIEnable() {
+  const dialog = $('#picGoCLIEnableDialog');
+  dialog.returnValue = 'cancel';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
+    dialog.showModal();
+  });
+}
+
 async function saveImageUploadSettings() {
   if (state.imageSettingsMutation || els.imageUploadSettingsDialog.classList.contains('hidden')) return;
   setImageUploadSettingsStatus();
+	if (selectedImageUploadMode() === 'picgo-cli' && !state.picGoCLIReady) {
+    $('#picGoCLIUploadStatus').textContent = t('picGoCLIUploadTestHint');
+    return;
+  }
 	if (selectedImageUploadMode() === 'picgo-cloud' && !state.picGoCloudConnectionReady) {
 		if (!state.picGoCloudHasToken) await loginPicGoCloud();
 		else await testPicGoCloudConnection();
@@ -4265,26 +4536,37 @@ async function saveImageUploadSettings() {
     }
   } catch (error) {
     console.warn('Unable to save image upload settings', error);
-    if (imageSettingsResponseCurrent(revision)) setImageUploadSettingsStatus(t('imageUploadSettingsSaveFailed'));
+    if (imageSettingsResponseCurrent(revision)) {
+      if (selectedImageUploadMode() === 'picgo-cli') {
+        state.picGoCLIReady = false;
+        $('#picGoCLIUploadStatus').classList.remove('is-success');
+        $('#picGoCLIUploadStatus').textContent = picGoCLISetupError(error);
+        setImageUploadSettingsStatus(picGoCLISetupError(error));
+      } else setImageUploadSettingsStatus(t('imageUploadSettingsSaveFailed'));
+    }
   } finally {
     finishImageSettingsMutation();
   }
 }
 
 async function uploadedOrLocalImagePath(localPath, target) {
-	if (!['picgo-cloud', 'picgo'].includes(target.mode)) return { path: localPath, uploaded: false, fallback: false };
+	if (!['picgo-cloud', 'picgo', 'picgo-cli'].includes(target.mode)) return { path: localPath, uploaded: false, fallback: false };
   const uploadRun = beginImageUploadProgress(target.mode);
   const operationId = state.imageUploadOperationId;
   let succeeded = false;
   try {
 		const uploadedPath = target.mode === 'picgo-cloud'
 			? await window.quilliteMarkdown.uploadImageToPicGoCloud(target.path, localPath, operationId)
-			: await window.quilliteMarkdown.uploadImageToPicGo(target.path, localPath, operationId);
+			: target.mode === 'picgo-cli'
+        ? await window.quilliteMarkdown.uploadImageToPicGoCLI(target.path, localPath, operationId)
+        : await window.quilliteMarkdown.uploadImageToPicGo(target.path, localPath, operationId);
     succeeded = true;
     return { path: uploadedPath, uploaded: true, fallback: false };
   } catch (error) {
     console.warn('PicGo upload failed; using the local asset instead', error);
-    return { path: localPath, uploaded: false, fallback: true };
+    const cliError = target.mode === 'picgo-cli' ? (String(error?.message || error).match(/PICGO_CLI_[A-Z_]+/)?.[0] || 'PICGO_CLI_FAILED') : '';
+    if (cliError) state.picGoCLILastError = cliError;
+    return { path: localPath, uploaded: false, fallback: true, cliError };
   } finally {
     finishImageUploadProgress(uploadRun, succeeded);
   }
@@ -4344,7 +4626,7 @@ function finishImageUploadProgress(run, succeeded) {
 function showImportedImageResult(result) {
   if (/^data:image\//i.test(result.path)) showToast(t('imageEmbedded'), 'success');
   else if (result.uploaded) showToast(t('imageUploaded'), 'success');
-  else if (result.fallback) showToast(t('picGoUploadFailedFallback'), 'warning');
+  else if (result.fallback) showToast(t('picGoUploadFailedFallback') + (result.cliError ? `。${picGoCLISetupError(result.cliError)}` : ''), 'warning');
   else showToast(t('imageImported'), 'success');
 }
 
@@ -4709,6 +4991,7 @@ async function initializeCodeEditor() {
       if (update.docChanged) scheduleEditorOutline();
       if (update.viewportChanged && state.editing && state.compactTocOpen) scheduleActiveTocRefresh();
       if (update.docChanged && !suppressEditorChanges && state.currentFile) {
+        state.editorRevision = (state.editorRevision || 0) + 1;
         const performance = documentPerformanceProfile(update.state.doc.length, state.currentDocumentHasDiagrams);
         if (performance.deferContentSync) {
           // Converting a CodeMirror rope to one giant string on every keypress
@@ -5204,7 +5487,7 @@ function openSettingsSubmenu(name, focusSelected = false) {
   panel.classList.remove('hidden');
   trigger.setAttribute('aria-expanded', 'true');
   positionSettingsSubmenu(trigger, panel);
-  if (focusSelected) requestAnimationFrame(() => panel.querySelector('[aria-checked="true"]')?.focus());
+  if (focusSelected) requestAnimationFrame(() => (panel.querySelector('[aria-checked="true"]') || panel.querySelector('button, select'))?.focus());
 }
 
 function toggleAccentMenu() {
@@ -6102,11 +6385,11 @@ async function editRecentDocument(filePath) {
   if (!maybeDiscardChanges()) return;
   const request = beginDocumentOpen();
   try {
-    const doc = await window.quilliteMarkdown.openRecentFile(filePath);
-    if (!canApplyDocumentOpen(request) || !doc?.path) return;
-    displayDocument(doc);
+    const doc = await readDocumentForOpen(request, () => window.quilliteMarkdown.openRecentFile(filePath));
+    if (!doc) return;
     await toggleEditor(true);
   } catch (error) {
+    if (request.id !== state.documentOpenRequest) return;
     if (isMissingDocumentError(error)) {
       await refreshLibraryFileStatuses();
       showToast(t('recentMissingTitle'), 'warning');
@@ -6152,12 +6435,25 @@ function scrollPreviewContainerToHeading(container, target, behavior = 'smooth')
   return true;
 }
 
-function tocTreeItems(headings) {
-  return buildTocTree(headings.map(heading => ({
+const tocHeadingTitles = new WeakMap();
+function tocHeadingTitle(heading) {
+  if (heading.tocTitle) return heading.tocTitle;
+  if (!tocHeadingTitles.has(heading)) tocHeadingTitles.set(heading, createTocTitle(heading));
+  return tocHeadingTitles.get(heading);
+}
+
+function tocItems(headings) {
+  return headings.map(heading => ({
     id: heading.id,
-    text: heading.textContent,
-    level: Number(heading.tagName.slice(1))
-  })));
+    text: tocHeadingTitle(heading).text,
+    title: tocHeadingTitle(heading),
+    level: Number(heading.tagName.slice(1)),
+    children: []
+  }));
+}
+
+function tocTreeItems(headings) {
+  return buildTocTree(tocItems(headings));
 }
 
 function renderDynamicTocs(container, headings = collectDocumentHeadings(container)) {
@@ -6169,7 +6465,7 @@ function renderDynamicTocs(container, headings = collectDocumentHeadings(contain
       const link = document.createElement('a');
       link.href = `#${node.id}`;
       link.dataset.target = node.id;
-      link.textContent = node.text;
+      link.innerHTML = tocTitleHTML(node.title);
       item.append(link);
       if (node.children.length) item.append(renderList(node.children));
       list.append(item);
@@ -6183,15 +6479,6 @@ function renderDynamicTocs(container, headings = collectDocumentHeadings(contain
     placeholder.append(title);
     if (tree.length) placeholder.append(renderList(tree));
   });
-}
-
-function highlightedTocTitle(text, query) {
-  const needle = String(query || '').trim().toLocaleLowerCase();
-  if (!needle) return escapeHtml(text);
-  const lower = String(text).toLocaleLowerCase();
-  const index = lower.indexOf(needle);
-  if (index < 0) return escapeHtml(text);
-  return `${escapeHtml(text.slice(0, index))}<mark>${escapeHtml(text.slice(index, index + needle.length))}</mark>${escapeHtml(text.slice(index + needle.length))}`;
 }
 
 const compactTocMediaQuery = window.matchMedia?.('(max-width: 1120px)');
@@ -6258,7 +6545,7 @@ function currentEditorHeadings() {
     const label = document.createElement('span');
     outlineHeadings = editorOutline(outlineDocument.toString()).map((heading, index) => {
       label.innerHTML = DOMPurify.sanitize(marked.parseInline(heading.text));
-      return { ...heading, id: slugify(label.textContent, index), textContent: label.textContent, tagName: `H${heading.level}` };
+      return { ...heading, id: slugify(label.textContent, index), textContent: label.textContent, tagName: `H${heading.level}`, tocTitle: createTocTitle(label) };
     });
   }
   return outlineHeadings;
@@ -6286,12 +6573,7 @@ function scrollEditorToHeading(id) {
 
 function renderToc() {
   const headings = state.editing ? currentEditorHeadings() : collectDocumentHeadings(els.content);
-  const allItems = headings.map(heading => ({
-    id: heading.id,
-    text: heading.textContent,
-    level: Number(heading.tagName.slice(1)),
-    children: []
-  }));
+  const allItems = tocItems(headings);
   const query = state.tocQuery.trim();
   const tree = state.tocMode === 'flat'
     ? allItems.filter(item => !query || item.text.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
@@ -6300,14 +6582,14 @@ function renderToc() {
   const renderNodes = nodes => `<ul class="toc-tree">${nodes.map(node => {
     const hasChildren = node.children.length > 0;
     const isCollapsed = hasChildren && !query && collapsed.has(node.id);
-    const title = highlightedTocTitle(node.text, query);
+    const title = tocTitleHTML(node.title, query);
     const toggle = state.tocMode === 'tree' && hasChildren
       ? `<button type="button" class="toc-toggle" data-toc-toggle="${escapeHtml(node.id)}" aria-expanded="${String(!isCollapsed)}" aria-label="${escapeHtml(t(isCollapsed ? 'expandTocSection' : 'collapseTocSection', { title: node.text }))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>`
       : '<span class="toc-toggle-placeholder" aria-hidden="true"></span>';
     const children = state.tocMode === 'tree' && hasChildren
       ? `<div class="toc-children${isCollapsed ? ' hidden' : ''}">${renderNodes(node.children)}</div>`
       : '';
-    return `<li class="toc-node level-${node.level}${isCollapsed ? ' collapsed' : ''}" data-toc-node="${escapeHtml(node.id)}"><div class="toc-row">${toggle}<a href="#${escapeHtml(node.id)}" data-target="${escapeHtml(node.id)}"><span class="toc-link-text">${title}</span></a></div>${children}</li>`;
+    return `<li class="toc-node level-${node.level}${isCollapsed ? ' collapsed' : ''}" data-toc-node="${escapeHtml(node.id)}"><div class="toc-row">${toggle}<a href="#${escapeHtml(node.id)}" data-target="${escapeHtml(node.id)}"><span class="toc-link-text${node.title.hasMath ? ' has-math' : ''}">${title}</span></a></div>${children}</li>`;
   }).join('')}</ul>`;
   els.toc.innerHTML = renderNodes(tree);
   els.toc.classList.toggle('is-flat', state.tocMode === 'flat');
@@ -6660,7 +6942,35 @@ function applyMarkdownTableLayouts(container, layouts) {
   });
 }
 
-function renderMarkdownTo(container, doc, content) {
+function* prepareMarkdownPresentation(container, doc, content) {
+  if (isPlainTextFile(doc.path)) return null;
+  const tableLayouts = findMarkdownTables(content);
+  yield;
+  const deferred = container === els.content && content.length >= READER_DEFER_THRESHOLD;
+  const cacheKey = JSON.stringify([doc.path, state.language, mermaidPreviewThemeKey(), deferred]);
+  const cachedHTML = container === els.content ? readerHTMLCache.get(cacheKey, content) : null;
+  const prepared = cachedHTML === null ? prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(tableRenderSource(frontmatterRenderSource(content))))) : null;
+  yield;
+  const sourceMap = container === els.editorPreview || container === els.content
+    ? createPreviewSourceMap(marked, prepared?.lineMap, { inline: container === els.editorPreview,
+      snapshot: cachedHTML === null ? '' : readerHTMLCache.getMapping(cacheKey, content) }) : null;
+  let renderedMath, html = cachedHTML;
+  if (html === null) {
+    const previous = deferReaderCode;
+    deferReaderCode = deferred;
+    try {
+      renderedMath = collectFormulaRendering(() => renderPreparedFootnotes(prepared, marked, t('footnotes'), sourceMap?.parse));
+    } finally { deferReaderCode = previous; }
+    yield;
+    html = DOMPurify.sanitize(renderedMath.html, { ADD_ATTR: ['target', 'rel', 'data-md-color'] });
+    if (container === els.content && cacheKey === JSON.stringify([doc.path, state.language, mermaidPreviewThemeKey(), deferred])) {
+      readerHTMLCache.set(cacheKey, content, html, sourceMap.snapshot());
+    }
+  }
+  return {tableLayouts, deferred, prepared, sourceMap, renderedMath, html, cacheKey};
+}
+
+function renderMarkdownTo(container, doc, content, presentation = null) {
   cancelReaderWork(container);
   cancelPreviewImages(container);
   if (isPlainTextFile(doc.path)) {
@@ -6676,29 +6986,15 @@ function renderMarkdownTo(container, doc, content) {
   const mermaidThemeKey = mermaidPreviewThemeKey();
   const reusableMermaid = reusableMermaidDiagrams(container, mermaidThemeKey);
   const reusableECharts = reusableEChartsDiagrams(container, mermaidThemeKey);
-  const tableLayouts = findMarkdownTables(content);
-  const deferred = container === els.content && content.length >= READER_DEFER_THRESHOLD;
-  const cacheKey = JSON.stringify([doc.path, state.language, mermaidThemeKey, deferred]);
-  const cachedHTML = container === els.content ? readerHTMLCache.get(cacheKey, content) : null;
-  const prepared = cachedHTML === null ? prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(tableRenderSource(frontmatterRenderSource(content))))) : null;
-  // Reader navigation needs block anchors, not thousands of inline text spans.
-  // Cache only immutable metadata together with the sanitised HTML revision.
-  const sourceMap = container === els.editorPreview || container === els.content
-    ? createPreviewSourceMap(marked, prepared?.lineMap, { inline: container === els.editorPreview,
-      snapshot: cachedHTML === null ? '' : readerHTMLCache.getMapping(cacheKey, content) }) : null;
-  let renderedMath;
-  let html = cachedHTML;
-  if (html === null) {
-    const previous = deferReaderCode;
-    deferReaderCode = deferred;
-    try {
-      renderedMath = collectFormulaRendering(() => {
-        return renderPreparedFootnotes(prepared, marked, t('footnotes'), sourceMap?.parse);
-      });
-      html = DOMPurify.sanitize(renderedMath.html, { ADD_ATTR: ['target', 'rel', 'data-md-color'] });
-    } finally { deferReaderCode = previous; }
-    if (container === els.content) readerHTMLCache.set(cacheKey, content, html, sourceMap.snapshot());
+  // Settings can change while opening yields to the UI. Never commit HTML
+  // prepared for an older language/theme, or cache it under the newer settings.
+  if (presentation && presentation.cacheKey !== JSON.stringify([doc.path, state.language, mermaidThemeKey, container === els.content && content.length >= READER_DEFER_THRESHOLD])) presentation = null;
+  if (!presentation) {
+    const steps = prepareMarkdownPresentation(container, doc, content);
+    let step; do { step = steps.next(); } while (!step.done);
+    presentation = step.value;
   }
+  const {tableLayouts, deferred, prepared, sourceMap, renderedMath, html} = presentation;
   // The reusable snapshots above are plain SVG strings. Release the live
   // ECharts instances and ResizeObservers before replacing the preview DOM,
   // otherwise repeated editing of a chart-heavy document gradually retains
@@ -6778,14 +7074,14 @@ function renderEditorPreview(content = state.currentFile?.content || '') {
   }
 }
 
-function renderCurrentDocument() {
+function renderCurrentDocument(presentation = null) {
   cancelReadingPositionRestore();
   const doc = state.currentFile;
   if (!doc) return;
   // Identity must follow the opened document even if rendering fails.
   els.breadcrumb.innerHTML = `<span>${escapeHtml(doc.directory)}</span><i>›</i><strong>${escapeHtml(doc.name)}</strong>`;
   try {
-    renderMarkdownTo(els.content, doc, doc.content);
+    renderMarkdownTo(els.content, doc, doc.content, presentation);
     const words = documentWordCount(doc.content);
     const minutes = Math.max(1, Math.ceil(words / 300));
     els.readingTime.textContent = t('readingTime', {
@@ -6806,13 +7102,15 @@ function renderCurrentDocument() {
   }
 }
 
+let documentLoading;
 function beginDocumentOpen() {
-  return { id: ++state.documentOpenRequest, session: state.documentSession, content: state.currentFile?.content };
+  documentLoading?.cancel();
+  return { id: ++state.documentOpenRequest, session: state.documentSession, content: state.currentFile?.content, editorRevision: state.editorRevision || 0 };
 }
 
 function canApplyDocumentOpen(request) {
   return request.id === state.documentOpenRequest && request.session === state.documentSession
-    && (request.content === state.currentFile?.content || maybeDiscardChanges());
+    && (request.content === state.currentFile?.content && (request.editorRevision || 0) === (state.editorRevision || 0) || maybeDiscardChanges());
 }
 
 function syncDocumentAccessControls() {
@@ -6824,7 +7122,36 @@ function syncDocumentAccessControls() {
   els.saveButton.title = readOnly ? t('referenceReadOnlyTitle') : t('saveTitle');
 }
 
-function displayDocument(doc, { addToLibrary = true } = {}) {
+async function readDocumentForOpen(request, read, options = {}) {
+  documentLoading ||= mountDocumentLoading($('.reader-pane'), () => state.language);
+  const loading = documentLoading.begin();
+  const current = () => request.id === state.documentOpenRequest && request.session === state.documentSession;
+  try {
+    const doc = await read();
+    if (!doc?.path || !current()) return null;
+    loading.phase('processing');
+    await loading.yield();
+    const steps = prepareMarkdownPresentation(els.content, doc, doc.content);
+    let step;
+    do {
+      if (!current()) return null;
+      step = steps.next();
+      if (!step.done) await loading.yield();
+    } while (!step.done);
+    loading.phase('displaying');
+    await loading.yield();
+    // The old document remains intact during preparation. Recheck unsaved
+    // changes immediately before the synchronous commit, never across a yield.
+    if (!canApplyDocumentOpen(request)) return null;
+    if (options.sidebarMode) setSidebarMode(options.sidebarMode);
+    displayDocument(doc, {...options, presentation: step.value});
+    const session = state.documentSession;
+    await loading.yield();
+    return request.id === state.documentOpenRequest && session === state.documentSession ? doc : null;
+  } finally { loading.finish(); }
+}
+
+function displayDocument(doc, { addToLibrary = true, presentation = null } = {}) {
   if (!doc?.path) return;
   cancelReadingPositionRestore();
   readingPosition = null;
@@ -6872,13 +7199,14 @@ function displayDocument(doc, { addToLibrary = true } = {}) {
   syncDocumentAccessControls();
   els.editButton.classList.remove('active');
   els.editButtonLabel.textContent = t('edit');
-  renderCurrentDocument();
+  renderCurrentDocument(presentation);
   setDirty(false);
   $('.reader-pane').scrollTo({ top: 0 });
 }
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  documentLoading?.cancel();
   cancelReadingPositionRestore();
   readingPosition = null;
   editorEntryPosition = null;
@@ -6987,13 +7315,16 @@ async function newFile() {
   }
 }
 
-async function loadFile(filePath) {
+async function loadFile(filePath, { fragment = '' } = {}) {
   if (!maybeDiscardChanges()) return;
   const request = beginDocumentOpen();
   try {
-    const doc = await window.quilliteMarkdown.openRecentFile(filePath);
-    if (canApplyDocumentOpen(request)) displayDocument(doc);
+    const doc = await readDocumentForOpen(request, () => window.quilliteMarkdown.openRecentFile(filePath));
+    if (doc?.path) {
+      if (fragment) scrollDocumentLinkTarget(els.content, fragment);
+    }
   } catch (error) {
+    if (request.id !== state.documentOpenRequest || request.session !== state.documentSession) return;
     if (isMissingDocumentError(error)) {
       await refreshLibraryFileStatuses();
       showToast(t('recentMissingTitle'), 'warning');
@@ -7530,7 +7861,7 @@ async function saveDocument(saveAs = false, options = {}) {
   }
   if (state.saveAsRequired && options.auto) return;
   if (state.saveAsRequired && !options.auto && !options.conflictRevision) saveAs = true;
-  if (state.currentFile.draft && !options.auto) saveAs = true;
+  // NewFile already creates a real file. Draft identity must not turn Save into Save As.
   const editingContent = state.editing ? editorContent() : state.currentFile.content;
   const originalPath = state.currentFile.path;
   const originalDirectory = state.currentFile.directory;
@@ -7653,6 +7984,8 @@ function exportPreviewContainer() {
 }
 
 async function waitForPreviewImages(container, timeout = 3000) {
+  // Explicit print/export must load offscreen images as well.
+  container.querySelectorAll('img').forEach(image => { image.loading = 'eager'; });
   const pending = [...container.querySelectorAll('img')].filter(image => !image.complete || image.classList.contains('local-image-loading'));
   if (!pending.length) return;
   const cleanups = [];
@@ -8442,30 +8775,47 @@ function bindDocumentActions(container = els.content) {
     button.textContent = t('copied');
     setTimeout(() => button.textContent = t('copy'), 1200);
   }));
-  container.querySelectorAll('a').forEach(link => link.addEventListener('click', event => {
-    const href = link.getAttribute('href') || '';
-    if (href.startsWith('#') && link.dataset.target) {
+  container.querySelectorAll('a').forEach(link => {
+    const activate = event => {
+      if (event.type === 'auxclick' && event.button !== 1) return;
       event.preventDefault();
-      scrollPreviewContainerToHeading(container, link.dataset.target);
-      return;
-    }
-    if (/^https?:\/\//i.test(href)) {
-      event.preventDefault();
-      openExternal(href);
-    }
-  }));
+      const target = resolveDocumentLink(link.getAttribute('href') || '', state.currentFile?.path);
+      if (target.kind === 'external') { openExternal(target.url); return; }
+      if (target.kind === 'anchor' || (target.kind === 'document' && sameDocumentPath(target.path, state.currentFile?.path))) {
+        scrollDocumentLinkTarget(container, target.fragment);
+      } else if (target.kind === 'document') {
+        void loadFile(target.path, { fragment: target.fragment });
+      } else {
+        showToast(state.language === 'en' ? 'Unsupported document link. Use a local Markdown/text file or an HTTP(S) address.' : '不支持此链接，请使用本地 Markdown／文本文件或 HTTP(S) 地址。', 'warning');
+      }
+    };
+    link.addEventListener('click', activate);
+    link.addEventListener('auxclick', activate);
+  });
+}
+
+function scrollDocumentLinkTarget(container, fragment) {
+  cancelReadingPositionRestore();
+  if (container === els.content) revealReaderLayout(container);
+  const target = fragment ? [...container.querySelectorAll('[id]')].find(node => node.id === fragment)
+    || [...container.querySelectorAll('h1, h2, h3, h4, h5, h6')].find(node => slugify(node.textContent, 0).replace(/-0$/, '') === fragment) : container;
+  if (target && /^H[1-6]$/.test(target.tagName) && scrollPreviewContainerToHeading(container, target.id, 'auto')) return;
+  const scroller = container === els.content ? $('.reader-pane') : container.closest('.editor-preview-scroll');
+  if (target && scroller) {
+    const top = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 28;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+  } else if (fragment) {
+    showToast(state.language === 'en' ? 'The target section was not found in this document.' : '文档中未找到此链接指向的章节。', 'warning');
+  }
 }
 
 async function openFile() {
   if (!maybeDiscardChanges()) return;
   const request = beginDocumentOpen();
   try {
-    const doc = await window.quilliteMarkdown.openFile();
-    if (doc && canApplyDocumentOpen(request)) {
-      setSidebarMode('recent');
-      displayDocument(doc);
-    }
+    await readDocumentForOpen(request, () => window.quilliteMarkdown.openFile(), {sidebarMode: 'recent'});
   } catch (error) {
+    if (request.id !== state.documentOpenRequest || request.session !== state.documentSession) return;
     reportSilentError(error, 'document.open');
     showToast(t(diagnosticErrorMessage(error).includes('DOCUMENT_TOO_LARGE') ? 'documentTooLarge' : 'openFailed'), 'error');
   }
@@ -8482,8 +8832,7 @@ async function openFolder() {
     state.explorerFiles = folder.files;
     setSidebarMode('explorer');
     if (folder.files[0]) {
-      const doc = await window.quilliteMarkdown.readFile(folder.files[0].path);
-      if (canApplyDocumentOpen(request)) displayDocument(doc);
+      await readDocumentForOpen(request, () => window.quilliteMarkdown.readFile(folder.files[0].path));
     }
   } catch (error) {
     if (explorerRequest !== state.explorerRequest || !canApplyDocumentOpen(request)) return;
@@ -8496,9 +8845,9 @@ async function openReferenceDocument(kind) {
   if (!maybeDiscardChanges()) return;
   const request = beginDocumentOpen();
   try {
-    const doc = await window.quilliteMarkdown.openReferenceDocument(kind);
-    if (doc && canApplyDocumentOpen(request)) displayDocument(doc, { addToLibrary: false });
+    await readDocumentForOpen(request, () => window.quilliteMarkdown.openReferenceDocument(kind), {addToLibrary: false});
   } catch (error) {
+    if (request.id !== state.documentOpenRequest || request.session !== state.documentSession) return;
     reportSilentError(error, 'document.open-reference');
     console.error(error);
     showToast(t('referenceOpenFailed'), 'error');
@@ -10548,9 +10897,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '3.0.1', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '3.0.2', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.0.1';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.0.2';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -10608,7 +10957,7 @@ function openUpdateDialog(info) {
   state.updateInfo = info;
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
-  $('#currentVersion').textContent = info.currentVersion || '3.0.1';
+  $('#currentVersion').textContent = info.currentVersion || '3.0.2';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -11043,9 +11392,8 @@ async function startDownloadAndUpdate() {
 async function loadInitialDocument(request) {
   try {
     if (!canApplyDocumentOpen(request)) return;
-    const initialFile = await window.quilliteMarkdown.getInitialFile();
-    if (!initialFile?.path || !canApplyDocumentOpen(request)) return;
-    displayDocument(initialFile);
+    const initialFile = await readDocumentForOpen(request, () => window.quilliteMarkdown.getInitialFile());
+    if (!initialFile?.path) return;
     const session = state.documentSession;
     const mode = await window.quilliteMarkdown.getStartupMode();
     if (request.id === state.documentOpenRequest && session === state.documentSession && mode === 'edit') await toggleEditor(true);
@@ -11532,6 +11880,18 @@ $('#closeImageUploadSettings').addEventListener('click', closeImageUploadSetting
 $('#cancelImageUploadSettings').addEventListener('click', closeImageUploadSettings);
 $('#saveImageUploadSettings').addEventListener('click', saveImageUploadSettings);
 $('#testPicGo').addEventListener('click', testPicGoConnection);
+$('#testPicGoCLI').addEventListener('click', testPicGoCLIConnection);
+$('#preparePicGoCLI').addEventListener('click', preparePicGoCLIComponent);
+$('#loginPicGoCLI').addEventListener('click', () => configurePicGoCLIHosting('login'));
+$('#selectPicGoCLIConfig').addEventListener('click', () => configurePicGoCLIHosting('select'));
+$('#testPicGoCLIUpload').addEventListener('click', () => configurePicGoCLIHosting('test'));
+for (const id of ['picGoCLIPath', 'picGoCLIConfigPath']) $(`#${id}`).addEventListener('input', () => {
+  invalidateImageSettingsResponses();
+  $('#picGoCLIStatus').textContent = '';
+  $('#picGoCLIUploadStatus').textContent = '';
+  $('#picGoPrepareProgress').classList.add('hidden');
+  updatePicGoSettingsAvailability();
+});
 $('#loginPicGoCloud').addEventListener('click', loginPicGoCloud);
 $('#testPicGoCloud').addEventListener('click', testPicGoCloudConnection);
 $('#logoutPicGoCloud').addEventListener('click', logoutPicGoCloud);
@@ -11553,6 +11913,7 @@ $('#picGoSetupBack').addEventListener('click', () => {
 });
 document.querySelectorAll('input[name="imageUploadMode"]').forEach(input => input.addEventListener('change', () => {
   setImageUploadSettingsStatus();
+  $('#picGoCLIStatus').textContent = '';
   invalidateImageSettingsResponses();
   state.picGoCloudConnectionReady = false;
   applyPicGoCloudStatus({ connected: false });
@@ -12141,10 +12502,6 @@ els.moreMenu.addEventListener('click', event => {
     window.quilliteMarkdown.openDefaultApps();
     showToast(t('defaultAppHint'), 'info', 5200);
   }
-  if (action === 'print') {
-    printCurrentDocument();
-  }
-  if (action === 'export-center') openExportCenter();
   if (action === 'document-tools') documentTools.open();
   if (action === 'image-upload-settings') openImageUploadSettings();
   if (action === 'body-typography') openTypographySettings();
@@ -12370,7 +12727,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   // Native dialog traps focus; do not route typing/shortcuts to the background document.
-  if ($('#linkDialog').open || $('#footnoteDialog').open || $('#recentClearDialog').open) return;
+  if ($('#linkDialog').open || $('#footnoteDialog').open || $('#recentClearDialog').open || $('#picGoCLIEnableDialog').open) return;
   if (!els.formulaDialog.classList.contains('hidden')) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); $('#formulaSearch').focus(); }
     else if (event.key === 'Escape') { event.preventDefault(); closeFormulaDialog(); }
@@ -12471,10 +12828,14 @@ window.addEventListener('focus', () => {
   scheduleMacWindowModeSync();
   refreshCurrentFileFromDisk();
 });
-window.quilliteMarkdown.onOpenFile(doc => {
+window.quilliteMarkdown.onOpenFile(async doc => {
   if (!doc?.path || !maybeDiscardChanges()) return;
-  setSidebarMode('recent');
-  displayDocument(doc);
+  const request = beginDocumentOpen();
+  try { await readDocumentForOpen(request, async () => doc, {sidebarMode: 'recent'}); }
+  catch (error) {
+    if (request.id !== state.documentOpenRequest || request.session !== state.documentSession) return;
+    reportSilentError(error, 'document.open-event'); showToast(t('openFailed'), 'error');
+  }
 });
 window.quilliteMarkdown.onConfirmClose(openUnsavedCloseDialog);
 initialize();

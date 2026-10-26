@@ -102,13 +102,15 @@ export function scheduleReaderWork(container, highlight) {
     }
   }, { root: container.closest('.reader-pane'), rootMargin: '400px' });
   codes.forEach(code => session.observer.observe(code));
-  // Keep headings and charts normally laid out. No wrapper changes, missing
-  // text, or source-position mapping changes are introduced.
+  // Keep headings and charts normally laid out. Prose below the viewport can
+  // also skip layout; all text stays in the DOM for selection/search/export.
   for (const block of container.children) {
-    if (!block.matches('.code-block, .markdown-table-scroll') || block.querySelector('.mermaid-diagram, .echarts-diagram')) continue;
+    if (!block.matches('p, blockquote, ul, ol, .code-block, .markdown-table-scroll') || block.querySelector('h1,h2,h3,h4,h5,h6,.mermaid-diagram,.echarts-diagram')) continue;
     if (block.matches('.code-block') && !block.querySelector('pre > code')) continue;
     block.classList.add('reader-deferred-layout');
-    const lines = block.matches('.code-block') ? block.querySelector('code').textContent.split('\n').length : block.querySelectorAll('tr').length;
+    const lines = block.matches('.code-block') ? block.querySelector('code').textContent.split('\n').length
+      : block.matches('.markdown-table-scroll') ? block.querySelectorAll('tr').length
+      : Math.ceil(block.textContent.length / 70);
     block.style.containIntrinsicSize = `auto ${Math.min(20000, Math.max(80, lines * 28 + 40))}px`;
   }
 }

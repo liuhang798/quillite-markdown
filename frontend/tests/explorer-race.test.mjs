@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {installDocumentLoadingFixture} from './document-loading-fixture.mjs';
 const source=readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
 const deferred=()=>{let resolve,reject;const promise=new Promise((r,j)=>{resolve=r;reject=j;});return{promise,resolve,reject};};
@@ -9,6 +10,7 @@ function harness() {
  const state={root:'Saved',explorerRequest:0,explorerFiles:[{name:'original.md'}],sidebarMode:'explorer',documentOpenRequest:0,documentSession:0};
  const lists=[],frames=[],notices=[],opens=[];
  const context=vm.createContext({state,console:{warn(){},error(){}},window:{quilliteMarkdown:{listFolder:root=>{const d=deferred();lists.push({root,...d});return d.promise;},openFolder:()=>{const d=deferred();opens.push(d);return d.promise;},readFile:async path=>({path})}},requestAnimationFrame:fn=>frames.push(fn),setSidebarMode:mode=>{state.sidebarMode=mode;},reportSilentError(){},showToast:k=>notices.push(k),t:k=>k,isMissingDocumentError:()=>false,maybeDiscardChanges:()=>true,displayDocument:doc=>{state.currentFile=doc;state.documentSession++;}});
+ installDocumentLoadingFixture(context,source);
  vm.runInContext(between('function beginDocumentOpen(', 'function syncDocumentAccessControls(')+between('async function refreshExplorer()', 'function renderFileRow(')+between('async function openFolder()', 'async function openReferenceDocument('),context);
  const paint=()=>{const first=frames.shift();first?.();const second=frames.shift();return second?.();};
  return{state,context,lists,notices,opens,paint};

@@ -1,0 +1,6 @@
+{
+  "name": "quillite-picgo-component",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": { "picgo": "3.2.0" }
+}

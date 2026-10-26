@@ -1,6 +1,7 @@
 // Map the tokens that actually render, not an independently guessed block list.
 // Offsets stay local to each token; only line arrays are retained, including for
 // large embedded images. Container prefixes may disappear in child token raws.
+import { markdownSourceOptions } from './markdown-performance.js';
 const mappedContainers = new WeakMap();
 export function clearPreviewSourceMap(container) { mappedContainers.delete(container); }
 function lineStarts(text) {
@@ -77,7 +78,7 @@ export function createPreviewSourceMap(markdown, sourceLineMap = null, { inline 
     parse(text, links = null) {
       // Marked normalises newlines itself; normalise before indexing as well.
       text = text.replace(/\r\n?/g, '\n');
-      const options = {...markdown.defaults, breaks: true};
+      const options = markdownSourceOptions(markdown.defaults, text);
       const lexer = new markdown.Lexer(options);
       if (links) Object.assign(lexer.tokens.links, links);
       const tokens = lexer.lex(text), starts = lineStarts(text);

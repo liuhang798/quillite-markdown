@@ -6,7 +6,7 @@
   <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
     <a href="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml"><img src="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml/badge.svg" alt="Build status"></a>
-    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.0.1-159A63" alt="Download V3.0.1"></a>
+    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.0.2-159A63" alt="Download V3.0.2"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/liuhang798/quillite-markdown" alt="MIT License"></a>
   </p>
   <p><a href="https://qm.ssssa.cn/">Official website</a> · <a href="https://qm.ssssa.cn/#download">Download</a> · <a href="#quick-start">Quick start</a> · <a href="#development">Build from source</a></p>
@@ -14,7 +14,7 @@
 
 Quillite Markdown is built with Go + Wails, without Electron. The Windows installer is about 13 MB. Read long documents, write READMEs, maintain technical notes and browse local Markdown folders; plain-text `.txt` files are supported too. Documents stay in local files, and no Quillite account is required.
 
-The current release is **V3.0.1**, combining the macOS Chinese-input fix, editing outline overlay, reading/editing position continuity and Shift range selection in Recent, plus editor null-node guards, interrupted-download retries and clearer AI rate-limit/quota guidance. See the [changelog](CHANGELOG.md) for this update and the [complete v3.0.0 record](docs/releases/3.0.0-details.md) for the previous major release.
+The current release is **V3.0.2**, adding on-demand PicGo CLI uploads, one-click preparation and upload-settings verification. It improves large-document loading, fixes outline equations, local document links, new-document saving and chart selection, and simplifies Spell check. See the [changelog](CHANGELOG.md) for this update and the [complete v3.0.0 record](docs/releases/3.0.0-details.md) for the previous major release.
 
 ## Download
 
@@ -27,17 +27,25 @@ The current release is **V3.0.1**, combining the macOS Chinese-input fix, editin
 - **[qm.ssssa.cn](https://qm.ssssa.cn/)** is the official website and the app's only update/download channel. GitHub retains source code, release records and build assets.
 - Windows installation shows the final destination before confirmation. A custom ordinary folder is treated as a parent for a dedicated product directory. Upgrades reuse only a validated installation directory; uninstalling preserves user documents.
 - Formal Windows Authenticode / Apple Developer ID certificates are not configured. SmartScreen or Gatekeeper may display warnings. Updates or file access may require authorization depending on the operating system; a prompt-free experience is not guaranteed.
-- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.0.1; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
+- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.0.2; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
 
 ## Quick start
 
+Auto, English (US) and English (UK) are listed directly in the Spell check submenu. Click an item to select it; the current dictionary is checked, with no dropdown.
+
+More → Spell check groups misspelling marks, dictionary language and clearing the personal dictionary. Export and Print remain in the reading-page actions (the document actions menu in narrow windows), without duplicate entries in More. Ctrl / ⌘ + P remains available.
+
+Heading equations retain subscripts, superscripts and fractions in the reading outline, editing outline and inline `[TOC]`. Search accepts formula source text; existing section anchors and document content remain unchanged.
+
 Leaving the editor restores the pre-edit reading position instead of jumping to the top. Newly opened documents still start at the top.
 
-1. Choose Open document to read a file, or New document to start editing. The first manual save asks for a name and location.
+1. Choose Open document to read a file, or New document to start editing. Ctrl / ⌘ + S saves directly to the displayed location, including new and autosaved documents. Use Save As or Ctrl / ⌘ + Shift + S to choose a different name or folder.
 2. Use Live editing / Source at the lower right of the editor header. The table below describes explicit mode actions.
 3. Insert tables, images, equations or charts from the toolbar; additional actions move into More formatting when space is limited.
 4. Press `Ctrl + S` (`⌘ + S` on macOS). Autosave runs every 10 seconds while editing, but pauses automatic overwriting when external changes require conflict resolution.
 5. Choose Export document for output options. The home screen and lower sidebar provide chart, equation and formatting examples.
+
+Local Markdown/text links resolve against the current file's directory and open inside the app, including Unicode, spaces, parent directories and section anchors. Web links still use the default browser; missing targets leave the current document open.
 
 | Action | Editing area | Split preview |
 |---|---|---|
@@ -58,6 +66,7 @@ Switching modes preserves content, selection and undo history. The app remembers
 - Headings, prose, emphasis, lists, quotes, tasks, code and tables render in the editing area. The text-style menu offers prose and H1–H6.
 - Click, select and type inside table cells and code without expanding an entire block into source. Code retains its background, and block controls appear on hover or keyboard focus.
 - View source / Return to rendered view operates on individual blocks. Complex or unfinished syntax keeps an editable source fallback.
+- Whole-chart selection uses a card border without stray top/left color bars; source-text highlighting and chart copy, delete and undo remain available.
 - Shared undo/redo, IME input, formatting shortcuts, multiple selections, find/replace and rich-text paste from web pages or Word.
 - Live editing is not a promise of full WYSIWYG support for every Markdown extension: plain text, some complex syntax and oversized prose use source fallback.
 
@@ -67,7 +76,10 @@ Switching modes preserves content, selection and undo history. The app remembers
 - Paste regular TSV or HTML text tables with empty cells, alignment and undo preserved. Unsupported merged cells or complex media tables are rejected with feedback instead of overwriting content.
 - Use local attachments, online URLs, reference images or embedded Base64 images. Adjust size, alignment and image rows, including images inside tables.
 - Long Base64 image payloads appear as format/size labels even in source mode. **Only their display is condensed; copying and saving preserve the complete image data.**
-- Images default to the document's `assets` directory. Embedded storage, PicGo Cloud and local PicGo are optional; failed cloud uploads fall back to the saved local attachment.
+- Images default to the document's `assets` directory. Embedded storage, PicGo Cloud, local PicGo Server and PicGo CLI are optional; failed uploads fall back to the saved local attachment.
+- CLI “Verify upload settings” automatically uses a built-in test image; no image selection is needed. Success prompts you to “Save & enable”. Cancel or Escape leaves uploading disabled, with a prominent unsaved status and manual saving available while verification remains valid.
+- CLI preparation shows real download bytes/percentage, stages and elapsed time. Dependency installation uses an activity indicator rather than a simulated overall percentage. Manual executable paths are in collapsed Advanced settings.
+- PicGo CLI runs on demand without a background Server. “Prepare CLI automatically” downloads pinned versions from official Node.js/npm sources after confirmation, verifies them, and installs privately without changing system Node.js, PATH or npm configuration. Windows x64, macOS Intel/Apple Silicon and Linux x64 are supported; internet and several hundred MB of free space are required. Then sign in to PicGo Cloud through the CLI in your browser (a separate profile preserves existing settings), or select a trusted configured CLI `config.json`; blank reuses `~/.picgo/config.json`. Other hosts can still be configured with `picgo set` / `picgo use`. Version detection cannot enable uploading: explicitly upload the built-in test PNG, obtain an HTTPS result, then save within 10 minutes. The test image remains on the host until you remove it. Existing absolute CLI paths are supported, including Windows `picgo.cmd` without command arguments. Actual uploads always execute `picgo upload`; success inserts HTTPS while keeping local backups, and failures preserve local assets without retries. Existing local images are not uploaded automatically.
 - Portable Markdown embeds supported local images into a new copy without modifying the original or deleting attachments. Online, missing or complex references stop the export with feedback.
 
 ### 41 chart types and 95 equation templates
@@ -92,6 +104,8 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 - Rename, Save As, history versions and crash recovery. Restored content first enters the editor and is written to disk only after saving.
 - Compare disk changes with current edits, save a separate copy or merge manually instead of silently overwriting another application's changes.
 - Deferred highlighting and preview optimizations for large documents. Hidden split previews stop automatic rendering and show fresh content when restored.
+- Large documents no longer enter a read-only safe mode because of character count or embedded Base64 images: reading, editing, search, printing and export remain available. Marker-free prose avoids redundant parsing; offscreen prose layout and code highlighting are deferred, with lazy image loading. Printing/export explicitly load complete images. Complex large documents may still take time; opening never truncates or rewrites the source.
+- Document opening shows a lightweight indicator in the reading area after 300 ms, with an additional waiting hint after 3 seconds. It reports opening, processing and displaying stages without fabricated percentages. The existing page and file list stay visible; rendering yields between stages, and switching/closing documents invalidates stale UI updates.
 
 ### Export and optional assistance
 
