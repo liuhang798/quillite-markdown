@@ -8,7 +8,8 @@ function fixture(){
  const classList={add:n=>classes.add(n),remove:n=>classes.delete(n),contains:n=>classes.has(n),toggle:(n,v)=>v?classes.add(n):classes.delete(n)};
  const els={imageUploadProgress:{classList},imageUploadProgressTitle:{},imageUploadProgressDetail:{},imageUploadProgressPercent:{},imageUploadProgressBar:{style:{}}};
  const state={imageUploadRun:0,imageUploadMode:'local',imageUploadOperationId:''};
- const c=vm.createContext({state,els,t:k=>k,crypto:{randomUUID:()=>`request-${++id}`},clearTimeout(){},setTimeout:f=>timers.push(f)});
+ const c=vm.createContext({state,els,t:k=>k,crypto:{randomUUID:()=>`request-${++id}`},clearTimeout(){},setTimeout:f=>timers.push(f),setInterval:f=>{c.tick=f;return 1;},clearInterval:()=>{c.tick=null;}});
+ vm.runInContext(renderer.slice(renderer.indexOf('function cliUploadPhaseText('),renderer.indexOf('\nasync function configurePicGoCLIHosting(')),c);
  vm.runInContext(renderer.slice(renderer.indexOf('function beginImageUploadProgress('),renderer.indexOf('\nfunction showImportedImageResult(')),c);
  const progress=(operationId,done,phase='uploading')=>c.updateImageUploadProgress({operationId,phase,done,total:100});
  return{c,els,state,classes,timers,progress};
@@ -20,6 +21,15 @@ test('progress accepts only the active operation, including after cancellation a
  assert.equal(f.els.imageUploadProgressPercent.textContent,'30%');
  f.state.imageUploadOperationId='';f.progress(current,90);assert.equal(f.els.imageUploadProgressPercent.textContent,'30%');
  f.c.beginImageUploadProgress('picgo');f.progress(current,99);assert.equal(f.els.imageUploadProgressPercent.textContent,'0%');
+});
+
+test('CLI shows stage and elapsed time without fabricated percentages and stops its timer',()=>{
+ const f=fixture(),run=f.c.beginImageUploadProgress('picgo-cli'),id=f.state.imageUploadOperationId;
+ for(const [phase,key] of [['queued','cliUploadQueued'],['starting','cliUploadStarting'],['uploading','cliUploadRunning'],['finalizing','cliUploadFinishing']]) {
+   f.progress(id,0,phase);assert.match(f.els.imageUploadProgressDetail.textContent,new RegExp(key));
+   assert.equal(f.els.imageUploadProgressPercent.textContent,'');assert.equal(f.classes.has('is-indeterminate'),true);
+ }
+ f.c.finishImageUploadProgress(run,true);assert.equal(f.c.tick,null);assert.equal(f.els.imageUploadProgressPercent.textContent,'100%');
 });
 test('provider wording belongs to the upload snapshot, not newer settings',()=>{
  const f=fixture();f.c.beginImageUploadProgress('picgo-cloud');f.state.imageUploadMode='picgo';f.progress(f.state.imageUploadOperationId,40);

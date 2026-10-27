@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,6 +20,14 @@ import (
 
 // CLI uploads are serialized because PicGo plugins share one user configuration.
 var picGoCLISlot = make(chan struct{}, 1)
+
+//go:embed picgo_upload_runner.cjs
+var picGoUploadRunner string
+
+type picGoRunOptions struct {
+	awaitUpload bool
+	report      func(string, int64, int64)
+}
 
 func findPicGoProgram(name string, candidates []string) (string, error) {
 	if path, err := exec.LookPath(name); err == nil && filepath.IsAbs(path) {
@@ -106,9 +115,11 @@ func resolvePicGoCLI(configured string) (string, []string, error) {
 }
 
 type picGoCLIOutput struct {
-	mu       sync.Mutex
-	data     []byte
-	overflow bool
+	mu        sync.Mutex
+	data      []byte
+	overflow  bool
+	phaseLine []byte
+	onPhase   func(string, int64, int64)
 }
 
 func (b *picGoCLIOutput) Write(p []byte) (int, error) {
@@ -121,13 +132,35 @@ func (b *picGoCLIOutput) Write(p []byte) (int, error) {
 		p = p[:remaining]
 	}
 	b.data = append(b.data, p...)
+	if b.onPhase != nil {
+		for _, c := range p {
+			if c == '\n' {
+				line := strings.TrimSpace(string(b.phaseLine))
+				for _, phase := range []string{"uploading", "finalizing"} {
+					if line == "QUILLITE_CLI_PHASE "+phase {
+						b.onPhase(phase, 0, 0)
+					}
+				}
+				b.phaseLine = b.phaseLine[:0]
+			} else if len(b.phaseLine) < 1024 {
+				b.phaseLine = append(b.phaseLine, c)
+			}
+		}
+	}
 	return n, nil
 }
 
 func runPicGoCLI(ctx context.Context, configured string, args ...string) (string, error) {
+	return runPicGoCLIWithOptions(ctx, configured, picGoRunOptions{}, args...)
+}
+
+func runPicGoCLIWithOptions(ctx context.Context, configured string, options picGoRunOptions, args ...string) (string, error) {
 	program, prefix, err := resolvePicGoCLI(configured)
 	if err != nil {
 		return "", err
+	}
+	if options.awaitUpload {
+		prefix = []string{"-e", picGoUploadRunner, configured}
 	}
 	cmd := exec.CommandContext(ctx, program, append(prefix, args...)...)
 	if filepath.Base(configured) == managedPicGoEntry {
@@ -145,8 +178,20 @@ func runPicGoCLI(ctx context.Context, configured string, args ...string) (string
 	cmd.Dir = filepath.Dir(program)
 	cmd.WaitDelay = 2 * time.Second
 	stdout, stderr := &picGoCLIOutput{}, &picGoCLIOutput{}
+	if options.awaitUpload {
+		stderr.onPhase = options.report
+	}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	err = cmd.Run()
+	if options.report != nil {
+		options.report("starting", 0, 0)
+	}
+	err = cmd.Start()
+	if err == nil {
+		if !options.awaitUpload && options.report != nil {
+			options.report("uploading", 0, 0)
+		}
+		err = cmd.Wait()
+	}
 	if ctx.Err() != nil {
 		return "", errors.New("PICGO_CLI_TIMEOUT")
 	}
@@ -165,7 +210,7 @@ func runPicGoCLI(ctx context.Context, configured string, args ...string) (string
 
 var picGoANSI = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 
-func picGoCLIImageURL(output string) (string, error) {
+func picGoCLIImageURL(output string, allowHTTP bool) (string, error) {
 	output = picGoANSI.ReplaceAllString(output, "")
 	var result string
 	success := false
@@ -178,7 +223,8 @@ func picGoCLIImageURL(output string) (string, error) {
 		if strings.Contains(strings.ToUpper(line), "[PICGO ERROR]") {
 			return "", errors.New("PICGO_CLI_OUTPUT_INVALID")
 		}
-		if !success || !strings.HasPrefix(line, "https://") {
+		lower := strings.ToLower(line)
+		if !success || (!strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://")) {
 			continue
 		}
 		parsed, err := url.Parse(line)
@@ -190,11 +236,17 @@ func picGoCLIImageURL(output string) (string, error) {
 	if result == "" {
 		return "", errors.New("PICGO_CLI_OUTPUT_INVALID")
 	}
+	// Validate the entire output before reporting a protocol-only refusal.
+	// Never upgrade the returned URL: the hosting service may not support TLS.
+	if strings.HasPrefix(strings.ToLower(result), "http://") && !allowHTTP {
+		return "", errors.New("PICGO_CLI_HTTP_NOT_ALLOWED")
+	}
 	return result, nil
 }
 
 // Detection only reads the CLI version. It never uploads the clipboard/image.
 func (a *App) TestPicGoCLI(path string) (string, error) {
+	path = a.effectivePicGoCLIPath(path)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	output, err := runPicGoCLI(ctx, path, "--version")
@@ -219,22 +271,24 @@ func (a *App) UploadImageToPicGoCLI(currentFile, imagePath, operationID string) 
 	if normaliseImageUploadMode(prefs.ImageUploadMode) != imageUploadModePicGoCLI {
 		return "", errors.New("PicGo CLI uploading is disabled")
 	}
-	name, data, _, err := imageAssetForUpload(currentFile, imagePath)
-	if err != nil {
-		return "", err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	report := imageUploadReporter(operationID, a.emitImageUploadProgress)
+	report("queued", 0, 0)
 	select {
 	case picGoCLISlot <- struct{}{}:
 		defer func() { <-picGoCLISlot }()
 	case <-ctx.Done():
 		return "", errors.New("PICGO_CLI_TIMEOUT")
 	}
-	report := imageUploadReporter(operationID, a.emitImageUploadProgress)
+	// Do not retain an entire image in memory while waiting for another upload.
+	name, data, _, err := imageAssetForUpload(currentFile, imagePath)
+	if err != nil {
+		return "", err
+	}
 	report("preparing", 0, int64(len(data)))
-	report("uploading", 0, 0)
-	result, err := uploadPicGoCLIConfiguredSnapshot(ctx, prefs.PicGoCLIPath, prefs.PicGoCLIConfigPath, name, data)
+	cli := a.effectivePicGoCLIPath(prefs.PicGoCLIPath)
+	result, err := uploadPicGoCLIConfiguredSnapshot(ctx, cli, prefs.PicGoCLIConfigPath, name, data, prefs.PicGoCLIAllowHTTP, picGoRunOptions{awaitUpload: a.validManagedPicGoCLI(cli), report: report})
 	if err != nil {
 		report("failed", 0, int64(len(data)))
 		return "", err
@@ -244,10 +298,10 @@ func (a *App) UploadImageToPicGoCLI(currentFile, imagePath, operationID string) 
 }
 
 func uploadPicGoCLISnapshot(ctx context.Context, cliPath, name string, data []byte) (string, error) {
-	return uploadPicGoCLIConfiguredSnapshot(ctx, cliPath, "", name, data)
+	return uploadPicGoCLIConfiguredSnapshot(ctx, cliPath, "", name, data, false)
 }
 
-func uploadPicGoCLIConfiguredSnapshot(ctx context.Context, cliPath, configPath, name string, data []byte) (string, error) {
+func uploadPicGoCLIConfiguredSnapshot(ctx context.Context, cliPath, configPath, name string, data []byte, allowHTTP bool, options ...picGoRunOptions) (string, error) {
 	args, err := picGoCLIConfigArgs(configPath)
 	if err != nil {
 		return "", err
@@ -265,9 +319,13 @@ func uploadPicGoCLIConfiguredSnapshot(ctx context.Context, cliPath, configPath, 
 	if err := stage.Close(); err != nil {
 		return "", err
 	}
-	output, err := runPicGoCLI(ctx, cliPath, append(args, "upload", stage.Name())...)
+	var runOptions picGoRunOptions
+	if len(options) > 0 {
+		runOptions = options[0]
+	}
+	output, err := runPicGoCLIWithOptions(ctx, cliPath, runOptions, append(args, "upload", stage.Name())...)
 	if err != nil {
 		return "", err
 	}
-	return picGoCLIImageURL(output)
+	return picGoCLIImageURL(output, allowHTTP)
 }

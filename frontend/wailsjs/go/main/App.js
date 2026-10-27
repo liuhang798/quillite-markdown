@@ -22,6 +22,10 @@ export function CancelAIRewrite() {
   return window['go']['main']['App']['CancelAIRewrite']();
 }
 
+export function CancelPicGoCLILogin(arg1) {
+  return window['go']['main']['App']['CancelPicGoCLILogin'](arg1);
+}
+
 export function CheckDocumentAssets(arg1, arg2) {
   return window['go']['main']['App']['CheckDocumentAssets'](arg1, arg2);
 }
@@ -158,8 +162,8 @@ export function ListRecoveryArchives() {
   return window['go']['main']['App']['ListRecoveryArchives']();
 }
 
-export function LoginPicGoCLI(arg1, arg2) {
-  return window['go']['main']['App']['LoginPicGoCLI'](arg1, arg2);
+export function LoginPicGoCLI(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['LoginPicGoCLI'](arg1, arg2, arg3, arg4);
 }
 
 export function LoginPicGoCloud() {
@@ -306,6 +310,10 @@ export function SavePastedImage(arg1, arg2) {
   return window['go']['main']['App']['SavePastedImage'](arg1, arg2);
 }
 
+export function SavePicGoCLIDraft(arg1) {
+  return window['go']['main']['App']['SavePicGoCLIDraft'](arg1);
+}
+
 export function SaveRecoverySnapshot(arg1) {
   return window['go']['main']['App']['SaveRecoverySnapshot'](arg1);
 }
@@ -406,8 +414,12 @@ export function TestPicGoCLI(arg1) {
   return window['go']['main']['App']['TestPicGoCLI'](arg1);
 }
 
-export function TestPicGoCLIUpload(arg1, arg2, arg3) {
-  return window['go']['main']['App']['TestPicGoCLIUpload'](arg1, arg2, arg3);
+export function TestPicGoCLIUpload(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['TestPicGoCLIUpload'](arg1, arg2, arg3, arg4);
+}
+
+export function TestPicGoCLIUploadWithProgress(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['TestPicGoCLIUploadWithProgress'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function TestPicGoCloud() {

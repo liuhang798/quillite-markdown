@@ -94,64 +94,71 @@ type RecentFileStatus struct {
 }
 
 type Preferences struct {
-	RecentFiles          []string           `json:"recentFiles"`
-	RecentFileStatuses   []RecentFileStatus `json:"recentFileStatuses,omitempty"`
-	PinnedRecentFiles    []string           `json:"pinnedRecentFiles"`
-	FavoriteFiles        []string           `json:"favoriteFiles"`
-	FavoriteFileStatuses []RecentFileStatus `json:"favoriteFileStatuses,omitempty"`
-	DraftFiles           []string           `json:"draftFiles,omitempty"`
-	LastFile             string             `json:"lastFile,omitempty"`
-	LastSaveDirectory    string             `json:"lastSaveDirectory,omitempty"`
-	ExplorerRoot         string             `json:"explorerRoot,omitempty"`
-	Language             string             `json:"language"`
-	FontFamily           string             `json:"fontFamily,omitempty"`
-	BodyTypography       BodyTypography     `json:"bodyTypography"`
-	LastUpdateCheck      string             `json:"lastUpdateCheck,omitempty"`
-	SuppressUpdateUntil  string             `json:"suppressUpdateUntil,omitempty"`
-	UsageAnalytics       bool               `json:"usageAnalytics"`
-	ImageUploadMode      string             `json:"imageUploadMode,omitempty"`
-	PicGoServerURL       string             `json:"picGoServerUrl,omitempty"`
-	PicGoCLIPath         string             `json:"picGoCliPath,omitempty"`
-	PicGoCLIConfigPath   string             `json:"picGoCliConfigPath,omitempty"`
-	AIProvider           string             `json:"aiProvider,omitempty"`
-	AIBaseURL            string             `json:"aiBaseUrl,omitempty"`
-	AIBaseURLs           map[string]string  `json:"aiBaseUrls,omitempty"`
-	AIModel              string             `json:"aiModel,omitempty"`
-	AIModels             map[string]string  `json:"aiModels,omitempty"`
-	AnonymousInstallID   string             `json:"anonymousInstallId,omitempty"`
-	LastActiveReport     string             `json:"lastActiveReport,omitempty"`
-	ExportSettings       ExportSettings     `json:"exportSettings,omitempty"`
+	RecentFiles             []string           `json:"recentFiles"`
+	RecentFileStatuses      []RecentFileStatus `json:"recentFileStatuses,omitempty"`
+	PinnedRecentFiles       []string           `json:"pinnedRecentFiles"`
+	FavoriteFiles           []string           `json:"favoriteFiles"`
+	FavoriteFileStatuses    []RecentFileStatus `json:"favoriteFileStatuses,omitempty"`
+	DraftFiles              []string           `json:"draftFiles,omitempty"`
+	LastFile                string             `json:"lastFile,omitempty"`
+	LastSaveDirectory       string             `json:"lastSaveDirectory,omitempty"`
+	ExplorerRoot            string             `json:"explorerRoot,omitempty"`
+	Language                string             `json:"language"`
+	FontFamily              string             `json:"fontFamily,omitempty"`
+	BodyTypography          BodyTypography     `json:"bodyTypography"`
+	LastUpdateCheck         string             `json:"lastUpdateCheck,omitempty"`
+	SuppressUpdateUntil     string             `json:"suppressUpdateUntil,omitempty"`
+	UsageAnalytics          bool               `json:"usageAnalytics"`
+	ImageUploadMode         string             `json:"imageUploadMode,omitempty"`
+	PicGoServerURL          string             `json:"picGoServerUrl,omitempty"`
+	PicGoCLIPath            string             `json:"picGoCliPath,omitempty"`
+	PicGoCLIConfigPath      string             `json:"picGoCliConfigPath,omitempty"`
+	PicGoCLIAllowHTTP       bool               `json:"picGoCliAllowHttp,omitempty"`
+	PicGoManagedCLIPath     string             `json:"picGoManagedCliPath,omitempty"`
+	PicGoCLILoginConfigPath string             `json:"picGoCliLoginConfigPath,omitempty"`
+	PicGoCLIDraft           *PicGoCLIDraft     `json:"picGoCliDraft,omitempty"`
+	AIProvider              string             `json:"aiProvider,omitempty"`
+	AIBaseURL               string             `json:"aiBaseUrl,omitempty"`
+	AIBaseURLs              map[string]string  `json:"aiBaseUrls,omitempty"`
+	AIModel                 string             `json:"aiModel,omitempty"`
+	AIModels                map[string]string  `json:"aiModels,omitempty"`
+	AnonymousInstallID      string             `json:"anonymousInstallId,omitempty"`
+	LastActiveReport        string             `json:"lastActiveReport,omitempty"`
+	ExportSettings          ExportSettings     `json:"exportSettings,omitempty"`
 }
 
 type App struct {
-	ctx                  context.Context
-	mu                   sync.RWMutex
-	preferencesMu        sync.Mutex
-	recoveryMu           sync.Mutex
-	startupRecoveryReady bool
-	startupRecovery      *RecoverySnapshot
-	workspaceMu          sync.Mutex
-	workspacePlan        *workspaceReplacePlan
-	historyMu            sync.Mutex
-	picGoCloudLoginMu    sync.Mutex
-	picGoCLIVerified     string
-	picGoCLIVerifiedAt   time.Time
-	securityBookmarksMu  sync.Mutex
-	draftsMu             sync.Mutex
-	aiRequestMu          sync.Mutex
-	draftFiles           map[string]bool
-	draftReplacements    map[string]bool
-	dirty                bool
-	language             string
-	initialFile          string
-	frontendReady        bool
-	preferencesOverride  string
-	referenceOverride    string
-	aiCredentials        aiCredentialStore
-	aiRewriteCancel      context.CancelFunc
-	aiRewriteGeneration  uint64
-	aiReviewCancel       context.CancelFunc
-	aiReviewGeneration   uint64
+	ctx                      context.Context
+	mu                       sync.RWMutex
+	preferencesMu            sync.Mutex
+	recoveryMu               sync.Mutex
+	startupRecoveryReady     bool
+	startupRecovery          *RecoverySnapshot
+	workspaceMu              sync.Mutex
+	workspacePlan            *workspaceReplacePlan
+	historyMu                sync.Mutex
+	picGoCloudLoginMu        sync.Mutex
+	picGoCLIVerified         string
+	picGoCLIVerifiedAt       time.Time
+	picGoCLILoginID          string
+	picGoCLILoginCancel      context.CancelFunc
+	picGoCLILoginCancelledID string
+	securityBookmarksMu      sync.Mutex
+	draftsMu                 sync.Mutex
+	aiRequestMu              sync.Mutex
+	draftFiles               map[string]bool
+	draftReplacements        map[string]bool
+	dirty                    bool
+	language                 string
+	initialFile              string
+	frontendReady            bool
+	preferencesOverride      string
+	referenceOverride        string
+	aiCredentials            aiCredentialStore
+	aiRewriteCancel          context.CancelFunc
+	aiRewriteGeneration      uint64
+	aiReviewCancel           context.CancelFunc
+	aiReviewGeneration       uint64
 }
 
 func NewApp() *App {

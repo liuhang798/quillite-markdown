@@ -15,8 +15,11 @@ try {
   await page.goto(server.resolvedUrls.local[0]);await page.evaluate(()=>import('/src/main.js'));
   await page.evaluate(()=>{
    window.cliAudit={calls:[],saved:null,preparations:[],uploads:[],logins:[]};
-   quilliteMarkdown.testPicGoCLIUpload=(path,config,confirmed)=>new Promise((resolve,reject)=>cliAudit.uploads.push({path,config,confirmed,resolve,reject}));
-   quilliteMarkdown.loginPicGoCLI=(path,confirmed)=>new Promise((resolve,reject)=>cliAudit.logins.push({path,confirmed,resolve,reject}));
+   quilliteMarkdown.testPicGoCLIUpload=(path,config,confirmed,allowHTTP,operationId)=>new Promise((resolve,reject)=>cliAudit.uploads.push({path,config,confirmed,allowHTTP,operationId,resolve,reject}));
+   quilliteMarkdown.onImageUploadProgress=callback=>{cliAudit.uploadProgress=callback;return()=>{cliAudit.uploadProgress=null;};};
+   quilliteMarkdown.loginPicGoCLI=(path,confirmed,operationId,forceNew)=>new Promise((resolve,reject)=>cliAudit.logins.push({path,confirmed,operationId,forceNew,resolve,reject}));
+   quilliteMarkdown.onPicGoCLILoginProgress=callback=>{cliAudit.loginProgress=callback;return()=>{cliAudit.loginProgress=null;};};
+   quilliteMarkdown.cancelPicGoCLILogin=async id=>{cliAudit.cancelled=id;cliAudit.logins.find(x=>x.operationId===id)?.reject(Error('PICGO_CLI_LOGIN_CANCELLED'));};
    quilliteMarkdown.selectPicGoCLIConfig=async()=> 'C:/existing/config.json';
    quilliteMarkdown.preparePicGoCLI=(confirmed,operationId)=>new Promise((resolve,reject)=>cliAudit.preparations.push({confirmed,operationId,resolve,reject}));
    quilliteMarkdown.onPicGoPrepareProgress=callback=>{cliAudit.progress=callback;return()=>{cliAudit.progress=null;};};
@@ -24,7 +27,7 @@ try {
    quilliteMarkdown.setImageUploadSettings=async input=>(cliAudit.saved={...input});
   });
   const open=async()=>{await page.locator('#moreButton').click();await page.locator('[data-action="image-upload-settings"]').click();};
-  await open();const dialog=page.locator('#imageUploadSettingsDialog'),save=page.locator('#saveImageUploadSettings');
+  await open();const dialog=page.locator('#imageUploadSettingsDialog'),save=page.locator('#enableVerifiedPicGoCLI'),draftSave=page.locator('#saveImageUploadSettings');
   assert.equal(await dialog.locator('[name="imageUploadMode"]').count(),5);
   await dialog.locator('[value="picgo-cli"]').check();await page.locator('#picGoCLISetup').waitFor({state:'visible'});
   assert.equal(await save.isDisabled(),true);
@@ -45,11 +48,22 @@ try {
   await page.locator('#selectPicGoCLIConfig').click();await page.waitForFunction(()=>document.querySelector('#picGoCLIConfigPath').value==='C:/existing/config.json');
   page.once('dialog',d=>d.accept());await page.locator('#testPicGoCLIUpload').click();
   await page.waitForFunction(()=>cliAudit.uploads.length===1);
+  await page.evaluate(()=>cliAudit.uploadProgress({operationId:cliAudit.uploads[0].operationId,phase:'starting',done:0,total:0}));
+  assert.match(await page.locator('#picGoCLIUploadStatus').textContent(),/启动 CLI|Starting CLI/);
+  await page.evaluate(()=>cliAudit.uploadProgress({operationId:cliAudit.uploads[0].operationId,phase:'uploading',done:0,total:0}));
+  if(process.env.AUDIT_OUTPUT){await page.locator('#picGoCLIUploadStatus').scrollIntoViewIfNeeded();await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/picgo-upload-stage-${language}.png`,animations:'disabled'});}
   assert.equal(await page.locator('#picGoCLIConfigPath').isDisabled(),true);
   await page.evaluate(()=>cliAudit.uploads[0].reject(Error('PICGO_CLI_AUTH_REQUIRED')));
   await page.waitForFunction(()=>!document.querySelector('#testPicGoCLIUpload').disabled);assert.equal(await save.isDisabled(),true);
   assert.match(await page.locator('#picGoCLIUploadStatus').textContent(),/登录|login/);
   page.once('dialog',d=>d.accept());await page.locator('#loginPicGoCLI').click();await page.waitForFunction(()=>cliAudit.logins.length===1);
+  await page.evaluate(()=>cliAudit.loginProgress({operationId:cliAudit.logins[0].operationId,phase:'waiting',configPath:'C:/private/cloud/config.json'}));
+  assert.equal(await page.locator('#picGoCLIConfigPath').inputValue(),'C:/private/cloud/config.json');
+  assert.equal(await save.isDisabled(),true);
+  await page.evaluate(()=>cliAudit.loginProgress({operationId:cliAudit.logins[0].operationId,phase:'checking',configPath:'C:/private/cloud/config.json'}));
+  assert.match(await page.locator('#picGoCLIUploadStatus').textContent(),/20/);
+  assert.equal(await page.evaluate(()=>cliAudit.logins[0].forceNew),false);
+  if(process.env.AUDIT_OUTPUT)await page.locator('#picGoCLISetup').screenshot({path:`${process.env.AUDIT_OUTPUT}/picgo-login-checking-${language}.png`,animations:'disabled'});
   await page.evaluate(()=>cliAudit.logins[0].resolve('C:/private/cloud/config.json'));
   await page.waitForFunction(()=>!document.querySelector('#testPicGoCLIUpload').disabled);
   assert.equal(await save.isDisabled(),true);
@@ -140,6 +154,93 @@ try {
   assert.equal(await page.locator('#picGoCLIUploadStatus').evaluate(el=>el.classList.contains('is-success')),false);
   assert.equal(await page.evaluate(()=>cliAudit.uploads.length),4);
   assert.equal(await page.locator('#picGoCLIPath').inputValue(),'C:/private/runtime/quillite-picgo.cjs');
-  assert.deepEqual(errors,[]);console.log(`PASS PicGo CLI settings and preparation ${language}`);await page.close();
+  // HTTP is opt-in, has its own diagnostic, and does not trigger uploads.
+  const http=page.locator('#picGoCLIAllowHTTP');
+  assert.equal(await http.isChecked(),false);
+  page.once('dialog',d=>d.dismiss());await http.click();
+  assert.equal(await http.isChecked(),false);
+  assert.equal(await page.evaluate(()=>cliAudit.uploads.length),4);
+  page.once('dialog',d=>d.accept());await page.locator('#testPicGoCLIUpload').click();
+  await page.waitForFunction(()=>cliAudit.uploads.length===5);
+  assert.equal(await page.evaluate(()=>cliAudit.uploads[4].allowHTTP),false);
+  await page.evaluate(()=>cliAudit.uploads[4].reject(Error('PICGO_CLI_HTTP_NOT_ALLOWED')));
+  await page.waitForFunction(()=>!document.querySelector('#testPicGoCLIUpload').disabled);
+  assert.match(await page.locator('#picGoCLIUploadStatus').textContent(),/HTTP/);
+  assert.match(await page.locator('#picGoCLIUploadStatus').textContent(),/报告上传成功|reported a successful upload/);
+  assert.equal(await save.isDisabled(),true);
+  if(process.env.AUDIT_OUTPUT)await page.locator('#picGoCLISetup').screenshot({path:`${process.env.AUDIT_OUTPUT}/picgo-http-blocked-${language}.png`,animations:'disabled'});
+  page.once('dialog',d=>d.accept());await http.check();
+  assert.equal(await page.evaluate(()=>cliAudit.uploads.length),5);
+  page.once('dialog',d=>d.accept());await page.locator('#testPicGoCLIUpload').click();
+  await page.waitForFunction(()=>cliAudit.uploads.length===6);
+  assert.equal(await http.isDisabled(),true);
+  assert.equal(await page.evaluate(()=>cliAudit.uploads[5].allowHTTP),true);
+  await page.evaluate(()=>cliAudit.uploads[5].resolve('http://example.org/image.png'));
+  await page.locator('#picGoCLIEnableDialog').waitFor({state:'visible'});
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(()=>!document.querySelector('#saveImageUploadSettings').disabled);
+  // Changing the policy invalidates prior verification; no automatic retry.
+  await http.uncheck();assert.equal(await save.isDisabled(),true);
+  page.once('dialog',d=>d.accept());await http.check();
+  assert.equal(await save.isDisabled(),true);
+  await page.evaluate(()=>{quilliteMarkdown.setImageUploadSettings=async input=>(cliAudit.saved={...input});});
+  page.once('dialog',d=>d.accept());await page.locator('#testPicGoCLIUpload').click();
+  await page.waitForFunction(()=>cliAudit.uploads.length===7);
+  await page.evaluate(()=>cliAudit.uploads[6].resolve('http://example.org/image.png'));
+  await page.locator('#confirmPicGoCLIEnable').click();await dialog.waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(()=>cliAudit.saved.cliAllowHttp),true);
+  await open();assert.equal(await http.isChecked(),true);
+  await page.waitForFunction(()=>cliAudit.calls.length===8);await page.evaluate(()=>cliAudit.calls[7].resolve('3.2.0'));
+  await page.waitForFunction(()=>!document.querySelector('#testPicGoCLIUpload').disabled);
+  await page.setViewportSize({width:480,height:900});
+  await page.evaluate(()=>document.documentElement.setAttribute('data-color-mode','dark'));
+  assert.equal(await page.locator('#picGoCLISetup').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+  if(process.env.AUDIT_OUTPUT)await page.locator('#picGoCLISetup').screenshot({path:`${process.env.AUDIT_OUTPUT}/picgo-http-narrow-dark-${language}.png`,animations:'disabled'});
+  // Switching to another configuration must not transfer insecure consent.
+  await page.locator('#picGoCLIConfigPath').fill('C:/another/config.json');
+  assert.equal(await http.isChecked(),false);assert.equal(await save.isDisabled(),true);
+  assert.equal(await page.evaluate(()=>cliAudit.uploads.length),7);
+  // A new authorization is explicit; cancel stops only that operation and
+  // leaves its profile visible for recovery when settings open again.
+  page.once('dialog',d=>d.accept());await page.locator('#reauthorizePicGoCLI').click();
+  await page.waitForFunction(()=>cliAudit.logins.length===2);
+  assert.equal(await page.evaluate(()=>cliAudit.logins[1].forceNew),true);
+  await page.evaluate(()=>cliAudit.loginProgress({operationId:cliAudit.logins[1].operationId,phase:'waiting',configPath:'C:/pending/config.json'}));
+  assert.equal(await page.locator('#picGoCLIConfigPath').inputValue(),'C:/pending/config.json');
+  await page.locator('#cancelImageUploadSettings').click();await dialog.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>cliAudit.cancelled===cliAudit.logins[1].operationId && cliAudit.loginProgress===null);
+  assert.equal(await page.evaluate(()=>cliAudit.uploads.length),7);
+  // Offline draft save is independent of upload/enable. Failed persistence
+  // keeps the form; successful persistence restores HTTP without applying it.
+  const beforeDraft=await page.evaluate(()=>({saved:JSON.stringify(cliAudit.saved),uploads:cliAudit.uploads.length,calls:cliAudit.calls.length}));
+  await open();await page.waitForFunction(n=>cliAudit.calls.length>n,beforeDraft.calls);
+  await page.evaluate(()=>cliAudit.calls.at(-1).resolve('3.2.0'));
+  await page.waitForFunction(()=>!document.querySelector('#picGoCLIAllowHTTP').disabled);
+  page.once('dialog',d=>d.accept());await http.check();
+  assert.equal(await draftSave.isDisabled(),false);assert.equal(await save.isDisabled(),true);
+  await page.evaluate(()=>{quilliteMarkdown.savePicGoCLIDraft=async()=>{throw Error('PICGO_CLI_DRAFT_INVALID');};});
+  await draftSave.click();await page.waitForFunction(()=>!document.querySelector('#saveImageUploadSettings').disabled);
+  assert.equal(await dialog.isVisible(),true);assert.equal(await http.isChecked(),true);
+  await page.evaluate(()=>{quilliteMarkdown.savePicGoCLIDraft=async input=>(cliAudit.draft={...input});});
+  await draftSave.click();await dialog.waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(()=>JSON.stringify(cliAudit.saved)),beforeDraft.saved);
+  assert.equal(await page.evaluate(()=>cliAudit.uploads.length),beforeDraft.uploads);
+  assert.equal(await page.evaluate(()=>cliAudit.draft.cliAllowHttp),true);
+  if(await page.locator('#closeToast').isVisible())await page.locator('#closeToast').click();
+  const callsBeforeOpen=await page.evaluate(()=>cliAudit.calls.length);await open();
+  assert.equal(await http.isChecked(),true);
+  await page.waitForFunction(n=>cliAudit.calls.length>n,callsBeforeOpen);await page.evaluate(()=>cliAudit.calls.at(-1).resolve('3.2.0'));
+  await page.waitForFunction(()=>!document.querySelector('#picGoCLIAllowHTTP').disabled);
+  assert.equal(await save.isDisabled(),true);assert.equal(await draftSave.isDisabled(),false);
+  await page.setViewportSize({width:1200,height:900});await page.evaluate(()=>document.documentElement.setAttribute('data-color-mode','light'));
+  await save.scrollIntoViewIfNeeded();
+  assert.equal(await save.evaluate(el=>getComputedStyle(el).backgroundColor!==getComputedStyle(document.querySelector('#testPicGoCLIUpload')).backgroundColor),true);
+  if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/picgo-draft-${language}.png`,animations:'disabled'});
+  await page.setViewportSize({width:480,height:700});await page.evaluate(()=>document.documentElement.setAttribute('data-color-mode','dark'));
+  await save.scrollIntoViewIfNeeded();assert.equal(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+  assert.equal(await save.evaluate(el=>getComputedStyle(el).backgroundColor!==getComputedStyle(document.querySelector('#testPicGoCLIUpload')).backgroundColor),true);
+  if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/picgo-draft-narrow-${language}.png`,animations:'disabled'});
+  await page.locator('#cancelImageUploadSettings').click();
+  assert.deepEqual(errors,[]);console.log(`PASS PicGo CLI settings, HTTP consent, login recovery and preparation ${language}`);await page.close();
  }
 } finally {await browser?.close();await server.close();}

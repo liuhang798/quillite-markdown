@@ -102,15 +102,19 @@ func (a *App) emitImageUploadProgress(progress imageUploadProgress) {
 }
 
 type ImageUploadSettings struct {
-	CLIConfigPath string `json:"cliConfigPath"`
-	CLIPath       string `json:"cliPath"`
-	Mode          string `json:"mode"`
-	ServerURL     string `json:"serverUrl"`
-	HasSecret     bool   `json:"hasSecret"`
-	HasCloudToken bool   `json:"hasCloudToken"`
+	CLIDraft           *PicGoCLIDraft `json:"cliDraft"`
+	CLILoginConfigPath string         `json:"cliLoginConfigPath"`
+	CLIAllowHTTP       bool           `json:"cliAllowHttp"`
+	CLIConfigPath      string         `json:"cliConfigPath"`
+	CLIPath            string         `json:"cliPath"`
+	Mode               string         `json:"mode"`
+	ServerURL          string         `json:"serverUrl"`
+	HasSecret          bool           `json:"hasSecret"`
+	HasCloudToken      bool           `json:"hasCloudToken"`
 }
 
 type ImageUploadSettingsInput struct {
+	CLIAllowHTTP  bool   `json:"cliAllowHttp"`
 	CLIConfigPath string `json:"cliConfigPath"`
 	CLIPath       string `json:"cliPath"`
 	Mode          string `json:"mode"`
@@ -300,18 +304,21 @@ func (a *App) GetImageUploadSettings() (ImageUploadSettings, error) {
 		return ImageUploadSettings{}, err
 	}
 	return ImageUploadSettings{
-		Mode:          normaliseImageUploadMode(prefs.ImageUploadMode),
-		CLIPath:       prefs.PicGoCLIPath,
-		CLIConfigPath: prefs.PicGoCLIConfigPath,
-		ServerURL:     prefs.PicGoServerURL,
-		HasSecret:     a.readPicGoSecret() != "",
-		HasCloudToken: a.readPicGoCloudToken() != "",
+		CLILoginConfigPath: a.recoverPicGoLoginProfile(),
+		CLIDraft:           prefs.PicGoCLIDraft,
+		Mode:               normaliseImageUploadMode(prefs.ImageUploadMode),
+		CLIPath:            a.effectivePicGoCLIPath(prefs.PicGoCLIPath),
+		CLIConfigPath:      prefs.PicGoCLIConfigPath,
+		CLIAllowHTTP:       prefs.PicGoCLIAllowHTTP,
+		ServerURL:          prefs.PicGoServerURL,
+		HasSecret:          a.readPicGoSecret() != "",
+		HasCloudToken:      a.readPicGoCloudToken() != "",
 	}, nil
 }
 
 func (a *App) SetImageUploadSettings(input ImageUploadSettingsInput) (ImageUploadSettings, error) {
 	mode := normaliseImageUploadMode(input.Mode)
-	cliPath := strings.TrimSpace(input.CLIPath)
+	cliPath := strings.TrimSpace(a.effectivePicGoCLIPath(input.CLIPath))
 	if strings.ContainsAny(cliPath, "\x00\r\n") {
 		return ImageUploadSettings{}, errors.New("PICGO_CLI_PATH_INVALID")
 	}
@@ -319,7 +326,7 @@ func (a *App) SetImageUploadSettings(input ImageUploadSettingsInput) (ImageUploa
 		if _, _, err := resolvePicGoCLI(cliPath); err != nil {
 			return ImageUploadSettings{}, err
 		}
-		if !a.picGoCLIUploadVerified(cliPath, input.CLIConfigPath) {
+		if !a.picGoCLIUploadVerified(cliPath, input.CLIConfigPath, input.CLIAllowHTTP) {
 			return ImageUploadSettings{}, errors.New("PICGO_CLI_TEST_REQUIRED")
 		}
 	}
@@ -344,14 +351,20 @@ func (a *App) SetImageUploadSettings(input ImageUploadSettingsInput) (ImageUploa
 		prefs.PicGoServerURL = serverURL
 		prefs.PicGoCLIPath = cliPath
 		prefs.PicGoCLIConfigPath = strings.TrimSpace(input.CLIConfigPath)
+		prefs.PicGoCLIAllowHTTP = input.CLIAllowHTTP
+		if mode == imageUploadModePicGoCLI {
+			prefs.PicGoCLIDraft = nil
+		}
 	})
 	if err != nil {
 		return ImageUploadSettings{}, err
 	}
 	return ImageUploadSettings{
 		Mode:          prefs.ImageUploadMode,
+		CLIDraft:      prefs.PicGoCLIDraft,
 		CLIPath:       prefs.PicGoCLIPath,
 		CLIConfigPath: prefs.PicGoCLIConfigPath,
+		CLIAllowHTTP:  prefs.PicGoCLIAllowHTTP,
 		ServerURL:     prefs.PicGoServerURL,
 		HasSecret:     a.readPicGoSecret() != "",
 		HasCloudToken: a.readPicGoCloudToken() != "",

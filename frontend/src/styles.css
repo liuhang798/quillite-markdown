@@ -1463,8 +1463,9 @@ body.resizing-table-column, body.resizing-table-column * { cursor: col-resize !i
 .local-assets-summary { display: grid; gap: 4px; padding: 16px 17px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--panel) 64%, transparent); }
 .local-assets-summary strong { color: var(--text); font-size: 12px; }
 .local-assets-summary span { color: var(--muted); font-size: 10.5px; line-height: 1.5; }
-.image-upload-settings-actions { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; margin-top: 14px; }
+.image-upload-settings-actions { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; margin-top: 14px; }
 .image-upload-settings-actions .large-button { min-width: 96px; height: 39px; }
+.image-upload-settings-actions .large-button:disabled { background: var(--panel) !important; color: var(--muted) !important; border: 1px solid var(--line); cursor: not-allowed; opacity: .65; box-shadow: none; }
 .formula-dialog { position: relative; width: min(980px, 100%); height: min(760px, calc(100vh - 48px)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; padding: 30px; border: 1px solid color-mix(in srgb, var(--line) 78%, var(--accent)); border-radius: 20px; background: var(--paper-strong); box-shadow: 0 30px 90px rgba(18, 25, 20, .28); animation: dialog-rise .2s ease-out; }
 .formula-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding-right: 42px; }
 .formula-dialog-header h2 { margin: 6px 0 7px; font-size: 25px; letter-spacing: -.4px; }
@@ -1883,6 +1884,7 @@ body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { pad
   .image-upload-settings-dialog { padding: 25px 20px; }
   .image-upload-mode-options { grid-template-columns: 1fr; }
   .image-upload-settings-actions { grid-template-columns: 1fr 1fr; }
+  .image-upload-settings-actions #enableVerifiedPicGoCLI { grid-column: 1 / -1; }
   .image-upload-settings-actions > span { display: none; }
   .image-dialog-actions { flex-wrap: wrap; }
   .image-dialog-actions .large-button { flex: 1 1 120px; }
@@ -2251,6 +2253,8 @@ body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { pad
 .picgo-cli-hosting { display: grid; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); min-width: 0; }
 .picgo-cli-hosting p { margin: 0; line-height: 1.6; }
 .picgo-cli-config-label { display: grid; gap: 8px; min-width: 0; font-size: 12px; }
+.picgo-cli-http-option { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.6; cursor: pointer; }
+.picgo-cli-http-option input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--accent); }
 .picgo-cli-config-label input { width: 100%; min-width: 0; height: 39px; padding: 0 11px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: var(--paper-strong); }
 .picgo-cli-config-label input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .picgo-cli-hosting > button { justify-self: start; }

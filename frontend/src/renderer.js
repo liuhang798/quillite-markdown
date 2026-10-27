@@ -354,8 +354,12 @@ const state = {
   picGoServerURL: 'http://127.0.0.1:36677',
   picGoCLIPath: '',
   picGoCLIConfigPath: '',
+  picGoCLIAllowHTTP: false,
   picGoCLILastError: '',
   picGoCLIReady: false,
+  picGoCLIDraft: null,
+  picGoCLILoginOperation: '',
+  picGoCLILoginConfigPath: '',
   picGoCLIChecking: false,
   picGoCLIRun: 0,
   picGoHasSecret: false,
@@ -675,13 +679,29 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
 };
 
 Object.assign(translations['zh-CN'], {
+  picGoCLIDraftSaveFailed: '配置草稿保存失败，表单内容已保留；请检查本地配置目录的写入权限。当前图床设置未改变。',
+  picGoCLIDraftHint: '可先保存配置草稿（含 HTTP 选项），无需联网；草稿不会改变当前上传设置。验证成功后，点击“保存并启用”才生效。',
+  picGoCLISaveDraft: '保存配置草稿', picGoCLIDraftSaved: '配置草稿已保存，当前图床设置未改变；验证成功后才能启用。', picGoCLIDraftRestored: '已恢复未启用的配置草稿（含 HTTP 选项）。当前上传仍使用原设置；请验证后再启用。', picGoCLIDraftInvalid: '草稿未保存：CLI 和配置文件请填写完整绝对路径，或留空使用默认值。', picGoCLIUploadUnconfirmed: '未确认上传成功，已使用本地图片，图床设置未改变。请先核对图床记录，避免重复上传。',
+  cliUploadQueued: '等待前一个 CLI 操作完成', cliUploadStarting: '正在启动 CLI 并加载插件', cliUploadRunning: 'CLI 正在处理并上传图片', cliUploadFinishing: '正在接收并校验上传结果',
   picGoCLIMode: 'PicGo CLI（按需启动）', picGoCLIHint: '无需后台 Server，复用 PicGo CLI 图床配置',
   picGoCLISetup: '自动下载并配置独立运行环境，无需手动安装 Node.js，不影响系统设置。',
   picGoCLIAdvanced: '高级设置 · 手动指定 CLI 路径',
-  picGoCLINotice: '全程使用 PicGo CLI 上传，不启动后台 Server。配置文件可能包含密钥和插件，请仅选择可信配置。成功后使用 HTTPS 链接并保留本地备份；失败保留本地图片，不自动重试。已有图片不会自动上传。',
+  picGoCLINotice: '全程使用 PicGo CLI 上传，不启动后台 Server。配置文件可能包含密钥和插件，请仅选择可信配置。成功后使用图床返回的地址并保留本地备份（默认仅接受 HTTPS）；失败保留本地图片，不自动重试。已有图片不会自动上传。',
   picGoCLIHostingTitle: '2 · 配置图床', picGoCLIHostingHint: '首次使用可通过 CLI 在浏览器登录 PicGo Cloud（使用独立配置，不覆盖原配置）。其他图床可选择已配置好的 PicGo CLI config.json；留空沿用默认配置。',
   picGoCLILogin: '通过 CLI 登录 PicGo Cloud', picGoCLISelectConfig: '选择已有图床配置', picGoCLIConfigPath: 'CLI 配置文件（留空使用 ~/.picgo/config.json）',
-  picGoCLILoginConfirm: '将由 PicGo CLI 打开系统浏览器登录 PicGo Cloud，凭证仅由 CLI 保存到轻阅独立配置目录，不覆盖已有配置。是否继续？',
+  picGoCLIAllowHTTP: '允许 HTTP 图片地址（不安全，仅限 CLI）',
+  picGoCLIHTTPHint: '默认仅接受 HTTPS。HTTP 图片访问未加密；仅在可信图床不支持 HTTPS 时开启。',
+  picGoCLIHTTPConfirm: '允许此 CLI 配置返回 HTTP 图片地址？HTTP 图片访问未加密，内容可能被窃取或篡改。建议优先为图床配置 HTTPS。开启后仍须手动验证并保存，不会自动上传。',
+  picGoCLIHTTPBlocked: 'CLI 已报告上传成功，但返回的是 HTTP 图片地址，当前设置不允许使用。请先核对图床中的图片，避免重复上传；如需兼容，可明确开启“允许 HTTP 图片地址”后手动验证。本次未自动重试，也未改写地址。',
+  picGoCLIOutputInvalid: 'CLI 返回的图片地址无效或不唯一，未确认可用结果。图片可能已经上传，请先核对图床记录；本次不会自动重试。',
+  picGoCLILoginConfirm: '将先检查已有 CLI 登录配置；没有凭证时才打开浏览器授权。配置会保留，不覆盖默认配置，也不会上传图片。是否继续？',
+  picGoCLIReauthorize: '重新授权 / 切换账号',
+  picGoCLIReauthorizeConfirm: '将新建独立配置并打开新一轮浏览器授权，保留旧配置。请完成新打开页面的授权，旧成功页面不能完成这次登录。是否继续？',
+  picGoCLICheckingLogin: '正在检查已有授权或校验本次登录（最多 20 秒）。不会打开重复登录或上传图片。',
+  picGoCLILoginRecovered: '已找回独立登录配置；授权是否仍有效尚未确认，可检查登录或手动验证上传。',
+  picGoCLIAuthCheckFailed: '未能确认登录有效，配置已保留。可能是网络异常、登录失效或状态响应异常；不会自动重复登录。可稍后检查登录，或明确选择“重新授权 / 切换账号”。',
+  picGoCLILoginTimeout: '等待浏览器授权超时，配置已保留。若浏览器曾显示成功，请先再次检查已有登录，不要重复授权；旧成功页面不能完成另一轮登录。',
+  picGoCLILoginCancelled: '已停止本次登录等待，配置及已收到的授权保留。下次可继续检查，未启用上传。',
   picGoCLILoggingIn: '请在浏览器完成 PicGo CLI 登录；最多等待 3 分钟。登录不会上传图片。', picGoCLILoggedIn: 'CLI 已登录，独立配置已填入。请继续上传测试图片；尚未启用上传。',
   picGoCLIUploadTestTitle: '3 · 验证并启用', picGoCLIUploadTestHint: '自动上传软件内置的 1 像素 PNG 检查图床，不需要选择图片，也不会读取剪贴板或文档图片。验证通过后会询问是否保存并启用。',
   picGoCLINoImageNeeded: '无需选图 · 自动使用内置测试图',
@@ -697,11 +717,11 @@ Object.assign(translations['zh-CN'], {
   picGoCLIPreparingButton: '正在准备…',
   picGoStepDownload: '下载环境', picGoStepVerify: '校验解压', picGoStepInstall: '安装 CLI', picGoStepCheck: '检查就绪',
   picGoPhaseStarting: '正在连接官方来源', picGoPhaseDownloading: '正在下载 Node.js 运行环境', picGoPhaseVerifying: '正在校验文件完整性', picGoPhaseExtracting: '正在解压运行环境', picGoPhaseInstalling: '正在下载并安装 PicGo CLI', picGoPhaseChecking: '正在检查 CLI 是否可用', picGoPhaseComplete: 'CLI 已准备就绪', picGoPhaseFailed: '准备未完成',
-  picGoPrepareElapsed: '已用时 {seconds} 秒', picGoPrepareDownloadHint: '来源：nodejs.org', picGoPrepareInstallHint: '来源：registry.npmjs.org · 此阶段不提供百分比', picGoPrepareWorkHint: '正在本机处理，请保持软件开启', picGoPrepareDoneHint: '点击“保存设置”启用', picGoPrepareFailedHint: '原上传设置未改变，可重试或使用已有 CLI',
+  picGoPrepareElapsed: '已用时 {seconds} 秒', picGoPrepareDownloadHint: '来源：nodejs.org', picGoPrepareInstallHint: '来源：registry.npmjs.org · 此阶段不提供百分比', picGoPrepareWorkHint: '正在本机处理，请保持软件开启', picGoPrepareDoneHint: '组件位置已记住；继续配置图床并验证上传', picGoPrepareFailedHint: '原上传设置未改变，可重试或使用已有 CLI',
   picGoCLIPrepare: '一键准备 CLI',
   picGoCLIPrepareConfirm: '将从 nodejs.org 和 registry.npmjs.org 下载固定版本的 Node.js 与 PicGo CLI（需要联网及数百 MB 可用空间），校验后安装到轻阅独立目录。不修改系统 Node.js、不启动 Server、不上传任何图片。是否继续？',
   picGoCLIPreparing: '正在下载、校验并安装 CLI，通常需要几分钟，请勿退出软件…',
-  picGoCLIPrepared: '1 · CLI 已准备好。请继续配置图床并测试上传；安装完成不代表可以上传。',
+  picGoCLIPrepared: '1 · CLI 已准备好并记住位置，关闭窗口或重启后仍可检测。请继续配置图床并测试上传；尚未启用上传。',
   picGoCLIPrepareFailed: '组件准备失败，未更改当前上传设置。请检查网络和磁盘空间后重试，或使用已有 CLI 路径。',
   picGoCLIPrepareIntegrity: '组件完整性校验未通过，已停止安装。请检查网络后重新准备。',
   picGoCLIPreparePlatform: '当前系统架构暂不支持一键准备，请指定已安装的 CLI。',
@@ -769,13 +789,29 @@ Object.assign(translations['zh-CN'], {
   exportDescriptionPdf: '直接生成 PDF，并根据 H1–H6 标题写入可点击的书签目录。'
 });
 Object.assign(translations.en, {
+  picGoCLIDraftSaveFailed: 'Could not save the draft. Form values are retained; check write access to the local settings directory. Active hosting settings are unchanged.',
+  picGoCLIDraftHint: 'Save a configuration draft, including HTTP permission, without a network connection. Drafts do not change active upload settings. Verify successfully, then choose Save & enable to apply.',
+  picGoCLISaveDraft: 'Save configuration draft', picGoCLIDraftSaved: 'Draft saved. Active hosting settings are unchanged; verify before enabling.', picGoCLIDraftRestored: 'Restored an inactive draft, including HTTP permission. Uploads still use the previous settings; verify before enabling.', picGoCLIDraftInvalid: 'Draft not saved: enter absolute CLI/config paths, or leave them blank for defaults.', picGoCLIUploadUnconfirmed: 'Upload success was not confirmed. The local image was used and hosting settings are unchanged. Check your host before uploading again to avoid duplicates.',
+  cliUploadQueued: 'Waiting for the previous CLI operation', cliUploadStarting: 'Starting CLI and loading plugins', cliUploadRunning: 'CLI is processing and uploading the image', cliUploadFinishing: 'Receiving and validating the upload result',
   picGoCLIMode: 'PicGo CLI (on demand)', picGoCLIHint: 'No background Server; uses your PicGo CLI configuration',
   picGoCLISetup: 'Download a private runtime automatically. No manual Node.js installation or system changes.',
   picGoCLIAdvanced: 'Advanced · Specify an existing CLI path',
-  picGoCLINotice: 'Uploads use PicGo CLI, not a background Server. Configurations may contain secrets and plugins: select only trusted files. Success inserts HTTPS and keeps a local backup; failure keeps the local image without retrying. Existing images are not uploaded automatically.',
+  picGoCLINotice: 'Uploads use PicGo CLI, not a background Server. Configurations may contain secrets and plugins: select only trusted files. Success inserts the returned URL (HTTPS only by default) and keeps a local backup; failure keeps the local image without retrying. Existing images are not uploaded automatically.',
   picGoCLIHostingTitle: '2 · Configure hosting', picGoCLIHostingHint: 'Sign in to PicGo Cloud through the CLI using a separate profile, or select an existing configured PicGo CLI config.json for another host. Blank uses the default configuration.',
   picGoCLILogin: 'Sign in to PicGo Cloud via CLI', picGoCLISelectConfig: 'Select existing hosting config', picGoCLIConfigPath: 'CLI config file (blank uses ~/.picgo/config.json)',
-  picGoCLILoginConfirm: 'Allow PicGo CLI to open your browser for PicGo Cloud sign-in? The CLI stores credentials in a separate Quillite profile without overwriting existing configurations.',
+  picGoCLIAllowHTTP: 'Allow HTTP image URLs (insecure, CLI only)',
+  picGoCLIHTTPHint: 'HTTPS only by default. HTTP image access is unencrypted; enable only for a trusted host without HTTPS.',
+  picGoCLIHTTPConfirm: 'Allow this CLI configuration to return HTTP image URLs? HTTP image access is unencrypted and content may be intercepted or altered. HTTPS is recommended. You must still verify and save manually; enabling this option does not upload anything.',
+  picGoCLIHTTPBlocked: 'The CLI reported a successful upload but returned an HTTP image URL, which current settings disallow. Check the hosted image first to avoid duplicates. To use this host, explicitly enable “Allow HTTP image URLs” and verify manually. No automatic retry or URL rewriting occurred.',
+  picGoCLIOutputInvalid: 'The CLI returned an invalid or ambiguous image URL. The image may already be uploaded; check the host before trying again. No automatic retry occurred.',
+  picGoCLILoginConfirm: 'Check existing CLI authorization first, opening the browser only if no credentials are available? Profiles are retained; your default configuration is not overwritten and no images are uploaded.',
+  picGoCLIReauthorize: 'Reauthorize / Switch account',
+  picGoCLIReauthorizeConfirm: 'Create a separate profile and start a new browser authorization? Old profiles are retained. Complete the newly opened page; an old success page cannot authorize this new attempt.',
+  picGoCLICheckingLogin: 'Checking existing authorization or verifying this login (up to 20 seconds). No duplicate login or image upload.',
+  picGoCLILoginRecovered: 'Recovered a separate login profile. Authorization validity is not yet confirmed; check login or verify uploading manually.',
+  picGoCLIAuthCheckFailed: 'Could not confirm valid authorization. The profile is retained. This may be a network, expired-session or status-response problem. No automatic login retry. Check again later or explicitly choose “Reauthorize / Switch account”.',
+  picGoCLILoginTimeout: 'Browser authorization timed out; the profile is retained. If a success page appeared, check existing authorization first instead of repeating login. An old success page cannot authorize another attempt.',
+  picGoCLILoginCancelled: 'Stopped this login wait. The profile and any received authorization are retained for checking later. Uploading is not enabled.',
   picGoCLILoggingIn: 'Complete PicGo CLI sign-in in your browser (up to 3 minutes). No images are uploaded during login.', picGoCLILoggedIn: 'CLI signed in; separate configuration selected. Upload the test image next. Uploading is not enabled yet.',
   picGoCLIUploadTestTitle: '3 · Verify & enable', picGoCLIUploadTestHint: 'Automatically check hosting with a built-in one-pixel PNG. No image selection is needed; your clipboard and document images are not read. After verification, you will be asked to save and enable.',
   picGoCLINoImageNeeded: 'No image selection · Built-in test image',
@@ -791,11 +827,11 @@ Object.assign(translations.en, {
   picGoCLIPreparingButton: 'Preparing…',
   picGoStepDownload: 'Download', picGoStepVerify: 'Verify / extract', picGoStepInstall: 'Install CLI', picGoStepCheck: 'Check',
   picGoPhaseStarting: 'Connecting to official sources', picGoPhaseDownloading: 'Downloading Node.js runtime', picGoPhaseVerifying: 'Verifying file integrity', picGoPhaseExtracting: 'Extracting runtime', picGoPhaseInstalling: 'Downloading and installing PicGo CLI', picGoPhaseChecking: 'Checking CLI availability', picGoPhaseComplete: 'CLI is ready', picGoPhaseFailed: 'Preparation incomplete',
-  picGoPrepareElapsed: '{seconds}s elapsed', picGoPrepareDownloadHint: 'Source: nodejs.org', picGoPrepareInstallHint: 'Source: registry.npmjs.org · No percentage for this stage', picGoPrepareWorkHint: 'Processing locally. Keep the app open.', picGoPrepareDoneHint: 'Save settings to enable', picGoPrepareFailedHint: 'Upload settings unchanged. Retry or use an existing CLI.',
+  picGoPrepareElapsed: '{seconds}s elapsed', picGoPrepareDownloadHint: 'Source: nodejs.org', picGoPrepareInstallHint: 'Source: registry.npmjs.org · No percentage for this stage', picGoPrepareWorkHint: 'Processing locally. Keep the app open.', picGoPrepareDoneHint: 'Component remembered; configure hosting and verify uploading next', picGoPrepareFailedHint: 'Upload settings unchanged. Retry or use an existing CLI.',
   picGoCLIPrepare: 'Prepare CLI automatically',
   picGoCLIPrepareConfirm: 'Download pinned Node.js and PicGo CLI versions from nodejs.org and registry.npmjs.org (internet and several hundred MB of free space required)? Components are verified and installed privately, without changing system Node.js, starting a Server, or uploading images.',
   picGoCLIPreparing: 'Downloading, verifying and installing CLI. This may take a few minutes; keep the app open…',
-  picGoCLIPrepared: '1 · CLI prepared. Configure hosting and test uploading next; installation does not verify upload access.',
+  picGoCLIPrepared: '1 · CLI prepared and its location remembered, including after closing or restarting. Configure hosting and test uploading next; uploads are not enabled yet.',
   picGoCLIPrepareFailed: 'Preparation failed; upload settings were not changed. Check network and disk space, then retry, or use an existing CLI path.',
   picGoCLIPrepareIntegrity: 'Component integrity verification failed. Installation stopped. Check your network before retrying.',
   picGoCLIPreparePlatform: 'Automatic preparation is unavailable for this architecture. Specify an existing CLI instead.',
@@ -4074,9 +4110,12 @@ function saveVisualTable() {
 }
 
 function applyImageUploadSettings(settings) {
+  state.picGoCLIDraft = settings?.cliDraft || null;
   state.imageUploadMode = ['embedded', 'picgo-cloud', 'picgo', 'picgo-cli'].includes(settings?.mode) ? settings.mode : 'local';
   state.picGoCLIPath = String(settings?.cliPath || '');
   state.picGoCLIConfigPath = String(settings?.cliConfigPath || '');
+  if (settings?.cliLoginConfigPath) state.picGoCLILoginConfigPath = String(settings.cliLoginConfigPath);
+  state.picGoCLIAllowHTTP = settings?.cliAllowHttp === true;
   state.picGoServerURL = String(settings?.serverUrl || 'http://127.0.0.1:36677');
   state.picGoHasSecret = Boolean(settings?.hasSecret);
 	state.picGoCloudHasToken = Boolean(settings?.hasCloudToken);
@@ -4092,6 +4131,7 @@ function currentImageUploadSettingsInput() {
     mode: selectedImageUploadMode(),
     cliPath: $('#picGoCLIPath').value.trim(),
     cliConfigPath: $('#picGoCLIConfigPath').value.trim(),
+    cliAllowHttp: $('#picGoCLIAllowHTTP').checked,
     serverUrl: els.picGoServerURL.value.trim(),
     secret: els.picGoSecret.value,
     clearSecret: els.clearPicGoSecret.checked,
@@ -4105,6 +4145,13 @@ function imageSettingsResponseCurrent(revision) {
 }
 
 function invalidateImageSettingsResponses() {
+  state.picGoCLIUploadCleanup?.();
+  state.picGoCLIUploadCleanup = null;
+  if (state.picGoCLILoginOperation) {
+    const operationId = state.picGoCLILoginOperation;
+    state.picGoCLILoginOperation = '';
+    Promise.resolve(window.quilliteMarkdown.cancelPicGoCLILogin(operationId)).catch(() => {});
+  }
   if ($('#picGoCLIEnableDialog')?.open) $('#picGoCLIEnableDialog').close('cancel');
   $('#picGoCLIUploadStatus')?.classList?.remove('is-success');
   state.picGoCLIRun += 1;
@@ -4143,7 +4190,7 @@ function setPicGoWizardStep(step) {
   });
   const saveButton = $('#saveImageUploadSettings');
   const readyToEnable = selectedImageUploadMode() === 'picgo' && state.picGoConnectionReady;
-  const label = state.imageSettingsMutation ? 'imageSettingsWorking' : selectedImageUploadMode() === 'picgo-cli' && state.picGoCLIReady ? 'picGoCLIEnableNow' : readyToEnable ? 'enablePicGo' : 'saveSettings';
+  const label = state.imageSettingsMutation ? 'imageSettingsWorking' : selectedImageUploadMode() === 'picgo-cli' ? 'picGoCLISaveDraft' : readyToEnable ? 'enablePicGo' : 'saveSettings';
   saveButton.dataset.i18n = label;
   saveButton.textContent = t(label);
 }
@@ -4159,14 +4206,18 @@ function updatePicGoSettingsAvailability() {
 	els.localAssetsSummary.classList.toggle('hidden', mode !== 'local');
   $('#embeddedImagesSummary').classList.toggle('hidden', mode !== 'embedded');
   const busy = Boolean(state.imageSettingsMutation);
-	$('#saveImageUploadSettings').disabled = busy || (cliEnabled && !state.picGoCLIReady) || (cloudEnabled && !state.picGoCloudConnectionReady) || (localPicGoEnabled && !state.picGoConnectionReady);
+	$('#saveImageUploadSettings').disabled = busy || (cloudEnabled && !state.picGoCloudConnectionReady) || (localPicGoEnabled && !state.picGoConnectionReady);
+  $('#enableVerifiedPicGoCLI').classList.toggle('hidden', !cliEnabled);
+  $('#enableVerifiedPicGoCLI').disabled = busy || state.picGoCLIChecking || !state.picGoCLIReady;
+  $('#saveImageUploadSettings').classList.toggle('secondary', cliEnabled);
+  $('#saveImageUploadSettings').classList.toggle('primary', !cliEnabled);
   $('#testPicGoCLI').disabled = busy || state.picGoCLIChecking;
   $('#preparePicGoCLI').disabled = busy || state.picGoCLIChecking;
   const preparingLabel = state.imageSettingsMutation === 'prepare-cli' ? 'picGoCLIPreparingButton' : 'picGoCLIPrepare';
   $('#preparePicGoCLI').dataset.i18n = preparingLabel;
   $('#preparePicGoCLI').textContent = t(preparingLabel);
   $('#picGoCLIPath').disabled = busy;
-  for (const id of ['loginPicGoCLI', 'selectPicGoCLIConfig', 'testPicGoCLIUpload', 'picGoCLIConfigPath']) {
+  for (const id of ['loginPicGoCLI', 'reauthorizePicGoCLI', 'selectPicGoCLIConfig', 'testPicGoCLIUpload', 'picGoCLIConfigPath', 'picGoCLIAllowHTTP']) {
     $(`#${id}`).disabled = busy || state.picGoCLIChecking;
   }
 	$('#loginPicGoCloud').disabled = busy;
@@ -4284,11 +4335,19 @@ function openImageUploadSettings() {
   const revision = state.imageSettingsRevision;
   if (!els.imageDialog.classList.contains('hidden')) closeImageDialog();
   setImageUploadSettingsStatus();
-  document.querySelector(`input[name="imageUploadMode"][value="${state.imageUploadMode}"]`).checked = true;
+  document.querySelector(`input[name="imageUploadMode"][value="${state.picGoCLIDraft ? 'picgo-cli' : state.imageUploadMode}"]`).checked = true;
   els.picGoServerURL.value = state.picGoServerURL;
   $('#picGoCLIPath').value = state.picGoCLIPath;
-  $('#picGoCLIConfigPath').value = state.picGoCLIConfigPath;
+  $('#picGoCLIConfigPath').value = state.picGoCLIConfigPath || (state.imageUploadMode !== 'picgo-cli' ? state.picGoCLILoginConfigPath : '');
+  $('#picGoCLIAllowHTTP').checked = state.picGoCLIAllowHTTP;
   $('#picGoCLIUploadStatus').textContent = state.picGoCLILastError ? picGoCLISetupError(state.picGoCLILastError) : '';
+  if (!state.picGoCLILastError && !state.picGoCLIConfigPath && $('#picGoCLIConfigPath').value) $('#picGoCLIUploadStatus').textContent = t('picGoCLILoginRecovered');
+  if (state.picGoCLIDraft) {
+    $('#picGoCLIPath').value = state.picGoCLIDraft.cliPath;
+    $('#picGoCLIConfigPath').value = state.picGoCLIDraft.cliConfigPath;
+    $('#picGoCLIAllowHTTP').checked = state.picGoCLIDraft.cliAllowHttp === true;
+    $('#picGoCLIUploadStatus').textContent = t('picGoCLIDraftRestored');
+  }
   $('#picGoCLIStatus').textContent = '';
   $('#picGoCLIAdvanced').open = false;
   $('#picGoPrepareProgress').classList.add('hidden');
@@ -4406,6 +4465,7 @@ async function preparePicGoCLIComponent() {
     const path = await window.quilliteMarkdown.preparePicGoCLI(true, operationId);
     if (!imageSettingsResponseCurrent(revision) || selectedImageUploadMode() !== 'picgo-cli') return;
     $('#picGoCLIPath').value = path;
+    $('#picGoCLIAllowHTTP').checked = false;
     state.picGoCLIReady = false;
     renderPicGoPrepareProgress({ phase: 'complete' }, startedAt);
     $('#picGoCLIStatus').textContent = t('picGoCLIPrepared');
@@ -4449,6 +4509,12 @@ async function testPicGoCLIConnection() {
 
 function picGoCLISetupError(error) {
   const code = String(error?.message || error || '');
+  if (code.includes('PICGO_CLI_DRAFT_INVALID')) return t('picGoCLIDraftInvalid');
+  if (code.includes('PICGO_CLI_AUTH_CHECK_FAILED')) return t('picGoCLIAuthCheckFailed');
+  if (code.includes('PICGO_CLI_LOGIN_TIMEOUT')) return t('picGoCLILoginTimeout');
+  if (code.includes('PICGO_CLI_LOGIN_CANCELLED')) return t('picGoCLILoginCancelled');
+  if (code.includes('PICGO_CLI_HTTP_NOT_ALLOWED')) return t('picGoCLIHTTPBlocked');
+  if (code.includes('PICGO_CLI_OUTPUT_INVALID')) return t('picGoCLIOutputInvalid');
   if (code.includes('PICGO_CLI_AUTH_REQUIRED')) return t('picGoCLIAuthRequired');
   if (code.includes('PICGO_CLI_CONFIG_INVALID')) return t('picGoCLIConfigInvalid');
   if (code.includes('PICGO_CLI_QUOTA')) return t('picGoCLIQuota');
@@ -4457,21 +4523,40 @@ function picGoCLISetupError(error) {
   return t('picGoCLIUploadFailed');
 }
 
+function cliUploadPhaseText(phase, startedAt) {
+  const key = ({queued:'cliUploadQueued',preparing:'imageUploadPreparing',starting:'cliUploadStarting',uploading:'cliUploadRunning',finalizing:'cliUploadFinishing'})[phase] || 'cliUploadRunning';
+  return `${t(key)} · ${t('picGoPrepareElapsed').replace('{seconds}', String(Math.max(0, Math.floor((Date.now() - startedAt) / 1000))))}`;
+}
+
 async function configurePicGoCLIHosting(action) {
   if (state.imageSettingsMutation || selectedImageUploadMode() !== 'picgo-cli' || els.imageUploadSettingsDialog.classList.contains('hidden')) return;
-  if (action === 'login' && !window.confirm(t('picGoCLILoginConfirm'))) return;
+  const login = action === 'login' || action === 'reauthorize';
+  if (login && !window.confirm(t(action === 'reauthorize' ? 'picGoCLIReauthorizeConfirm' : 'picGoCLILoginConfirm'))) return;
   if (action === 'test' && !window.confirm(t('picGoCLIUploadConfirm'))) return;
   invalidateImageSettingsResponses();
   const revision = beginImageSettingsMutation(`cli-${action}`);
   if (revision === null) return;
   const current = () => imageSettingsResponseCurrent(revision) && selectedImageUploadMode() === 'picgo-cli';
   let enableConfirmed = false;
+  let unsubscribe = () => {};
+  let progressTimer;
   const status = $('#picGoCLIUploadStatus');
-  status.textContent = action === 'login' ? t('picGoCLILoggingIn') : action === 'test' ? t('picGoCLIUploadTesting') : '';
+  status.textContent = login ? t('picGoCLICheckingLogin') : action === 'test' ? t('picGoCLIUploadTesting') : '';
   try {
     const path = $('#picGoCLIPath').value.trim();
     if (action === 'test') {
-      await window.quilliteMarkdown.testPicGoCLIUpload(path, $('#picGoCLIConfigPath').value.trim(), true);
+      const operationId = `picgo-test-${Date.now()}-${state.picGoCLIRun}`, startedAt = Date.now();
+      let phase = 'preparing';
+      const refresh = () => { if (current()) status.textContent = cliUploadPhaseText(phase, startedAt); };
+      const offProgress = window.quilliteMarkdown.onImageUploadProgress(event => {
+        if (!current() || event?.operationId !== operationId || !['queued','preparing','starting','uploading','finalizing'].includes(event.phase)) return;
+        phase = event.phase; refresh();
+      });
+      unsubscribe = () => { clearInterval(progressTimer); offProgress(); unsubscribe = () => {}; };
+      state.picGoCLIUploadCleanup = () => unsubscribe();
+      refresh(); progressTimer = setInterval(refresh, 1000);
+      await window.quilliteMarkdown.testPicGoCLIUpload(path, $('#picGoCLIConfigPath').value.trim(), true, $('#picGoCLIAllowHTTP').checked, operationId);
+      clearInterval(progressTimer); unsubscribe(); unsubscribe = () => {};
       if (current()) {
         state.picGoCLIReady = true;
         state.picGoCLILastError = '';
@@ -4481,22 +4566,42 @@ async function configurePicGoCLIHosting(action) {
         enableConfirmed = await confirmPicGoCLIEnable();
       }
     } else {
-      const config = action === 'login'
-        ? await window.quilliteMarkdown.loginPicGoCLI(path, true)
+      const operationId = login ? `picgo-login-${Date.now()}-${state.picGoCLIRun}` : '';
+      if (login) {
+        state.picGoCLILoginOperation = operationId;
+        unsubscribe = window.quilliteMarkdown.onPicGoCLILoginProgress(event => {
+          if (!current() || event?.operationId !== operationId || state.picGoCLILoginOperation !== operationId) return;
+          if (!['waiting','checking','complete'].includes(event.phase)) return;
+          if (event.configPath) {
+            state.picGoCLILoginConfigPath = event.configPath;
+            $('#picGoCLIConfigPath').value = event.configPath;
+            $('#picGoCLIAllowHTTP').checked = false;
+          }
+          status.textContent = t(event.phase === 'waiting' ? 'picGoCLILoggingIn' : event.phase === 'checking' ? 'picGoCLICheckingLogin' : 'picGoCLILoggedIn');
+        });
+      }
+      const config = login
+        ? await window.quilliteMarkdown.loginPicGoCLI(path, true, operationId, action === 'reauthorize')
         : await window.quilliteMarkdown.selectPicGoCLIConfig();
       if (current() && config) {
+        if (login) state.picGoCLILoginConfigPath = config;
         $('#picGoCLIConfigPath').value = config;
-        status.textContent = action === 'login' ? t('picGoCLILoggedIn') : t('picGoCLIUploadTestHint');
+        $('#picGoCLIAllowHTTP').checked = false;
+        status.textContent = login ? t('picGoCLILoggedIn') : t('picGoCLIUploadTestHint');
       }
     }
   } catch (error) {
     if (current()) status.textContent = picGoCLISetupError(error);
   } finally {
+    clearInterval(progressTimer);
+    unsubscribe();
+    state.picGoCLIUploadCleanup = null;
+    if (login) state.picGoCLILoginOperation = '';
     finishImageSettingsMutation();
   }
   // Release the verification mutation before saving and recheck the dialog
   // session, so an old confirmation cannot save a new settings draft.
-  if (enableConfirmed && current() && state.picGoCLIReady) await saveImageUploadSettings();
+  if (enableConfirmed && current() && state.picGoCLIReady) await saveImageUploadSettings(true);
 }
 
 function confirmPicGoCLIEnable() {
@@ -4508,10 +4613,10 @@ function confirmPicGoCLIEnable() {
   });
 }
 
-async function saveImageUploadSettings() {
+async function saveImageUploadSettings(enableCLI = false) {
   if (state.imageSettingsMutation || els.imageUploadSettingsDialog.classList.contains('hidden')) return;
   setImageUploadSettingsStatus();
-	if (selectedImageUploadMode() === 'picgo-cli' && !state.picGoCLIReady) {
+	if (selectedImageUploadMode() === 'picgo-cli' && enableCLI && !state.picGoCLIReady) {
     $('#picGoCLIUploadStatus').textContent = t('picGoCLIUploadTestHint');
     return;
   }
@@ -4525,9 +4630,16 @@ async function saveImageUploadSettings() {
     return;
   }
   const input = currentImageUploadSettingsInput();
+  const draftOnly = input.mode === 'picgo-cli' && !enableCLI;
   const revision = beginImageSettingsMutation('save');
   if (revision === null) return;
   try {
+    if (draftOnly) {
+      const draft = await window.quilliteMarkdown.savePicGoCLIDraft({cliPath:input.cliPath,cliConfigPath:input.cliConfigPath,cliAllowHttp:input.cliAllowHttp});
+      state.picGoCLIDraft = draft;
+      if (imageSettingsResponseCurrent(revision)) { closeImageUploadSettings(); showToast(t('picGoCLIDraftSaved'), 'success'); }
+      return;
+    }
     const settings = await window.quilliteMarkdown.setImageUploadSettings(input);
     applyImageUploadSettings(settings);
     if (imageSettingsResponseCurrent(revision)) {
@@ -4540,8 +4652,9 @@ async function saveImageUploadSettings() {
       if (selectedImageUploadMode() === 'picgo-cli') {
         state.picGoCLIReady = false;
         $('#picGoCLIUploadStatus').classList.remove('is-success');
-        $('#picGoCLIUploadStatus').textContent = picGoCLISetupError(error);
-        setImageUploadSettingsStatus(picGoCLISetupError(error));
+        const message = draftOnly && !String(error?.message || error).includes('PICGO_CLI_DRAFT_INVALID') ? t('picGoCLIDraftSaveFailed') : picGoCLISetupError(error);
+        $('#picGoCLIUploadStatus').textContent = message;
+        setImageUploadSettingsStatus(message);
       } else setImageUploadSettingsStatus(t('imageUploadSettingsSaveFailed'));
     }
   } finally {
@@ -4576,6 +4689,9 @@ function beginImageUploadProgress(mode) {
   const run = ++state.imageUploadRun;
   state.imageUploadOperationId = crypto.randomUUID();
   state.imageUploadProgressMode = mode;
+  state.imageUploadStartedAt = Date.now();
+  state.imageUploadPhase = 'preparing';
+  clearInterval(beginImageUploadProgress.elapsedTimer);
   clearTimeout(beginImageUploadProgress.hideTimer);
   els.imageUploadProgressTitle.textContent = t('imageUploadingTitle');
   els.imageUploadProgressDetail.textContent = t('imageUploadPreparing');
@@ -4583,6 +4699,12 @@ function beginImageUploadProgress(mode) {
   els.imageUploadProgressBar.style.width = '0%';
   els.imageUploadProgress.classList.add('is-indeterminate');
   els.imageUploadProgress.classList.remove('hidden');
+  if (mode === 'picgo-cli') {
+    els.imageUploadProgressPercent.textContent = '';
+    beginImageUploadProgress.elapsedTimer = setInterval(() => {
+      if (run === state.imageUploadRun && state.imageUploadOperationId) els.imageUploadProgressDetail.textContent = cliUploadPhaseText(state.imageUploadPhase, state.imageUploadStartedAt);
+    }, 1000);
+  }
   return run;
 }
 
@@ -4591,6 +4713,13 @@ function updateImageUploadProgress(progress) {
   const phase = String(progress?.phase || 'uploading');
   const done = Math.max(0, Number(progress?.done) || 0);
   const total = Math.max(0, Number(progress?.total) || 0);
+  if (state.imageUploadProgressMode === 'picgo-cli' && ['queued','preparing','starting','uploading','finalizing'].includes(phase)) {
+    state.imageUploadPhase = phase;
+    els.imageUploadProgress.classList.add('is-indeterminate');
+    els.imageUploadProgressPercent.textContent = '';
+    els.imageUploadProgressDetail.textContent = cliUploadPhaseText(phase, state.imageUploadStartedAt);
+    return;
+  }
   if (phase === 'preparing') {
     els.imageUploadProgress.classList.add('is-indeterminate');
     els.imageUploadProgressDetail.textContent = t('imageUploadPreparing');
@@ -4611,6 +4740,7 @@ function updateImageUploadProgress(progress) {
 
 function finishImageUploadProgress(run, succeeded) {
   if (run !== state.imageUploadRun) return;
+  clearInterval(beginImageUploadProgress.elapsedTimer);
   state.imageUploadOperationId = '';
   if (succeeded) {
     els.imageUploadProgress.classList.remove('is-indeterminate');
@@ -4626,7 +4756,7 @@ function finishImageUploadProgress(run, succeeded) {
 function showImportedImageResult(result) {
   if (/^data:image\//i.test(result.path)) showToast(t('imageEmbedded'), 'success');
   else if (result.uploaded) showToast(t('imageUploaded'), 'success');
-  else if (result.fallback) showToast(t('picGoUploadFailedFallback') + (result.cliError ? `。${picGoCLISetupError(result.cliError)}` : ''), 'warning');
+  else if (result.fallback) showToast(result.cliError ? t('picGoCLIUploadUnconfirmed') + (!['PICGO_CLI_FAILED','PICGO_CLI_TIMEOUT'].includes(result.cliError) ? ` ${picGoCLISetupError(result.cliError)}` : '') : t('picGoUploadFailedFallback'), 'warning');
   else showToast(t('imageImported'), 'success');
 }
 
@@ -4703,6 +4833,7 @@ function imageInsertionCurrent(target, notify = false) {
 }
 
 function cancelImageInsertions() {
+  clearInterval(beginImageUploadProgress.elapsedTimer);
   for (const target of state.imageInsertionTargets) { target.cancelled = true; target.dismissed = true; }
   state.imageInsertionTargets.clear();
   state.imageDialogTarget = null;
@@ -11878,18 +12009,31 @@ $('#pickLocalImage').addEventListener('click', insertLocalImage);
 $('#openImageUploadSettings').addEventListener('click', openImageUploadSettings);
 $('#closeImageUploadSettings').addEventListener('click', closeImageUploadSettings);
 $('#cancelImageUploadSettings').addEventListener('click', closeImageUploadSettings);
-$('#saveImageUploadSettings').addEventListener('click', saveImageUploadSettings);
+$('#saveImageUploadSettings').addEventListener('click', () => saveImageUploadSettings(false));
+$('#enableVerifiedPicGoCLI').addEventListener('click', () => saveImageUploadSettings(true));
 $('#testPicGo').addEventListener('click', testPicGoConnection);
 $('#testPicGoCLI').addEventListener('click', testPicGoCLIConnection);
 $('#preparePicGoCLI').addEventListener('click', preparePicGoCLIComponent);
 $('#loginPicGoCLI').addEventListener('click', () => configurePicGoCLIHosting('login'));
+$('#reauthorizePicGoCLI').addEventListener('click', () => configurePicGoCLIHosting('reauthorize'));
 $('#selectPicGoCLIConfig').addEventListener('click', () => configurePicGoCLIHosting('select'));
 $('#testPicGoCLIUpload').addEventListener('click', () => configurePicGoCLIHosting('test'));
 for (const id of ['picGoCLIPath', 'picGoCLIConfigPath']) $(`#${id}`).addEventListener('input', () => {
+  $('#picGoCLIAllowHTTP').checked = false;
   invalidateImageSettingsResponses();
   $('#picGoCLIStatus').textContent = '';
   $('#picGoCLIUploadStatus').textContent = '';
   $('#picGoPrepareProgress').classList.add('hidden');
+  updatePicGoSettingsAvailability();
+});
+$('#picGoCLIAllowHTTP').addEventListener('change', () => {
+  const checkbox = $('#picGoCLIAllowHTTP');
+  if (checkbox.checked && !window.confirm(t('picGoCLIHTTPConfirm'))) {
+    checkbox.checked = false;
+    return;
+  }
+  invalidateImageSettingsResponses();
+  $('#picGoCLIUploadStatus').textContent = t('picGoCLIUploadTestHint');
   updatePicGoSettingsAvailability();
 });
 $('#loginPicGoCloud').addEventListener('click', loginPicGoCloud);

@@ -21,30 +21,30 @@ func TestPicGoCLIUploadTestConsentBindingAndExpiry(t *testing.T) {
 	app := testApp(t)
 	path := fakePicGoCLI(t, `const fs=require('fs');const a=process.argv.slice(2);if(a.length!==4||a[0]!=='--config'||a[2]!=='upload')process.exit(2);const d=fs.readFileSync(a[3]);if(d.length!==68||d[0]!==137)process.exit(3);console.log('[PicGo SUCCESS]:\nhttps://example.org/test.png');`)
 	config := fakePicGoCLIConfig(t)
-	if _, err := app.TestPicGoCLIUpload(path, config, false); err == nil {
+	if _, err := app.TestPicGoCLIUpload(path, config, false, false); err == nil {
 		t.Fatal("missing consent accepted")
 	}
-	if app.picGoCLIUploadVerified(path, config) {
+	if app.picGoCLIUploadVerified(path, config, false) {
 		t.Fatal("unverified config accepted")
 	}
-	if _, err := app.TestPicGoCLIUpload(path, config, true); err != nil {
+	if _, err := app.TestPicGoCLIUpload(path, config, true, false); err != nil {
 		t.Fatal(err)
 	}
-	if !app.picGoCLIUploadVerified(path, config) {
+	if !app.picGoCLIUploadVerified(path, config, false) {
 		t.Fatal("successful test not remembered")
 	}
-	if app.picGoCLIUploadVerified(path, fakePicGoCLIConfig(t)) {
+	if app.picGoCLIUploadVerified(path, fakePicGoCLIConfig(t), false) {
 		t.Fatal("different config accepted")
 	}
 	app.picGoCLIVerifiedAt = time.Now().Add(-11 * time.Minute)
-	if app.picGoCLIUploadVerified(path, config) {
+	if app.picGoCLIUploadVerified(path, config, false) {
 		t.Fatal("expired verification accepted")
 	}
 	app.picGoCLIVerifiedAt = time.Now()
 	if err := os.WriteFile(config, []byte(`{"changed":true}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if app.picGoCLIUploadVerified(path, config) {
+	if app.picGoCLIUploadVerified(path, config, false) {
 		t.Fatal("edited config accepted")
 	}
 }
@@ -54,10 +54,10 @@ func TestPicGoCLIZeroExitErrorDoesNotVerifyOrExposeSecrets(t *testing.T) {
 		app := testApp(t)
 		path := fakePicGoCLI(t, `console.`+stream+`('[PicGo ERROR]: Please login token=TOP_SECRET');`)
 		config := fakePicGoCLIConfig(t)
-		if _, err := app.TestPicGoCLIUpload(path, config, true); err == nil || err.Error() != "PICGO_CLI_AUTH_REQUIRED" {
+		if _, err := app.TestPicGoCLIUpload(path, config, true, false); err == nil || err.Error() != "PICGO_CLI_AUTH_REQUIRED" {
 			t.Fatalf("unsafe error %v", err)
 		}
-		if app.picGoCLIUploadVerified(path, config) {
+		if app.picGoCLIUploadVerified(path, config, false) {
 			t.Fatal("error enabled uploads")
 		}
 		data, _ := os.ReadFile(config)
@@ -70,10 +70,10 @@ func TestPicGoCLIZeroExitErrorDoesNotVerifyOrExposeSecrets(t *testing.T) {
 func TestPicGoCLILoginUsesSeparateProfileAndCLIOnly(t *testing.T) {
 	app := testApp(t)
 	path := fakePicGoCLI(t, `const fs=require('fs');const a=process.argv.slice(2);if(a[0]!=='--config'||!a[1].includes('picgo-cli-profiles'))process.exit(2);if(a[2]==='login'){const c=JSON.parse(fs.readFileSync(a[1]));if(c.picBed.uploader!=='picgo-cloud')process.exit(3);c.settings.picgoCloud.token='test-secret';fs.writeFileSync(a[1],JSON.stringify(c));}else if(a.join(' ').includes('cloud auth status --format json'))console.log(JSON.stringify({status:'logged_in',loggedIn:true}));else process.exit(4);`)
-	if _, err := app.LoginPicGoCLI(path, false); err == nil {
+	if _, err := app.LoginPicGoCLI(path, false, "login-test", false); err == nil {
 		t.Fatal("login without confirmation")
 	}
-	profile, err := app.LoginPicGoCLI(path, true)
+	profile, err := app.LoginPicGoCLI(path, true, "login-test", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestPicGoCLILoginUsesSeparateProfileAndCLIOnly(t *testing.T) {
 	if err != nil || settings.Mode == imageUploadModePicGoCLI || settings.CLIConfigPath != "" {
 		t.Fatal("login silently enabled settings")
 	}
-	if app.picGoCLIUploadVerified(path, profile) {
+	if app.picGoCLIUploadVerified(path, profile, false) {
 		t.Fatal("login counted as upload verification")
 	}
 }
@@ -116,10 +116,10 @@ func TestPicGoCLIInstalledCoreRejectsUnconfiguredHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := testApp(t)
-	if _, err := app.TestPicGoCLIUpload(entry, config, true); err == nil || err.Error() != "PICGO_CLI_AUTH_REQUIRED" {
+	if _, err := app.TestPicGoCLIUpload(entry, config, true, false); err == nil || err.Error() != "PICGO_CLI_AUTH_REQUIRED" {
 		t.Fatalf("expected actionable login error, got %v", err)
 	}
-	if app.picGoCLIUploadVerified(entry, config) {
+	if app.picGoCLIUploadVerified(entry, config, false) {
 		t.Fatal("unconfigured official CLI enabled")
 	}
 }

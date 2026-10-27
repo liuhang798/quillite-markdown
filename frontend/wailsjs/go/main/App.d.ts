@@ -12,6 +12,8 @@ export function CancelAIDocumentReview():Promise<void>;
 
 export function CancelAIRewrite():Promise<void>;
 
+export function CancelPicGoCLILogin(arg1:string):Promise<void>;
+
 export function CheckDocumentAssets(arg1:string,arg2:Array<string>):Promise<Array<string>>;
 
 export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
@@ -80,7 +82,7 @@ export function ListFolder(arg1:string):Promise<main.FolderResult>;
 
 export function ListRecoveryArchives():Promise<Array<main.RecoveryArchive>>;
 
-export function LoginPicGoCLI(arg1:string,arg2:boolean):Promise<string>;
+export function LoginPicGoCLI(arg1:string,arg2:boolean,arg3:string,arg4:boolean):Promise<string>;
 
 export function LoginPicGoCloud():Promise<main.PicGoCloudStatus>;
 
@@ -154,6 +156,8 @@ export function SaveFileWithRevision(arg1:string,arg2:string,arg3:string):Promis
 
 export function SavePastedImage(arg1:string,arg2:string):Promise<string>;
 
+export function SavePicGoCLIDraft(arg1:main.PicGoCLIDraft):Promise<main.PicGoCLIDraft>;
+
 export function SaveRecoverySnapshot(arg1:main.RecoverySnapshotInput):Promise<void>;
 
 export function SearchWorkspace(arg1:main.WorkspaceQuery):Promise<main.WorkspaceSearchResult>;
@@ -204,7 +208,9 @@ export function TestPicGo(arg1:main.ImageUploadSettingsInput):Promise<void>;
 
 export function TestPicGoCLI(arg1:string):Promise<string>;
 
-export function TestPicGoCLIUpload(arg1:string,arg2:string,arg3:boolean):Promise<string>;
+export function TestPicGoCLIUpload(arg1:string,arg2:string,arg3:boolean,arg4:boolean):Promise<string>;
+
+export function TestPicGoCLIUploadWithProgress(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:string):Promise<string>;
 
 export function TestPicGoCloud():Promise<main.PicGoCloudStatus>;
 

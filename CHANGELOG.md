@@ -2,9 +2,15 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [3.0.2] - 2026-10-26
+## [3.0.2] - 2026-10-27
 
 ### 简体中文
+
+- 分离 PicGo CLI“保存配置草稿”和“保存并启用”：HTTP 选项及路径可离线保存、关闭或重启后恢复，不替换当前图床配置；启用仍须验证成功并明确确认。禁用按钮显示灰色，实际上传失败提示不再误称“未启用设置”。
+- 优化内置 PicGo CLI 上传结束后的等待：完整执行官方上传命令及异步处理后及时退出，不等待残留空闲连接；自定义 CLI 保持原有退出校验。上传与验证显示阶段和已用时间，不伪造百分比，排队时延后读取图片以减少内存占用；成功使用图床链接并保留本地备份，失败不自动重传。
+- 修复 PicGo CLI 浏览器授权成功后配置为空或持续等待的问题：优先恢复已有授权配置，区分等待授权与有效性检查；取消或超时保留配置，切换账号须明确重新授权，登录不自动上传或启用图床。
+- 修复“一键准备 CLI”后关闭设置窗口或重启，检测不到已下载组件的问题。组件位置独立保存，可找回旧版遗留的完整组件；不改动已有图床配置，也不自动启用上传。
+- 修复 PicGo CLI 返回 HTTP 图片地址时被统一误报为未确认上传成功的问题。默认仍要求 HTTPS；仅在用户明确确认风险、勾选兼容选项并验证保存后允许 HTTP，保留原地址，不自动重试，失败仍保留本地附件。
 
 - 新增 PicGo CLI 图片上传：按需启动，无需后台 Server，支持自动检测、自定义可执行文件和已有配置；上传失败保留本地附件，不自动重试或迁移既有图片。
 - 新增 PicGo CLI 一键准备及分阶段进度：经确认从 Node.js/npm 官方来源获取固定版本，校验运行时与锁定依赖，禁用依赖安装脚本，不修改系统 Node/npm 或 PATH；准备本身不上传图片。
@@ -19,6 +25,11 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Separate PicGo CLI draft saving from activation. Save HTTP preferences and paths offline and restore them after closing or restarting without changing active hosting settings. Activation still requires successful verification and an explicit action. Disabled buttons are visibly grey, and upload failures no longer incorrectly claim settings were not enabled.
+- Reduce post-upload waiting in the managed PicGo CLI by awaiting the complete official upload action and flushing output before exiting, without waiting for idle handles. Custom CLIs retain exit validation. Show upload/verification phases and elapsed time without fabricated percentages, and defer image reads while queued. Successful uploads use hosted URLs with local backups; failures never trigger automatic retries.
+- Recover existing PicGo CLI authorization profiles instead of starting duplicate logins. Show separate browser-authorization and validity-check phases, retain profiles on cancellation or timeout, and require explicit reauthorization to switch accounts. Login never uploads images or enables hosting automatically.
+- Remember prepared PicGo CLI components independently from upload settings, including after closing settings or restarting. Discover complete components left by older versions without changing existing hosting settings or automatically enabling uploads.
+- Distinguish PicGo CLI HTTP URL refusals from upload failures. HTTPS remains the default; HTTP compatibility requires explicit risk confirmation, verification and saving. Original URLs are preserved without automatic retries, and local attachments remain available on failure.
 - Added on-demand PicGo CLI image uploading without a background Server, with executable detection, custom paths and existing configurations. Failures retain local assets without automatic retries or migration of existing images.
 - Added one-click PicGo CLI preparation with staged progress, explicit consent, pinned official Node.js/npm downloads, runtime/dependency integrity checks and disabled lifecycle scripts. System Node/npm and PATH remain unchanged; preparation never uploads images.
 - Added CLI browser sign-in with isolated profiles and upload-settings verification using a built-in test image after explicit confirmation. Successful verification requires a separate Save & enable confirmation; cancellation and stale asynchronous results cannot enable or overwrite settings.

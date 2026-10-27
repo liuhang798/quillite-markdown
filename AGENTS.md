@@ -169,8 +169,12 @@ app.go / updates.go（Go 后端）
 - `picGoServerUrl`：PicGo 本地 HTTP 服务地址，仅允许 localhost／回环 IP；可选服务密钥独立保存在用户配置目录，不进入偏好 JSON。
 - `picGoCliPath`：可选 PicGo CLI 可执行文件绝对路径，空值自动检测；`imageUploadMode=picgo-cli` 独立于 Server 模式。`TestPicGoCLI` 仅检查版本，`UploadImageToPicGoCLI` 按需运行 `upload` 并复用用户 CLI 配置。Windows npm shim 通过 Node 直接执行，不使用 shell；只上传已验证图片的私有临时副本，HTTPS 结果严格校验，失败保留 assets 且不自动重试。
 - `picGoCliConfigPath`：可选 CLI 配置绝对路径，空值使用 `~/.picgo/config.json`；只保存路径，不把凭证读入前端。`LoginPicGoCLI` 经确认调用官方 CLI 浏览器登录，配置写入独立 profile、不覆盖默认配置；`TestPicGoCLIUpload` 只上传内置测试 PNG，必须确认且不得自动重试。CLI 设置保存必须验证最近 10 分钟内该执行文件与配置的成功测试指纹；版本检测和登录均不能代替上传验证。取消弹窗或异步过期结果不能启用配置；成功上传仍保留 assets，不自动迁移既有图片。
+- `picGoCliAllowHttp`：缺省为 false，仅针对 CLI 返回的图片地址。用户明确确认未加密风险后可开启；上传测试指纹同时绑定该选项，修改后必须重新验证再保存。合法 HTTP 地址被默认策略拒绝时返回 `PICGO_CLI_HTTP_NOT_ALLOWED`，不声称上传未发生、不自动重试、不改写为 HTTPS；Cloud/Server 安全规则不变。
+- `picGoCliDraft`：独立的 CLI 配置草稿，只含 CLI 路径、配置路径和 HTTP 选项。`SavePicGoCLIDraft` 仅本地保存草稿，不执行 CLI、不上传、不覆盖已启用配置；允许留空和暂时不存在的绝对路径。`GetImageUploadSettings.cliDraft` 用于恢复表单，不可用于上传。前端“保存配置草稿”与“保存并启用”独立；只有后者通过现有测试指纹校验后才更新实际配置并清除草稿。更改 HTTP 的重新验证要求针对启用，不限制草稿保存。
 - `PreparePicGoCLI(true)` 仅由用户确认后触发，从 `nodejs.org` 获取固定版本与 SHA-256 的便携 Node，从 `registry.npmjs.org` 按内嵌 lockfile 安装 PicGo；这是用户明确授权的可选第三方组件下载例外，不改变应用更新/官网域名规则。组件位于配置目录下独立随机目录，使用私有 Node，不改系统 PATH/global npm，也不执行 npm lifecycle scripts。准备只在隔离配置中验证版本，不上传图片、不修改用户 PicGo 配置或自动启用上传。只清理本次刚创建且未暴露的私有临时目录；成功组件保留。升级依赖必须重新审核 lockfile、校验值并运行隔离官方下载回归。
 - `exportSettings`：本机 Pandoc 路径与最多 24 条导出预设；旧偏好缺失时使用空设置。
+- `picGoManagedCliPath`：一键准备成功后独立记住组件位置，不修改 `picGoCliPath`、图床配置或上传模式。空 CLI 路径优先识别有效的已准备组件；旧版遗留组件仅在应用配置目录的 components 下进行有界、非递归、拒绝链接的布局检查，不执行扫描到的文件。显式 CLI 路径不被替换；检测版本、登录、测试上传及保存必须使用一致的路径解析。
+- `picGoCliLoginConfigPath`：独立记录登录配置用于关闭后恢复，不替换已启用图床的配置。仅有界扫描应用自有 profile；已有令牌须经 CLI 状态检查才认定登录成功。`LoginPicGoCLI(path, confirmed, operationID, forceNew)` 优先复用授权，明确重新授权才新建配置；`picgo-cli:login-progress` 只传操作 ID、阶段和配置路径，不传凭证。`CancelPicGoCLILogin(operationID)` 仅取消所属登录，超时或取消不删除配置、不启用图床、不重试上传；前端须过滤旧事件并释放订阅。
 - `anonymousInstallId`：本地随机匿名标识，仅用于每日活跃按设备去重；服务器只保存不可逆哈希。
 - `lastActiveReport`：最近一次成功提交每日活跃的 UTC 日期，保证每台设备每天最多一次。
 
@@ -230,6 +234,8 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 ## 8. 前端状态与桥接
 
 PicGo CLI 准备通过 `PreparePicGoCLI(confirmed, operationID)` 与 `picgo-cli:prepare-progress` 事件关联：运行环境下载报告真实字节，未知总量/校验/解压/npm 安装/版本检查使用无百分比阶段。前端按操作 ID、弹窗修订及当前模式过滤旧事件，结束释放订阅与计时器，完成后仍须用户保存设置才启用。不能将下载百分比标为整体安装百分比，不能从 npm 日志泄露本地路径或令牌。
+
+内置 CLI 上传优化只用于通过完整布局检查的固定版本组件，通过官方 `upload` 命令的 `parseAsync` 等待完整 action 后刷新输出并退出，不能看到 URL 就提前返回或停止尚未完成的上传。自定义 CLI 仍等待正常退出；错误、未知结果及 HTTP 策略校验不变，不自动重传。上传及 `TestPicGoCLIUploadWithProgress` 使用带操作 ID 的阶段事件，仅传白名单阶段、不传日志和凭证；未知传输量不显示虚假百分比，关闭窗口须清理计时器和订阅。
 
 前端禁止在多个文件中直接调用 `window.go.main.App`。所有后端调用统一通过 `frontend/src/main.js` 暴露的 `window.quilliteMarkdown`，这样浏览器预览和桌面运行可以共享代码。
 

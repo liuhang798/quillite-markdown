@@ -1360,14 +1360,18 @@
           <div class="picgo-cli-actions">
             <button id="loginPicGoCLI" class="large-button secondary" type="button" data-i18n="picGoCLILogin">通过 CLI 登录 PicGo Cloud</button>
             <button id="selectPicGoCLIConfig" class="large-button secondary" type="button" data-i18n="picGoCLISelectConfig">选择已有图床配置</button>
+            <button id="reauthorizePicGoCLI" class="large-button secondary" type="button" data-i18n="picGoCLIReauthorize">重新授权 / 切换账号</button>
           </div>
           <label class="picgo-cli-config-label"><span data-i18n="picGoCLIConfigPath">CLI 配置文件（留空使用 ~/.picgo/config.json）</span><input id="picGoCLIConfigPath" type="text" spellcheck="false" autocomplete="off"></label>
+          <label class="picgo-cli-http-option"><input id="picGoCLIAllowHTTP" type="checkbox" aria-describedby="picGoCLIHTTPHint"><span data-i18n="picGoCLIAllowHTTP">允许 HTTP 图片地址（不安全，仅限 CLI）</span></label>
+          <p id="picGoCLIHTTPHint" data-i18n="picGoCLIHTTPHint"></p>
         </section>
         <section class="picgo-cli-hosting" aria-labelledby="picGoCLIUploadTestTitle">
           <h3 id="picGoCLIUploadTestTitle" data-i18n="picGoCLIUploadTestTitle">3 · 验证上传</h3>
           <p data-i18n="picGoCLIUploadTestHint"></p>
           <strong class="picgo-cli-test-note" data-i18n="picGoCLINoImageNeeded">无需选图 · 自动使用内置测试图</strong>
           <button id="testPicGoCLIUpload" class="large-button primary" type="button" data-i18n="picGoCLIUploadTest">验证上传配置</button>
+          <p class="setting-hint" data-i18n="picGoCLIDraftHint">可先保存配置草稿（含 HTTP 选项），无需联网；草稿不会改变当前上传设置。验证成功后，点击“保存并启用”才生效。</p>
           <div id="picGoCLIUploadStatus" class="picgo-test-status" role="status" aria-live="polite"></div>
         </section>
         <details id="picGoCLIAdvanced" class="picgo-cli-advanced">
@@ -1444,6 +1448,7 @@
         <span></span>
         <button id="cancelImageUploadSettings" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
         <button id="saveImageUploadSettings" class="large-button primary" type="button" data-i18n="saveSettings">保存设置</button>
+        <button id="enableVerifiedPicGoCLI" class="large-button primary hidden" type="button" data-i18n="picGoCLIEnableNow" disabled>保存并启用</button>
       </div>
     </section>
   </div>

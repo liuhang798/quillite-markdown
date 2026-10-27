@@ -517,7 +517,26 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class PicGoCLIDraft {
+	    cliPath: string;
+	    cliConfigPath: string;
+	    cliAllowHttp: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new PicGoCLIDraft(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cliPath = source["cliPath"];
+	        this.cliConfigPath = source["cliConfigPath"];
+	        this.cliAllowHttp = source["cliAllowHttp"];
+	    }
+	}
 	export class ImageUploadSettings {
+	    cliDraft?: PicGoCLIDraft;
+	    cliLoginConfigPath: string;
+	    cliAllowHttp: boolean;
 	    cliConfigPath: string;
 	    cliPath: string;
 	    mode: string;
@@ -531,6 +550,9 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cliDraft = this.convertValues(source["cliDraft"], PicGoCLIDraft);
+	        this.cliLoginConfigPath = source["cliLoginConfigPath"];
+	        this.cliAllowHttp = source["cliAllowHttp"];
 	        this.cliConfigPath = source["cliConfigPath"];
 	        this.cliPath = source["cliPath"];
 	        this.mode = source["mode"];
@@ -538,8 +560,27 @@ export namespace main {
 	        this.hasSecret = source["hasSecret"];
 	        this.hasCloudToken = source["hasCloudToken"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ImageUploadSettingsInput {
+	    cliAllowHttp: boolean;
 	    cliConfigPath: string;
 	    cliPath: string;
 	    mode: string;
@@ -553,6 +594,7 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cliAllowHttp = source["cliAllowHttp"];
 	        this.cliConfigPath = source["cliConfigPath"];
 	        this.cliPath = source["cliPath"];
 	        this.mode = source["mode"];
@@ -607,6 +649,7 @@ export namespace main {
 	        this.version = source["version"];
 	    }
 	}
+
 	export class PicGoCloudStatus {
 	    connected: boolean;
 	    user?: string;
@@ -657,6 +700,10 @@ export namespace main {
 	    picGoServerUrl?: string;
 	    picGoCliPath?: string;
 	    picGoCliConfigPath?: string;
+	    picGoCliAllowHttp?: boolean;
+	    picGoManagedCliPath?: string;
+	    picGoCliLoginConfigPath?: string;
+	    picGoCliDraft?: PicGoCLIDraft;
 	    aiProvider?: string;
 	    aiBaseUrl?: string;
 	    aiBaseUrls?: Record<string, string>;
@@ -691,6 +738,10 @@ export namespace main {
 	        this.picGoServerUrl = source["picGoServerUrl"];
 	        this.picGoCliPath = source["picGoCliPath"];
 	        this.picGoCliConfigPath = source["picGoCliConfigPath"];
+	        this.picGoCliAllowHttp = source["picGoCliAllowHttp"];
+	        this.picGoManagedCliPath = source["picGoManagedCliPath"];
+	        this.picGoCliLoginConfigPath = source["picGoCliLoginConfigPath"];
+	        this.picGoCliDraft = this.convertValues(source["picGoCliDraft"], PicGoCLIDraft);
 	        this.aiProvider = source["aiProvider"];
 	        this.aiBaseUrl = source["aiBaseUrl"];
 	        this.aiBaseUrls = source["aiBaseUrls"];

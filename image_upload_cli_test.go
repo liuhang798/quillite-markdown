@@ -33,7 +33,7 @@ func TestPicGoCLIOutputValidation(t *testing.T) {
 		"[PicGo SUCCESS]:\nhttps://example.org/image.png\n[PicGo WARN]: Log file is too large, recreate log file\n",
 		"[PicGo INFO]: uploading\n\x1b[32m[PicGo SUCCESS]:\x1b[0m\r\nhttps://example.org/a%20b.png?token=x\r\n",
 	} {
-		if _, err := picGoCLIImageURL(output); err != nil {
+		if _, err := picGoCLIImageURL(output, false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -43,7 +43,7 @@ func TestPicGoCLIOutputValidation(t *testing.T) {
 		"[PicGo SUCCESS]:\nhttps://example.org/a b", "[PicGo SUCCESS]:\nhttps://example.org/a\nhttps://example.org/b",
 		"[PicGo SUCCESS]:\nhttps://example.org/x\n[PicGo ERROR]: failed",
 	} {
-		if _, err := picGoCLIImageURL(output); err == nil {
+		if _, err := picGoCLIImageURL(output, false); err == nil {
 			t.Fatalf("accepted invalid output %q", output)
 		}
 	}
@@ -66,7 +66,7 @@ func TestPicGoCLISettingsAndVersion(t *testing.T) {
 	if _, err := app.SetImageUploadSettings(input); err == nil {
 		t.Fatal("version-only check enabled uploads")
 	}
-	if _, err := app.TestPicGoCLIUpload(path, config, true); err != nil {
+	if _, err := app.TestPicGoCLIUpload(path, config, true, false); err != nil {
 		t.Fatal(err)
 	}
 	settings, err := app.SetImageUploadSettings(input)
@@ -186,7 +186,7 @@ func TestPicGoCLIUploadUsesAssetsAndModeGuard(t *testing.T) {
 	if _, err = app.UploadImageToPicGoCLI(doc, image, "cli-test"); err == nil {
 		t.Fatal("disabled upload allowed")
 	}
-	if _, err = app.TestPicGoCLIUpload(path, config, true); err != nil {
+	if _, err = app.TestPicGoCLIUpload(path, config, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = app.SetImageUploadSettings(ImageUploadSettingsInput{Mode: imageUploadModePicGoCLI, CLIPath: path, CLIConfigPath: config}); err != nil {

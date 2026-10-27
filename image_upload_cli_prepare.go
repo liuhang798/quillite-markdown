@@ -321,7 +321,7 @@ func installOfficialPicGoWithProgress(ctx context.Context, component, work strin
 		return errors.New("PICGO_PREPARE_INSTALL")
 	}
 	entry := filepath.Join(runtimeDir, managedPicGoEntry)
-	if err := os.WriteFile(entry, []byte("require('../cli/node_modules/picgo/bin/picgo');\n"), 0600); err != nil {
+	if err := os.WriteFile(entry, []byte(managedPicGoBootstrap), 0600); err != nil {
 		return err
 	}
 	// Isolate the smoke check from the user's existing ~/.picgo configuration.
@@ -333,7 +333,8 @@ func installOfficialPicGoWithProgress(ctx context.Context, component, work strin
 	return nil
 }
 
-// Explicit button only: preparing does not upload an image or change preferences.
+// Explicit button only: remember the component, never enable uploads or replace
+// the user's configured CLI/hosting preferences.
 func (a *App) PreparePicGoCLI(confirmed bool, operationID string) (string, error) {
 	if !confirmed {
 		return "", errors.New("PICGO_PREPARE_CONFIRM")
@@ -351,12 +352,15 @@ func (a *App) PreparePicGoCLI(confirmed bool, operationID string) (string, error
 	defer cancel()
 	report := imageUploadReporter(operationID, a.emitPicGoPrepareProgress)
 	report("starting", 0, 0)
-	entry, err := preparePicGoComponent(ctx, filepath.Join(filepath.Dir(a.preferencePath()), "components"), func(ctx context.Context, component, work string) error {
+	entry, err := preparePicGoComponent(ctx, a.picGoComponentsDirectory(), func(ctx context.Context, component, work string) error {
 		return installOfficialPicGoWithProgress(ctx, component, work, report)
 	})
 	if ctx.Err() != nil {
 		report("failed", 0, 0)
 		return "", errors.New("PICGO_PREPARE_TIMEOUT")
+	}
+	if err == nil {
+		err = a.rememberPreparedPicGoCLI(entry)
 	}
 	if err != nil {
 		report("failed", 0, 0)

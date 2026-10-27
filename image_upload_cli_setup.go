@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -66,57 +65,7 @@ func (a *App) SelectPicGoCLIConfig() (string, error) {
 	return path, err
 }
 
-// The official CLI owns browser login and credentials. No Server upload service
-// or direct Cloud uploader is used here. New profiles never overwrite ~/.picgo.
-func (a *App) LoginPicGoCLI(path string, confirmed bool) (string, error) {
-	if !confirmed {
-		return "", errors.New("PICGO_CLI_CONFIRM_REQUIRED")
-	}
-	if _, _, err := resolvePicGoCLI(path); err != nil {
-		return "", err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-	select {
-	case picGoCLISlot <- struct{}{}:
-		defer func() { <-picGoCLISlot }()
-	default:
-		return "", errors.New("PICGO_CLI_BUSY")
-	}
-	root := filepath.Join(filepath.Dir(a.preferencePath()), "picgo-cli-profiles")
-	if err := os.MkdirAll(root, 0700); err != nil {
-		return "", errors.New("PICGO_CLI_CONFIG_INVALID")
-	}
-	dir, err := os.MkdirTemp(root, "cloud-")
-	if err != nil {
-		return "", errors.New("PICGO_CLI_CONFIG_INVALID")
-	}
-	// Retained even on failure: credentials may have been written after browser
-	// approval. Never recursively remove a CLI profile or the user's configuration.
-	config := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(config, []byte(`{"picBed":{"uploader":"picgo-cloud","current":"picgo-cloud"},"settings":{"picgoCloud":{"autoImport":false}}}`), 0600); err != nil {
-		return "", errors.New("PICGO_CLI_CONFIG_INVALID")
-	}
-	if _, err := runPicGoCLI(ctx, path, "--config", config, "login"); err != nil {
-		return "", err
-	}
-	// PicGo's login command can exit zero after logging an error. Probe its
-	// structured auth result; process exit alone is not evidence of login.
-	output, err := runPicGoCLI(ctx, path, "--config", config, "cloud", "auth", "status", "--format", "json")
-	if err != nil {
-		return "", err
-	}
-	var status struct {
-		Status   string `json:"status"`
-		LoggedIn bool   `json:"loggedIn"`
-	}
-	if json.Unmarshal([]byte(output), &status) != nil || status.Status != "logged_in" || !status.LoggedIn {
-		return "", errors.New("PICGO_CLI_AUTH_REQUIRED")
-	}
-	return config, nil
-}
-
-func picGoCLITestFingerprint(path, config string) (string, error) {
+func picGoCLITestFingerprint(path, config string, allowHTTP bool) (string, error) {
 	program, prefix, err := resolvePicGoCLI(path)
 	if err != nil {
 		return "", err
@@ -141,6 +90,7 @@ func picGoCLITestFingerprint(path, config string) (string, error) {
 		return "", errors.New("PICGO_CLI_CONFIG_INVALID")
 	}
 	h := sha256.New()
+	fmt.Fprintf(h, "allowHTTP=%t\x00", allowHTTP)
 	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", strings.TrimSpace(path), strings.TrimSpace(config), program)
 	for _, file := range append([]string{program}, prefix...) {
 		info, err := os.Stat(file)
@@ -153,8 +103,8 @@ func picGoCLITestFingerprint(path, config string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (a *App) picGoCLIUploadVerified(path, config string) bool {
-	key, err := picGoCLITestFingerprint(path, config)
+func (a *App) picGoCLIUploadVerified(path, config string, allowHTTP bool) bool {
+	key, err := picGoCLITestFingerprint(path, config, allowHTTP)
 	if err != nil {
 		return false
 	}
@@ -165,10 +115,22 @@ func (a *App) picGoCLIUploadVerified(path, config string) bool {
 
 // Explicitly uploads ONLY this built-in one-pixel PNG. Never reads clipboard,
 // document contents or user images. One attempt; no retry on unknown outcomes.
-func (a *App) TestPicGoCLIUpload(path, config string, confirmed bool) (string, error) {
+func (a *App) TestPicGoCLIUpload(path, config string, confirmed, allowHTTP bool) (string, error) {
+	return a.testPicGoCLIUpload(path, config, confirmed, allowHTTP, nil)
+}
+
+func (a *App) TestPicGoCLIUploadWithProgress(path, config string, confirmed, allowHTTP bool, operationID string) (string, error) {
+	if !validImageUploadOperationID(operationID) {
+		return "", errors.New("invalid image upload operation ID")
+	}
+	return a.testPicGoCLIUpload(path, config, confirmed, allowHTTP, imageUploadReporter(operationID, a.emitImageUploadProgress))
+}
+
+func (a *App) testPicGoCLIUpload(path, config string, confirmed, allowHTTP bool, report func(string, int64, int64)) (string, error) {
 	if !confirmed {
 		return "", errors.New("PICGO_CLI_CONFIRM_REQUIRED")
 	}
+	path = a.effectivePicGoCLIPath(path)
 	select {
 	case picGoCLISlot <- struct{}{}:
 		defer func() { <-picGoCLISlot }()
@@ -178,17 +140,17 @@ func (a *App) TestPicGoCLIUpload(path, config string, confirmed bool) (string, e
 	a.mu.Lock()
 	a.picGoCLIVerified = ""
 	a.mu.Unlock()
-	if _, err := picGoCLITestFingerprint(path, config); err != nil {
+	if _, err := picGoCLITestFingerprint(path, config, allowHTTP); err != nil {
 		return "", err
 	}
 	data, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	result, err := uploadPicGoCLIConfiguredSnapshot(ctx, path, config, "test.png", data)
+	result, err := uploadPicGoCLIConfiguredSnapshot(ctx, path, config, "test.png", data, allowHTTP, picGoRunOptions{awaitUpload: a.validManagedPicGoCLI(path), report: report})
 	if err != nil {
 		return "", err
 	}
-	key, err := picGoCLITestFingerprint(path, config)
+	key, err := picGoCLITestFingerprint(path, config, allowHTTP)
 	if err != nil {
 		return "", err
 	}
