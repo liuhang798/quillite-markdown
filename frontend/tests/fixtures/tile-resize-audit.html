@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>Tile resize regression</title>
+<link rel="icon" href="data:,">
+<style>#editor{height:360px}.cm-editor{height:100%}.cm-scroller{overflow:auto}.widget{display:inline-block;min-width:30px;background:#eee}</style>
+<div id="editor"></div>
+<script type="module">
+import {EditorState, StateField, StateEffect} from '@codemirror/state';
+import {EditorView, Decoration, WidgetType, drawSelection} from '@codemirror/view';
+import {history, undo, redo} from '@codemirror/commands';
+class Box extends WidgetType {
+  eq(other) { return other instanceof Box; }
+  toDOM() { const el=document.createElement('span');el.className='widget';el.textContent='预览块';return el; }
+}
+const changeRanges=StateEffect.define();
+const boxes=StateField.define({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value=value.map(tr.changes);
+    for (const effect of tr.effects) if(effect.is(changeRanges)) value=Decoration.set(effect.value.map(([from,to])=>Decoration.replace({widget:new Box()}).range(from,to)),true);
+    return value;
+  },
+  provide: field=>EditorView.decorations.from(field)
+});
+const errors=[];
+const view=new EditorView({parent:document.querySelector('#editor'),state:EditorState.create({doc:'START\n'+'a'.repeat(240)+'\n'+('paragraph 文本\n'.repeat(160))+'END',extensions:[boxes,history(),drawSelection(),EditorView.lineWrapping,EditorView.exceptionSink.of(e=>errors.push(String(e)))]})});
+window.tileAudit={view,errors,ranges:ranges=>view.dispatch({effects:changeRanges.of(ranges)}),undo:()=>undo(view),redo:()=>redo(view)};
+</script>

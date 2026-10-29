@@ -60,6 +60,8 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### Live-rendered and source editing
 
+The 2026-10-29 rebuild of v3.0.2 fixes editor tile traversal when rendered widgets change length, preserving document content, undo history and IME safeguards.
+
 - Reading and editing resume at the current viewport in both directions, using source-block anchors instead of an old editing position. Unsaved content and undo history are preserved.
 - A collapsible editing outline offers heading search, tree/flat views and chapter navigation. It starts closed and overlays the page without reducing editor width.
 - The outline trigger has dedicated space in the rightmost header, keeping version history and preview close controls accessible in either split direction.

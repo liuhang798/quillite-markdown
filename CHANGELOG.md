@@ -2,9 +2,11 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [3.0.2] - 2026-10-27
+## [3.0.2] - 2026-10-29
 
 ### 简体中文
+
+- 修复编辑器复用并调整渲染块长度时的布局遍历越界，避免后续光标定位、选区绘制和滚动连续出现“No tile at position”。保留文档内容、撤回历史及现有输入法保护。
 
 - 分离 PicGo CLI“保存配置草稿”和“保存并启用”：HTTP 选项及路径可离线保存、关闭或重启后恢复，不替换当前图床配置；启用仍须验证成功并明确确认。禁用按钮显示灰色，实际上传失败提示不再误称“未启用设置”。
 - 优化内置 PicGo CLI 上传结束后的等待：完整执行官方上传命令及异步处理后及时退出，不等待残留空闲连接；自定义 CLI 保持原有退出校验。上传与验证显示阶段和已用时间，不伪造百分比，排队时延后读取图片以减少内存占用；成功使用图床链接并保留本地备份，失败不自动重传。
@@ -25,6 +27,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Fix tile traversal after rendered widgets are reused and resized, preventing cascading “No tile at position” failures in cursor positioning, selection drawing and scrolling. Preserve document content, undo history and existing IME safeguards.
 - Separate PicGo CLI draft saving from activation. Save HTTP preferences and paths offline and restore them after closing or restarting without changing active hosting settings. Activation still requires successful verification and an explicit action. Disabled buttons are visibly grey, and upload failures no longer incorrectly claim settings were not enabled.
 - Reduce post-upload waiting in the managed PicGo CLI by awaiting the complete official upload action and flushing output before exiting, without waiting for idle handles. Custom CLIs retain exit validation. Show upload/verification phases and elapsed time without fabricated percentages, and defer image reads while queued. Successful uploads use hosted URLs with local backups; failures never trigger automatic retries.
 - Recover existing PicGo CLI authorization profiles instead of starting duplicate logins. Show separate browser-authorization and validity-check phases, retain profiles on cancellation or timeout, and require explicit reauthorization to switch accounts. Login never uploads images or enables hosting automatically.
