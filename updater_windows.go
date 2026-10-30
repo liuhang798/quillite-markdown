@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	windowsUpdateExecutableName    = "QuilliteMarkdown.exe"
 	updateCleanupHelperEnvironment = "QUILLITE_CONFIRMED_UPDATE_HELPER"
 	updateCleanupBackupEnvironment = "QUILLITE_CONFIRMED_UPDATE_BACKUP"
 	windowsSharingViolation        = syscall.Errno(32)

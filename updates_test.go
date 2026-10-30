@@ -1,9 +1,28 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestPortableUpdateGuidanceOnlyAppearsForANewerVersion(t *testing.T) {
+	for _, name := range []string{"quillite-markdown-3.0.2-windows-amd64-portable.exe", "我的阅读器.exe"} {
+		executable := filepath.Join(t.TempDir(), name)
+		if requiresManualPortableUpdate("windows", "3.0.2", "3.0.2", executable) {
+			t.Fatal("same version must not prompt repair")
+		}
+		if !requiresManualPortableUpdate("windows", "3.0.2", "3.0.3", executable) {
+			t.Fatal("portable updates must offer manual portable download")
+		}
+		if requiresManualPortableUpdate("darwin", "3.0.2", "3.0.3", executable) {
+			t.Fatal("portable Windows policy affected macOS")
+		}
+	}
+	if requiresManualPortableUpdate("windows", "3.0.2", "3.0.3", filepath.Join(t.TempDir(), windowsUpdateExecutableName)) {
+		t.Fatal("installed updater changed")
+	}
+}
 
 func TestMapOfficialReleaseUsesLanguageAndAbsoluteAssetURL(t *testing.T) {
 	app := &App{language: "zh-CN"}

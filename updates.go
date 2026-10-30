@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -15,12 +16,14 @@ import (
 )
 
 const (
-	officialWebsiteBase      = "https://qm.ssssa.cn"
-	officialLatestReleaseAPI = officialWebsiteBase + "/api/v1/releases/latest"
-	officialDownloadPage     = officialWebsiteBase + "/#download"
+	officialWebsiteBase         = "https://qm.ssssa.cn"
+	officialLatestReleaseAPI    = officialWebsiteBase + "/api/v1/releases/latest"
+	officialDownloadPage        = officialWebsiteBase + "/#download"
+	windowsUpdateExecutableName = "QuilliteMarkdown.exe"
 )
 
 var windowsUninstallerSafetyCheck = prepareWindowsUninstallerForUpdate
+var updateExecutablePath = os.Executable
 
 type UpdateInfo struct {
 	Checked               bool   `json:"checked"`
@@ -224,8 +227,15 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 
 	latest := normaliseVersion(release.TagName)
 	manualInstallReason := requiredManualInstallReason(runtime.GOOS, appVersion, latest, windowsUninstallerSafe)
+	executable, _ := updateExecutablePath()
+	if manualInstallReason == "" && requiresManualPortableUpdate(runtime.GOOS, appVersion, latest, executable) {
+		manualInstallReason = manualInstallReasonWindowsPortable
+	}
 	manualInstallerURL := ""
-	if manualInstallReason != "" {
+	if manualInstallReason == manualInstallReasonWindowsPortable {
+		// Open the download page, not the installer or an executable download.
+		manualInstallerURL = officialDownloadPage
+	} else if manualInstallReason != "" {
 		manualInstallerURL = fullInstallerURLForPlatform(release.Assets, runtime.GOOS)
 	}
 	result = UpdateInfo{
@@ -275,7 +285,13 @@ func fullInstallerURLForPlatform(assets []updateReleaseAsset, goos string) strin
 const (
 	manualInstallReasonMacLegacyUpdater         = "mac-legacy-updater"
 	manualInstallReasonWindowsUnsafeUninstaller = "windows-unsafe-uninstaller"
+	manualInstallReasonWindowsPortable          = "windows-portable"
 )
+
+func requiresManualPortableUpdate(goos, currentVersion, latestVersion, executable string) bool {
+	return goos == "windows" && compareVersions(latestVersion, currentVersion) > 0 &&
+		!strings.EqualFold(filepath.Base(executable), windowsUpdateExecutableName)
+}
 
 func requiredManualInstallReason(goos, currentVersion, latestVersion string, windowsUninstallerSafe bool) string {
 	if goos == "windows" && !windowsUninstallerSafe {

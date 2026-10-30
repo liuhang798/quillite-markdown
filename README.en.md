@@ -60,6 +60,10 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ### Live-rendered and source editing
 
+The 2026-10-30 rebuild of v3.0.2 fixes false installation-repair prompts for portable EXEs, header overlap from the sidebar opener, and preview positioning for same-line cursor moves and long code blocks. Portable updates offer manual portable EXE downloads without requiring installation. Download this same-version rebuild again; save documents and fully quit the old process before installing or launching it, so single-instance handling does not bring back the old window.
+
+This rebuild also excludes app-owned export dialogs and backdrops from PDF system-print fallback, preserving document content and its legitimate HTML components.
+
 The 2026-10-29 rebuild of v3.0.2 fixes editor tile traversal when rendered widgets change length, preserving document content, undo history and IME safeguards.
 
 - Reading and editing resume at the current viewport in both directions, using source-block anchors instead of an old editing position. Unsaved content and undo history are preserved.

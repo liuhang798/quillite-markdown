@@ -336,6 +336,11 @@ body.resizing-panes .sidebar, body.resizing-panes .toc-panel { transition: none;
 .folder-cta strong { font-size: 12px; }
 .folder-cta small { color: var(--muted); font-size: 10px; }
 .rail-button { position: absolute; left: 10px; top: 14px; z-index: 5; width: 32px; height: 32px; border: 1px solid var(--line); background: var(--paper); border-radius: 9px; display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow); }
+/* The collapsed library's opener belongs to the left header in every layout. */
+.app-shell:has(> .sidebar.collapsed) .editor-preview-pane .split-pane-header { padding-left: 54px; }
+body[data-editor-layout="editor-left"] .app-shell:has(> .sidebar.collapsed) .editor-preview-pane .split-pane-header { padding-left: 16px; }
+body[data-editor-layout="editor-left"] .app-shell:has(> .sidebar.collapsed) .editor-workspace .editor-header,
+body[data-editor-layout="editor-only"] .app-shell:has(> .sidebar.collapsed) .editor-workspace .editor-header { padding-left: 54px; }
 
 .reader-pane { flex: 1; min-width: 0; overflow: auto; background: var(--paper); scroll-behavior: smooth; }
 .document-loading { position: fixed; z-index: 35; display: grid; place-items: center; pointer-events: none; padding: 24px; box-sizing: border-box; }
@@ -1929,6 +1934,11 @@ body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { pad
 }
 
 @media print {
+  /* Native PDF engines can fall back to window.print() while an export dialog
+     is open. The bridge may return before printing begins, so exclude all
+     modal UI in print media instead of temporarily toggling its screen state.
+     App dialogs are body children; document HTML dialogs must remain intact. */
+  body > .dialog-backdrop, body > dialog, body > dialog::backdrop { display: none !important; }
   .reader-deferred-layout { content-visibility: visible; contain-intrinsic-size: none !important; }
   .titlebar, .sidebar, .toc-panel, .document-meta, .article-footer, .rail-button, .editor-view, .back-to-top, .window-controls, .toast, .popover, .pane-resizer { display: none !important; }
   .image-upload-progress { display: none !important; }

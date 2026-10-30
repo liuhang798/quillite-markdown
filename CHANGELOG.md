@@ -2,9 +2,14 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [3.0.2] - 2026-10-29
+## [3.0.2] - 2026-10-30
 
 ### 简体中文
+
+- 修复 PDF 直接导出回退到系统打印时把导出设置界面一起打印的问题：打印样式仅排除应用自身弹窗和遮罩，保留正文中的合法 HTML 组件；引擎不可用、超时和失败三种回退均补充回归验证。
+- 修复 Windows 便携 EXE 因文件名不同而误报“需要修复安装组件”：不存在卸载程序时无需修复；有新版本时提供便携版手动下载指引，不放宽热更新目标或未知卸载文件保护。
+- 修复收起侧栏后展开按钮遮挡编辑／预览标题，兼容左右分栏和仅编辑布局。
+- 改进源码光标与预览同步：同一行移动或点击可恢复被滚走的预览，长代码块和换行段落按内部位置定位；已可见时不跳动，保留输入法、文档内容和撤销历史。
 
 - 修复编辑器复用并调整渲染块长度时的布局遍历越界，避免后续光标定位、选区绘制和滚动连续出现“No tile at position”。保留文档内容、撤回历史及现有输入法保护。
 
@@ -27,6 +32,10 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Fix export settings appearing in PDFs when native PDF generation falls back to system printing. Print media excludes only app-owned dialogs and backdrops, preserving legitimate HTML components in the document, with regressions for missing, timed-out and failed engines.
+- Stop treating standalone Windows EXEs with different filenames as broken installations when no uninstaller exists. Offer manual portable downloads for newer versions without weakening update-target or unknown-uninstaller safeguards.
+- Reserve header space for the collapsed-sidebar opener in either split orientation and editor-only mode.
+- Keep source cursor content visible after same-line movement or clicks, including internal code lines and wrapped paragraph positions. Avoid scrolling already-visible content and preserve IME, document content and undo history.
 - Fix tile traversal after rendered widgets are reused and resized, preventing cascading “No tile at position” failures in cursor positioning, selection drawing and scrolling. Preserve document content, undo history and existing IME safeguards.
 - Separate PicGo CLI draft saving from activation. Save HTTP preferences and paths offline and restore them after closing or restarting without changing active hosting settings. Activation still requires successful verification and an explicit action. Disabled buttons are visibly grey, and upload failures no longer incorrectly claim settings were not enabled.
 - Reduce post-upload waiting in the managed PicGo CLI by awaiting the complete official upload action and flushing output before exiting, without waiting for idle handles. Custom CLIs retain exit validation. Show upload/verification phases and elapsed time without fabricated percentages, and defer image reads while queued. Successful uploads use hosted URLs with local backups; failures never trigger automatic retries.

@@ -48,9 +48,6 @@ func prepareWindowsUninstallerForUpdate() bool {
 }
 
 func prepareWindowsUninstallerForExecutable(executable string) bool {
-	if !strings.EqualFold(filepath.Base(executable), windowsUpdateExecutableName) {
-		return false
-	}
 	installDirectory := filepath.Dir(executable)
 	uninstallerPath := filepath.Join(installDirectory, "uninstall.exe")
 	file, data, err := openLockedUninstaller(uninstallerPath)
@@ -63,6 +60,11 @@ func prepareWindowsUninstallerForExecutable(executable string) bool {
 	defer file.Close()
 	if hasWindowsSafeUninstallerMarker(data) {
 		return true
+	}
+	// A standalone/renamed executable without an uninstaller needs no repair.
+	// A filename must never grant permission to modify a neighbouring file.
+	if !strings.EqualFold(filepath.Base(executable), windowsUpdateExecutableName) {
+		return false
 	}
 	if !isVerifiedRiskyUninstaller(data) {
 		return false

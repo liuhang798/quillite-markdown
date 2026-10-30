@@ -62,6 +62,10 @@ jobs:
           node frontend/tests/browser-ime-background.mjs
           export RECENT_BROWSER=webkit
           node frontend/tests/browser-recent-selection.mjs
+          export ISSUE14_BROWSER=webkit
+          node frontend/tests/browser-issue14.mjs
+          export ISSUE15_BROWSER=webkit
+          node frontend/tests/browser-issue15.mjs
   windows:
     needs: verify
     name: Windows x64

@@ -51,7 +51,7 @@ import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaRepla
 import { mathExtensions, renderLatexResult, collectFormulaRendering, formulaMarkdownMatches } from './math-rendering.js';
 import { formulaFallbackSource } from './formula-export.js';
 import { FORMULA_STRUCTURES, hasFormulaPlaceholders } from './formula-visual-policy.js';
-import { createPreviewSourceMap, clearPreviewSourceMap, previewLineTarget, previewPointerTarget } from './preview-source-map.js';
+import { createPreviewSourceMap, clearPreviewSourceMap, previewLineTarget, previewPointerTarget, previewCursorRect } from './preview-source-map.js';
 import { captureReadingPosition, restoreReadingPosition } from './reading-position.js';
 import { editorOutline, captureEditorPosition, restoreEditorPosition } from './editor-navigation.js';
 import { largeHeadingTokenizer } from './marked-large-heading.js';
@@ -679,6 +679,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
 };
 
 Object.assign(translations['zh-CN'], {
+  portableUpdateTitle: '下载新版便携版', portableUpdateDescription: '当前为独立运行或已重命名的程序，无需安装修复。请保存文档并退出程序，再从官网下载新版便携 EXE，手动替换程序文件；保留文档和附件。', portableUpdateButton: '打开官网下载便携版',
   picGoCLIDraftSaveFailed: '配置草稿保存失败，表单内容已保留；请检查本地配置目录的写入权限。当前图床设置未改变。',
   picGoCLIDraftHint: '可先保存配置草稿（含 HTTP 选项），无需联网；草稿不会改变当前上传设置。验证成功后，点击“保存并启用”才生效。',
   picGoCLISaveDraft: '保存配置草稿', picGoCLIDraftSaved: '配置草稿已保存，当前图床设置未改变；验证成功后才能启用。', picGoCLIDraftRestored: '已恢复未启用的配置草稿（含 HTTP 选项）。当前上传仍使用原设置；请验证后再启用。', picGoCLIDraftInvalid: '草稿未保存：CLI 和配置文件请填写完整绝对路径，或留空使用默认值。', picGoCLIUploadUnconfirmed: '未确认上传成功，已使用本地图片，图床设置未改变。请先核对图床记录，避免重复上传。',
@@ -789,6 +790,7 @@ Object.assign(translations['zh-CN'], {
   exportDescriptionPdf: '直接生成 PDF，并根据 H1–H6 标题写入可点击的书签目录。'
 });
 Object.assign(translations.en, {
+  portableUpdateTitle: 'Download the new portable build', portableUpdateDescription: 'This standalone or renamed executable does not require installation repair. Save documents and quit, then download the portable EXE from the website and replace the program manually. Keep your documents and attachments.', portableUpdateButton: 'Get the portable build',
   picGoCLIDraftSaveFailed: 'Could not save the draft. Form values are retained; check write access to the local settings directory. Active hosting settings are unchanged.',
   picGoCLIDraftHint: 'Save a configuration draft, including HTTP permission, without a network connection. Drafts do not change active upload settings. Verify successfully, then choose Save & enable to apply.',
   picGoCLISaveDraft: 'Save configuration draft', picGoCLIDraftSaved: 'Draft saved. Active hosting settings are unchanged; verify before enabling.', picGoCLIDraftRestored: 'Restored an inactive draft, including HTTP permission. Uploads still use the previous settings; verify before enabling.', picGoCLIDraftInvalid: 'Draft not saved: enter absolute CLI/config paths, or leave them blank for defaults.', picGoCLIUploadUnconfirmed: 'Upload success was not confirmed. The local image was used and hosting settings are unchanged. Check your host before uploading again to avoid duplicates.',
@@ -5171,6 +5173,7 @@ async function initializeCodeEditor() {
     initializationStage = 'listeners';
     codeEditor.contentDOM.addEventListener('paste', handleEditorPaste, true);
     codeEditor.contentDOM.addEventListener('contextmenu', openEditorClipboardMenu);
+    codeEditor.contentDOM.addEventListener('pointerup', () => scrollPreviewToCursor());
     els.editor.addEventListener('pointerdown', event => {
       // The projected editor and its source action own their focus handoff.
       // Focusing the root during pointerdown can expose a native caret at the
@@ -7569,26 +7572,27 @@ function updateEditorPosition() {
   els.editorPosition.textContent = t('editorPosition', { line: line.number, column: cursor - line.from + 1 });
 }
 
-// 根据编辑器光标行号，把左侧预览滚动到对应的块元素（编辑/预览滚动同步）。
-// 只取“最后一个起始行 <= 光标行的块”，光标在同一行内移动时不重复滚动；
-// force 用于预览重新渲染后强制校正一次。
-function scrollPreviewToCursor(force = false, behavior = 'smooth') {
+// Keep the cursor's rendered content visible without pinning every move to top.
+function scrollPreviewToCursor(force = false, behavior = 'auto') {
   if (!codeEditor || !state.editing || state.editorLayout === 'editor-only') return;
+  if (editorHasComposition(codeEditor)) return;
   const scroller = $('.editor-preview-scroll');
   const preview = els.editorPreview;
   if (!scroller || !preview?.children.length) return;
-  const cursorLine = editorEntryPosition?.line || codeEditor.state.doc.lineAt(codeEditor.state.selection.main.head).number;
-  if (!force && cursorLine === scrollPreviewToCursor.lastLine) return;
-  scrollPreviewToCursor.lastLine = cursorLine;
+  const cursor = codeEditor.state.selection.main.head;
+  const sourceLine = codeEditor.state.doc.lineAt(cursor);
+  const cursorLine = editorEntryPosition?.line || sourceLine.number;
   const target = previewLineTarget(preview, cursorLine);
   if (!target) return;
-  const rect = target.getBoundingClientRect();
+  const rect = editorEntryPosition ? target.getBoundingClientRect() : previewCursorRect(preview, cursorLine, cursor - sourceLine.from);
+  if (!rect) return;
   const scrollerRect = scroller.getBoundingClientRect();
+  if (!editorEntryPosition && rect.top >= scrollerRect.top + 12 && rect.bottom <= scrollerRect.bottom - 12) return;
   const offset = editorEntryPosition
     ? Number.isFinite(editorEntryPosition.fraction) ? -editorEntryPosition.fraction * rect.height : editorEntryPosition.offset
     : 12;
   const top = Math.max(0, scroller.scrollTop + rect.top - scrollerRect.top - offset);
-  if (Math.abs(top - scroller.scrollTop) < 48) return;
+  if (Math.abs(top - scroller.scrollTop) < 1) return;
   scroller.scrollTo({ top, behavior });
 }
 
@@ -11087,6 +11091,7 @@ async function submitFeedbackForm(event) {
 function openUpdateDialog(info) {
   state.updateInfo = info;
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
+  const portableWindows = info.manualInstallReason === 'windows-portable';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
   $('#currentVersion').textContent = info.currentVersion || '3.0.2';
   $('#latestVersion').textContent = info.latestVersion || '';
@@ -11105,10 +11110,10 @@ function openUpdateDialog(info) {
   const platform = document.documentElement.dataset.platform;
   const manualInstallRequired = info.manualInstallRequired === true;
   $('#manualUpdateNotice').classList.toggle('hidden', !manualInstallRequired);
-  $('#manualUpdateTitle').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerTitle') : t('manualMacUpdateTitle');
-  $('#manualUpdateDescription').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerDescription') : t('manualMacUpdateDescription');
+  $('#manualUpdateTitle').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerTitle') : t(portableWindows ? 'portableUpdateTitle' : 'manualMacUpdateTitle');
+  $('#manualUpdateDescription').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerDescription') : t(portableWindows ? 'portableUpdateDescription' : 'manualMacUpdateDescription');
   $('#applyUpdate').classList.toggle('hidden', manualInstallRequired || (platform !== 'darwin' && platform !== 'windows'));
-  $('#openUpdatePage').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerButton') : (manualInstallRequired ? t('manualMacUpdateButton') : t('openDownloadPage'));
+  $('#openUpdatePage').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerButton') : (portableWindows ? t('portableUpdateButton') : (manualInstallRequired ? t('manualMacUpdateButton') : t('openDownloadPage')));
   $('#openUpdatePage').classList.toggle('primary', manualInstallRequired);
   $('#openUpdatePage').classList.toggle('secondary', !manualInstallRequired);
   $('#updateSnooze').classList.toggle('hidden', unsafeWindowsUninstaller);
