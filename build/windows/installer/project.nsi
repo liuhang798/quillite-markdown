@@ -28,7 +28,7 @@
 !define INFO_PROJECTNAME    "quillite-markdown"
 !define INFO_COMPANYNAME    "Quillite Open Source"
 !define INFO_PRODUCTNAME    "轻阅 Markdown"
-!define INFO_PRODUCTVERSION "3.0.2"
+!define INFO_PRODUCTVERSION "3.1.0"
 !define INFO_COPYRIGHT      "Copyright © 2026 柳航"
 !define PRODUCT_EXECUTABLE  "QuilliteMarkdown.exe"
 !define LEGACY_PRODUCTNAME  "MD阅读助手"
@@ -318,18 +318,21 @@ FunctionEnd
 
 # Wails' generated association macro writes a standalone .ico on every install.
 # Explorer can keep that file locked. Use the executable's embedded icon instead.
+!include "document_associations.nsh"
 !macro AssociateMarkdownFiles
     !insertmacro APP_ASSOCIATE "md" "Markdown Document" "Markdown 文档" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "使用 ${INFO_PRODUCTNAME} 打开" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
     !insertmacro APP_ASSOCIATE "markdown" "Markdown Document" "Markdown 文档" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "使用 ${INFO_PRODUCTNAME} 打开" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
     !insertmacro APP_ASSOCIATE "mdown" "Markdown Document" "Markdown 文档" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "使用 ${INFO_PRODUCTNAME} 打开" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
     !insertmacro APP_ASSOCIATE "mkd" "Markdown Document" "Markdown 文档" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "使用 ${INFO_PRODUCTNAME} 打开" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
     !insertmacro APP_ASSOCIATE "txt" "Text Document" "文本文件" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "使用 ${INFO_PRODUCTNAME} 打开" "$\"$INSTDIR\${PRODUCT_EXECUTABLE}$\" $\"%1$\""
+    !insertmacro RegisterQuilliteDocumentApplication
 !macroend
 
 # Mirror the registry cleanup without Wails' generated icon deletion. Legacy
 # icon files may share a custom install directory with user content and are
 # therefore preserved deliberately.
 !macro UnassociateMarkdownFiles
+    !insertmacro UnregisterQuilliteDocumentApplication
     !insertmacro APP_UNASSOCIATE "md" "Markdown Document"
     !insertmacro APP_UNASSOCIATE "markdown" "Markdown Document"
     !insertmacro APP_UNASSOCIATE "mdown" "Markdown Document"

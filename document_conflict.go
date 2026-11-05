@@ -18,6 +18,12 @@ func (a *App) ReadDocumentConflict(path string) (*Document, error) {
 // SaveConflictCopy never overwrites an existing path, including the source,
 // aliases, links, and a destination created after the file picker returned.
 func (a *App) SaveConflictCopy(currentPath, content string) (*Document, error) {
+	if _, _, scoped, _ := a.bundleWorkspaceContext(currentPath); scoped {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED")
+	}
+	if isEditableBundlePath(currentPath) {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED: use SaveBundleCopy to preserve resources and metadata")
+	}
 	name := filepath.Base(currentPath)
 	ext := filepath.Ext(name)
 	path, err := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{
@@ -27,6 +33,12 @@ func (a *App) SaveConflictCopy(currentPath, content string) (*Document, error) {
 	})
 	if err != nil || path == "" {
 		return nil, err
+	}
+	if isEditableBundlePath(path) {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED")
+	}
+	if _, _, scoped, _ := a.bundleWorkspaceContext(path); scoped {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED")
 	}
 	// The save picker grants access on macOS. Register it before scoped I/O.
 	_ = a.rememberMacSecurityScopedPath(path, false)
@@ -44,6 +56,9 @@ func (a *App) SaveConflictCopy(currentPath, content string) (*Document, error) {
 }
 
 func writeConflictCopy(source, path string, content []byte) error {
+	if isEditableBundlePath(path) {
+		return textPackError("BUNDLE_SESSION_REQUIRED: a package destination requires complete package bytes")
+	}
 	if len(content) > maxSupportedDocumentBytes {
 		return errors.New("DOCUMENT_TOO_LARGE: maximum supported document size is 64 MiB")
 	}

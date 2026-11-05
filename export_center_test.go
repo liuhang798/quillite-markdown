@@ -13,6 +13,13 @@ import (
 	"testing"
 )
 
+func TestTextPackExportPresetIsPreserved(t *testing.T) {
+	preset := normaliseExportPreset(ExportPreset{ID: "pack", Name: "Packed document", Format: "textpack"})
+	if preset.Format != "textpack" {
+		t.Fatalf("textpack preset changed to %q", preset.Format)
+	}
+}
+
 func TestNormaliseExportSettingsKeepsSafeUniquePresets(t *testing.T) {
 	settings := normaliseExportSettings(ExportSettings{
 		PandocPath: ` C:\Tools\pandoc.exe `,

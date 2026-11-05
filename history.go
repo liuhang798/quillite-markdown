@@ -196,13 +196,22 @@ func (a *App) captureDocumentVersion(filePath, nextContent string) error {
 		return err
 	}
 	var current []byte
-	_, foundBookmark, bookmarkErr := a.withMacSecurityScopedPath(cleaned, func(accessiblePath string) error {
+	readCurrent := func(accessiblePath string) error {
+		if isEditableBundlePath(accessiblePath) {
+			snapshot, err := readEditableBundle(accessiblePath)
+			if err != nil {
+				return err
+			}
+			current = []byte(snapshot.Content)
+			return nil
+		}
 		var readErr error
 		current, readErr = os.ReadFile(accessiblePath)
 		return readErr
-	})
+	}
+	_, foundBookmark, bookmarkErr := a.withMacSecurityScopedPath(cleaned, readCurrent)
 	if !foundBookmark || bookmarkErr != nil {
-		current, err = os.ReadFile(cleaned)
+		err = readCurrent(cleaned)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil

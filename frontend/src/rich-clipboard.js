@@ -2,11 +2,68 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { decodeHTML } from 'entities';
+import { formulaMarkdownMatches } from './math-rendering.js';
 
-const RICH_HTML_PATTERN = /<(?:h[1-6]|p|div|br|strong|b|em|i|u|s|strike|del|a|ul|ol|li|blockquote|pre|code|table|img|span)\b/i;
+const RICH_HTML_PATTERN = /<(?:h[1-6]|p|div|br|strong|b|em|i|u|s|strike|del|a|ul|ol|li|blockquote|pre|code|table|img|span|math)\b/i;
 const MAX_RICH_CLIPBOARD_HTML = 5 * 1024 * 1024;
 const SAFE_LINK_PATTERN = /^(?:https?:|#)/i;
 const SAFE_IMAGE_PATTERN = /^https?:\/\//i;
+
+// HTML-to-Markdown escaping must not double TeX's backslashes or turn its
+// underscores into Markdown escapes. Only explicit, balanced LaTeX delimiters
+// are opaque; ordinary/escaped parentheses and code retain Turndown's rules.
+function escapeWithLatex(source, escape) {
+  const parts = [];
+  let end = 0, cursor = 0;
+  while (cursor < source.length) {
+    if (source[cursor] !== '\\') { cursor++; continue; }
+    if (source[cursor + 1] === '\\') { cursor += 2; continue; }
+    const open = source[cursor + 1];
+    if (open !== '(' && open !== '[') { cursor++; continue; }
+    const close = open === '(' ? ')' : ']';
+    let last = cursor + 2;
+    for (; last < source.length; last++) {
+      if (open === '(' && /[\r\n]/.test(source[last])) break;
+      if (source[last] !== '\\') continue;
+      if (source[last + 1] === '\\') { last++; continue; }
+      if (source[last + 1] === close) break;
+    }
+    if (last < source.length && source[last] === '\\' && source[last + 1] === close) {
+      parts.push(escape(source.slice(end, cursor)), source.slice(cursor, last + 2));
+      end = cursor = last + 2;
+    } else cursor = last;
+  }
+  parts.push(escape(source.slice(end)));
+  return parts.join('');
+}
+
+function clipboardMath(node) {
+  if (node.isCode) return null;
+  const classes = node.getAttribute('class') || '';
+  const ownFormula = /(?:^|\s)math-(?:inline|block)(?:\s|$)/.test(classes) && node.getAttribute('role') === 'math';
+  if (!(ownFormula || /(?:^|\s)katex(?:-display)?(?:\s|$)/.test(classes) || node.nodeName.toLowerCase() === 'math')) return null;
+  let expression;
+  // Our sanitized document markup deliberately removes MathML annotation
+  // elements. Its outer formula keeps a bounded, percent-encoded source.
+  if (ownFormula && node.hasAttribute('data-math-source')) {
+    const encoded = node.getAttribute('data-math-source');
+    if (encoded.length > 32768 * 12) return null;
+    try { expression = decodeURIComponent(encoded).trim(); } catch { return null; }
+  } else {
+    const annotations = node.querySelectorAll('annotation[encoding="application/x-tex"]');
+    if (annotations.length !== 1) return null;
+    expression = annotations[0].textContent.trim();
+  }
+  if (!expression || expression.length > 32768) return null;
+  let display = node.getAttribute('display') === 'block' || /(?:^|\s)math-block(?:\s|$)/.test(classes);
+  for (let parent = node; parent?.nodeType === 1; parent = parent.parentNode) {
+    if (/(?:^|\s)katex-display(?:\s|$)/.test(parent.getAttribute('class') || '')) { display = true; break; }
+  }
+  const markdown = display ? `\\[\n${expression}\n\\]` : `\\(${expression}\\)`;
+  // An untrusted annotation must describe exactly one formula, never break out
+  // through a closing delimiter and introduce surrounding Markdown content.
+  return formulaMarkdownMatches(markdown, expression, display) ? { markdown, display } : null;
+}
 
 function officeListReplacement(content, node) {
   const style = node.getAttribute('style') || '';
@@ -42,6 +99,8 @@ function createRichTextConverter() {
     strongDelimiter: '**',
     linkStyle: 'inlined'
   });
+  const escape = converter.escape.bind(converter);
+  converter.escape = text => escapeWithLatex(text, escape);
   converter.use(gfm);
   converter.remove(['script', 'style', 'noscript', 'iframe', 'object', 'embed', 'xml', 'meta', 'link']);
   converter.addRule('office-list-paragraph', {
@@ -75,6 +134,22 @@ function createRichTextConverter() {
       if (!SAFE_IMAGE_PATTERN.test(source)) return alt;
       const target = /[\s()]/.test(source) ? `<${source.replaceAll('>', '%3E')}>` : source;
       return `![${alt}](${target})`;
+    }
+  });
+  converter.addRule('unrecognized-math-annotation', {
+    filter: node => node.nodeName.toLowerCase() === 'annotation' && node.getAttribute('encoding') === 'application/x-tex',
+    replacement: (_content, node) => escape(node.textContent)
+  });
+  const formulas = new WeakMap();
+  converter.addRule('latex-formulas', {
+    filter: node => {
+      const formula = clipboardMath(node);
+      if (formula) formulas.set(node, formula);
+      return Boolean(formula);
+    },
+    replacement: (_content, node) => {
+      const formula = formulas.get(node);
+      return formula.display ? `\n\n${formula.markdown}\n\n` : formula.markdown;
     }
   });
   return converter;

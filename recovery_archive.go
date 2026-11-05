@@ -53,7 +53,7 @@ func (a *App) captureStartupRecoveryLocked() error {
 	}
 	// Only a known non-conflicting copy equal to disk is already resolved.
 	diskInfo, statErr := os.Stat(snapshot.Path)
-	if !snapshot.Conflict && statErr == nil && diskInfo.Mode().IsRegular() && diskInfo.Size() == int64(len(snapshot.Content)) {
+	if snapshot.BundleSessionID == "" && !isEditableBundlePath(snapshot.Path) && !snapshot.Conflict && statErr == nil && diskInfo.Mode().IsRegular() && diskInfo.Size() == int64(len(snapshot.Content)) {
 		if disk, readErr := os.ReadFile(snapshot.Path); readErr == nil && string(disk) == snapshot.Content {
 			a.startupRecoveryReady = true
 			return nil

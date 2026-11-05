@@ -97,7 +97,7 @@ func defaultExportSettings() ExportSettings {
 func normaliseExportFormat(format string) string {
 	format = strings.ToLower(strings.TrimSpace(format))
 	switch format {
-	case "docx", "html", "html-plain", "markdown-portable", "pdf", "png", "jpeg", "epub", "rtf", "odt", "latex", "mediawiki", "custom":
+	case "docx", "html", "html-plain", "markdown-portable", "markdown-assets", "textpack", "pdf", "png", "jpeg", "epub", "rtf", "odt", "latex", "mediawiki", "custom":
 		return format
 	default:
 		return "html"
@@ -262,6 +262,12 @@ func executablePattern() string {
 }
 
 func (a *App) ExportWithPandoc(input PandocExportInput) (string, error) {
+	if isEditableBundlePath(input.SourcePath) {
+		return "", errors.New("BUNDLE_PANDOC_REQUIRES_COPY")
+	}
+	if _, _, scoped, _ := a.bundleWorkspaceContext(input.SourcePath); scoped {
+		return "", errors.New("BUNDLE_PANDOC_REQUIRES_COPY: export portable Markdown first to keep resource access explicit")
+	}
 	if len(input.Content) > maxPandocSourceSize {
 		return "", errors.New(exportSourceTooLargeErrorMarker + ": source document exceeds the 64 MiB export limit")
 	}

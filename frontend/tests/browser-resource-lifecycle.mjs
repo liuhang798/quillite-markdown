@@ -7,7 +7,7 @@ import {createServer} from 'vite';
 const {chromium} = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const baseline = process.env.RESOURCE_BASELINE === '1';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const server = await createServer({root, server:{host:'127.0.0.1', port:0, watch:null, hmr:false}, logLevel:'error', plugins:[{
+const server = await createServer({root, server:{host:'127.0.0.1', port:Number(process.env.RESOURCE_PORT) || 41739, watch:null, hmr:false}, logLevel:'error', plugins:[{
   name:'resource-lifecycle-audit', enforce:'pre', transform(code, id) {
     if (id.replaceAll('\\','/').endsWith('/src/echarts-diagrams.js')) return code + '\nwindow.resourceECharts=echarts;';
     if (!id.replaceAll('\\','/').endsWith('/src/renderer.js')) return;
@@ -116,10 +116,16 @@ try {
     });
     assert.equal((queuedExport.match(/src="data:image/g)||[]).length,20,'export waits for the whole queue, even beyond the decode timeout');
     await page.evaluate(()=>{
-      window.quilliteMarkdown.readImageData=async()=>'';
+      window.restoredAttachment='';
+      window.quilliteMarkdown.readImageData=async()=>window.restoredAttachment;
       window.resourceAudit.open({path:'missing.md',name:'missing.md',directory:'.',content:'![missing](assets/missing.png)'});
     });
     await assert.rejects(page.evaluate(()=>window.resourceAudit.exportHTML()),/EXPORT_IMAGE_RESOURCE_FAILED/);
+    const repairedExport=await page.evaluate(()=>{
+      window.restoredAttachment='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN3cAAAAASUVORK5CYII=';
+      return window.resourceAudit.exportHTML();
+    });
+    assert.match(repairedExport, /src="data:image/, 'export sees the restored attachment without reopening the document');
     const printing = await page.evaluate(async () => {
       const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN3cAAAAASUVORK5CYII=';
       const printed=[];

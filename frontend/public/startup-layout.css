@@ -1,0 +1,12 @@
+/* Critical layout, loaded before the body and main application bundle. */
+html[data-startup-sidebar="collapsed"] #sidebar {
+  width: 0 !important;
+  flex-basis: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  transition: none !important;
+}
+html[data-startup-sidebar="collapsed"] #sidebarResizer { display: none !important; }
+html[data-startup-sidebar="collapsed"] #expandSidebar { display: grid !important; }

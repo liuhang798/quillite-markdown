@@ -6,5 +6,5 @@ Exec=quillite-markdown %F
 Icon=quillite-markdown
 Terminal=false
 Categories=Office;TextEditor;
-MimeType=text/markdown;text/plain;
+MimeType=text/markdown;text/plain;application/x-textpack;
 StartupNotify=true

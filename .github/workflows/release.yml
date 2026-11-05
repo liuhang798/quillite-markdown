@@ -66,6 +66,18 @@ jobs:
           node frontend/tests/browser-issue14.mjs
           export ISSUE15_BROWSER=webkit
           node frontend/tests/browser-issue15.mjs
+          export ISSUE16_BROWSER=webkit
+          node frontend/tests/browser-issue16.mjs
+          export ISSUE17_BROWSER=webkit
+          node frontend/tests/browser-issue17.mjs
+          export TEXTPACK_BROWSER=webkit
+          node frontend/tests/browser-textpack.mjs
+          export BUNDLE_BROWSER=webkit
+          node frontend/tests/browser-bundle-document.mjs
+          export AUDIT_BROWSER=webkit
+          node frontend/tests/browser-save-outline-audit.mjs
+          export GANTT_BROWSER=webkit
+          node frontend/tests/browser-gantt-viewer.mjs
   windows:
     needs: verify
     name: Windows x64

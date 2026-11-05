@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "轻阅 Markdown"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "3.0.2"
+    !define INFO_PRODUCTVERSION "3.1.0"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "Copyright © 2026 柳航"
@@ -238,52 +238,60 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 
 !macro wails.associateFiles
     ; Create file associations
-    
+
+      !insertmacro APP_ASSOCIATE "textpack" "TextPack Document" "TextPack 文档包" "$INSTDIR\mdFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+
+      File "..\mdFileIcon.ico"
+
       !insertmacro APP_ASSOCIATE "md" "Markdown Document" "Markdown 文档" "$INSTDIR\mdFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
       File "..\mdFileIcon.ico"
-    
+
       !insertmacro APP_ASSOCIATE "markdown" "Markdown Document" "Markdown 文档" "$INSTDIR\mdFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
       File "..\mdFileIcon.ico"
-    
+
       !insertmacro APP_ASSOCIATE "mdown" "Markdown Document" "Markdown 文档" "$INSTDIR\mdFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
       File "..\mdFileIcon.ico"
-    
+
       !insertmacro APP_ASSOCIATE "mkd" "Markdown Document" "Markdown 文档" "$INSTDIR\mdFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
       File "..\mdFileIcon.ico"
-    
+
       !insertmacro APP_ASSOCIATE "txt" "Text Document" "文本文件" "$INSTDIR\mdFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
       File "..\mdFileIcon.ico"
-    
+
 !macroend
 
 !macro wails.unassociateFiles
     ; Delete app associations
-    
+
+      !insertmacro APP_UNASSOCIATE "textpack" "TextPack Document"
+
+      Delete "$INSTDIR\mdFileIcon.ico"
+
       !insertmacro APP_UNASSOCIATE "md" "Markdown Document"
 
       Delete "$INSTDIR\mdFileIcon.ico"
-    
+
       !insertmacro APP_UNASSOCIATE "markdown" "Markdown Document"
 
       Delete "$INSTDIR\mdFileIcon.ico"
-    
+
       !insertmacro APP_UNASSOCIATE "mdown" "Markdown Document"
 
       Delete "$INSTDIR\mdFileIcon.ico"
-    
+
       !insertmacro APP_UNASSOCIATE "mkd" "Markdown Document"
 
       Delete "$INSTDIR\mdFileIcon.ico"
-    
+
       !insertmacro APP_UNASSOCIATE "txt" "Text Document"
 
       Delete "$INSTDIR\mdFileIcon.ico"
-    
+
 !macroend
 
 !macro CUSTOM_PROTOCOL_ASSOCIATE PROTOCOL DESCRIPTION ICON COMMAND
@@ -302,10 +310,10 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 
 !macro wails.associateCustomProtocols
     ; Create custom protocols associations
-    
+
 !macroend
 
 !macro wails.unassociateCustomProtocols
     ; Delete app custom protocol associations
-    
+
 !macroend

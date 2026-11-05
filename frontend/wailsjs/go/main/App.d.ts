@@ -20,6 +20,8 @@ export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
 
 export function ChooseDocumentSavePath(arg1:string):Promise<string>;
 
+export function ChooseTextBundleSource(arg1:string):Promise<main.TextBundleSource>;
+
 export function ClearRecoverySnapshot():Promise<void>;
 
 export function DetectPandoc():Promise<main.PandocStatus>;
@@ -38,11 +40,15 @@ export function ExportDOCX(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ExportHTML(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
+export function ExportMarkdownWithAssets(arg1:string,arg2:string,arg3:string,arg4:Array<main.TextPackImage>):Promise<main.TextPackExportResult>;
+
 export function ExportPDF(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
 export function ExportPlainHTML(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
 export function ExportPortableMarkdown(arg1:string,arg2:string):Promise<string>;
+
+export function ExportTextPack(arg1:string,arg2:string,arg3:Array<main.TextPackImage>):Promise<main.TextPackExportResult>;
 
 export function ExportWithPandoc(arg1:main.PandocExportInput):Promise<string>;
 
@@ -74,6 +80,8 @@ export function GetWindowsInstallSafety():Promise<main.WindowsInstallSafety>;
 
 export function ImportImage(arg1:string,arg2:string):Promise<string>;
 
+export function ImportTextBundle(arg1:string,arg2:string,arg3:string):Promise<main.TextBundleImportResult>;
+
 export function ListAIModels(arg1:string):Promise<Array<string>>;
 
 export function ListDocumentVersions(arg1:string):Promise<Array<main.DocumentVersion>>;
@@ -93,6 +101,8 @@ export function NeedsLanguageSelection():Promise<boolean>;
 export function NewFile():Promise<main.Document>;
 
 export function OpenDefaultApps():Promise<void>;
+
+export function OpenEditableBundle(arg1:string):Promise<main.Document>;
 
 export function OpenExternal(arg1:string):Promise<void>;
 
@@ -120,6 +130,8 @@ export function ReadPortableImage(arg1:string,arg2:string):Promise<string>;
 
 export function ReadRecoveryArchive(arg1:string):Promise<main.RecoverySnapshot>;
 
+export function RebaseBundleDocument(arg1:string,arg2:string,arg3:string):Promise<main.Document>;
+
 export function RemoveFavorite(arg1:string):Promise<main.Preferences>;
 
 export function RemoveRecent(arg1:string):Promise<main.Preferences>;
@@ -132,15 +144,23 @@ export function ReportErrorLog(arg1:string,arg2:string,arg3:string):Promise<void
 
 export function RequestQuit():Promise<boolean>;
 
+export function ResumeBundleDocument(arg1:string,arg2:string,arg3:string):Promise<main.Document>;
+
 export function ReviewDocumentWithAI(arg1:main.AIDocumentReviewRequest):Promise<main.AIDocumentReviewResponse>;
 
 export function RewriteWithAI(arg1:main.AIRewriteRequest):Promise<main.AIRewriteResponse>;
 
 export function SaveAs(arg1:string,arg2:string):Promise<main.Document>;
 
+export function SaveBundleCopy(arg1:string,arg2:string,arg3:string):Promise<main.Document>;
+
+export function SaveBundleDocument(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.Document>;
+
 export function SaveConflictCopy(arg1:string,arg2:string):Promise<main.Document>;
 
 export function SaveDiagnosticReport(arg1:main.DiagnosticInput):Promise<string>;
+
+export function SaveDocumentAsFormat(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<main.TextPackImage>,arg6:string):Promise<main.Document>;
 
 export function SaveDocumentCopy(arg1:string,arg2:string,arg3:string):Promise<main.Document>;
 

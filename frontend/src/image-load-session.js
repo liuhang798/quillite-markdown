@@ -49,11 +49,14 @@ export async function waitForPreviewImageReads(container, timeout = 30_000) {
   if (!session) return;
   let timer;
   try {
+    // Only an explicit export/print retries reads that already failed in
+    // this preview. Never loop on failure or retry a pending read.
+    session.retryFailed();
     await Promise.race([
       session.settled(),
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('EXPORT_IMAGE_RESOURCE_FAILED: local image loading timed out')), timeout); })
     ]);
-    if (!session.active || container.querySelector('.local-image-loading, .local-image-error')) {
+    if (!session.active || session.hasUnavailable()) {
       throw new Error('EXPORT_IMAGE_RESOURCE_FAILED: local image unavailable');
     }
   } finally { clearTimeout(timer); }
@@ -63,21 +66,40 @@ export function loadPreviewImages(container, context) {
   cancelPreviewImages(container);
   const session = createImageLoadSession(context);
   previews.set(container, session);
-  container.querySelectorAll('img').forEach(img => {
-    const ref = img.dataset.markdownSrc || img.getAttribute('src') || '';
-    delete img.dataset.markdownSrc;
-    if (/^(https?:|data:)/i.test(ref)) return;
+  const failed = new Map(), pending = new Set();
+  session.hasUnavailable = () => {
+    for (const img of failed.keys()) if (container.contains(img)) return true;
+    for (const img of pending) if (container.contains(img)) return true;
+    return false;
+  };
+  session.retryFailed = () => {
+    for (const [img, ref] of failed) {
+      failed.delete(img);
+      if (container.contains(img)) read(img, ref);
+    }
+  };
+  function read(img, ref) {
+    pending.add(img);
     img.removeAttribute('src');
     img.classList.add('local-image-loading');
     const current = () => session.active && img.isConnected && container.contains(img);
     session.load(ref).then(dataUrl => {
+      pending.delete(img);
       if (!current()) return;
       img.src = dataUrl;
       img.classList.remove('local-image-loading', 'local-image-error');
     }).catch(() => {
+      pending.delete(img);
       if (!current()) return;
+      failed.set(img, ref);
       img.classList.remove('local-image-loading');
       img.classList.add('local-image-error');
     });
+  }
+  container.querySelectorAll('img').forEach(img => {
+    if (img.dataset.remoteImageBlocked === 'true') return;
+    const ref = img.dataset.markdownSrc || img.getAttribute('src') || '';
+    delete img.dataset.markdownSrc;
+    if (!/^(https?:|data:)/i.test(ref)) read(img, ref);
   });
 }

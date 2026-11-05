@@ -34,8 +34,11 @@ export function resolveDocumentLink(value, currentPath) {
     let path = decodeURIComponent(url.pathname);
     const fragment = decodeURIComponent(url.hash.slice(1));
     if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);
+    // TextBundle is a directory package. A conventional trailing directory
+    // slash does not change which package should be opened by the app.
+    path = path.replace(/(\.textbundle)\/+$/i, '$1');
     if (controls.test(path + fragment) || path.startsWith('//') || path.includes('\\')
-      || path.replace(/^[a-z]:/i, '').includes(':') || !/\.(md|markdown|mdown|mkd|txt)$/i.test(path)) return unsupported;
+      || path.replace(/^[a-z]:/i, '').includes(':') || !/\.(md|markdown|mdown|mkd|txt|textpack|textbundle)$/i.test(path)) return unsupported;
     return { kind: 'document', path, fragment };
   } catch { return unsupported; }
 }

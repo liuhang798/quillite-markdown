@@ -1,6 +1,49 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createImageLoadSession } from '../src/image-load-session.js';
+import { createImageLoadSession, loadPreviewImages, waitForPreviewImageReads } from '../src/image-load-session.js';
+
+test('export retries only failed local reads and recovers a restored attachment', async () => {
+  const calls = [], good = 'data:image/png;base64,AA==';
+  const images = ['missing.png','ok.png'].map(ref => ({
+    isConnected:true, dataset:{markdownSrc:ref}, removeAttribute(){}, classList:{add(){}, remove(){}}
+  }));
+  const container = {querySelectorAll:()=>images, contains:img=>images.includes(img)};
+  let restored = false;
+  loadPreviewImages(container, {readImageData: async ref => {
+    calls.push(ref);
+    if (!restored && ref === 'missing.png') throw new Error('ENOENT');
+    return good;
+  }});
+  await new Promise(setImmediate);
+  await assert.rejects(waitForPreviewImageReads(container), /local image unavailable/);
+  restored = true;
+  await waitForPreviewImageReads(container);
+  await waitForPreviewImageReads(container);
+  assert.deepEqual(calls, ['missing.png','ok.png','missing.png','missing.png']);
+  assert.equal(images[0].src, good);
+});
+
+test('explicit export retry never reads images blocked by an imported session', async () => {
+  const good = 'data:image/png;base64,AA==', calls = [];
+  const local = {isConnected:true, dataset:{markdownSrc:'missing.png'}, removeAttribute(){}, classList:{add(){}, remove(){}}};
+  const remote = {isConnected:true, dataset:{markdownSrc:'https://image.invalid/blocked.png',remoteImageBlocked:'true'},
+    removeAttribute(){throw new Error('blocked remote must remain untouched');}, classList:{add(){}, remove(){}}};
+  const images = [local, remote];
+  const container = {querySelectorAll:()=>images, contains:img=>images.includes(img)};
+  let restored = false;
+  loadPreviewImages(container, {readImageData: async ref => {
+    calls.push(ref);
+    if (!restored) throw new Error('ENOENT');
+    return good;
+  }});
+  await new Promise(setImmediate);
+  restored = true;
+  await waitForPreviewImageReads(container);
+  await waitForPreviewImageReads(container);
+  assert.deepEqual(calls, ['missing.png','missing.png']);
+  assert.equal(local.src, good);
+  assert.equal(remote.src, undefined);
+});
 const image = 'data:image/png;base64,YQ==';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 

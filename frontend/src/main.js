@@ -4,6 +4,7 @@ import { rebaseMarkdownImages } from './portable-images.js';
 import { directoryFromDocumentPath } from './library-state.js';
 import { normalizeBodyTypography, readBodyTypography } from './body-typography.js';
 import { guardFileDropResolver } from './safe-file-drop.js';
+import { prepareTextPackExport } from './textpack.js';
 import {
   Environment,
   EventsOn,
@@ -64,16 +65,59 @@ async function saveDocumentCopy(filePath, content) {
   const windowsPaths = /^[A-Za-z]:|^\\\\/.test(filePath);
   const equal = windowsPaths ? normalize(sourceDirectory).toLowerCase() === normalize(targetDirectory).toLowerCase() : normalize(sourceDirectory) === normalize(targetDirectory);
   const relocated = !equal;
-  const transform = text => relocated ? rebaseMarkdownImages(text, sourceDirectory) : text;
+  // A TXT file can contain Markdown-looking text literally. Never interpret or
+  // rewrite it, including when the copy is saved in a different directory.
+  const transform = text => relocated && !/\.txt$/i.test(filePath) ? rebaseMarkdownImages(text, sourceDirectory) : text;
   const prepared = await transform(content);
   const saved = await Backend.SaveDocumentCopy(filePath, target, prepared);
   if (!saved || saved.content !== prepared) throw new Error('DOCUMENT_CONFLICT: copy receipt mismatch');
   return { ...saved, sourceContent: content, rebaseContent: transform };
 }
 
+async function saveDocumentAsFormat(filePath, content, sessionId = '', format = '') {
+  if (!desktopRuntime) return null;
+  // Same-format ordinary copies are backups, not portable-package exports.
+  // Preserve same-folder bytes (including missing/complex image references),
+  // and retain the established reference rebase only for relocated Markdown.
+  if (!sessionId && ((format === 'text' && /\.txt$/i.test(filePath))
+      || (format === 'markdown' && /\.(?:md|markdown|mdown|mkd)$/i.test(filePath)))) return saveDocumentCopy(filePath, content);
+  const prepared = sessionId && ['textbundle', 'textpack'].includes(format)
+    ? {content, images: [], warnings: []}
+    : prepareTextPackExport(content, format === 'markdown' ? {assetDirectory: `assets/quillite-${crypto.randomUUID()}`} : {});
+  if (prepared.warnings.some(warning => warning.code === 'UNSAFE_REFERENCE')) throw new Error('TEXTPACK_CONVERSION_INCOMPLETE: UNSAFE_REFERENCE');
+  const saved = await Backend.SaveDocumentAsFormat(filePath, content, sessionId, format, prepared.images, prepared.content);
+  if (!saved) return null;
+  // Package loading consumes exactly one encoding BOM from ordinary input.
+  // Existing package text is already canonical: another leading FEFF there is
+  // actual document text and must not be silently removed from the receipt.
+  const expectedContent = !sessionId && ['textbundle', 'textpack'].includes(format)
+    ? prepared.content.replace(/^\uFEFF/, '') : prepared.content;
+  if (saved.content !== expectedContent) {
+    const error = new Error('DOCUMENT_COPY_RECEIPT_MISMATCH: copy receipt mismatch');
+    error.copyResultPath = saved.path;
+    throw error;
+  }
+  const warnings = [...(saved.exportWarnings || []), ...prepared.warnings];
+  // A format conversion also relocates attachments. New edits may reference
+  // media created after this snapshot, so never rebase them into a saved copy.
+  return { ...saved, sourceContent: content, exportWarnings: warnings,
+    rebaseContent: current => {
+      if (current !== content) {
+        const error = new Error('DOCUMENT_COPY_EDITOR_CHANGED');
+        error.copyPath = saved.path;
+        throw error;
+      }
+      return saved.content;
+    } };
+}
+
 window.quilliteMarkdown = {
   newFile: () => desktopRuntime ? Backend.NewFile() : resolved({ path: 'New document.md', name: 'New document.md', directory: '.', content: '', draft: true }),
   openFile: () => desktopRuntime ? Backend.OpenFile() : resolved(null),
+  saveBundleDocument: (path, content, revision, sessionId) => desktopRuntime ? Backend.SaveBundleDocument(path, content, revision, sessionId) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  saveBundleCopy: (path, content, sessionId) => desktopRuntime ? Backend.SaveBundleCopy(path, content, sessionId) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  resumeBundleDocument: (path, sessionId, baseRevision) => desktopRuntime ? Backend.ResumeBundleDocument(path, sessionId, baseRevision) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  rebaseBundleDocument: (sessionId, diskSessionId, revision) => desktopRuntime ? Backend.RebaseBundleDocument(sessionId, diskSessionId, revision) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   openFolder: () => desktopRuntime ? Backend.OpenFolder() : resolved(null),
   readFile: filePath => desktopRuntime ? Backend.ReadFile(filePath) : resolved(null),
   readDocumentConflict: filePath => desktopRuntime ? Backend.ReadDocumentConflict(filePath) : resolved(null),
@@ -89,8 +133,11 @@ window.quilliteMarkdown = {
   canEditFile: filePath => desktopRuntime ? Backend.CanEditFile(filePath) : resolved(true),
   saveFile: (filePath, content, revision) => desktopRuntime ? Backend.SaveFileWithRevision(filePath, content, revision || '') : resolved(null),
   saveAs: saveDocumentCopy,
+  saveDocumentAsFormat,
   renameDocument: (path, name, revision) => desktopRuntime ? Backend.RenameDocument(path, name, revision) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   exportPortableMarkdown: (path, content) => desktopRuntime ? Backend.ExportPortableMarkdown(path, content) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  exportMarkdownWithAssets: (sourcePath, content, sessionId, images) => desktopRuntime ? Backend.ExportMarkdownWithAssets(sourcePath, content, sessionId, images) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  exportTextPack: (sourcePath, content, images) => desktopRuntime ? Backend.ExportTextPack(sourcePath, content, images) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   readPortableImage: (ref, directory) => desktopRuntime ? Backend.ReadPortableImage(ref, directory) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   listDocumentVersions: filePath => desktopRuntime ? Backend.ListDocumentVersions(filePath) : resolved([]),
   getDocumentVersion: (filePath, id) => desktopRuntime ? Backend.GetDocumentVersion(filePath, id) : resolved(null),
@@ -228,12 +275,12 @@ window.quilliteMarkdown = {
   onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   onAIProgress: callback => desktopRuntime ? EventsOn('ai:progress', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.0.2', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.1.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   getWindowsInstallSafety: () => desktopRuntime
     ? Backend.GetWindowsInstallSafety()
-    : resolved({ applicable: false, safe: true, currentVersion: '3.0.2', downloadUrl: 'https://qm.ssssa.cn/#download' }),
+    : resolved({ applicable: false, safe: true, currentVersion: '3.1.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
@@ -241,14 +288,14 @@ window.quilliteMarkdown = {
           checked: true,
           available: true,
           currentVersion: '2.4.4',
-          latestVersion: '3.0.2',
-          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 3.0.2' : '轻阅 Markdown 3.0.2',
+          latestVersion: '3.1.0',
+          releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 3.1.0' : '轻阅 Markdown 3.1.0',
           releaseNotes: localStorage.getItem('language') === 'en'
             ? 'Added visual table editing, rich paste, and spell checking\nAdded PicGo image hosting with upload progress\nAdded a 12-format Export Center and crisp A4 image pages'
             : '新增可视化表格、富文本粘贴与拼写检查\n新增 PicGo 图床和上传进度\n新增 12 种格式导出中心与 A4 高清图片分页',
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '3.0.2', latestVersion: '3.0.2' }),
+      : { checked: true, available: false, currentVersion: '3.1.0', latestVersion: '3.1.0' }),
   snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},

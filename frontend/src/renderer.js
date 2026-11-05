@@ -1,3 +1,5 @@
+import { sidebarStartsCollapsed, alignedPreviewScroll } from './reading-layout.js';
+import { createDiagramViewer } from './diagram-viewer.js';
 import { marked } from 'marked';
 import { picGoPrepareProgressModel, picGoPrepareBytes } from './picgo-prepare-progress.js';
 import { installTextStyleMenu } from './text-style-menu.js';
@@ -39,6 +41,7 @@ import { projectedDiagramReplacement, diagramDisplayName } from './diagram-editi
 import { aiModelOptions } from './ai-model-options.js';
 import { exceedsAIInputLimit, protectEmbeddedImages, aiInputCharacterCount } from './ai-input.js';
 import { transformMarkdownImages } from './portable-images.js';
+import { prepareTextPackExport } from './textpack.js';
 import { normalizeImageRows } from './image-layout.js';
 import { deleteAIModelCache, readAIModelCache, writeAIModelCache } from './ai-model-cache.js';
 import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearanceStorage, resolveMacColorMode, temporaryMacColorModeAfterToggle } from './appearance.js';
@@ -58,6 +61,7 @@ import { largeHeadingTokenizer } from './marked-large-heading.js';
 import { openExternalSafely } from './external-links.js';
 import { resolveDocumentLink } from './document-links.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
+import { documentListName } from './document-list-name.js';
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
 import { createTableModel, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, serializeTableReplacement, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
 import { resolveEditableTable, findEditableTableAt, tableInsertion } from './table-editing.js';
@@ -69,6 +73,7 @@ import { detectAISensitiveContent, redactAISensitiveContent, restoreAISensitiveC
 import { clampTocPreferredWidth, fitReaderSidePanels, scrollDeltaForBounds, tocDisplayMetrics, tocDisplaySignature, TOC_WIDTH_LIMITS } from './toc-display.js';
 import { buildTocTree, filterTocTree, normalizeTocMode, readCollapsedToc, replaceDynamicTocMarkers, writeCollapsedToc } from './toc-tree.js';
 import { createTocTitle, tocTitleHTML } from './toc-title.js';
+import { activeHeadingIndex, readerFlowHeadings } from './toc-scroll.js';
 import { documentHasDiagrams, documentPerformanceProfile, documentWordCount } from './document-performance.js';
 import { documentVersionLineDifference, historyPreviewText } from './version-history.js';
 import { createDocumentTools } from './document-tools.js';
@@ -87,7 +92,7 @@ const EXPORT_FORMAT_DESCRIPTIONS = {
   docx: 'exportDescriptionDocx', html: 'exportDescriptionHtml', 'html-plain': 'exportDescriptionHtmlPlain',
   pdf: 'exportDescriptionPdf', png: 'exportDescriptionPng', jpeg: 'exportDescriptionJpeg', epub: 'exportDescriptionEpub',
   rtf: 'exportDescriptionRtf', odt: 'exportDescriptionOdt', latex: 'exportDescriptionLatex',
-  mediawiki: 'exportDescriptionMediawiki', custom: 'exportDescriptionCustom', 'markdown-portable': 'exportDescriptionPortable'
+  mediawiki: 'exportDescriptionMediawiki', custom: 'exportDescriptionCustom', 'markdown-portable': 'exportDescriptionPortable', textpack: 'exportDescriptionTextPack', 'markdown-assets': 'exportDescriptionMarkdownAssets'
 };
 const NEW_FILE_COOLDOWN_MS = 3000;
 const runtimeDiagnostics = createRuntimeDiagnostics(import.meta.url);
@@ -309,6 +314,7 @@ const state = {
   recentFiles: [],
   pinnedRecentFiles: [],
   favoriteFiles: [],
+  previewScrollPausedSession: null,
   sidebarMode: normalizeSidebarMode(localStorage.getItem('sidebarMode')),
   recentSelection: [],
   recentSelectionAnchor: '',
@@ -387,7 +393,8 @@ const state = {
   exportSettings: { pandocPath: '', presets: [] },
   pandocStatus: { available: false, path: '', version: '' },
   exportDraft: { format: 'docx', header: '', footer: '', extraArguments: '', customWriter: 'plain', customExtension: '.txt', imageScale: 2, imageLayout: 'pages' },
-  exportInProgress: false
+  exportInProgress: false,
+  blockImportedRemoteImages: false
 };
 
 let pendingRecoverySnapshot = null;
@@ -481,6 +488,14 @@ function isExportImageResourceError(error) {
   return diagnosticErrorMessage(error).includes('EXPORT_IMAGE_RESOURCE_FAILED');
 }
 
+function warnIfLocalExportImageUnavailable(error) {
+  if (diagnosticErrorMessage(error) !== 'EXPORT_IMAGE_RESOURCE_FAILED: local image unavailable') return false;
+  showToast(state.language === 'en'
+    ? 'Export stopped: a local image could not be read. Check the image path and permissions, then export again.'
+    : '导出已停止：本地图片无法读取。请检查图片路径和读取权限，修正后再次导出。', 'warning', 7200);
+  return true;
+}
+
 function isMacAccessNotGrantedError(error) {
   const message = error instanceof Error ? error.message : String(error ?? '');
   return message.includes('macOS document access was not granted');
@@ -556,15 +571,15 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     docWidth: '文档宽度', widthNarrow: '窄', widthMedium: '中', widthWide: '宽', widthFull: '全宽', docWidthChanged: '文档宽度：{level}',
     editorLayout: '编辑布局', editorOnly: '仅编辑', hideLivePreview: '关闭实时预览（仅编辑）', restoreLivePreview: '恢复预览', previewOnLeft: '预览在左', editorOnLeft: '编辑在左', swapEditorLayout: '切换编辑与预览位置', editorLayoutChanged: '编辑布局：{layout}',
     bodyFontScale: '文字字号 {percent}%', recentOpened: '最近打开', pinnedRecentGroup: '置顶', ordinaryRecentGroup: '最近', pinnedRecent: '已置顶', pinRecent: '置顶', unpinRecent: '取消置顶', pinRecentAdded: '已置顶文档', pinRecentRemoved: '已取消置顶', pinRecentUnavailable: '文件已不可用，未能置顶；最近列表已重新同步', reorderPinnedRecent: '拖动或使用上下方向键调整“{name}”的置顶顺序', pinnedOrderPosition: '已将“{name}”移到置顶第 {position} 项，共 {total} 项', pinRecentSaveFailed: '置顶状态保存失败，已恢复并重新同步', pinnedOrderSaveFailed: '置顶顺序保存失败，已恢复并重新同步', favorited: '已收藏', favoriteDocument: '收藏文档', unfavoriteDocument: '取消收藏', favoriteAdded: '已收藏文档', favoriteRemoved: '已取消收藏，原文件未删除', recentContextHint: '右键打开文档操作菜单', recentContextMenuTitle: '文档操作', recentEdit: '编辑', recentSaveAs: '另存为', recentReveal: '打开所在文件夹', recentRemove: '移除', recentRevealFailed: '无法打开文件所在目录', recentMissing: '文件不存在', recentMissingTitle: '文件已删除、移动，或所在磁盘当前不可用', currentDocumentMissing: '原文件已移动或删除，当前预览内容已保留', recentMissingAria: '{name}，文件不存在', recentRemoved: '已从最近阅读中移除，原文件未删除', emptyRecent: '还没有最近文档', emptyFavorites: '还没有收藏文档', emptyExplorer: '请先打开一个文件夹',
-    markdownDocument: 'Markdown 文档',
+    markdownDocument: 'Markdown 文档', documentTypeFile: '文件', documentTypeNoExtension: '无后缀', documentTypeText: '文本文件', documentTypeTextPack: 'TextPack 文档包', documentTypeTextBundle: 'TextBundle 目录包',
     discardConfirm: '当前文档有尚未保存的更改。\n\n确定要放弃更改并继续吗？', previewError: '暂时无法渲染当前内容',
     readingTime: '约 {minutes} 分钟 · {words} 字', renderFailed: 'Markdown 渲染失败', openFailed: '无法打开这个文件', macAccessNotGranted: '未获得该文档的访问权限，请重新选择原文件并确认打开',
     editorPosition: '第 {line} 行，第 {column} 列', saveAsDone: '文档已另存为', saveDone: '文档已保存', saveFailed: '保存失败，请检查文件权限', saveAsRequired: '需要另存为', editPermissionDenied: '当前文件无编辑权限，可能是微信缓存只读或正被其他程序占用。请另存为可编辑副本后再编辑', editPermissionLabel: '编辑权限', editPermissionTitle: '当前文件无法直接编辑', editPermissionDescription: '轻阅无法获得这个文件的写入权限。原文件不会被修改或删除。', currentDocument: '当前文档', possibleReasons: '可能原因', permissionReasonCache: '文件来自微信、企业微信等应用的只读缓存目录', permissionReasonReadOnly: '文件或所在目录被设置为只读，当前账号没有写入权限', permissionReasonLocked: '文件正被其他程序占用或锁定', editPermissionGuide: '建议另存为一个可编辑副本。保存成功后，轻阅会自动打开副本并进入编辑模式。', saveCopyAndEdit: '另存为副本并编辑', saveAsRequiredHint: '原文件可能来自微信缓存、处于只读状态或正被其他程序占用，请另存为后继续编辑', saveAsFallback: '原文件无法直接写入，已为你打开“另存为”',
-    folderOpenFailed: '无法打开文件夹中的文档', defaultAppHint: '请在“按文件类型指定默认应用”中选择 .md', dropUnsupported: '请拖入 Markdown 或文本文件',
+    folderOpenFailed: '无法打开文件夹中的文档', defaultAppHint: '请在 Windows“默认应用”中为 .md 或 .textpack 选择轻阅 Markdown；默认应用需由你确认。', defaultAppFailed: '无法准备文件关联或打开默认应用设置，请重试，或在 Windows 设置中手动选择应用。', dropUnsupported: '请拖入 Markdown 或文本文件',
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 3.0.2', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 3.1.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -649,15 +664,15 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     docWidth: 'Document width', widthNarrow: 'Narrow', widthMedium: 'Medium', widthWide: 'Wide', widthFull: 'Full width', docWidthChanged: 'Document width: {level}',
     editorLayout: 'Editor layout', editorOnly: 'Editor only', hideLivePreview: 'Close live preview (editor only)', restoreLivePreview: 'Restore preview', previewOnLeft: 'Preview on left', editorOnLeft: 'Editor on left', swapEditorLayout: 'Swap editor and preview', editorLayoutChanged: 'Editor layout: {layout}',
     bodyFontScale: 'Text size {percent}%', recentOpened: 'Recently opened', pinnedRecentGroup: 'PINNED', ordinaryRecentGroup: 'RECENT', pinnedRecent: 'Pinned', pinRecent: 'Pin', unpinRecent: 'Unpin', pinRecentAdded: 'Document pinned', pinRecentRemoved: 'Document unpinned', pinRecentUnavailable: 'The file is no longer available and was not pinned. Recent documents were synced again.', reorderPinnedRecent: 'Drag or use the up and down arrow keys to reorder pinned document “{name}”', pinnedOrderPosition: 'Moved “{name}” to pinned position {position} of {total}', pinRecentSaveFailed: 'Could not save the pinned state. The list was restored and synced again.', pinnedOrderSaveFailed: 'Could not save the pinned order. The list was restored and synced again.', favorited: 'Favorited', favoriteDocument: 'Add to Favorites', unfavoriteDocument: 'Remove from Favorites', favoriteAdded: 'Document added to Favorites', favoriteRemoved: 'Removed from Favorites. The original file was not deleted.', recentContextHint: 'Right-click for document actions', recentContextMenuTitle: 'Document actions', recentEdit: 'Edit', recentSaveAs: 'Save As', recentReveal: 'Show in Folder', recentRemove: 'Remove', recentRevealFailed: 'Unable to show the file in its folder', recentMissing: 'File unavailable', recentMissingTitle: 'The file was deleted, moved, or its disk is currently unavailable', currentDocumentMissing: 'The original file was moved or deleted. The current preview has been preserved.', recentMissingAria: '{name}, file unavailable', recentRemoved: 'Removed from Recent. The original file was not deleted.', emptyRecent: 'No recent documents', emptyFavorites: 'No favorite documents', emptyExplorer: 'Open a folder to browse files',
-    markdownDocument: 'Markdown document',
+    markdownDocument: 'Markdown document', documentTypeFile: 'File', documentTypeNoExtension: 'No extension', documentTypeText: 'Text file', documentTypeTextPack: 'TextPack document', documentTypeTextBundle: 'TextBundle directory',
     discardConfirm: 'This document has unsaved changes.\n\nDiscard the changes and continue?', previewError: 'The current content cannot be rendered',
     readingTime: 'About {minutes} min · {words} words', renderFailed: 'Markdown rendering failed', openFailed: 'Unable to open this file', macAccessNotGranted: 'Access was not granted. Select the original document and confirm Open to restore access.',
     editorPosition: 'Line {line}, Column {column}', saveAsDone: 'Document saved as a new file', saveDone: 'Document saved', saveFailed: 'Save failed. Check file permissions.', saveAsRequired: 'Save As required', editPermissionDenied: 'This file cannot be edited because it may be a read-only app cache or locked by another program. Save a writable copy to continue editing.', editPermissionLabel: 'EDIT PERMISSION', editPermissionTitle: 'This file cannot be edited directly', editPermissionDescription: 'Quillite cannot obtain write access to this file. The original will not be changed or deleted.', currentDocument: 'Current document', possibleReasons: 'Possible reasons', permissionReasonCache: 'The file comes from a read-only WeChat, WeCom, or other application cache', permissionReasonReadOnly: 'The file or its folder is read-only, or your account lacks write permission', permissionReasonLocked: 'Another program currently has the file open or locked', editPermissionGuide: 'Save a writable copy instead. Quillite will open the copy and enter editing mode automatically after it is saved.', saveCopyAndEdit: 'Save Copy & Edit', saveAsRequiredHint: 'The source may be a read-only app cache or locked by another program. Save a writable copy to continue editing.', saveAsFallback: 'The source cannot be written. Save As has been opened for you.',
-    folderOpenFailed: 'Unable to open a document from this folder', defaultAppHint: 'Choose this app for .md under “Choose defaults by file type”.', dropUnsupported: 'Drop a Markdown or text file',
+    folderOpenFailed: 'Unable to open a document from this folder', defaultAppHint: 'In Windows Default apps, choose Quillite Markdown for .md or .textpack. Confirm your preferred default there.', defaultAppFailed: 'Could not prepare file associations or open Default apps. Retry, or select an app manually in Windows Settings.', dropUnsupported: 'Drop a Markdown or text file',
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 3.0.2', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 3.1.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -1050,6 +1065,89 @@ Object.assign(translations.en, {
   newReferenceHint: 'The definition is appended to the document with a unique name, preserving the following text.'
 });
 
+Object.assign(translations['zh-CN'], {
+  exportFormatTextPack: '打包文档（含图片）', exportFormatsCount: '15 种导出格式',
+  exportFormatMarkdownAssets: 'Markdown（含图片）',
+  exportDescriptionMarkdownAssets: '将当前文档导出为新的 .md 文件和 assets 图片目录，不修改原文档，也不切换当前编辑。网络图片保留链接、不自动下载；缺失图片会明确提示。',
+  markdownAssetsExported: 'Markdown 和图片已导出',
+  documentCopyRetained: '新副本已保存在：{path}。保存期间当前文档发生变化，已保留当前编辑，未切换到副本。',
+  documentFormatExtension: '文件扩展名与所选格式不一致，请重新选择保存位置并保留对应扩展名。',
+  documentConversionIncomplete: '无法完整收集图片，已停止另存转换。请检查缺失图片或不安全的图片路径；原文档和当前编辑未改变。',
+  documentPartialCopy: '新副本未完成，已保留写入的文件或图片，原文档和当前编辑未改变。保留位置及原因：{details}',
+  documentCopyOpenFailed: '新副本已保存，但未能打开，原文档和当前编辑仍保留。副本位置及原因：{details}',
+  documentCopyResultUnknown: '副本保存结果无法确认，未切换文档。原文档和当前编辑仍保留，请检查目标位置：{path}',
+  documentSaveFormatTitle: '选择文档格式', documentSaveFormatHint: '创建新副本，原文档不变。保存成功后继续编辑新副本。',
+  saveFormatMarkdown: 'Markdown', saveFormatMarkdownHint: '普通副本保留图片引用；转换时收集图片', saveFormatText: '纯文本', saveFormatTextHint: '原样保留文字，不解析图片引用', saveFormatTextBundleHint: '正文与附件保存在目录包', saveFormatTextPackHint: '单个压缩文件，便于分享', chooseSaveLocation: '选择保存位置',
+  editableBundleLocation: '文档位置',
+  bundleSaveFailed: '文档包保存失败，编辑内容仍保留。请检查原包权限或另存完整文档包副本；不会自动改为普通 Markdown。',
+  bundleRenameUnsupported: '文档包请使用“另存为”创建完整副本，不在此直接重命名。',
+  bundleMergeBusy: '正在核验原包并保留双方附件；完成前请勿切换文档。',
+  bundleMergeFailed: '无法合并文档包基线或附件发生冲突。当前编辑和原包均保留，请重新比较或另存完整副本。',
+  bundleRecoveryFailed: '无法恢复文档包工作区，未将正文单独转为普通草稿。恢复记录仍保留，请重试并保留本地恢复目录。',
+  bundlePandocUnsupported: '为避免读取包外文件，原包编辑暂不支持 Pandoc 扩展格式。请先导出“便携 Markdown”，再打开该副本转换。Word、HTML、PDF 和图片导出仍可使用。',
+  bundlePartialSave: '文档包中已新增部分附件，正文写回结果尚未确认。工作区和附件已保留，自动保存已暂停；请重新比较原包或另存完整副本。',
+  bundleSessionPersistWarning: '正文已成功写回原包，但编辑会话记录保存失败。自动保存已暂停；请保留当前编辑或另存完整副本，重新打开原包后再继续保存。',
+  bundlePartialSaveState: '附件部分写入，需比较原包', bundleSessionPersistState: '已写回，请重新打开原包', bundleSaveFailedState: '原包保存失败，自动保存暂停',
+  exportDescriptionTextPack: '生成 .textpack：正文和可读取的本地图片一起打包。网络图片只保留链接，不自动下载；缺失资源会明确列出，不保证整个文档完全离线。',
+  importTextBundle: '导入打包文档…', chooseTextPack: '选择 TextPack 文件', chooseTextBundle: '选择 TextBundle 文件夹',
+  textBundleImportHint: '导入到新目录，转换为普通 .md + assets。之后保存的是解包后的文档，不会自动写回原压缩包或修改原包。网络图片保留链接，不自动下载。',
+  textBundleImportNow: '选择保存位置并导入', textBundleChecking: '正在读取并检查文档包…', textBundleImporting: '正在创建普通 Markdown 文档…',
+  textBundleReady: '检查完成。选择保存位置后，将在其中创建新的文档目录。', textBundleImported: '已导入为普通 Markdown 文档', textPackExported: '打包文档已导出',
+  textBundleImageSummary: '网络图片 {remote} 项 · 缺失图片 {missing} 项 · 其他资源提示 {other} 项',
+  textBundleIncomplete: '存在外部或未完整收集的资源；此文档包不能视为完全离线。',
+  textBundleNoImageIssues: '未发现已识别图片引用的缺失或网络依赖。普通链接、嵌入内容及复杂资源不在图片打包范围内，不保证整个文档完全离线。',
+  textBundleImportSavedHint: '后续编辑和保存只影响此目录中的 .md 文档及 assets，不会回写原 TextPack / TextBundle。此导入会话默认禁用网络图片加载，可按需明确允许。',
+  textBundleRemote: '网络图片：保留链接，未下载', textBundleMissing: '缺失图片：未包含在文档包中', textBundleUnsupported: '未收集或无法确认的资源', textBundleUnsafe: '包外或不安全引用：未读取', textBundleEmbedded: '内嵌图片',
+  textBundleMoreWarnings: '另有 {count} 项资源提示。', textBundleLoadRemote: '允许加载网络资源', textBundleRemoteBlocked: '此文档包会话默认禁用网络资源；图表暂显示源码，允许加载后恢复渲染。',
+  textBundleNetworkNotice: '允许后将恢复图表和样式，并可能请求文档中指定的网络地址。网络图片仍只保留链接，不会保存到 assets。',
+  textBundleRenderConsent: '此文档包会话尚未允许网络资源。此导出／打印操作会恢复图表和样式，并可能访问文档指定的网络地址。是否明确允许并继续？取消后仍可使用“打包文档（含图片）”且不下载网络图片。',
+  textBundleDesktopRequired: '请在桌面应用中使用文档包导入／导出。', textBundleFailed: '文档包操作失败。请检查包格式、文件权限及可用空间；原包未修改。',
+  textBundleInvalid: '无效或不安全的文档包。仅支持 Markdown TextPack / TextBundle；路径、链接和文件大小必须通过安全检查。',
+  textBundleSourceChanged: '文档包已发生变化，请重新选择并检查后再导入。', textBundleComplex: '暂不支持 srcset 等复杂响应式图片引用，请改为普通图片引用后再操作。',
+  textBundleStale: '当前文档已变化，未切换到导入文档。新文件已保留在：{path}', textBundlePartial: '导入未完成，已保留新建的部分副本，原包未修改。保留位置及原因：{details}', textBundleLimit: '文档包超过大小或条目数限制：正文 64 MiB、单张图片 25 MiB、总量 256 MiB、最多 1024 个条目。'
+});
+Object.assign(translations.en, {
+  exportFormatTextPack: 'Package document with images', exportFormatsCount: '15 export formats',
+  exportFormatMarkdownAssets: 'Markdown with images',
+  exportDescriptionMarkdownAssets: 'Export the current document as a new .md file and assets folder without changing the original or switching documents. Online images remain links and are not downloaded; missing images are reported.',
+  markdownAssetsExported: 'Markdown and images exported',
+  documentCopyRetained: 'The new copy is saved at: {path}. The current document changed while saving; your current edits were retained and the copy was not opened.',
+  documentFormatExtension: 'The filename extension does not match the selected format. Choose the location again and keep the matching extension.',
+  documentConversionIncomplete: 'Images could not be collected completely, so Save As conversion stopped. Check missing images or unsafe image paths. Your original and current edits are unchanged.',
+  documentPartialCopy: 'The new copy is incomplete. Written files or images were retained; your original and current edits are unchanged. Retained location and reason: {details}',
+  documentCopyOpenFailed: 'The new copy was saved but could not be opened. Your original and current edits are retained. Copy location and reason: {details}',
+  documentCopyResultUnknown: 'The copy result could not be confirmed, so the active document was not changed. Your original and current edits are retained. Check the target location: {path}',
+  documentSaveFormatTitle: 'Choose document format', documentSaveFormatHint: 'Create a new copy without changing the original. Continue editing the copy after it is saved.',
+  saveFormatMarkdown: 'Markdown', saveFormatMarkdownHint: 'Ordinary copies retain image references; conversions collect images', saveFormatText: 'Plain text', saveFormatTextHint: 'Keep literal text without parsing image references', saveFormatTextBundleHint: 'Text and attachments in a folder package', saveFormatTextPackHint: 'One compressed file, ready to share', chooseSaveLocation: 'Choose save location',
+  editableBundleLocation: 'Document location',
+  bundleSaveFailed: 'Package saving failed; your edits are retained. Check access or save a complete package copy. It will not silently become ordinary Markdown.',
+  bundleRenameUnsupported: 'Use Save as to create a complete package copy instead of renaming this package here.',
+  bundleMergeBusy: 'Checking the package and retaining attachments from both versions. Keep this document open until complete.',
+  bundleMergeFailed: 'Could not merge package baselines or attachments conflict. Your edits and original package are retained; compare again or save a complete copy.',
+  bundleRecoveryFailed: 'Could not restore the package workspace; text was not silently converted to an ordinary draft. The recovery entry remains available. Keep the local recovery directory and retry.',
+  bundlePandocUnsupported: 'Pandoc extended formats are temporarily unavailable while editing a package to prevent reading outside-package files. Export Portable Markdown, open that copy, then convert it. Word, HTML, PDF and image exports remain available.',
+  bundlePartialSave: 'Some attachments were added to the package, but the Markdown write is not confirmed. The workspace and attachments were retained and autosave is paused. Compare the package again or save a complete copy.',
+  bundleSessionPersistWarning: 'The document was written back successfully, but its editing-session record could not be saved. Autosave is paused. Keep current edits or save a complete copy, then reopen the package before saving again.',
+  bundlePartialSaveState: 'Attachments partly written; compare package', bundleSessionPersistState: 'Written back; reopen package', bundleSaveFailedState: 'Package save failed; autosave paused',
+  exportDescriptionTextPack: 'Create a .textpack with Markdown and readable local images. Online images remain links and are not downloaded. Missing resources are reported; complete offline use is not guaranteed.',
+  importTextBundle: 'Import packaged document…', chooseTextPack: 'Choose TextPack file', chooseTextBundle: 'Choose TextBundle folder',
+  textBundleImportHint: 'Convert into a new folder containing ordinary .md + assets. Subsequent saves affect the extracted document, never the original archive or bundle. Online image links are retained, not downloaded.',
+  textBundleImportNow: 'Choose destination and import', textBundleChecking: 'Reading and checking the package…', textBundleImporting: 'Creating an ordinary Markdown document…',
+  textBundleReady: 'Check complete. A new document folder will be created in your chosen destination.', textBundleImported: 'Imported as ordinary Markdown', textPackExported: 'Document package exported',
+  textBundleImageSummary: '{remote} online images · {missing} missing images · {other} other resource notices',
+  textBundleIncomplete: 'External or uncollected resources remain. This package must not be treated as completely offline.',
+  textBundleNoImageIssues: 'No missing or online dependencies were found among recognized images. Ordinary links, embedded content and complex resources are outside image packaging scope; complete offline use is not guaranteed.',
+  textBundleImportSavedHint: 'Future editing and saving affect only this folder’s .md document and assets, not the original TextPack / TextBundle. Online image loading is disabled for this import session unless explicitly allowed.',
+  textBundleRemote: 'Online image: link retained, not downloaded', textBundleMissing: 'Missing image: not included in the package', textBundleUnsupported: 'Resource not collected or completeness unknown', textBundleUnsafe: 'External or unsafe local reference: not read', textBundleEmbedded: 'Embedded image',
+  textBundleMoreWarnings: '{count} additional resource notices.', textBundleLoadRemote: 'Allow online resources', textBundleRemoteBlocked: 'Online resources are disabled for this import session. Charts show source until loading is allowed.',
+  textBundleNetworkNotice: 'Allowing restores charts and styles and may contact addresses specified by the document. Online images remain links and are not saved into assets.',
+  textBundleRenderConsent: 'Online resources are not yet allowed for this import session. This export or print operation restores charts and styles and may contact addresses specified by the document. Allow and continue? You can cancel and still use Package document without downloading online images.',
+  textBundleDesktopRequired: 'Use the desktop app to import or export document packages.', textBundleFailed: 'Package operation failed. Check the format, file permissions and available space. The original package is unchanged.',
+  textBundleInvalid: 'Invalid or unsafe package. Only Markdown TextPack / TextBundle is supported; paths, links and file sizes must pass safety checks.',
+  textBundleSourceChanged: 'The package changed. Select and check it again before importing.', textBundleComplex: 'Responsive image references such as srcset are not supported yet. Convert them to ordinary image references first.',
+  textBundleStale: 'The current document changed and was not replaced. Imported files remain at: {path}', textBundlePartial: 'Import did not complete. The new partial copy was retained and the original package is unchanged. Retained location and reason: {details}', textBundleLimit: 'Package limits exceeded: 64 MiB of text, 25 MiB per image, 256 MiB total, and 1024 entries.'
+});
+
 function t(key, values = {}) {
   let template = translations[state.language]?.[key] ?? translations['zh-CN'][key] ?? key;
   if (document.documentElement.dataset.platform === 'darwin') template = template.replaceAll('Ctrl', '⌘');
@@ -1147,6 +1245,12 @@ const els = {
   imageUploadSettingsDialog: $('#imageUploadSettingsDialog'), picGoCloudSetup: $('#picGoCloudSetup'), picGoCloudAccount: $('#picGoCloudAccount'), picGoCloudUser: $('#picGoCloudUser'), picGoCloudStatus: $('#picGoCloudStatus'), picGoSetupWizard: $('#picGoSetupWizard'), picGoSetupInstall: $('#picGoSetupInstall'), picGoSetupConnect: $('#picGoSetupConnect'), picGoSetupReady: $('#picGoSetupReady'), picGoAdvancedSettings: $('#picGoAdvancedSettings'), localAssetsSummary: $('#localAssetsSummary'), picGoSettingsFields: $('#picGoSettingsFields'), picGoServerURL: $('#picGoServerURL'), picGoSecret: $('#picGoSecret'), clearPicGoSecretRow: $('#clearPicGoSecretRow'), clearPicGoSecret: $('#clearPicGoSecret'), picGoTestStatus: $('#picGoTestStatus'),
   editorUndoButton: $('#editorUndoButton')
 };
+
+const diagramViewer = createDiagramViewer({
+  roots: [els.content, els.editorPreview, els.editor],
+  language: () => state.language,
+  canOpen: () => !editorHasComposition(codeEditor),
+});
 
 marked.use({
   gfm: true,
@@ -1298,13 +1402,13 @@ function editorPresentationExtensions() {
   if (state.editorPresentation === 'source') return [sourceImageFolding];
   if (!state.editing) return [sourceImageFolding];
   const session = state.documentSession, path = state.currentFile?.path;
-  const mediaExtensions = [embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
+  const mediaExtensions = [embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', blockRemoteImages: state.blockImportedRemoteImages, readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
       editorFormulaPreview, formulaPreviewContext.of({ enabled: state.formulaDisplay !== 'source', sanitize: html => DOMPurify.sanitize(html),
         edit: (formula, view) => {
           const owner = resolveEditableOwner(view, formula, true);
           if (owner && codeEditor === owner.view && state.editing && state.documentSession === session && state.currentFile?.path === path) openFormulaDialog({ ...formula, from: owner.from, to: owner.to, projectionPrefix:owner.projectionPrefix, continuationPrefix:owner.projectionPrefix+(formula.continuationPrefix||'') });
         } }),
-      editorDiagramPreview, diagramPreviewContext.of({ enabled: state.editing && state.diagramDisplay !== 'source',
+      editorDiagramPreview, diagramPreviewContext.of({ enabled: state.editing && state.diagramDisplay !== 'source' && !state.blockImportedRemoteImages,
         render: renderEditorDiagram, release: releaseEditorDiagram,
         label: item => diagramDisplayName(item.source, item.engine, diagramLocale()),
         edit: (diagram, view) => {
@@ -1314,11 +1418,7 @@ function editorPresentationExtensions() {
   return [...mediaExtensions, editorLivePreview, livePreviewContext.of({
         nestedExtensions: mediaExtensions,
         nestedEffects: [setFormulaDisplayEffect, setDiagramDisplayEffect, refreshDiagramThemeEffect, updateImagePreviewDirectory],
-        renderTocTitle: source => {
-          const label = document.createElement('span');
-          label.innerHTML = DOMPurify.sanitize(marked.parseInline(source));
-          return tocTitleHTML(createTocTitle(label));
-        },
+        renderTocTitle: source => tocTitleHTML(createTocTitle(inertInlineTocLabel(source))),
         render: (source, item) => item.kind === 'code' ? DOMPurify.sanitize(`<pre><code>${hljs.getLanguage(item.language) ? hljs.highlight(item.text, { language: item.language }).value : escapeHtml(item.text)}</code></pre>`, { ALLOWED_TAGS: ['pre', 'code', 'span'], ALLOWED_ATTR: ['class'] }) : DOMPurify.sanitize(marked.parse(source, { gfm: true, breaks: true }), {
           ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'p', 'br', 'hr', 'div', 'span', 'strong', 'em', 'del', 's', 'u', 'sub', 'sup', 'mark', 'kbd', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
           ALLOWED_ATTR: ['align', 'colspan', 'rowspan', 'title'],
@@ -1515,6 +1615,7 @@ function openEditorDiagram(diagram) {
 }
 
 async function renderEditorDiagram(container, item) {
+  if (state.blockImportedRemoteImages) { container.textContent = item.source; return true; }
   const diagram = document.createElement('div'), isECharts = item.engine === 'echarts';
   diagram.className = isECharts ? 'echarts-diagram' : 'mermaid-diagram';
   diagram.dataset[isECharts ? 'echartsSource' : 'mermaidSource'] = encodeURIComponent(item.source);
@@ -3636,6 +3737,7 @@ async function updateDiagramPreview() {
   const template = diagramTemplateById(diagramWizardState.templateId);
   releaseRenderedResources(els.diagramPreview);
   els.diagramPreview.replaceChildren();
+  if (state.blockImportedRemoteImages) { els.diagramPreview.textContent = t('textBundleRemoteBlocked'); return; }
   if (!source) {
     els.diagramPreview.textContent = t('diagramInvalid');
     return;
@@ -4671,10 +4773,10 @@ async function uploadedOrLocalImagePath(localPath, target) {
   let succeeded = false;
   try {
 		const uploadedPath = target.mode === 'picgo-cloud'
-			? await window.quilliteMarkdown.uploadImageToPicGoCloud(target.path, localPath, operationId)
+			? await window.quilliteMarkdown.uploadImageToPicGoCloud(target.resourcePath || target.path, localPath, operationId)
 			: target.mode === 'picgo-cli'
-        ? await window.quilliteMarkdown.uploadImageToPicGoCLI(target.path, localPath, operationId)
-        : await window.quilliteMarkdown.uploadImageToPicGo(target.path, localPath, operationId);
+        ? await window.quilliteMarkdown.uploadImageToPicGoCLI(target.resourcePath || target.path, localPath, operationId)
+        : await window.quilliteMarkdown.uploadImageToPicGo(target.resourcePath || target.path, localPath, operationId);
     succeeded = true;
     return { path: uploadedPath, uploaded: true, fallback: false };
   } catch (error) {
@@ -4818,6 +4920,7 @@ function captureImageInsertion(view = codeEditor) {
   const owner = resolveEditableOwner(view);
   if (!owner || owner.view !== codeEditor) return null;
   const target = createImageInsertionTarget(codeEditor, state.documentSession, state.currentFile.path, owner);
+  target.resourcePath = state.currentFile.resourcePath || state.currentFile.path;
   target.width = preferredImageWidth();
   target.mode = state.imageUploadMode;
   state.imageInsertionTargets.add(target);
@@ -4868,7 +4971,7 @@ async function insertLocalImage() {
   state.imageDialogTarget = null; // Transfer the bookmark to the pending file operation.
   closeImageDialog();
   try {
-    const imagePath = await window.quilliteMarkdown.selectImage(target.path);
+    const imagePath = await window.quilliteMarkdown.selectImage(target.resourcePath || target.path);
     if (!imagePath) return;
     if (!imageInsertionCurrent(target, true)) return;
     const result = await uploadedOrLocalImagePath(imagePath, target);
@@ -4907,7 +5010,7 @@ async function importAndInsertImage(sourcePath, description = '', view = codeEdi
   const target = captureImageInsertion(view);
   if (!target) return false;
   try {
-    const imagePath = await window.quilliteMarkdown.importImage(target.path, sourcePath);
+    const imagePath = await window.quilliteMarkdown.importImage(target.resourcePath || target.path, sourcePath);
     if (!imagePath) return false;
     if (!imageInsertionCurrent(target, true)) return false;
     const result = await uploadedOrLocalImagePath(imagePath, target);
@@ -4943,7 +5046,7 @@ async function handleEditorPaste(event) {
   if (!destination) return;
   const pasteView = destination.view;
   if (destination.plainText && pasteView.state.selection.ranges.length === 1) return;
-  const path = state.currentFile.path;
+  const path = state.currentFile.resourcePath || state.currentFile.path;
   const item = [...(event.clipboardData?.items || [])].find(candidate => candidate.kind === 'file' && /^image\//i.test(candidate.type));
   const file = item?.getAsFile();
   const html = event.clipboardData?.getData('text/html') || '';
@@ -5930,7 +6033,7 @@ function fileIcon() {
 }
 
 function recentEntry(doc) {
-  return { path: doc.path, name: doc.name, directory: doc.directory || directoryFromDocumentPath(doc.path), exists: true };
+  return { path: doc.path, name: doc.name, directory: doc.packageDirectory || doc.directory || directoryFromDocumentPath(doc.path), exists: true };
 }
 
 function recentFilesFromPreferences(prefs) {
@@ -6156,29 +6259,36 @@ function restoreExplorerAfterFirstPaint(savedRoot) {
 
 function renderFileRow(file, pinned = false) {
   const encodedPath = encodeURIComponent(file.path);
+  const nameParts = documentListName(file.name);
+  const typeLabel = nameParts.extension.length > 16 ? t('documentTypeFile') : (nameParts.extension || t('documentTypeNoExtension'));
+  const typeDescription = nameParts.kind === 'markdown' ? t('markdownDocument')
+    : nameParts.kind === 'textpack' ? t('documentTypeTextPack')
+      : nameParts.kind === 'textbundle' ? t('documentTypeTextBundle')
+        : nameParts.kind === 'text' ? t('documentTypeText') : t('documentTypeFile');
+  const absoluteDirectory = directoryFromDocumentPath(file.path);
+  const directory = file.directory && file.directory !== '.' ? file.directory : absoluteDirectory;
   const active = sameDocumentPath(state.currentFile?.path, file.path) ? ' active' : '';
   const missing = state.sidebarMode !== 'explorer' && file.exists === false;
   const favorited = state.favoriteFiles.some(favorite => sameDocumentPath(favorite.path, file.path));
   const sub = state.sidebarMode === 'explorer'
-    ? (file.directory && file.directory !== '.' ? file.directory : t('markdownDocument'))
+    ? directory
     : missing
       ? t('recentMissing')
-      : state.sidebarMode === 'favorites'
-        ? t('favorited')
-        : (file.directory || directoryFromDocumentPath(file.path));
+      : directory;
   const favoriteMarker = favorited
     ? `<span class="favorite-marker" title="${escapeHtml(t('favorited'))}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg></span>`
     : '';
   const pinMarker = pinned
     ? `<span class="pin-marker" title="${escapeHtml(t('pinnedRecent'))}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3h8l-1 5 3 3v2H6v-2l3-3-1-5Z"/><path d="M12 13v8"/></svg></span>`
     : '';
+  const fullTitle = `${file.name}\n${file.path}\n${t(missing ? 'recentMissingTitle' : 'recentContextHint')}`;
   const itemAttributes = missing
-    ? ` aria-disabled="true" data-missing="true" title="${escapeHtml(t('recentMissingTitle'))}" aria-label="${escapeHtml(t('recentMissingAria', { name: file.name }))}"`
-    : ` title="${escapeHtml(t('recentContextHint'))}"`;
+    ? ` aria-disabled="true" data-missing="true" title="${escapeHtml(fullTitle)}" aria-label="${escapeHtml(t('recentMissingAria', { name: file.name }))}"`
+    : ` title="${escapeHtml(fullTitle)}" aria-label="${escapeHtml(file.name + ', ' + absoluteDirectory)}"`;
   const pinHandle = pinned
     ? `<button class="pin-drag-handle" type="button" data-path="${encodedPath}" aria-label="${escapeHtml(t('reorderPinnedRecent', { name: file.name }))}" title="${escapeHtml(t('reorderPinnedRecent', { name: file.name }))}" aria-keyshortcuts="ArrowUp ArrowDown Escape"${pinMutationInProgress ? ' disabled aria-disabled="true"' : ''}><svg viewBox="0 0 18 24" aria-hidden="true"><circle cx="6" cy="7" r="1.35"/><circle cx="12" cy="7" r="1.35"/><circle cx="6" cy="12" r="1.35"/><circle cx="12" cy="12" r="1.35"/><circle cx="6" cy="17" r="1.35"/><circle cx="12" cy="17" r="1.35"/></svg></button>`
     : '';
-  return `<div class="file-row${pinned ? ' pinned' : ''}${missing ? ' missing' : ''}" data-path="${encodedPath}">${pinHandle}<button class="file-item${active}" data-path="${encodedPath}"${itemAttributes}><span class="file-icon">${fileIcon()}</span><span class="file-copy"><span class="file-title-line">${pinMarker}${favoriteMarker}<strong>${escapeHtml(file.name)}</strong></span><small title="${escapeHtml(sub)}">${escapeHtml(sub)}</small></span></button></div>`;
+  return `<div class="file-row${pinned ? ' pinned' : ''}${missing ? ' missing' : ''}" data-path="${encodedPath}">${pinHandle}<button class="file-item${active}" data-path="${encodedPath}"${itemAttributes}><span class="file-icon">${fileIcon()}</span><span class="file-copy"><span class="file-title-line">${pinMarker}${favoriteMarker}<strong>${escapeHtml(nameParts.title)}</strong></span><small class="file-meta-line" title="${escapeHtml(absoluteDirectory)}"><span class="file-type-badge" data-file-kind="${nameParts.kind}" title="${escapeHtml(typeDescription + (nameParts.extension ? ' · ' + nameParts.extension : ''))}">${escapeHtml(typeLabel)}</span><span class="file-location">${escapeHtml(sub)}</span></small></span></button></div>`;
 }
 
 function renderRecentFileGroups() {
@@ -6646,6 +6756,7 @@ function setCompactTocOpen(open, restoreFocus = false) {
   if (open && state.editing) renderToc();
   state.compactTocOpen = Boolean(open && isCompactTocLayout() && state.tocAvailable);
   syncCompactTocControls();
+  if (state.compactTocOpen) scheduleActiveTocRefresh();
   if (!state.compactTocOpen && restoreFocus && !els.compactTocButton.classList.contains('hidden')) {
     requestAnimationFrame(() => els.compactTocButton.focus({ preventScroll: true }));
   }
@@ -6671,14 +6782,22 @@ function handleCompactTocLayoutChange() {
   applyPaneWidths();
 }
 
+function inertInlineTocLabel(source) {
+  // Detached elements still belong to the active document and can fetch eager
+  // images before title extraction discards them. Template contents are inert:
+  // inspect text/math metadata without ever activating document resources.
+  const template = document.createElement('template');
+  template.innerHTML = DOMPurify.sanitize(marked.parseInline(source));
+  return template.content;
+}
+
 let outlineDocument = null, outlineHeadings = [], outlineRefreshTimer;
 function currentEditorHeadings() {
   if (!codeEditor) return [];
   if (outlineDocument !== codeEditor.state.doc) {
     outlineDocument = codeEditor.state.doc;
-    const label = document.createElement('span');
     outlineHeadings = editorOutline(outlineDocument.toString()).map((heading, index) => {
-      label.innerHTML = DOMPurify.sanitize(marked.parseInline(heading.text));
+      const label = inertInlineTocLabel(heading.text);
       return { ...heading, id: slugify(label.textContent, index), textContent: label.textContent, tagName: `H${heading.level}`, tocTitle: createTocTitle(label) };
     });
   }
@@ -6705,6 +6824,31 @@ function scrollEditorToHeading(id) {
   return true;
 }
 
+let allReaderTocHeadings = [], trackedTocHeadings = [], trackedTocLinks = new Map();
+let trackedActiveTocLink = null, trackedActiveTocNodes = [];
+let activeTocNeedsReveal = false;
+
+function resetTocTracking(headings = []) {
+  allReaderTocHeadings = state.editing ? [] : headings;
+  trackedTocHeadings = readerFlowHeadings(allReaderTocHeadings, els.content);
+  trackedTocLinks = new Map([...els.toc.querySelectorAll('a[data-target]')].map(link => [link.dataset.target, link]));
+  trackedActiveTocLink = null;
+  trackedActiveTocNodes = [];
+}
+
+function setActiveTocLink(link) {
+  if (trackedActiveTocLink === link) return;
+  trackedActiveTocLink?.classList.remove('active');
+  for (const node of trackedActiveTocNodes) node.classList.remove('contains-active');
+  trackedActiveTocLink = link;
+  trackedActiveTocNodes = [];
+  link?.classList.add('active');
+  for (let node = link?.closest('.toc-node'); node; node = node.parentElement?.closest('.toc-node')) {
+    node.classList.add('contains-active');
+    trackedActiveTocNodes.push(node);
+  }
+}
+
 function renderToc() {
   const headings = state.editing ? currentEditorHeadings() : collectDocumentHeadings(els.content);
   const allItems = tocItems(headings);
@@ -6726,6 +6870,7 @@ function renderToc() {
     return `<li class="toc-node level-${node.level}${isCollapsed ? ' collapsed' : ''}" data-toc-node="${escapeHtml(node.id)}"><div class="toc-row">${toggle}<a href="#${escapeHtml(node.id)}" data-target="${escapeHtml(node.id)}"><span class="toc-link-text${node.title.hasMath ? ' has-math' : ''}">${title}</span></a></div>${children}</li>`;
   }).join('')}</ul>`;
   els.toc.innerHTML = renderNodes(tree);
+  resetTocTracking(headings);
   els.toc.classList.toggle('is-flat', state.tocMode === 'flat');
   els.tocEmpty.classList.toggle('hidden', tree.length > 0);
   els.clearTocSearch.classList.toggle('hidden', !query);
@@ -6749,62 +6894,61 @@ function renderToc() {
     if (isCollapsed) collapsed.add(node.dataset.tocNode);
     else collapsed.delete(node.dataset.tocNode);
     writeCollapsedToc(localStorage, state.currentFile?.path, collapsed);
+    scheduleActiveTocRefresh();
   }));
   els.toc.querySelectorAll('a').forEach(link => link.addEventListener('click', event => {
     event.preventDefault();
     if (!(state.editing ? scrollEditorToHeading(link.dataset.target) : scrollReaderToHeading(link.dataset.target))) return;
-    els.toc.querySelectorAll('a').forEach(item => item.classList.toggle('active', item === link));
+    setActiveTocLink(link);
     if (isCompactTocLayout()) setCompactTocOpen(false);
   }));
   scheduleActiveTocRefresh();
 }
 
 function updateActiveToc() {
+  if (!state.currentFile) return;
   if (state.editing && !state.compactTocOpen) return;
-  const headings = state.editing ? currentEditorHeadings() : [...els.content.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+  const headings = state.editing ? currentEditorHeadings() : trackedTocHeadings;
   const reader = $('.reader-pane');
   const max = reader.scrollHeight - reader.clientHeight;
+  const scrollTop = reader.scrollTop;
+  const readerHeight = reader.clientHeight;
   const readerTop = reader.getBoundingClientRect().top;
-  let active = headings[0];
   const editorLine = state.editing && codeEditor ? captureEditorPosition(codeEditor).line : null;
-  for (const heading of headings) {
-    if (editorLine ? codeEditor.state.doc.lineAt(heading.from).number <= editorLine : heading.getBoundingClientRect().top <= readerTop + 42) active = heading;
-  }
-  if (!state.editing && max > 0 && reader.scrollTop >= max - 2) active = headings.at(-1);
-  let activeLink = null;
-  els.toc.querySelectorAll('.toc-node').forEach(node => node.classList.remove('contains-active'));
-  els.toc.querySelectorAll('a').forEach(a => {
-    const isActive = active && a.dataset.target === active.id;
-    a.classList.toggle('active', isActive);
-    if (isActive) activeLink = a;
-  });
-  let activeNode = activeLink?.closest('.toc-node');
-  while (activeNode) {
-    activeNode.classList.add('contains-active');
-    activeNode = activeNode.parentElement?.closest('.toc-node');
-  }
-  if (activeLink && !activeLink.closest('.toc-children.hidden')) {
+  const atBottom = !state.editing && max > 0 && scrollTop >= max - 2;
+  const index = atBottom ? headings.length - 1 : activeHeadingIndex(headings, heading => editorLine
+    ? codeEditor.state.doc.lineAt(heading.from).number <= editorLine
+    : heading.getBoundingClientRect().top <= readerTop + 42);
+  const activeLink = trackedTocLinks.get(headings[index]?.id) || null;
+  const tocScroller = state.editing ? els.toc : els.tocPanel;
+  let scrollDelta = 0;
+  // Read before writing classes. Within the same chapter there is no need to
+  // touch every directory entry, force another layout, or undo manual TOC scroll.
+  if (activeLink && (activeLink !== trackedActiveTocLink || activeTocNeedsReveal)
+      && !activeLink.closest('.toc-children.hidden') && !els.tocPanel.inert) {
     const linkRect = activeLink.getBoundingClientRect();
-    const tocScroller = state.editing ? els.toc : els.tocPanel;
     const panelRect = tocScroller.getBoundingClientRect();
     const viewportTop = panelRect.top + tocScroller.clientTop;
     const viewportBottom = viewportTop + tocScroller.clientHeight;
-    const scrollDelta = scrollDeltaForBounds({
+    scrollDelta = scrollDeltaForBounds({
       itemTop: linkRect.top,
       itemBottom: linkRect.bottom,
       viewportTop,
       viewportBottom,
     });
-    if (scrollDelta) tocScroller.scrollTop += scrollDelta;
   }
-  const progress = max > 0 ? (reader.scrollTop / max) * 100 : 100;
+  activeTocNeedsReveal = false;
+  setActiveTocLink(activeLink);
+  if (scrollDelta) tocScroller.scrollTop += scrollDelta;
+  const progress = max > 0 ? (scrollTop / max) * 100 : 100;
   els.progressBar.style.width = `${progress}%`;
-  els.backToTop.classList.toggle('visible', !state.editing && reader.scrollTop > Math.min(460, reader.clientHeight * .55));
+  els.backToTop.classList.toggle('visible', !state.editing && scrollTop > Math.min(460, readerHeight * .55));
 }
 
 let activeTocRefreshFrame;
-function scheduleActiveTocRefresh() {
-  cancelAnimationFrame(activeTocRefreshFrame);
+function scheduleActiveTocRefresh(event) {
+  if (event?.type !== 'scroll') activeTocNeedsReveal = true;
+  if (activeTocRefreshFrame !== undefined) return;
   activeTocRefreshFrame = requestAnimationFrame(() => {
     activeTocRefreshFrame = undefined;
     updateActiveToc();
@@ -6820,6 +6964,7 @@ function setDirty(dirty) {
   state.dirty = Boolean(dirty) || Boolean(state.documentConflict);
   window.quilliteMarkdown.setDirty(state.dirty);
   els.editorSaveState.textContent = t(state.dirty ? 'unsaved' : 'saved');
+  els.editorSaveState.title = '';
   if (state.documentConflict) els.editorSaveState.textContent = t('conflictPaused');
   els.editorSaveState.classList.toggle('dirty', state.dirty);
   updateWindowTitle();
@@ -6879,12 +7024,45 @@ function cancelScheduledRecoverySnapshot() {
   scheduleRecoverySnapshot.timer = 0;
 }
 
+let recoveryWriteQueue = Promise.resolve();
+function serializeRecoveryWrite(operation) {
+  const result = recoveryWriteQueue.then(operation, operation);
+  recoveryWriteQueue = result.catch(() => undefined);
+  return result;
+}
+
+function recoverySnapshotCurrent(snapshot, session) {
+  return session === state.documentSession && state.currentFile
+    && sameDocumentPath(snapshot.path, state.currentFile.path)
+    && snapshot.content === (state.editing ? editorContent() : state.currentFile.content)
+    && (snapshot.baseRevision || '') === (state.currentFile.revision || '')
+    && (snapshot.bundleSessionId || '') === (state.currentFile.bundleSessionId || '')
+    && Boolean(snapshot.conflict) === Boolean(state.documentConflict);
+}
+
+function persistCurrentRecoverySnapshot(snapshot, session) {
+  return serializeRecoveryWrite(async () => {
+    if (!recoverySnapshotCurrent(snapshot, session)) return false;
+    await window.quilliteMarkdown.saveRecoverySnapshot(snapshot);
+    return true;
+  });
+}
+
+async function flushBundleRecoverySnapshot(snapshot, session) {
+  cancelScheduledRecoverySnapshot();
+  const stored = await persistCurrentRecoverySnapshot(snapshot, session);
+  return Boolean(stored && recoverySnapshotCurrent(snapshot, session));
+}
+
 async function clearRecoverySnapshot() {
   cancelScheduledRecoverySnapshot();
   lastRecoveryContent = '';
   lastRecoveryContext = '';
   try {
-    await window.quilliteMarkdown.clearRecoverySnapshot();
+    await serializeRecoveryWrite(async () => {
+      await window.quilliteMarkdown.clearRecoverySnapshot();
+      lastRecoveryContent = ''; lastRecoveryContext = '';
+    });
   } catch (error) {
     reportSilentError(error, 'document.recovery-clear');
   }
@@ -6904,7 +7082,7 @@ function scheduleRecoverySnapshot(performance = documentPerformanceProfile(codeE
       await clearRecoverySnapshot();
       return;
     }
-    const recoveryContext = JSON.stringify([requestedPath, state.currentFile.revision || '', Boolean(state.documentConflict)]);
+    const recoveryContext = JSON.stringify([requestedPath, state.currentFile.revision || '', Boolean(state.documentConflict), state.currentFile.bundleSessionId || '']);
     if (content === lastRecoveryContent && recoveryContext === lastRecoveryContext) return;
     const snapshot = {
       path: state.currentFile.path,
@@ -6912,11 +7090,17 @@ function scheduleRecoverySnapshot(performance = documentPerformanceProfile(codeE
       directory: state.currentFile.directory,
       baseRevision: state.currentFile.revision || '',
       conflict: Boolean(state.documentConflict),
+      bundleKind: state.currentFile.bundleKind || '',
+      bundleSessionId: state.currentFile.bundleSessionId || '',
       content
     };
     try {
-      await window.quilliteMarkdown.saveRecoverySnapshot(snapshot);
+      const stored = await persistCurrentRecoverySnapshot(snapshot, requestedSession);
       if (requestedSession !== state.documentSession || !sameDocumentPath(requestedPath, state.currentFile?.path)) return;
+      if (!stored) { if (state.dirty) scheduleRecoverySnapshot(); return; }
+      // A save receipt may have changed the baseline while this older recovery
+      // write was in flight. It must not clear a newer/bundle-warning backup.
+      if (!recoverySnapshotCurrent(snapshot, requestedSession)) { if (state.dirty) scheduleRecoverySnapshot(); return; }
       lastRecoveryContent = content;
       lastRecoveryContext = recoveryContext;
       if (!state.dirty) await clearRecoverySnapshot();
@@ -7104,6 +7288,74 @@ function* prepareMarkdownPresentation(container, doc, content) {
   return {tableLayouts, deferred, prepared, sourceMap, renderedMath, html, cacheKey};
 }
 
+function importedImagePresentation(html) {
+  // A template is inert: remove network-bearing image attributes before any
+  // nodes enter the live document, not after a request has already started.
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  // CSS has escapes, @import and image-set() forms. Do not attempt to detect
+  // network CSS with a URL regex; the original source/styles remain unchanged.
+  template.content.querySelectorAll('style, link').forEach(element => element.remove());
+  // Diagram engines can fetch images while constructing their SVG/canvas.
+  // Keep source visible without handing it to an engine until consent, rather
+  // than attempting an incomplete filter of Mermaid/ECharts resource options.
+  template.content.querySelectorAll('.mermaid-diagram, .echarts-diagram').forEach(element => {
+    const pre = document.createElement('pre'), code = document.createElement('code');
+    let source = element.dataset.mermaidSource || element.dataset.echartsSource || '';
+    try { source = decodeURIComponent(source); } catch { /* retain malformed source as text */ }
+    pre.className = 'imported-diagram-source'; code.textContent = source; pre.append(code); element.replaceWith(pre);
+  });
+  const remote = value => /^(?:https?:|\/\/)/i.test(String(value || '').replace(/[\x00-\x20]/g, '').replaceAll('\\', '/'));
+  const safeStyleNames = ['width', 'height', 'min-width', 'min-height', 'max-width', 'max-height', 'display', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'gap', 'flex', 'flex-wrap', 'flex-direction', 'align-items', 'justify-content', 'text-align', 'color', 'background-color', 'font-size', 'font-weight', 'line-height', 'white-space', 'object-fit'];
+  for (const element of template.content.querySelectorAll('*')) {
+    for (const name of ['src', 'srcset', 'poster', 'background']) {
+      const value = element.getAttribute(name);
+      if (value && (name === 'srcset' || remote(value))) {
+        element.removeAttribute(name);
+        if (element.tagName === 'IMG') {
+          element.dataset.remoteImageBlocked = 'true';
+          element.classList.add('remote-image-blocked');
+          element.title = t('textBundleRemoteBlocked');
+        }
+      }
+    }
+    if (element.localName !== 'a') for (const name of ['href', 'xlink:href']) {
+      const value = element.getAttribute(name);
+      if (value && !value.trim().startsWith('#')) element.removeAttribute(name);
+    }
+    if (element.namespaceURI === 'http://www.w3.org/2000/svg') for (const name of ['fill', 'stroke', 'filter', 'clip-path', 'mask', 'cursor', 'marker', 'marker-start', 'marker-mid', 'marker-end']) {
+      const value = element.getAttribute(name);
+      if (value && !/^(?:none|currentColor|[a-z]+|#[0-9a-f]{3,8}|url\(#[\w-]+\))$/i.test(value.trim())) element.removeAttribute(name);
+    }
+    // Retain only presentation properties whose value grammar cannot load a
+    // resource. CSSStyleDeclaration parses each value; never copy CSS text or
+    // resource-bearing shorthands such as background, mask, filter or content.
+    if (element.hasAttribute('style')) {
+      const safeStyles = safeStyleNames.map(name => [name, element.style?.getPropertyValue(name)]).filter(([, value]) => value);
+      element.removeAttribute('style');
+      for (const [name, value] of safeStyles) element.style.setProperty(name, value);
+    }
+  }
+  return template.content;
+}
+
+function loadImportedNetworkImages(options = {}) {
+  if (!state.blockImportedRemoteImages || !state.currentFile) return;
+  if (!options.confirmed && !window.confirm(t('textBundleNetworkNotice'))) return;
+  state.blockImportedRemoteImages = false;
+  renderCurrentDocument();
+  if (codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
+  if (state.editing) renderEditorPreview();
+  $('#textBundleResultLoadRemote').classList.add('hidden');
+}
+
+function allowImportedResourcesForRendering() {
+  if (!state.blockImportedRemoteImages) return true;
+  if (!window.confirm(t('textBundleRenderConsent'))) return false;
+  loadImportedNetworkImages({confirmed: true});
+  return true;
+}
+
 function renderMarkdownTo(container, doc, content, presentation = null) {
   cancelReaderWork(container);
   cancelPreviewImages(container);
@@ -7134,7 +7386,8 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
   // otherwise repeated editing of a chart-heavy document gradually retains
   // detached observers and makes typing/scrolling feel sluggish.
   releaseEChartsDiagrams(container);
-  container.innerHTML = html;
+  if (state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path)) container.replaceChildren(importedImagePresentation(html));
+  else container.innerHTML = html;
   normalizeImageRows(container);
   sourceMap?.apply(container);
   const documentHeadings = collectDocumentHeadings(container);
@@ -7162,6 +7415,12 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
     element.style.color = value;
   });
   loadPreviewImages(container, { directory: doc.directory, readImageData: window.quilliteMarkdown.readImageData });
+  if (state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path) && (container === els.content || container === els.editorPreview)) {
+    const notice = document.createElement('div'); notice.className = 'imported-network-notice';
+    const label = document.createElement('span'); label.textContent = t('textBundleRemoteBlocked');
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = t('textBundleLoadRemote'); button.addEventListener('click', loadImportedNetworkImages);
+    notice.append(label, button); container.prepend(notice);
+  }
   bindDocumentActions(container);
   if (container === els.editorPreview && state.editing && codeEditor?.state.doc.toString() === content) {
     const elements = renderedMath.formulas.map(item => {
@@ -7213,7 +7472,7 @@ function renderCurrentDocument(presentation = null) {
   const doc = state.currentFile;
   if (!doc) return;
   // Identity must follow the opened document even if rendering fails.
-  els.breadcrumb.innerHTML = `<span>${escapeHtml(doc.directory)}</span><i>›</i><strong>${escapeHtml(doc.name)}</strong>`;
+  els.breadcrumb.innerHTML = `<span>${escapeHtml(doc.packageDirectory || doc.directory)}</span><i>›</i><strong>${escapeHtml(doc.name)}</strong>`;
   try {
     renderMarkdownTo(els.content, doc, doc.content, presentation);
     const words = documentWordCount(doc.content);
@@ -7310,6 +7569,7 @@ function displayDocument(doc, { addToLibrary = true, presentation = null } = {})
   resetAIDocumentReviewSession();
   if (!sameDocumentPath(state.currentFile?.path, doc.path)) state.spellcheckIgnoredWords = new Set();
   state.currentFile = doc;
+  state.blockImportedRemoteImages = Boolean(doc.blockRemoteImages || doc.bundleKind);
   state.currentDocumentHasDiagrams = documentHasDiagrams(doc.content);
   missingCurrentFilePath = '';
   state.savedContent = doc.content;
@@ -7381,6 +7641,7 @@ function closePreview() {
   els.content.replaceChildren();
   els.breadcrumb.replaceChildren();
   els.toc.replaceChildren();
+  resetTocTracking();
   els.readingTime.textContent = '';
   els.progressBar.style.width = '0%';
   els.documentView.classList.add('hidden');
@@ -7497,17 +7758,25 @@ async function saveLibraryDocumentAs(filePath, { editAfterSave = false } = {}) {
     const source = await window.quilliteMarkdown.readFile(filePath);
     if (requestedSession !== state.documentSession) return false;
     if (!source?.path) return;
-    const saved = await window.quilliteMarkdown.saveAs(source.path, source.content);
+    const format = await chooseSaveDocumentFormat(source);
+    if (!format || requestedSession !== state.documentSession || previousContent !== state.currentFile?.content) return false;
+    const saved = await window.quilliteMarkdown.saveDocumentAsFormat(source.path, source.content, source.bundleSessionId || '', format);
     if (!saved?.path) return;
-    if (requestedSession !== state.documentSession || previousContent !== state.currentFile?.content) return false;
+    if (requestedSession !== state.documentSession || previousContent !== state.currentFile?.content) {
+      showToast(t('documentCopyRetained', {path: saved.path}), 'warning', 10000);
+      return false;
+    }
     displayDocument(saved);
     const savedSession = state.documentSession;
     await refreshLibraryAfterReplacement(saved);
     if (savedSession !== state.documentSession) return false;
-    showToast(t('saveAsDone'), 'success');
+    if (saved.exportWarnings?.length) showTextBundleResult(saved.path, textBundleWarnings({warnings: saved.exportWarnings}), 'saveAsDone');
+    else showToast(t('saveAsDone'), 'success');
     if (editAfterSave) await toggleEditor(true);
     return true;
   } catch (error) {
+    const formatFailure = documentFormatError(error);
+    if (formatFailure) { showToast(formatFailure, 'warning', 12000); return false; }
     reportSilentError(error, 'document.save-as');
     console.error(error);
     if (requestedSession !== state.documentSession) return false;
@@ -7531,12 +7800,13 @@ async function refreshCurrentFileFromDisk() {
     }
     const refreshed = await window.quilliteMarkdown.readFile(requestedPath);
     if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath) || state.dirty || state.saving) return;
-    if (!refreshed?.path || refreshed.content === state.currentFile.content) return;
+    if (!refreshed?.path || (refreshed.content === state.currentFile.content && (!refreshed.bundleKind || refreshed.revision === state.currentFile.revision))) return;
     missingCurrentFilePath = '';
 
     const reader = $('.reader-pane');
     const scrollTop = reader.scrollTop;
     state.currentFile = refreshed;
+    if (refreshed.bundleKind) state.blockImportedRemoteImages = true;
     state.savedContent = refreshed.content;
     els.editorFileName.textContent = refreshed.name;
     if (state.editing) {
@@ -7572,28 +7842,40 @@ function updateEditorPosition() {
   els.editorPosition.textContent = t('editorPosition', { line: line.number, column: cursor - line.from + 1 });
 }
 
-// Keep the cursor's rendered content visible without pinning every move to top.
+// 根据编辑器光标行号，把左侧预览滚动到对应的块元素（编辑/预览滚动同步）。
+// 只取“最后一个起始行 <= 光标行的块”，光标在同一行内移动时不重复滚动；
+// force 用于预览重新渲染后强制校正一次。
+let previewCursorFrame = 0;
 function scrollPreviewToCursor(force = false, behavior = 'auto') {
   if (!codeEditor || !state.editing || state.editorLayout === 'editor-only') return;
-  if (editorHasComposition(codeEditor)) return;
-  const scroller = $('.editor-preview-scroll');
-  const preview = els.editorPreview;
-  if (!scroller || !preview?.children.length) return;
-  const cursor = codeEditor.state.selection.main.head;
-  const sourceLine = codeEditor.state.doc.lineAt(cursor);
-  const cursorLine = editorEntryPosition?.line || sourceLine.number;
-  const target = previewLineTarget(preview, cursorLine);
-  if (!target) return;
-  const rect = editorEntryPosition ? target.getBoundingClientRect() : previewCursorRect(preview, cursorLine, cursor - sourceLine.from);
-  if (!rect) return;
-  const scrollerRect = scroller.getBoundingClientRect();
-  if (!editorEntryPosition && rect.top >= scrollerRect.top + 12 && rect.bottom <= scrollerRect.bottom - 12) return;
-  const offset = editorEntryPosition
-    ? Number.isFinite(editorEntryPosition.fraction) ? -editorEntryPosition.fraction * rect.height : editorEntryPosition.offset
-    : 12;
-  const top = Math.max(0, scroller.scrollTop + rect.top - scrollerRect.top - offset);
-  if (Math.abs(top - scroller.scrollTop) < 1) return;
-  scroller.scrollTo({ top, behavior });
+  cancelAnimationFrame(previewCursorFrame);
+  const session = state.documentSession;
+  // CodeMirror must finish its layout/scroll transaction before measuring.
+  previewCursorFrame = requestAnimationFrame(() => {
+    previewCursorFrame = 0;
+    if (session !== state.documentSession || !codeEditor || !state.editing || state.editorLayout === 'editor-only') return;
+    if (editorHasComposition(codeEditor) || state.previewScrollPausedSession === session) return;
+    const scroller = $('.editor-preview-scroll'), preview = els.editorPreview;
+    if (!scroller || !preview?.children.length) return;
+    const cursor = codeEditor.state.selection.main.head;
+    const sourceLine = codeEditor.state.doc.lineAt(cursor);
+    const cursorLine = editorEntryPosition?.line || sourceLine.number;
+    const target = previewLineTarget(preview, cursorLine);
+    if (!target) return;
+    const rect = editorEntryPosition ? target.getBoundingClientRect() : previewCursorRect(preview, cursorLine, cursor - sourceLine.from);
+    if (!rect) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    let top;
+    if (editorEntryPosition) {
+      const offset = Number.isFinite(editorEntryPosition.fraction) ? -editorEntryPosition.fraction * rect.height : editorEntryPosition.offset;
+      top = Math.max(0, scroller.scrollTop + rect.top - scrollerRect.top - offset);
+    } else {
+      top = alignedPreviewScroll({caret: codeEditor.coordsAtPos(cursor), editor: codeEditor.scrollDOM.getBoundingClientRect(),
+        target: rect, preview: scrollerRect, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight});
+    }
+    if (top === null || Math.abs(top - scroller.scrollTop) < 3) return;
+    scroller.scrollTo({top, behavior});
+  });
 }
 
 function previewBlockAtPointer(event) {
@@ -7785,16 +8067,20 @@ function authoringError(error) {
 function syncDocumentIdentity() {
   const doc = state.currentFile, location = $('#editorDocumentLocation');
   if (location) {
-    location.textContent = doc ? `${t(doc.draft ? 'draftLocation' : 'documentLocation')} · ${doc.directory}` : '';
+    location.textContent = doc ? `${t(doc.bundleKind ? 'editableBundleLocation' : (doc.draft ? 'draftLocation' : 'documentLocation'))} · ${doc.packageDirectory || doc.directory}` : '';
     location.title = doc?.path || '';
   }
   const rename = $('#renameDocumentButton');
-  if (rename) rename.disabled = !doc || doc.readOnly || state.saving;
+  if (rename) {
+    rename.disabled = !doc || doc.readOnly || state.saving || Boolean(doc.bundleKind);
+    rename.title = t(doc?.bundleKind ? 'bundleRenameUnsupported' : 'renameDocument');
+  }
 }
 
 let renameSession = null;
 function openRenameDocument() {
   if (!state.currentFile || state.currentFile.readOnly || state.saving || state.documentConflict) return;
+  if (state.currentFile.bundleKind) { showToast(t('bundleRenameUnsupported'), 'info'); return; }
   renameSession = { session: state.documentSession, path: state.currentFile.path, revision: state.currentFile.revision };
   $('#renameDocumentName').value = state.currentFile.name;
   $('#renameDocumentStatus').textContent = '';
@@ -7926,10 +8212,25 @@ function applyConflictContent(content) {
   if (!state.editing) renderCurrentDocument();
 }
 
+function adoptBundleIdentity(doc) {
+  const content = state.editing ? editorContent() : state.currentFile.content;
+  state.currentFile = { ...doc, content };
+  state.blockImportedRemoteImages = true;
+  if (codeEditor && typeof updateImagePreviewDirectory !== 'undefined' && updateImagePreviewDirectory) {
+    codeEditor.dispatch({ effects: updateImagePreviewDirectory.of(doc.directory || '') });
+  }
+  if (codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
+  syncDocumentIdentity();
+}
+
 function useConflictDisk() {
   const conflict = currentDocumentConflict();
   if (!conflict?.disk || !window.confirm(t('conflictConfirmDisk'))) return;
   const disk = conflict.disk;
+  if (state.currentFile.bundleKind) {
+    if (!disk.bundleKind || !disk.bundleSessionId) { showToast(t('bundleMergeFailed'), 'warning'); return; }
+    adoptBundleIdentity(disk);
+  }
   resetDocumentConflict();
   state.currentFile.revision = disk.revision;
   state.savedContent = disk.content;
@@ -7958,7 +8259,7 @@ function startConflictMerge() {
   $('#documentConflictMerge').focus();
 }
 
-function applyConflictMerge() {
+async function applyConflictMerge() {
   const conflict = currentDocumentConflict();
   if (!conflict?.disk) return;
   if (conflict.draftSource !== conflict.editorSnapshot || conflict.draftRevision !== conflict.disk.revision) {
@@ -7966,6 +8267,34 @@ function applyConflictMerge() {
     return;
   }
   const content = $('#documentConflictMerge').value;
+  if (state.currentFile.bundleKind) {
+    if (conflict.rebasing || !conflict.disk.bundleSessionId) return;
+    const session = state.documentSession, oldSessionId = state.currentFile.bundleSessionId;
+    const disk = conflict.disk, beforeContent = state.editing ? editorContent() : state.currentFile.content;
+    conflict.rebasing = true;
+    $('#conflictApply').disabled = true;
+    $('#documentConflictStatus').textContent = t('bundleMergeBusy');
+    try {
+      const rebased = await window.quilliteMarkdown.rebaseBundleDocument(oldSessionId, disk.bundleSessionId, disk.revision);
+      if (state.documentConflict !== conflict || state.documentSession !== session || conflict.disk !== disk
+          || state.currentFile?.bundleSessionId !== oldSessionId
+          || (state.editing ? editorContent() : state.currentFile.content) !== beforeContent
+          || $('#documentConflictMerge').value !== content) {
+        showToast(t('conflictChangedAgain'), 'warning'); return;
+      }
+      if (!rebased?.bundleSessionId || !sameDocumentPath(rebased.path, state.currentFile.path) || rebased.revision !== disk.revision) throw new Error('BUNDLE_REBASE_INVALID');
+      adoptBundleIdentity(rebased);
+    } catch {
+      if (state.documentSession === session && state.documentConflict === conflict) {
+        $('#documentConflictStatus').textContent = t('bundleMergeFailed');
+        showToast(t('bundleMergeFailed'), 'warning', 8000);
+      }
+      return;
+    } finally {
+      conflict.rebasing = false;
+      $('#conflictApply').disabled = false;
+    }
+  }
   conflict.mergedRevision = conflict.disk.revision;
   conflict.draft = null;
   applyConflictContent(content);
@@ -7984,8 +8313,62 @@ async function saveConflictMerge() {
   await saveDocument(false, { conflictRevision: conflict.mergedRevision });
 }
 
+function documentFormatError(error) {
+  const message = String(error?.message || error);
+  if (message.includes('DOCUMENT_COPY_RECEIPT_MISMATCH')) return t('documentCopyResultUnknown', {path: String(error.copyResultPath || '').slice(0, 4096)});
+  const partial = /TEXTPACK_COPY_FAILED:\s*([\s\S]+)/.exec(message);
+  if (partial) return t('documentPartialCopy', {details: partial[1].slice(0, 4096)});
+  const saved = /BUNDLE_COPY_SAVED:\s*([\s\S]+)/.exec(message);
+  if (saved) return t('documentCopyOpenFailed', {details: saved[1].slice(0, 4096)});
+  if (message.includes('DOCUMENT_FORMAT_EXTENSION')) return t('documentFormatExtension');
+  if (message.includes('TEXTPACK_CONVERSION_INCOMPLETE')) return t('documentConversionIncomplete');
+  if (message.includes('TEXTPACK_EXISTS')) return t('copyExists');
+  return '';
+}
+
+let pendingDocumentSaveFormat = null;
+
+function chooseSaveDocumentFormat(doc) {
+  if (pendingDocumentSaveFormat) return Promise.resolve(null);
+  const plainText = !doc.bundleKind && isPlainTextFile(doc.path);
+  const format = doc.bundleKind || (plainText ? 'text' : 'markdown');
+  const dialog = $('#documentSaveFormatDialog');
+  $('#documentSaveFormats').classList.toggle('has-text-format', plainText);
+  $('#documentSaveFormats').querySelectorAll('[data-save-format]').forEach(button => {
+    // Text is a verbatim-copy option for an existing TXT document, not an
+    // implicit lossy package-to-text conversion that could discard assets.
+    button.classList.toggle('hidden', button.dataset.saveFormat === 'text' && !plainText);
+    const active = button.dataset.saveFormat === format;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+  return new Promise(resolve => {
+    pendingDocumentSaveFormat = {resolve, format, returnFocus: state.editing ? $('#saveAsButton') : els.saveButton};
+    dialog.showModal();
+    $('#documentSaveFormats [aria-checked="true"]').focus();
+  });
+}
+
+function closeDocumentSaveFormat(format = null) {
+  const pending = pendingDocumentSaveFormat;
+  if (!pending) return;
+  pendingDocumentSaveFormat = null;
+  $('#documentSaveFormatDialog').close();
+  pending.resolve(format);
+  if (!format) requestAnimationFrame(() => {
+    const target = pending.returnFocus;
+    if (target && !target.disabled && target.getClientRects().length) target.focus();
+    else $('#openFileButton').focus();
+  });
+}
+
 async function saveDocument(saveAs = false, options = {}) {
   if (!state.currentFile || state.saving) return;
+  if (!saveAs && state.currentFile.bundleKind && String(state.currentFile.warning || '').includes('BUNDLE_SESSION_PERSIST_WARNING')) {
+    if (!options.auto) showToast(t('bundleSessionPersistWarning'), 'warning', 10000);
+    return;
+  }
   if (state.documentConflict && !saveAs && !options.conflictRevision) {
     if (!options.auto) await openDocumentConflict();
     return;
@@ -7995,21 +8378,44 @@ async function saveDocument(saveAs = false, options = {}) {
     return;
   }
   if (state.saveAsRequired && options.auto) return;
-  if (state.saveAsRequired && !options.auto && !options.conflictRevision) saveAs = true;
+  if (state.saveAsRequired && !options.auto && !options.conflictRevision && !state.currentFile.bundleKind) saveAs = true;
   // NewFile already creates a real file. Draft identity must not turn Save into Save As.
   const editingContent = state.editing ? editorContent() : state.currentFile.content;
   const originalPath = state.currentFile.path;
   const originalDirectory = state.currentFile.directory;
+  const originalBundleSessionId = state.currentFile.bundleSessionId;
   const requestedSession = state.documentSession;
   const isCurrentSession = () => requestedSession === state.documentSession && Boolean(state.currentFile);
   let fallbackToSaveAs = false;
   state.saving = true;
   try {
+    if (saveAs) {
+      const format = await chooseSaveDocumentFormat(state.currentFile);
+      if (!format || !isCurrentSession() || (state.editing ? editorContent() : state.currentFile.content) !== editingContent) return;
+      options = {...options, format};
+    }
+    if (state.currentFile.bundleKind) {
+      const snapshot = { path: originalPath, name: state.currentFile.name, directory: originalDirectory,
+        content: editingContent, baseRevision: state.currentFile.revision || '', conflict: Boolean(state.documentConflict),
+        bundleKind: state.currentFile.bundleKind, bundleSessionId: originalBundleSessionId };
+      const flushed = await flushBundleRecoverySnapshot(snapshot, requestedSession);
+      if (!isCurrentSession()) return;
+      if (!flushed || (state.editing ? editorContent() : state.currentFile.content) !== editingContent
+          || state.currentFile.bundleSessionId !== originalBundleSessionId) {
+        scheduleRecoverySnapshot();
+        return;
+      }
+    }
     const saved = saveAs
-      ? await (state.documentConflict ? window.quilliteMarkdown.saveConflictCopy(originalPath, editingContent) : window.quilliteMarkdown.saveAs(originalPath, editingContent))
-      : await window.quilliteMarkdown.saveFile(originalPath, editingContent, options.conflictRevision || state.currentFile.revision);
+      ? await window.quilliteMarkdown.saveDocumentAsFormat(originalPath, editingContent, originalBundleSessionId || '', options.format)
+      : state.currentFile.bundleKind
+        ? await window.quilliteMarkdown.saveBundleDocument(originalPath, editingContent, options.conflictRevision || state.currentFile.revision, originalBundleSessionId)
+        : await window.quilliteMarkdown.saveFile(originalPath, editingContent, options.conflictRevision || state.currentFile.revision);
     if (!saved) return;
-    if (!isCurrentSession()) return;
+    if (!isCurrentSession()) {
+      if (saveAs) showToast(t('documentCopyRetained', {path: saved.path}), 'warning', 10000);
+      return;
+    }
     // Fail closed if a backend ever returns a reread/external buffer instead
     // of the save receipt. Do not adopt its revision or clear our backup.
     if ((saved.sourceContent ?? saved.content) !== editingContent) throw new Error('DOCUMENT_CONFLICT: save receipt content mismatch');
@@ -8021,8 +8427,9 @@ async function saveDocument(saveAs = false, options = {}) {
     const currentContent = rebased;
     if (state.documentConflict) resetDocumentConflict();
     const unchangedSinceSave = beforeRebase === editingContent;
+    const bundleSessionWarning = Boolean(saved.bundleKind && String(saved.warning || '').includes('BUNDLE_SESSION_PERSIST_WARNING'));
     state.currentFile = saved;
-    state.saveAsRequired = false;
+    state.saveAsRequired = bundleSessionWarning;
     state.saveWarningShown = false;
     state.currentFile.content = currentContent;
     state.savedContent = committedContent;
@@ -8031,7 +8438,7 @@ async function saveDocument(saveAs = false, options = {}) {
       codeEditor.dispatch({ effects: updateImagePreviewDirectory.of(saved.directory || '') });
     }
     // Rebind nested media callbacks and future image sessions to the saved path.
-    if (saved.path !== originalPath && codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
+    if ((saved.path !== originalPath || saved.bundleSessionId !== originalBundleSessionId) && codeEditor && editorPresentation) codeEditor.dispatch({ effects: editorPresentation.reconfigure(editorPresentationExtensions()) });
     if (typeof documentHasDiagrams === 'function') state.currentDocumentHasDiagrams = documentHasDiagrams(currentContent);
     syncDocumentAccessControls();
     addRecentDocument(saved);
@@ -8042,7 +8449,9 @@ async function saveDocument(saveAs = false, options = {}) {
     if (state.sidebarMode === 'recent') state.files = [...state.recentFiles];
     renderFileList();
     setDirty(!unchangedSinceSave);
-    if (unchangedSinceSave) {
+    if (bundleSessionWarning) {
+      if (!unchangedSinceSave && typeof scheduleRecoverySnapshot === 'function') scheduleRecoverySnapshot();
+    } else if (unchangedSinceSave) {
       if (typeof clearRecoverySnapshot === 'function') await clearRecoverySnapshot();
       if (typeof lastRecoveryContent !== 'undefined') lastRecoveryContent = '';
     } else if (typeof scheduleRecoverySnapshot === 'function') {
@@ -8053,17 +8462,42 @@ async function saveDocument(saveAs = false, options = {}) {
     if (!isCurrentSession()) return;
     if (pathIsInsideRoot(saved.path)) await refreshExplorer();
     if (!isCurrentSession()) return;
+    if (bundleSessionWarning) {
+      clearTimeout(saveDocument.statusTimer);
+      els.editorSaveState.textContent = t('bundleSessionPersistState');
+      els.editorSaveState.title = t('bundleSessionPersistWarning');
+      showToast(t('bundleSessionPersistWarning'), 'warning', 10000);
+      return saved;
+    }
     if (options.auto && !state.dirty) {
       els.editorSaveState.textContent = t('autoSaved');
       clearTimeout(saveDocument.statusTimer);
       saveDocument.statusTimer = setTimeout(() => { if (isCurrentSession() && !state.dirty) els.editorSaveState.textContent = t('saved'); }, 1800);
+    } else if (saveAs && saved.exportWarnings?.length) {
+      showTextBundleResult(saved.path, textBundleWarnings({warnings: saved.exportWarnings}), 'saveAsDone');
     } else if (!options.silent) {
       showToast(t(saved.warning ? 'saveRecordsWarning' : (saveAs ? 'saveAsDone' : 'saveDone')), saved.warning ? 'warning' : 'success');
     }
     return saved;
   } catch (error) {
+    if (error?.copyPath) {
+      showToast(t('documentCopyRetained', {path: error.copyPath}), 'warning', 10000);
+      return;
+    }
+    const formatFailure = saveAs ? documentFormatError(error) : '';
+    if (formatFailure) { showToast(formatFailure, 'warning', 12000); return; }
     reportSilentError(error, 'document.save');
     if (!isCurrentSession()) return;
+    if (state.currentFile.bundleKind && String(error).includes('BUNDLE_PARTIAL_SAVE')) {
+      state.saveAsRequired = true;
+      state.documentConflict = { session: requestedSession, disk: null, mergedRevision: '', draft: state.documentConflict?.draft ?? null };
+      setDirty(true);
+      els.editorSaveState.textContent = t('bundlePartialSaveState');
+      els.editorSaveState.title = t('bundlePartialSave');
+      if (typeof scheduleRecoverySnapshot === 'function') scheduleRecoverySnapshot();
+      showToast(t('bundlePartialSave'), 'warning', 12000);
+      return;
+    }
     if (String(error).includes('DOCUMENT_CONFLICT')) {
       state.saveAsRequired = true;
       state.documentConflict = { session: requestedSession, disk: null, mergedRevision: '', draft: null };
@@ -8089,6 +8523,22 @@ async function saveDocument(saveAs = false, options = {}) {
     }
     if (/DOCUMENT_COPY_EXISTS|PORTABLE_|DOCUMENT_COPY_EDITOR_CHANGED/.test(String(error))) {
       if (!options.auto) showToast(authoringError(error), 'warning', 7200);
+      return;
+    }
+    if (saveAs) {
+      showToast(t('saveFailed'), 'warning');
+      return;
+    }
+    if (state.currentFile.bundleKind) {
+      // Never fall through to the ordinary Markdown Save As path: that would
+      // silently discard third-party metadata and staged package attachments.
+      state.saveAsRequired = true;
+      setDirty(true);
+      els.editorSaveState.textContent = t('bundleSaveFailedState');
+      els.editorSaveState.title = t('bundleSaveFailed');
+      if (typeof scheduleRecoverySnapshot === 'function') scheduleRecoverySnapshot();
+      if (!options.auto || !state.saveWarningShown) showToast(t('bundleSaveFailed'), 'warning', 8000);
+      state.saveWarningShown = true;
       return;
     }
     if (!saveAs) {
@@ -8204,6 +8654,8 @@ async function cleanRenderedHTMLForExport(container) {
     errorHint: t('dataChartRenderHint')
   });
   const clone = container.cloneNode(true);
+  clone.querySelectorAll('.imported-network-notice').forEach(element => element.remove());
+  clone.querySelectorAll('.diagram-view-button').forEach(button => button.remove());
   await convertMermaidDiagramsToImages(clone, t('mermaidDiagram'));
   await convertEChartsDiagramsToImages(clone, t('dataChart'));
   clone.querySelectorAll('.math-inline, .math-block').forEach(formula => {
@@ -8312,6 +8764,7 @@ async function exportWordDocument(options = {}) {
       showToast(t('exportAccessDenied'), 'warning', 7200);
       return false;
     }
+    if (warnIfLocalExportImageUnavailable(error)) return false;
     reportSilentError(error, 'document.export-word');
     console.error(error);
     showToast(t('wordExportFailed'), 'error');
@@ -8347,6 +8800,7 @@ async function exportHTMLDocument(options = {}) {
       showToast(t('exportAccessDenied'), 'warning', 7200);
       return false;
     }
+    if (warnIfLocalExportImageUnavailable(error)) return false;
     reportSilentError(error, 'document.export-html');
     console.error(error);
     showToast(t('htmlExportFailed'), 'error');
@@ -8407,6 +8861,7 @@ async function exportPDFWithBookmarks(options = {}, { allowSystemFallback = true
       showToast(t('exportAccessDenied'), 'warning', 7200);
       return false;
     }
+    if (warnIfLocalExportImageUnavailable(error)) return false;
     reportSilentError(error, 'document.export-pdf');
     showToast(error?.message || t('pdfDirectFailed'), 'error');
     return false;
@@ -8739,6 +9194,68 @@ function imageCanvasHasVisibleContent(canvas, backgroundColor) {
   return false;
 }
 
+function textBundleError(error) {
+  const formatFailure = documentFormatError(error);
+  if (formatFailure) return formatFailure;
+  const message = String(error?.message || error);
+  const partial = /TEXTPACK_IMPORT_FAILED: incomplete copy retained at ([\s\S]+)/.exec(message);
+  // Only this backend-owned recovery message carries a local path. Display as
+  // plain text to the initiating user, never send it to diagnostics/telemetry.
+  if (partial) return t('textBundlePartial', {details: partial[1].slice(0, 4096)});
+  if (/DESKTOP_REQUIRED/.test(message)) return t('textBundleDesktopRequired');
+  if (/SOURCE_CHANGED|TEXTPACK_CHANGED|REVISION|CONFLICT/.test(message)) return t('textBundleSourceChanged');
+  if (/UNSUPPORTED_IMAGE/.test(message)) return t('textBundleComplex');
+  if (/LIMIT|TOO_LARGE/.test(message)) return t('textBundleLimit');
+  if (/DOCUMENT_COPY_EXISTS|TEXTPACK_EXISTS/.test(message)) return t('copyExists');
+  if (/TEXTPACK_|TEXTBUNDLE_/.test(message)) return t('textBundleInvalid');
+  return t('textBundleFailed');
+}
+
+function textBundleWarnings(...reports) {
+  const warnings = [], seen = new Set();
+  for (const report of reports) for (const warning of report?.warnings || []) {
+    const key = `${warning.code}\0${warning.reference || ''}`;
+    if (!seen.has(key)) { seen.add(key); warnings.push(warning); }
+  }
+  return warnings;
+}
+
+function renderTextBundleReport(container, warnings = []) {
+  container.replaceChildren(); container.classList.remove('hidden');
+  const count = { remote: 0, missing: 0, other: 0 };
+  const warningKey = warning => /REMOTE_IMAGE/.test(warning.code) ? 'textBundleRemote' : /MISSING_IMAGE/.test(warning.code) ? 'textBundleMissing' : /UNSAFE_REFERENCE/.test(warning.code) ? 'textBundleUnsafe' : 'textBundleUnsupported';
+  for (const warning of warnings) count[/REMOTE_IMAGE/.test(warning.code) ? 'remote' : /MISSING_IMAGE/.test(warning.code) ? 'missing' : 'other']++;
+  container.dataset.warning = String(warnings.length > 0);
+  const summary = document.createElement('strong'); summary.textContent = t('textBundleImageSummary', count); container.append(summary);
+  const notice = document.createElement('p'); notice.textContent = t(warnings.length ? 'textBundleIncomplete' : 'textBundleNoImageIssues'); container.append(notice);
+  if (warnings.length) {
+    const list = document.createElement('ul');
+    for (const warning of warnings.slice(0, 30)) {
+      const item = document.createElement('li');
+      const ref = /^data:/i.test(warning.reference || '') ? t('textBundleEmbedded') : String(warning.reference || '').slice(0, 260);
+      item.textContent = `${t(warningKey(warning))}${ref ? ` · ${ref}` : ''}`; list.append(item);
+    }
+    if (warnings.length > 30) { const item = document.createElement('li'); item.textContent = t('textBundleMoreWarnings', {count: warnings.length - 30}); list.append(item); }
+    container.append(list);
+  }
+}
+
+function showTextBundleResult(path, warnings, titleKey = 'textPackExported') {
+  $('#textBundleResultTitle').textContent = t(titleKey);
+  $('#textBundleResultPath').textContent = path;
+  renderTextBundleReport($('#textBundleResultReport'), warnings);
+  $('#textBundleResultLoadRemote').classList.add('hidden');
+  $('#textBundleResultDialog').classList.remove('hidden'); document.body.classList.add('dialog-open');
+  $('#closeTextBundleResult').focus();
+}
+
+function closeTextBundleResult() {
+  $('#textBundleResultDialog').classList.add('hidden');
+  if (!document.querySelector('.dialog-backdrop:not(.hidden)')) document.body.classList.remove('dialog-open');
+  $('#moreButton').focus();
+}
+
+
 function setExportInProgress(inProgress) {
   state.exportInProgress = Boolean(inProgress);
   els.confirmExportCenter.disabled = state.exportInProgress;
@@ -8750,11 +9267,17 @@ async function performExportCenter() {
   setExportInProgress(true);
   let options;
   let portableIsCurrent;
+  let textPackResult;
   let completed = false;
   els.exportCenterStatus.textContent = t('exporting');
   try {
     options = readExportDraft();
     state.exportDraft = options;
+    if (state.currentFile?.bundleKind && PANDOC_EXPORT_FORMATS.has(options.format)) {
+      showToast(t('bundlePandocUnsupported'), 'warning', 9000);
+      return;
+    }
+    if (state.blockImportedRemoteImages && !['textpack', 'markdown-portable', 'markdown-assets'].includes(options.format) && !allowImportedResourcesForRendering()) return;
     if (PANDOC_EXPORT_FORMATS.has(options.format) && !state.pandocStatus.available) {
       await refreshPandocStatus();
       if (!state.pandocStatus.available) {
@@ -8768,6 +9291,20 @@ async function performExportCenter() {
     else if (options.format === 'html-plain') output = await exportPlainHTMLDocument(options);
     else if (options.format === 'pdf') output = await exportPDFWithBookmarks(options);
     else if (['png', 'jpeg'].includes(options.format)) output = await exportDocumentImage(options.format, options);
+    else if (['textpack', 'markdown-assets'].includes(options.format)) {
+      const doc = state.currentFile;
+      if (!doc) return;
+      const session = state.documentSession;
+      portableIsCurrent = () => state.documentSession === session && state.currentFile?.path === doc.path;
+      const snapshot = state.editing ? editorContent() : doc.content;
+      const prepared = prepareTextPackExport(snapshot, options.format === 'markdown-assets' ? {assetDirectory: `assets/quillite-${crypto.randomUUID()}`} : {});
+      output = options.format === 'markdown-assets'
+        ? await window.quilliteMarkdown.exportMarkdownWithAssets(doc.path, prepared.content, doc.bundleSessionId || '', prepared.images)
+        : await window.quilliteMarkdown.exportTextPack(doc.resourcePath || doc.path, prepared.content, prepared.images);
+      if (!portableIsCurrent() || !output?.path) return;
+      textPackResult = {path: output.path, warnings: textBundleWarnings(prepared, output),
+        titleKey: options.format === 'markdown-assets' ? 'markdownAssetsExported' : 'textPackExported'};
+    }
     else if (options.format === 'markdown-portable') {
       const doc = state.currentFile;
       const session = state.documentSession;
@@ -8776,12 +9313,12 @@ async function performExportCenter() {
       const snapshot = state.editing ? editorContent() : doc.content;
       const portable = await transformMarkdownImages(snapshot, ref => window.quilliteMarkdown.readPortableImage(ref, doc.directory), { portable: true });
       if (!isCurrent()) return;
-      output = await window.quilliteMarkdown.exportPortableMarkdown(doc.path, portable);
+      output = await window.quilliteMarkdown.exportPortableMarkdown(doc.resourcePath || doc.path, portable);
       if (!isCurrent()) return;
       if (!output) return; // Native picker cancelled: keep export options and document intact.
     }
     else output = await window.quilliteMarkdown.exportWithPandoc({
-      sourcePath: state.currentFile.path,
+      sourcePath: state.currentFile.resourcePath || state.currentFile.path,
       title: state.currentFile.name,
       content: state.currentFile.content,
       format: options.format,
@@ -8794,11 +9331,12 @@ async function performExportCenter() {
     });
     if (output === false) return;
     if (output?.autoPaginatedLongImage) showToast(t('longImageAutoPaged', { count: output.paths.length }), 'info', 7200);
-    else if (output && !['docx', 'html', 'html-plain', 'pdf'].includes(options.format)) showToast(t('exportSucceeded'), 'success');
+    else if (output && !['docx', 'html', 'html-plain', 'pdf', 'textpack', 'markdown-assets'].includes(options.format)) showToast(t('exportSucceeded'), 'success');
     completed = true;
   } catch (error) {
     if (portableIsCurrent && !portableIsCurrent()) return;
-    if (String(error?.message || error).includes('EXPORT_IMAGE_TOO_TALL')) showToast(t('imageExportTooTall'), 'warning');
+    if (['textpack', 'markdown-assets'].includes(options?.format)) showToast(textBundleError(error), 'warning', 8000);
+    else if (String(error?.message || error).includes('EXPORT_IMAGE_TOO_TALL')) showToast(t('imageExportTooTall'), 'warning');
     else if (/PORTABLE_|IMAGE_EMBED_TYPE|DOCUMENT_COPY_EXISTS/.test(String(error?.message || error))) showToast(authoringError(error), 'warning', 7200);
     else if (String(error?.message || error).includes('EXPORT_IMAGE_BLANK')) showToast(t('imageExportBlank'), 'warning');
     else if (isExportImageResourceError(error)) showToast(t('exportImageResourceFailed'), 'warning');
@@ -8814,6 +9352,7 @@ async function performExportCenter() {
     setExportInProgress(false);
     els.exportCenterStatus.textContent = '';
     if (completed) closeExportCenter(false);
+    if (textPackResult) showTextBundleResult(textPackResult.path, textPackResult.warnings, textPackResult.titleKey);
   }
 }
 
@@ -8839,6 +9378,7 @@ let printRequest = 0;
 async function printCurrentDocument(options = {}) {
   if (!closeTypographySettings()) return;
   if (!state.currentFile) return false;
+  if (state.blockImportedRemoteImages && !allowImportedResourcesForRendering()) return false;
   const request = ++printRequest, session = state.documentSession;
   let renderedRoot, captured = false, pageStyle;
   // Loading may take seconds. Never print a different document/render, or the
@@ -8906,7 +9446,12 @@ function openExternal(url) {
 function bindDocumentActions(container = els.content) {
   container.querySelectorAll('.copy-code').forEach(button => button.addEventListener('click', async () => {
     const code = button.closest('.code-block').querySelector('code').textContent;
-    await navigator.clipboard.writeText(code);
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      showToast(state.language === 'en' ? 'Copy failed. Focus this window and try again.' : '未能复制，请点回轻阅窗口后重试。', 'warning');
+      return;
+    }
     button.textContent = t('copied');
     setTimeout(() => button.textContent = t('copy'), 1200);
   }));
@@ -8963,6 +9508,10 @@ async function openFolder() {
   try {
     const folder = await window.quilliteMarkdown.openFolder();
     if (!folder || explorerRequest !== state.explorerRequest || !canApplyDocumentOpen(request)) return;
+    if (folder.document?.path) {
+      await readDocumentForOpen(request, async () => folder.document, {sidebarMode: 'recent'});
+      return;
+    }
     state.root = folder.root;
     state.explorerFiles = folder.files;
     setSidebarMode('explorer');
@@ -9064,7 +9613,8 @@ function goToSearch(delta) {
   els.searchCount.textContent = `${state.searchIndex + 1} / ${state.searchMatches.length}`;
 }
 
-function toggleSidebar(collapsed) {
+function toggleSidebar(collapsed, remember = true) {
+  if (remember) localStorage.setItem('sidebarCollapsed', String(collapsed));
   els.sidebar.classList.toggle('collapsed', collapsed);
   els.expandSidebar.classList.toggle('hidden', !collapsed);
   updatePaneResizerVisibility();
@@ -11032,9 +11582,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '3.0.2', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '3.1.0', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.0.2';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.1.0';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -11093,7 +11643,7 @@ function openUpdateDialog(info) {
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   const portableWindows = info.manualInstallReason === 'windows-portable';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
-  $('#currentVersion').textContent = info.currentVersion || '3.0.2';
+  $('#currentVersion').textContent = info.currentVersion || '3.1.0';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -11242,6 +11792,7 @@ function setRecoveryBusy(busy) {
 async function restoreRecoverySnapshot() {
   const snapshot = pendingRecoverySnapshot;
   if (!snapshot) return;
+  const bundleRecovery = Boolean(snapshot.bundleKind || snapshot.bundleSessionId || /\.(textpack|textbundle)[\\/]?$/i.test(snapshot.path || ''));
   if (state.dirty) { showToast(t('recoverySaveFirst'), 'warning'); return; }
   const operation = ++recoveryRestoreRequest;
   const cancelled = () => operation !== recoveryRestoreRequest;
@@ -11253,10 +11804,15 @@ async function restoreRecoverySnapshot() {
     let diskDocument;
     let recoveredAsDraft = false;
     try {
-      diskDocument = await window.quilliteMarkdown.readFile(snapshot.path);
+      if (bundleRecovery) {
+        if (!['textpack', 'textbundle'].includes(snapshot.bundleKind) || typeof snapshot.bundleSessionId !== 'string' || !snapshot.bundleSessionId) throw new Error('BUNDLE_RECOVERY_INVALID');
+        diskDocument = await window.quilliteMarkdown.resumeBundleDocument(snapshot.path, snapshot.bundleSessionId, snapshot.baseRevision || '');
+        if (!diskDocument?.bundleSessionId || diskDocument.bundleKind !== snapshot.bundleKind || !sameDocumentPath(diskDocument.path, snapshot.path)) throw new Error('BUNDLE_RECOVERY_INVALID');
+      } else diskDocument = await window.quilliteMarkdown.readFile(snapshot.path);
     } catch {
       if (cancelled()) return;
       if (!stillCurrent()) { showToast(t('recoveryChanged'), 'warning'); return; }
+      if (bundleRecovery) { showToast(t('bundleRecoveryFailed'), 'warning', 9000); return; }
       // Recover a missing/unreadable source into a separate draft; do not
       // recreate or overwrite the old source path.
       diskDocument = await window.quilliteMarkdown.newFile();
@@ -11270,7 +11826,7 @@ async function restoreRecoverySnapshot() {
     // Old snapshots have no revision: fail closed instead of adopting today's
     // disk revision and silently authorizing an overwrite after recovery.
     const knownRevision = /^[a-f0-9]{64}$/i.test(snapshot.baseRevision || '');
-    const needsComparison = !recoveredAsDraft && (Boolean(snapshot.conflict) || !knownRevision
+    const needsComparison = !recoveredAsDraft && (Boolean(snapshot.conflict) || Boolean(diskDocument.bundleConflict) || !knownRevision
       || snapshot.baseRevision !== diskDocument.revision);
     const recoveredDocument = {
       ...diskDocument,
@@ -11541,6 +12097,13 @@ async function loadInitialDocument(request) {
 }
 
 async function initialize() {
+  toggleSidebar(sidebarStartsCollapsed(localStorage.getItem('sidebarCollapsed')), false);
+  // Commit the initial collapsed geometry before restoring normal transitions.
+  // The blocking head bootstrap already applied it before the first paint.
+  if (document.documentElement.dataset.startupSidebar) {
+    els.sidebar.getBoundingClientRect();
+    delete document.documentElement.dataset.startupSidebar;
+  }
   // Reserve startup's place before any async settings work. A click while
   // preferences load must supersede startup, never the other way around.
   const initialRequest = beginDocumentOpen();
@@ -11840,6 +12403,32 @@ els.editPermissionDialog.addEventListener('click', event => {
   if (event.target === els.editPermissionDialog) closeEditPermissionDialog();
 });
 $('#closeExportCenter').addEventListener('click', () => closeExportCenter());
+$('#documentSaveFormats').addEventListener('click', event => {
+  const selected = event.target.closest('[data-save-format]');
+  if (!selected || selected.classList.contains('hidden') || !pendingDocumentSaveFormat) return;
+  pendingDocumentSaveFormat.format = selected.dataset.saveFormat;
+  $('#documentSaveFormats').querySelectorAll('[data-save-format]').forEach(button => {
+    const active = button === selected;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+});
+$('#documentSaveFormats').addEventListener('keydown', event => {
+  const buttons = [...event.currentTarget.querySelectorAll('[data-save-format]')].filter(button => !button.classList.contains('hidden'));
+  const index = buttons.indexOf(event.target.closest('[data-save-format]'));
+  if (index < 0 || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+    : (index + (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : buttons.length - 1)) % buttons.length;
+  buttons[next].click(); buttons[next].focus();
+});
+$('#confirmDocumentSaveFormat').addEventListener('click', () => closeDocumentSaveFormat(pendingDocumentSaveFormat?.format));
+$('#cancelDocumentSaveFormat').addEventListener('click', () => closeDocumentSaveFormat());
+$('#documentSaveFormatDialog').addEventListener('cancel', event => { event.preventDefault(); closeDocumentSaveFormat(); });
+$('#closeTextBundleResult').addEventListener('click', closeTextBundleResult);
+$('#textBundleResultLoadRemote').addEventListener('click', loadImportedNetworkImages);
+$('#textBundleResultDialog').addEventListener('click', event => { if (event.target === event.currentTarget) closeTextBundleResult(); });
 $('#cancelExportCenter').addEventListener('click', () => closeExportCenter());
 els.confirmExportCenter.addEventListener('click', performExportCenter);
 els.exportCenterDialog.addEventListener('click', event => {
@@ -12622,6 +13211,22 @@ const documentTools = createDocumentTools({
     } finally { newFileRequestInProgress = false; updateNewFileButtonState(); }
   }
 });
+let defaultAppSettingsOpening = false;
+async function openDefaultAppSettings() {
+  if (defaultAppSettingsOpening) return false;
+  defaultAppSettingsOpening = true;
+  try {
+    await window.quilliteMarkdown.openDefaultApps();
+    showToast(t('defaultAppHint'), 'info', 8000);
+    return true;
+  } catch {
+    showToast(t('defaultAppFailed'), 'warning', 8000);
+    return false;
+  } finally {
+    defaultAppSettingsOpening = false;
+  }
+}
+
 els.moreMenu.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button) return;
@@ -12647,10 +13252,7 @@ els.moreMenu.addEventListener('click', event => {
   if (button.hasAttribute('data-spellcheck-toggle')) setSpellcheckEnabled(!state.spellcheckEnabled);
   if (button.dataset.spellcheckLanguage) setSpellcheckLanguage(button.dataset.spellcheckLanguage);
   if (button.hasAttribute('data-spellcheck-clear')) clearPersonalDictionary();
-  if (action === 'default-app') {
-    window.quilliteMarkdown.openDefaultApps();
-    showToast(t('defaultAppHint'), 'info', 5200);
-  }
+  if (action === 'default-app') void openDefaultAppSettings();
   if (action === 'document-tools') documentTools.open();
   if (action === 'image-upload-settings') openImageUploadSettings();
   if (action === 'body-typography') openTypographySettings();
@@ -12847,8 +13449,23 @@ window.addEventListener('resize', closeSettingsSubmenus);
 window.addEventListener('resize', () => {
   if (!els.diagramDialog.classList.contains('hidden') && isCanvasDiagram() && flowchartDesignerState.mode === 'visual') applyFlowchartZoom();
 });
-$('.reader-pane').addEventListener('scroll', updateActiveToc, { passive: true });
+$('.reader-pane').addEventListener('scroll', scheduleActiveTocRefresh, { passive: true });
+els.content.addEventListener('toggle', event => {
+  if (event.target.tagName !== 'DETAILS' || state.editing || !state.currentFile) return;
+  trackedTocHeadings = readerFlowHeadings(allReaderTocHeadings, els.content);
+  scheduleActiveTocRefresh();
+}, true);
 $('.reader-pane').addEventListener('wheel', handlePreviewWheelZoom, { passive: false });
+// Only user interaction pauses following; programmatic scroll events do not.
+for (const type of ['wheel', 'pointerdown', 'touchstart', 'keydown']) {
+  $('.editor-preview-scroll').addEventListener(type, () => { state.previewScrollPausedSession = state.documentSession; }, {passive: true});
+}
+for (const type of ['pointerdown', 'keydown', 'beforeinput', 'compositionend']) {
+  els.editor.addEventListener(type, () => {
+    state.previewScrollPausedSession = null;
+    scrollPreviewToCursor();
+  }, {capture: true, passive: true});
+}
 $('.editor-preview-scroll').addEventListener('wheel', handlePreviewWheelZoom, { passive: false });
 $('.editor-preview-scroll').addEventListener('pointermove', showPreviewLocateHint, { passive: true });
 $('.editor-preview-scroll').addEventListener('pointerleave', hidePreviewLocateHint);
@@ -12876,7 +13493,18 @@ document.addEventListener('keydown', event => {
     return;
   }
   // Native dialog traps focus; do not route typing/shortcuts to the background document.
-  if ($('#linkDialog').open || $('#footnoteDialog').open || $('#recentClearDialog').open || $('#picGoCLIEnableDialog').open) return;
+  const textBundleDialog = !$('#textBundleResultDialog').classList.contains('hidden') ? $('#textBundleResultDialog') : null;
+  if (textBundleDialog) {
+    if (event.key === 'Escape') { event.preventDefault(); closeTextBundleResult(); }
+    else if (event.key === 'Tab') {
+      const controls = [...textBundleDialog.querySelectorAll('button:not(:disabled)')].filter(element => element.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!textBundleDialog.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); first?.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    } else if (event.ctrlKey || event.metaKey) event.preventDefault();
+    return;
+  }
+  if ($('#linkDialog').open || $('#footnoteDialog').open || $('#recentClearDialog').open || $('#picGoCLIEnableDialog').open || $('#documentSaveFormatDialog').open) return;
   if (!els.formulaDialog.classList.contains('hidden')) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); $('#formulaSearch').focus(); }
     else if (event.key === 'Escape') { event.preventDefault(); closeFormulaDialog(); }
@@ -12952,7 +13580,7 @@ document.addEventListener('drop', async event => {
     const dropPosition = codeEditor?.posAtCoords({ x: event.clientX, y: event.clientY });
     if (Number.isInteger(dropPosition)) codeEditor.dispatch({ selection: { anchor: dropPosition } });
     await importAndInsertImage(filePath, imageDescriptionFromName(file.name));
-  } else if (/\.(md|markdown|mdown|mkd|txt)$/i.test(filePath)) loadFile(filePath);
+  } else if (/\.(md|markdown|mdown|mkd|txt|textpack|textbundle)$/i.test(filePath)) loadFile(filePath);
   else showToast(t('dropUnsupported'), 'warning');
 });
 
@@ -12962,7 +13590,7 @@ window.quilliteMarkdown.onFileDrop(paths => {
   const filePath = paths[0];
   if (!filePath) return;
   if (state.editing && IMAGE_FILE_PATTERN.test(filePath)) importAndInsertImage(filePath);
-  else if (/\.(md|markdown|mdown|mkd|txt)$/i.test(filePath)) loadFile(filePath);
+  else if (/\.(md|markdown|mdown|mkd|txt|textpack|textbundle)$/i.test(filePath)) loadFile(filePath);
   else showToast(t('dropUnsupported'), 'warning');
 }, () => {
   dragDepth = 0;

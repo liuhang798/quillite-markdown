@@ -173,7 +173,10 @@ func TestInstallerLifecycleKeepsProductionOwnershipChecks(t *testing.T) {
 			t.Fatalf("missing %s", required)
 		}
 	}
-	if strings.Contains(source, "Copy-Item") {
+	// The newer-candidate fixture may copy the application, but never the
+	// installed uninstaller: its production EXEPATH guard must remain active.
+	withoutApplicationCopy := strings.ReplaceAll(source, `Copy-Item -LiteralPath (Join-Path $destination 'QuilliteMarkdown.exe') -Destination $newerExe`, "")
+	if strings.Contains(withoutApplicationCopy, "Copy-Item") {
 		t.Fatal("lifecycle test must execute the installed uninstaller itself")
 	}
 	nsis, err := os.ReadFile("build/windows/installer/project.nsi")

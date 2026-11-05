@@ -3,7 +3,6 @@
 package main
 
 import (
-	"io"
 	"os"
 
 	"golang.org/x/sys/windows"
@@ -23,7 +22,17 @@ func publishDocumentFile(staged, target string) error {
 	return windows.MoveFile(s, t)
 }
 
-func isolateDocumentOriginal(target, backup, revision string, expected os.FileInfo) error {
+func isolateDocumentOriginal(target, backup, revision string, expected os.FileInfo, limits ...int64) error {
+	limit := int64(maxSupportedDocumentBytes)
+	if len(limits) > 1 {
+		return errDocumentConflict
+	}
+	if len(limits) == 1 {
+		limit = limits[0]
+	}
+	if !validDocumentRevisionLimit(limit) {
+		return errDocumentConflict
+	}
 	p, err := windows.UTF16PtrFromString(target)
 	if err != nil {
 		return err
@@ -47,8 +56,7 @@ func isolateDocumentOriginal(target, backup, revision string, expected os.FileIn
 		return errDocumentConflict
 	}
 	if revision != "" {
-		data, err := io.ReadAll(io.LimitReader(f, maxSupportedDocumentBytes+1))
-		if err != nil || len(data) > maxSupportedDocumentBytes || documentRevision(data) != revision {
+		if err := checkDocumentRevisionReaderWithLimit(f, revision, limit); err != nil {
 			return errDocumentConflict
 		}
 	}

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file: https: http:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';">
   <title data-i18n="appName">轻阅 Markdown</title>
+  <link rel="stylesheet" href="/startup-layout.css">
+  <script src="/startup-layout.js"></script>
 </head>
 <body>
   <header class="titlebar">
@@ -540,7 +542,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.0.2</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.1.0</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -767,7 +769,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 3.0.2</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 3.1.0</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -1000,7 +1002,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.0.2</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.1.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -1022,9 +1024,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.0.2</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.1.0</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.0.2</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.1.0</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>
@@ -1092,6 +1094,8 @@
               <div class="export-format-grid">
                 <button type="button" class="active" role="radio" aria-checked="true" data-export-format="docx"><b>DOCX</b><span data-i18n="exportFormatWord">Word 文档</span></button>
                 <button type="button" role="radio" aria-checked="false" data-export-format="markdown-portable"><b>MD</b><span data-i18n="exportFormatPortable">便携 Markdown</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="textpack"><b>PACK</b><span data-i18n="exportFormatTextPack">打包文档（含图片）</span></button>
+                <button type="button" role="radio" aria-checked="false" data-export-format="markdown-assets"><b>MD</b><span data-i18n="exportFormatMarkdownAssets">Markdown（含图片）</span></button>
                 <button type="button" role="radio" aria-checked="false" data-export-format="pdf"><b>PDF</b><span data-i18n="exportFormatPDF">系统打印</span></button>
               </div>
             </section>
@@ -1160,6 +1164,28 @@
         <button id="cancelExportCenter" class="large-button secondary" type="button" data-i18n="cancel">取消</button>
         <button id="confirmExportCenter" class="large-button primary" type="button" data-i18n="exportNow">立即导出</button>
       </div>
+    </section>
+  </div>
+
+  <dialog id="documentSaveFormatDialog" class="document-save-format no-drag" aria-labelledby="documentSaveFormatTitle" aria-describedby="documentSaveFormatHint">
+    <span class="eyebrow" data-i18n="saveAs">另存为</span>
+    <h2 id="documentSaveFormatTitle" data-i18n="documentSaveFormatTitle">选择文档格式</h2>
+    <p id="documentSaveFormatHint" data-i18n="documentSaveFormatHint">创建新副本，原文档不变。保存成功后继续编辑新副本。</p>
+    <div id="documentSaveFormats" class="document-save-formats" role="radiogroup" data-i18n-aria-label="documentSaveFormatTitle" aria-label="选择文档格式">
+      <button type="button" class="hidden" role="radio" aria-checked="false" data-save-format="text"><b>.txt</b><span data-i18n="saveFormatText">纯文本</span><small data-i18n="saveFormatTextHint">原样保留文字，不解析图片引用</small></button>
+      <button type="button" role="radio" aria-checked="false" data-save-format="markdown"><b>.md</b><span data-i18n="saveFormatMarkdown">Markdown</span><small data-i18n="saveFormatMarkdownHint">普通副本保留图片引用；转换时收集图片</small></button>
+      <button type="button" role="radio" aria-checked="false" data-save-format="textbundle"><b>.textbundle</b><span>TextBundle</span><small data-i18n="saveFormatTextBundleHint">正文与附件保存在目录包</small></button>
+      <button type="button" role="radio" aria-checked="false" data-save-format="textpack"><b>.textpack</b><span>TextPack</span><small data-i18n="saveFormatTextPackHint">单个压缩文件，便于分享</small></button>
+    </div>
+    <div class="textbundle-actions"><button id="cancelDocumentSaveFormat" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="confirmDocumentSaveFormat" class="large-button primary" type="button" data-i18n="chooseSaveLocation">选择保存位置</button></div>
+  </dialog>
+
+  <div id="textBundleResultDialog" class="dialog-backdrop hidden no-drag" role="dialog" aria-modal="true" aria-labelledby="textBundleResultTitle">
+    <section class="textbundle-dialog">
+      <h2 id="textBundleResultTitle"></h2>
+      <p id="textBundleResultPath" class="textbundle-path"></p>
+      <div id="textBundleResultReport" class="textbundle-report"></div>
+      <div class="textbundle-actions"><button id="textBundleResultLoadRemote" class="large-button secondary hidden" type="button" data-i18n="textBundleLoadRemote">加载网络图片</button><button id="closeTextBundleResult" class="large-button primary" type="button" data-i18n="close">关闭</button></div>
     </section>
   </div>
 

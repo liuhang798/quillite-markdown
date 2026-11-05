@@ -6,7 +6,7 @@
 
 - 项目名称：轻阅 Markdown / Quillite Markdown
 - 仓库：`https://github.com/liuhang798/quillite-markdown`
-- 当前版本：`3.0.2`
+- 当前版本：`3.1.0`
 - 开源协议：MIT
 - 产品定位：极度轻量、美观、跨平台的 Markdown 阅读与编辑工具
 - 支持平台：Windows x64、macOS Universal、Linux x64
@@ -90,6 +90,7 @@ app.go / updates.go（Go 后端）
 - 自动生成右侧本页目录，支持标题搜索、层级／平铺切换、折叠记忆和准确章节定位；目录字号和默认宽度按显示器物理短边适配。
 - 正文独立一行的 `[TOC]` 在阅读页与编辑预览中生成动态可点击目录，并随标题变化刷新。
 - 当前章节跟随、阅读进度、阅读时长和字数估算。
+- 阅读滚动只调度一个待处理动画帧；目录在渲染时缓存标题和链接，每帧以二分及少量实时位置读取定位，不能恢复为全标题测量／全目录 class 重写。不要永久缓存高度：图片、字体与宽度会变。完整目录保留折叠章节，但定位列表须排除关闭 details 的非 summary 内容及 hidden 祖先；toggle 时重建结构过滤，关闭文档释放缓存。
 - 文档内搜索、打印、定位文件、回到顶部。
 - 明暗主题和阅读字号缩放。
 
@@ -117,6 +118,7 @@ app.go / updates.go（Go 后端）
 - 打开文档后立即进入最近阅读，支持多条持久置顶、拖动排序和删除单条记录。
 - 单实例：再次打开 `.md` 文件时交给已有窗口处理。
 - 支持拖放文件和系统文件关联。
+- 最近阅读、收藏和资源浏览器共用两行文档项：名称去后缀仅供显示，第二行固定类型标签加可省略路径。不得改写真实 name/path 或影响选择、置顶、收藏和打开行为；完整名称与路径通过悬停可见。
 
 ### 导出
 
@@ -131,6 +133,7 @@ app.go / updates.go（Go 后端）
 ### 平台与发布
 
 - Windows：自绘标题栏、NSIS 安装、桌面快捷方式、Markdown 文件关联。
+- 新增 TextPack 关联和主动默认应用登记使用应用专属 ProgID、内嵌 EXE 图标和 HKCU “打开方式”候选；不得修改 UserChoice 或抢占已有 HKCU/HKLM 默认。便携版仅在用户主动打开默认应用设置时登记候选，启动时不自动登记；新增卸载清理仅操作仍精确指向本安装路径的本应用登记，保留其他应用与后来重新登记的路径。原有 Markdown 关联宏的兼容迁移须独立核验，不随 TextPack 修复盲目改写通用文件类。
 - macOS：原生左侧窗口控制按钮、系统菜单和 Command 快捷键。
 - Linux：DEB 与 AppImage。
 - 启动时检查轻阅 Markdown 官网版本库。
@@ -148,6 +151,8 @@ app.go / updates.go（Go 后端）
 - `modifiedAt`：RFC3339Nano 修改时间。
 - `size`：字节数。
 - `replacedPath`：新建草稿另存成功后被替换的旧路径，供前端清理列表。
+- 原包文档额外含 `bundleKind`、`bundleSessionId`、`bundleTextPath`、`resourcePath`、`packageDirectory`、`bundleConflict`。`path` 始终原包，`directory`／`resourcePath` 是受控持久工作区；界面显示 `packageDirectory`。不得把工作区 Markdown 当成普通文件直接保存，不能以新磁盘修订隐式授权旧恢复内容。
+- 格式转换的保存回执可含 `exportWarnings`，前端展示资源提示但不得将其当作完全离线证明。`FolderResult.document` 可选：普通“打开文件夹”选中 TextBundle 时返回原包文档，前端直接打开而不是进入资源浏览器。
 
 ### `Preferences`
 
@@ -186,7 +191,7 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 
 ### 文档
 
-- `OpenFile()`：显示系统选择窗口并读取文档。
+- `OpenFile()`：显示普通系统选择窗口，支持 Markdown、文本和 TextPack／TextBundle。Windows/Linux 不能同时选文件和目录，选择 TextBundle 内的直接正文文件时识别原包；普通 `OpenFolder` 选中 TextBundle 也直接打开原包，不新增“导入／直接编辑”两套入口。
 - `NewFile()`：静默创建唯一文件名；macOS 固定写入用户 `Documents/Quillite Markdown`，避免 `.app` 升级覆盖用户文档；Windows/Linux 便携版优先写入应用目录，不可写时回退到用户 Documents。
 - `ReadFile(path)`：读取指定文件并写入最近阅读。
 - `SaveFile(path, content)`：覆盖保存。
@@ -219,6 +224,15 @@ Wails 会将 `App` 的公开方法暴露给前端。主要接口按领域分组�
 - `DetectPandoc()` / `SelectPandoc()`：检测 PATH、常见安装路径或让用户选择并验证 Pandoc 可执行文件。
 - `ExportWithPandoc(input)`：通过标准输入转换 EPUB、RTF、ODT、LaTeX、MediaWiki 或自定义 writer，输出位置固定由保存窗口决定。
 - `SaveExportImage(sourcePath, title, dataURL, format)`：校验并保存前端生成的 PNG/JPEG 长图。
+- `ChooseTextBundleSource(kind)` / `ImportTextBundle(sourcePath, revision, content)`：先只读检查 TextPack 文件或 TextBundle 目录，再核验资源指纹并导入到用户选择位置下的新独立目录。返回普通 `.md` 文档，保存不得回写原包；源元数据声明不能替代实际资源检查。
+- `ExportTextPack(sourcePath, content, images)`：生成新的标准 TextPack，正文图片引用由前端共用精确范围解析器改写，后端只读取已验证本地／内嵌图片。网络资源不下载，缺失和未验证资源明确报告，不承诺整包完全离线；输出 create-only，不能覆盖原文档或已有包。
+- `SaveDocumentAsFormat(source, rawContent, sessionId, format, images, preparedContent)`：统一格式转换为 Markdown、TextBundle 或 TextPack，并支持 TXT 的纯文本副本。普通 Markdown／TXT 同格式另存使用 `SaveDocumentCopy`，不强制打包；TXT 必须逐字保留、不解析图片。前端默认当前格式并明确选择，后端核验扩展名，目标仅新建；包到包必须保留完整基线、未引用附件及第三方元数据，不能替换为只收集正文图片的导出。成功才切换当前文档；取消、过期或保存期间新增编辑必须保留原会话和恢复材料。
+- `ExportMarkdownWithAssets(source, preparedContent, sessionId, images)`：统一导出面板中的“Markdown（含图片）”，从当前内容及受控资源生成普通 `.md + assets` 新副本，不切换当前文档、不清理 dirty。包转 Markdown 必须读取工作区内尚未写回原包的新图，网络图片不下载，缺失本地图片阻止转换并明确提示。
+- 第二期 `OpenEditableBundle(kind)`／普通 `ReadFile` 可直接打开原包。`SaveBundleDocument(path, content, revision, sessionId)` 必须同时绑定原路径、服务器工作区 ID 与整个包的修订；不得走普通 SaveFile 或只按正文修订写回。未知文件、ZIP Headers／Comment 和 info.json 原字节保留；新图 create-only，原资源不删除。
+- `SaveBundleCopy` 从完整基线和工作区创建新 TextPack；`ResumeBundleDocument` 保留恢复的旧 baseRevision，原包丢失／变化返回 bundleConflict；`RebaseBundleDocument` 只在用户确认磁盘修订后，采用磁盘完整元数据基线并保留不冲突的新附件。工作区持久保留，限 64 个／2 GiB，不自动清理。
+- 工作区图片插入必须在共享锁内完成配额核验和写入，覆盖选择、导入及粘贴路径；不足时拒绝新增，不删除恢复材料。文档包、含图 Markdown、便携 Markdown 的导出／副本及普通另存入口均拒绝受管工作区与当前原包内部目标，并在受控写入回调内重验；便携导出使用验证后的目录句柄写入。UTF-8 BOM 只作为编码标记保留一次，正文回执与会话内容使用一致的规范化表示。
+- 目录标题提取必须在惰性 `template.content` 中解析，不得先向活动文档所属节点写入含资源的 HTML 再清理；阅读、编辑目录均不得绕过原包网络授权。
+- 保存前串行持久化恢复快照并再次核对会话／正文；失败、部分提交或会话记录更新异常必须暂停自动保存。TextBundle 不是全目录事务：先新增附件，再原子替换正文，任何部分结果明确报告并保留材料。包外 staging／安全恢复目录不能污染包指纹。包预览和重打包不得通过绝对/file/UNC/路径穿越读取宿主文件；已解码路径不得二次解码。原包暂不直接重命名或通过 Pandoc 导出，应明确指引先导出便携 Markdown。
 
 ### 系统
 

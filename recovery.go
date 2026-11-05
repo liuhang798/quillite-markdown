@@ -24,32 +24,38 @@ const (
 // deliberately stored outside preferences so a large document cannot bloat or
 // corrupt ordinary application settings.
 type RecoverySnapshot struct {
-	BaseRevision string `json:"baseRevision,omitempty"`
-	Conflict     bool   `json:"conflict,omitempty"`
-	Path         string `json:"path"`
-	Name         string `json:"name"`
-	Directory    string `json:"directory"`
-	Content      string `json:"content"`
-	UpdatedAt    string `json:"updatedAt"`
+	BundleKind      string `json:"bundleKind,omitempty"`
+	BundleSessionID string `json:"bundleSessionId,omitempty"`
+	BaseRevision    string `json:"baseRevision,omitempty"`
+	Conflict        bool   `json:"conflict,omitempty"`
+	Path            string `json:"path"`
+	Name            string `json:"name"`
+	Directory       string `json:"directory"`
+	Content         string `json:"content"`
+	UpdatedAt       string `json:"updatedAt"`
 }
 
 type RecoverySnapshotInput struct {
-	BaseRevision string `json:"baseRevision,omitempty"`
-	Conflict     bool   `json:"conflict,omitempty"`
-	Path         string `json:"path"`
-	Name         string `json:"name"`
-	Directory    string `json:"directory"`
-	Content      string `json:"content"`
+	BundleKind      string `json:"bundleKind,omitempty"`
+	BundleSessionID string `json:"bundleSessionId,omitempty"`
+	BaseRevision    string `json:"baseRevision,omitempty"`
+	Conflict        bool   `json:"conflict,omitempty"`
+	Path            string `json:"path"`
+	Name            string `json:"name"`
+	Directory       string `json:"directory"`
+	Content         string `json:"content"`
 }
 
 type recoverySnapshotMetadata struct {
-	BaseRevision string `json:"baseRevision,omitempty"`
-	Conflict     bool   `json:"conflict,omitempty"`
-	Path         string `json:"path"`
-	Name         string `json:"name"`
-	Directory    string `json:"directory"`
-	UpdatedAt    string `json:"updatedAt"`
-	Size         int64  `json:"size"`
+	BundleKind      string `json:"bundleKind,omitempty"`
+	BundleSessionID string `json:"bundleSessionId,omitempty"`
+	BaseRevision    string `json:"baseRevision,omitempty"`
+	Conflict        bool   `json:"conflict,omitempty"`
+	Path            string `json:"path"`
+	Name            string `json:"name"`
+	Directory       string `json:"directory"`
+	UpdatedAt       string `json:"updatedAt"`
+	Size            int64  `json:"size"`
 }
 
 func (a *App) recoverySnapshotPath() string {
@@ -58,6 +64,7 @@ func (a *App) recoverySnapshotPath() string {
 
 func encodeRecoverySnapshot(snapshot RecoverySnapshot) ([]byte, error) {
 	metadata := recoverySnapshotMetadata{
+		BundleKind: snapshot.BundleKind, BundleSessionID: snapshot.BundleSessionID,
 		BaseRevision: snapshot.BaseRevision, Conflict: snapshot.Conflict,
 		Path: snapshot.Path, Name: snapshot.Name, Directory: snapshot.Directory,
 		UpdatedAt: snapshot.UpdatedAt, Size: int64(len(snapshot.Content)),
@@ -103,7 +110,7 @@ func decodeRecoverySnapshotReader(input io.Reader, fileSize int64) (RecoverySnap
 		if int64(len(content)) != metadata.Size {
 			return RecoverySnapshot{}, errors.New("recovery snapshot content size is invalid")
 		}
-		return RecoverySnapshot{Path: metadata.Path, Name: metadata.Name, Directory: metadata.Directory, Content: string(content), UpdatedAt: metadata.UpdatedAt, BaseRevision: metadata.BaseRevision, Conflict: metadata.Conflict}, nil
+		return RecoverySnapshot{Path: metadata.Path, Name: metadata.Name, Directory: metadata.Directory, Content: string(content), UpdatedAt: metadata.UpdatedAt, BaseRevision: metadata.BaseRevision, Conflict: metadata.Conflict, BundleKind: metadata.BundleKind, BundleSessionID: metadata.BundleSessionID}, nil
 	}
 
 	// Pre-2.7.3 development builds stored one JSON object. Account for the
@@ -123,6 +130,9 @@ func decodeRecoverySnapshotReader(input io.Reader, fileSize int64) (RecoverySnap
 }
 
 func (a *App) SaveRecoverySnapshot(input RecoverySnapshotInput) error {
+	if err := a.validateBundleRecovery(input); err != nil {
+		return err
+	}
 	a.recoveryMu.Lock()
 	defer a.recoveryMu.Unlock()
 
@@ -140,6 +150,7 @@ func (a *App) SaveRecoverySnapshot(input RecoverySnapshotInput) error {
 		}
 	}
 	snapshot := RecoverySnapshot{
+		BundleKind: input.BundleKind, BundleSessionID: input.BundleSessionID,
 		BaseRevision: strings.ToLower(input.BaseRevision), Conflict: input.Conflict,
 		Path:      filepath.Clean(path),
 		Name:      strings.TrimSpace(input.Name),
@@ -189,7 +200,7 @@ func (a *App) GetRecoverySnapshot() (*RecoverySnapshot, error) {
 	// the snapshot. Do not offer a recovery copy that is already on disk.
 	currentPath := filepath.Clean(snapshot.Path)
 	currentInfo, statErr := os.Stat(currentPath)
-	if !snapshot.Conflict && statErr == nil && !currentInfo.IsDir() && currentInfo.Size() == int64(len(snapshot.Content)) {
+	if snapshot.BundleSessionID == "" && !isEditableBundlePath(snapshot.Path) && !snapshot.Conflict && statErr == nil && !currentInfo.IsDir() && currentInfo.Size() == int64(len(snapshot.Content)) {
 		current, readErr := os.ReadFile(currentPath)
 		if readErr != nil || string(current) != snapshot.Content {
 			return &snapshot, nil

@@ -28,6 +28,7 @@ export const imagePreviewPhrases = {
   'Enter for image actions; Escape to return to editing': '按 Enter 操作图片；Esc 返回编辑',
   'Only adjacent image-only blocks can join; up to six images per row': '仅可合并相邻的纯图片段落；每排最多 6 张',
   'Loading image…': '图片加载中…',
+  'Online image not loaded; use the document preview to allow network access': '网络图片未加载；可在文档预览中允许网络访问',
   'Image could not be displayed; view source to inspect it': '图片无法显示，请展开源码检查'
 };
 export const toggleImageSource = StateEffect.define();
@@ -273,6 +274,9 @@ class ImageWidget extends WidgetType {
             if (!img.isConnected || displayedSources.get(img) !== record || !this.session.active) return;
             img.hidden = true; status.hidden = false; status.textContent = this.labels['Image could not be displayed; view source to inspect it']; view.requestMeasure();
           });
+        } else if (image.sourceKind === 'remote' && this.session.context.blockRemoteImages) {
+          img.hidden = true; status.hidden = false;
+          status.textContent = this.labels['Online image not loaded; use the document preview to allow network access'];
         } else {
           img.src = image.ref.startsWith('//') ? `https:${image.ref}` : image.ref;
         }

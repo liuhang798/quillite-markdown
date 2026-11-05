@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-textpack">
+    <comment>TextPack document package</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.textpack"/>
+  </mime-type>
   <mime-type type="text/markdown">
     <comment>Markdown document</comment>
     <glob pattern="*.md"/>

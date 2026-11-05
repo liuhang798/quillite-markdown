@@ -281,6 +281,20 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class TextPackWarning {
+	    code: string;
+	    reference: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TextPackWarning(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.reference = source["reference"];
+	    }
+	}
 	export class Document {
 	    path: string;
 	    name: string;
@@ -293,6 +307,13 @@ export namespace main {
 	    revision?: string;
 	    draft?: boolean;
 	    warning?: string;
+	    bundleKind?: string;
+	    bundleSessionId?: string;
+	    bundleTextPath?: string;
+	    resourcePath?: string;
+	    packageDirectory?: string;
+	    bundleConflict?: boolean;
+	    exportWarnings?: TextPackWarning[];
 
 	    static createFrom(source: any = {}) {
 	        return new Document(source);
@@ -311,7 +332,32 @@ export namespace main {
 	        this.revision = source["revision"];
 	        this.draft = source["draft"];
 	        this.warning = source["warning"];
+	        this.bundleKind = source["bundleKind"];
+	        this.bundleSessionId = source["bundleSessionId"];
+	        this.bundleTextPath = source["bundleTextPath"];
+	        this.resourcePath = source["resourcePath"];
+	        this.packageDirectory = source["packageDirectory"];
+	        this.bundleConflict = source["bundleConflict"];
+	        this.exportWarnings = this.convertValues(source["exportWarnings"], TextPackWarning);
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class DocumentVersion {
 	    id: string;
@@ -487,6 +533,7 @@ export namespace main {
 	    root: string;
 	    name: string;
 	    files: FolderFile[];
+	    document?: Document;
 
 	    static createFrom(source: any = {}) {
 	        return new FolderResult(source);
@@ -497,6 +544,7 @@ export namespace main {
 	        this.root = source["root"];
 	        this.name = source["name"];
 	        this.files = this.convertValues(source["files"], FolderFile);
+	        this.document = this.convertValues(source["document"], Document);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -790,6 +838,8 @@ export namespace main {
 	    }
 	}
 	export class RecoverySnapshot {
+	    bundleKind?: string;
+	    bundleSessionId?: string;
 	    baseRevision?: string;
 	    conflict?: boolean;
 	    path: string;
@@ -804,6 +854,8 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bundleKind = source["bundleKind"];
+	        this.bundleSessionId = source["bundleSessionId"];
 	        this.baseRevision = source["baseRevision"];
 	        this.conflict = source["conflict"];
 	        this.path = source["path"];
@@ -814,6 +866,8 @@ export namespace main {
 	    }
 	}
 	export class RecoverySnapshotInput {
+	    bundleKind?: string;
+	    bundleSessionId?: string;
 	    baseRevision?: string;
 	    conflict?: boolean;
 	    path: string;
@@ -827,6 +881,8 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bundleKind = source["bundleKind"];
+	        this.bundleSessionId = source["bundleSessionId"];
 	        this.baseRevision = source["baseRevision"];
 	        this.conflict = source["conflict"];
 	        this.path = source["path"];
@@ -835,6 +891,127 @@ export namespace main {
 	        this.content = source["content"];
 	    }
 	}
+	export class TextBundleImportResult {
+	    document?: Document;
+	    directory: string;
+	    warnings: TextPackWarning[];
+
+	    static createFrom(source: any = {}) {
+	        return new TextBundleImportResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.document = this.convertValues(source["document"], Document);
+	        this.directory = source["directory"];
+	        this.warnings = this.convertValues(source["warnings"], TextPackWarning);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TextBundleSource {
+	    sourcePath: string;
+	    content: string;
+	    revision: string;
+	    assets: string[];
+	    warnings: TextPackWarning[];
+
+	    static createFrom(source: any = {}) {
+	        return new TextBundleSource(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePath = source["sourcePath"];
+	        this.content = source["content"];
+	        this.revision = source["revision"];
+	        this.assets = source["assets"];
+	        this.warnings = this.convertValues(source["warnings"], TextPackWarning);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TextPackExportResult {
+	    path: string;
+	    warnings: TextPackWarning[];
+	    assetCount: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TextPackExportResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.warnings = this.convertValues(source["warnings"], TextPackWarning);
+	        this.assetCount = source["assetCount"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TextPackImage {
+	    source: string;
+	    target: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TextPackImage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.target = source["target"];
+	    }
+	}
+
 	export class UpdateInfo {
 	    checked: boolean;
 	    suppressed: boolean;

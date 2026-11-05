@@ -11,6 +11,18 @@ func commitDocumentReplacement(staged, target, revision string) error {
 	return commitDocumentReplacementWithPublish(staged, target, revision, publishDocumentFile)
 }
 
+// Bundle callers choose a bounded archive revision limit and a verified,
+// same-volume recovery parent outside a TextBundle directory. The callback is
+// private backend policy, never supplied through the frontend bridge.
+func commitDocumentReplacementAt(staged, target, revision string, revisionLimit int64, recoveryParent string, beforePublish func() error) error {
+	// Unlike the ordinary document writer, package callers stage their own
+	// bytes. Keep the same metadata fail-closed rule at this new entry point.
+	if err := validateDocumentMetadata(target); err != nil {
+		return err
+	}
+	return commitDocumentReplacementWithOperationsAt(staged, target, revision, revisionLimit, recoveryParent, beforePublish, publishDocumentFile, prepareDocumentCandidate)
+}
+
 // The callback is a per-call seam for deterministic external-save regression
 // tests, not a global hook and not exposed through the application bridge.
 func commitDocumentReplacementWithPublish(staged, target, revision string, publish func(string, string) error) error {
@@ -18,14 +30,40 @@ func commitDocumentReplacementWithPublish(staged, target, revision string, publi
 }
 
 func commitDocumentReplacementWithOperations(staged, target, revision string, publish, prepare func(string, string) error) error {
+	return commitDocumentReplacementWithOperationsAt(staged, target, revision, maxSupportedDocumentBytes, "", nil, publish, prepare)
+}
+
+func commitDocumentReplacementWithOperationsAt(staged, target, revision string, revisionLimit int64, recoveryParent string, beforePublish func() error, publish, prepare func(string, string) error) error {
+	if !validDocumentRevisionLimit(revisionLimit) {
+		return errDocumentConflict
+	}
+	if recoveryParent == "" {
+		recoveryParent = filepath.Dir(target)
+	} else {
+		// This parameter is internal, but fail closed on missing/non-directory
+		// and linked final roots instead of following an unexpected redirection.
+		if !filepath.IsAbs(recoveryParent) {
+			return fmt.Errorf("DOCUMENT_SAFE_SAVE_ACCESS: recovery parent must be absolute")
+		}
+		recoveryParent = filepath.Clean(recoveryParent)
+		parent, err := os.Lstat(recoveryParent)
+		if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("DOCUMENT_SAFE_SAVE_ACCESS: recovery parent is unavailable or unsafe")
+		}
+	}
 	info, err := os.Lstat(target)
 	if os.IsNotExist(err) && revision == "" {
+		if beforePublish != nil {
+			if err := beforePublish(); err != nil {
+				return err
+			}
+		}
 		return publish(staged, target)
 	}
 	if err != nil || !info.Mode().IsRegular() {
 		return errDocumentConflict
 	}
-	dir, err := os.MkdirTemp(filepath.Dir(target), ".quillite-save-recovery-")
+	dir, err := os.MkdirTemp(recoveryParent, ".quillite-save-recovery-")
 	if err != nil {
 		return err
 	}
@@ -40,7 +78,7 @@ func commitDocumentReplacementWithOperations(staged, target, revision string, pu
 	if err = os.Remove(candidate); err != nil {
 		return err
 	}
-	if err = isolateDocumentOriginal(target, original, revision, info); err != nil {
+	if err = isolateDocumentOriginal(target, original, revision, info, revisionLimit); err != nil {
 		// Non-recursive: never remove a recovery directory containing any file.
 		_ = os.Remove(dir)
 		return err
@@ -68,7 +106,7 @@ func commitDocumentReplacementWithOperations(staged, target, revision string, pu
 		return failed(errDocumentConflict)
 	}
 	if revision != "" {
-		if err = checkDocumentRevision(original, revision); err != nil {
+		if err = checkDocumentRevisionWithLimit(original, revision, revisionLimit); err != nil {
 			return failed(err)
 		}
 	}
@@ -80,6 +118,11 @@ func commitDocumentReplacementWithOperations(staged, target, revision string, pu
 	}
 	if err = replaceDocumentFile(staged, candidate); err != nil {
 		return failed(err)
+	}
+	if beforePublish != nil {
+		if err = beforePublish(); err != nil {
+			return failed(err)
+		}
 	}
 	if err = publish(candidate, target); err != nil {
 		return failed(fmt.Errorf("%w: %v", errDocumentConflict, err))

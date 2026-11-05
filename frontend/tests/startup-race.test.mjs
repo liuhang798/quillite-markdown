@@ -4,13 +4,14 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {installDocumentLoadingFixture} from './document-loading-fixture.mjs';
 import {partitionRecentFiles} from '../src/library-state.js';
+import {sidebarStartsCollapsed} from '../src/reading-layout.js';
 const source=readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return{promise,resolve};};
 function harness() {
  const prefs=deferred(),initial=deferred(),mode=deferred(),calls=[];
  const state={documentOpenRequest:0,documentSession:0,explorerRequest:0,currentFile:null,recentFiles:[],pinnedRecentFiles:[],sidebarMode:'recent'};
- const context=vm.createContext({state,partitionRecentFiles,console,els:{usageAnalyticsToggle:{}},window:{quilliteMarkdown:{
+ const context=vm.createContext({state,partitionRecentFiles,console,sidebarStartsCollapsed,toggleSidebar(){},document:{documentElement:{dataset:{}}},localStorage:{getItem:()=>null},els:{usageAnalyticsToggle:{}},window:{quilliteMarkdown:{
   getPreferences:()=>{calls.push('prefs');return prefs.promise;},getInitialFile:()=>{calls.push('initial');return initial.promise;},getStartupMode:()=>mode.promise,
   getImageUploadSettings:async()=>({}),needsLanguageSelection:async()=>false,
  }},maybeDiscardChanges:()=>assert.fail('startup must never request discard of newer content'),

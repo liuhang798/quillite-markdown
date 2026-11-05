@@ -109,7 +109,7 @@ export function markdownImageRanges(source, { preview = false, definitions, excl
 // Export/save-as scan the whole document, unlike preview widgets which scan
 // their own editable scope. Footnote continuations look like code to the root
 // parser, so scan their projected bodies and map only image ranges back.
-function documentImageRanges(source) {
+export function documentImageRanges(source) {
   const notes=source.includes('[^')?prepareFootnotes(source).definitions:new Map();
   const definitions=markdownImageDefinitions(source);
   const result=markdownImageRanges(source,{definitions,excludedRanges:[...notes.values(),...scanMarkdownFormulas(source)]});
@@ -122,7 +122,7 @@ function documentImageRanges(source) {
   return result.sort((a,b)=>a.from-b.from);
 }
 
-function imageReplacement(item, ref) {
+export function imageReplacement(item, ref) {
   if (item.kind === 'reference') return `![${item.alt}](<${ref}>${item.title ? ` ${item.title}` : ''})`.replaceAll('\n','\n'+(item.continuationPrefix||''));
   if (item.kind === 'html') return ref.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   return `<${ref}>`;

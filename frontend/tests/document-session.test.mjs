@@ -17,7 +17,9 @@ function harness() {
   const calls = [];
   const context = vm.createContext({
     state, els: { editorFileName: {}, editorSaveState: {} },
-    window: { quilliteMarkdown: { saveFile: () => write.promise, saveAs: () => { calls.push('saveAs'); return write.promise; } } },
+    window: { quilliteMarkdown: { saveFile: () => write.promise, saveAs: () => { calls.push('saveAs'); return write.promise; }, saveDocumentAsFormat: () => { calls.push('saveAs'); return write.promise; } } },
+    chooseSaveDocumentFormat: async () => 'markdown',
+    documentFormatError: () => '',
     editorContent: () => state.currentFile.content,
     addRecentDocument: () => calls.push('recent'), refreshLibraryAfterReplacement: async () => {},
     syncDocumentAccessControls() {}, syncDocumentIdentity() {}, renderCurrentDocument() {},
@@ -155,6 +157,7 @@ test('explicit Save As on drafts still opens the chooser and cancel preserves co
   const { context, state, write, calls } = harness();
   state.currentFile.draft = true;
   const saving = context.saveDocument(true);
+  await new Promise(setImmediate);
   assert.equal(calls.includes('saveAs'), true);
   write.resolve(null);
   await saving;
@@ -166,6 +169,7 @@ test('explicit Save As on drafts still opens the chooser and cancel preserves co
 test('cross-directory copy rebases later edits but retains the committed baseline', async () => {
   const { context, state, write } = harness();
   const saving = context.saveDocument(true);
+  await new Promise(setImmediate);
   state.currentFile.content = 'old plus later edit';
   write.resolve({ path: '/copy.md', name: 'copy.md', sourceContent: 'old', content: 'rebased old', rebaseContent: text => `rebased ${text}` });
   await saving;

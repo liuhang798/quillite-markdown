@@ -38,6 +38,10 @@ export function ChooseDocumentSavePath(arg1) {
   return window['go']['main']['App']['ChooseDocumentSavePath'](arg1);
 }
 
+export function ChooseTextBundleSource(arg1) {
+  return window['go']['main']['App']['ChooseTextBundleSource'](arg1);
+}
+
 export function ClearRecoverySnapshot() {
   return window['go']['main']['App']['ClearRecoverySnapshot']();
 }
@@ -74,6 +78,10 @@ export function ExportHTML(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['ExportHTML'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ExportMarkdownWithAssets(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ExportMarkdownWithAssets'](arg1, arg2, arg3, arg4);
+}
+
 export function ExportPDF(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['ExportPDF'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -84,6 +92,10 @@ export function ExportPlainHTML(arg1, arg2, arg3, arg4, arg5) {
 
 export function ExportPortableMarkdown(arg1, arg2) {
   return window['go']['main']['App']['ExportPortableMarkdown'](arg1, arg2);
+}
+
+export function ExportTextPack(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportTextPack'](arg1, arg2, arg3);
 }
 
 export function ExportWithPandoc(arg1) {
@@ -146,6 +158,10 @@ export function ImportImage(arg1, arg2) {
   return window['go']['main']['App']['ImportImage'](arg1, arg2);
 }
 
+export function ImportTextBundle(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ImportTextBundle'](arg1, arg2, arg3);
+}
+
 export function ListAIModels(arg1) {
   return window['go']['main']['App']['ListAIModels'](arg1);
 }
@@ -184,6 +200,10 @@ export function NewFile() {
 
 export function OpenDefaultApps() {
   return window['go']['main']['App']['OpenDefaultApps']();
+}
+
+export function OpenEditableBundle(arg1) {
+  return window['go']['main']['App']['OpenEditableBundle'](arg1);
 }
 
 export function OpenExternal(arg1) {
@@ -238,6 +258,10 @@ export function ReadRecoveryArchive(arg1) {
   return window['go']['main']['App']['ReadRecoveryArchive'](arg1);
 }
 
+export function RebaseBundleDocument(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RebaseBundleDocument'](arg1, arg2, arg3);
+}
+
 export function RemoveFavorite(arg1) {
   return window['go']['main']['App']['RemoveFavorite'](arg1);
 }
@@ -262,6 +286,10 @@ export function RequestQuit() {
   return window['go']['main']['App']['RequestQuit']();
 }
 
+export function ResumeBundleDocument(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResumeBundleDocument'](arg1, arg2, arg3);
+}
+
 export function ReviewDocumentWithAI(arg1) {
   return window['go']['main']['App']['ReviewDocumentWithAI'](arg1);
 }
@@ -274,12 +302,24 @@ export function SaveAs(arg1, arg2) {
   return window['go']['main']['App']['SaveAs'](arg1, arg2);
 }
 
+export function SaveBundleCopy(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveBundleCopy'](arg1, arg2, arg3);
+}
+
+export function SaveBundleDocument(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveBundleDocument'](arg1, arg2, arg3, arg4);
+}
+
 export function SaveConflictCopy(arg1, arg2) {
   return window['go']['main']['App']['SaveConflictCopy'](arg1, arg2);
 }
 
 export function SaveDiagnosticReport(arg1) {
   return window['go']['main']['App']['SaveDiagnosticReport'](arg1);
+}
+
+export function SaveDocumentAsFormat(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SaveDocumentAsFormat'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function SaveDocumentCopy(arg1, arg2, arg3) {

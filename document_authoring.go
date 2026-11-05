@@ -41,6 +41,10 @@ func (a *App) documentSaveDialogOptions(currentPath string) wailsruntime.SaveDia
 	if name == "." || name == "" || a.isDraft(currentPath) {
 		name = a.text("newDocument")
 	}
+	if strings.EqualFold(filepath.Ext(currentPath), ".txt") {
+		return wailsruntime.SaveDialogOptions{Title: a.textPackLabel("另存为文本", "Save text as"), DefaultFilename: name, DefaultDirectory: directory,
+			Filters: []wailsruntime.FileFilter{{DisplayName: a.text("textFile"), Pattern: "*.txt"}}}
+	}
 	return wailsruntime.SaveDialogOptions{Title: a.text("saveAsMarkdown"), DefaultFilename: name, DefaultDirectory: directory,
 		Filters: []wailsruntime.FileFilter{{DisplayName: a.text("markdownDocument"), Pattern: "*.md"}, {DisplayName: a.text("textFile"), Pattern: "*.txt"}}}
 }
@@ -56,10 +60,28 @@ func (a *App) ChooseDocumentSavePath(currentPath string) (string, error) {
 }
 
 func (a *App) SaveDocumentCopy(currentPath, targetPath, content string) (*Document, error) {
+	if err := a.validateDocumentCopyTarget(currentPath, targetPath); err != nil {
+		return nil, err
+	}
+	if _, _, scoped, _ := a.bundleWorkspaceContext(currentPath); scoped {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED")
+	}
+	if _, _, scoped, _ := a.bundleWorkspaceContext(targetPath); scoped {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED")
+	}
+	if isEditableBundlePath(currentPath) || isEditableBundlePath(targetPath) {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED: preserve the complete package with SaveBundleCopy")
+	}
 	documentSaveMu.Lock()
 	defer documentSaveMu.Unlock()
 	var doc *Document
-	write := func(path string) (err error) { doc, err = a.saveDocumentAs(currentPath, path, content); return err }
+	write := func(path string) (err error) {
+		if err := a.validateDocumentCopyTarget(currentPath, path); err != nil {
+			return err
+		}
+		doc, err = a.saveDocumentAs(currentPath, path, content)
+		return err
+	}
 	_, found, err := a.withMacSecurityScopedPath(targetPath, write)
 	if !found {
 		err = write(targetPath)
@@ -129,6 +151,12 @@ func renameDocument(path, name, revision string) (string, string, error) {
 }
 
 func (a *App) RenameDocument(path, name, revision string) (*Document, error) {
+	if _, _, scoped, _ := a.bundleWorkspaceContext(path); scoped {
+		return nil, textPackError("BUNDLE_RENAME_NOT_SUPPORTED")
+	}
+	if isEditableBundlePath(path) || isEditableBundlePath(name) {
+		return nil, textPackError("BUNDLE_RENAME_NOT_SUPPORTED")
+	}
 	if a.isReferenceDocumentPath(path) {
 		return nil, errors.New("DOCUMENT_READ_ONLY")
 	}

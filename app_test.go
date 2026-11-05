@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,6 +28,22 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 )
+
+func TestLocalImageFileURLDecodesExactlyOnce(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"100%.png", "literal%20space.png", "空 格.png"} {
+		want := filepath.Join(dir, name)
+		path := filepath.ToSlash(want)
+		if runtime.GOOS == "windows" {
+			path = "/" + path
+		}
+		ref := (&url.URL{Scheme: "file", Path: path}).String()
+		got, err := resolveLocalImagePath(ref, "")
+		if err != nil || got != want {
+			t.Fatalf("resolve %q: got %q, %v; want %q", ref, got, err, want)
+		}
+	}
+}
 
 func TestEmptyTableCellKeepsBoundaryAndCaret(t *testing.T) {
 	data, err := os.ReadFile("frontend/src/live-editable-block.js")

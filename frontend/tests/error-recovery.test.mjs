@@ -13,6 +13,31 @@ function load(name, context) {
   vm.runInContext(next < 0 ? rest : rest.slice(0, next + 1), context);
 }
 
+for (const method of ['exportWordDocument','exportHTMLDocument','exportPDFWithBookmarks']) {
+  test(method + ' stops on unreadable local images with recovery guidance', async () => {
+    const messages = [];
+    const ctx = vm.createContext({state:{currentFile:{path:'document.md',name:'document'},language:'en'},
+      window:{quilliteMarkdown:{}}, renderedHTMLForExport:async()=>{throw Error('EXPORT_IMAGE_RESOURCE_FAILED: local image unavailable');},
+      pdfEngineFailure:()=>'', showToast:(...args)=>messages.push(args), t:k=>k});
+    for (const name of ['diagnosticErrorMessage','isExportFileInUseError','isExportTooLargeError','isExportAccessDeniedError','warnIfLocalExportImageUnavailable',method]) load(name,ctx);
+    assert.equal(await ctx[method](),false);
+    assert.match(messages[0][0],/image path and permissions/);
+    assert.equal(messages[0][1],'warning');
+  });
+}
+
+test('unfocused preview code copy shows a warning without false success', async () => {
+  let click; const messages = [];
+  const button = {textContent:'copy', closest:()=>({querySelector:()=>({textContent:'example'})}), addEventListener:(_, cb)=>{click=cb;}};
+  const ctx = vm.createContext({state:{language:'en'}, navigator:{clipboard:{writeText:async()=>{throw Error('Document is not focused');}}},
+    showToast:m=>messages.push(m), t:k=>k});
+  load('bindDocumentActions',ctx);
+  ctx.bindDocumentActions({querySelectorAll:s=>s==='.copy-code'?[button]:[]});
+  await click();
+  assert.match(messages[0], /Focus this window/);
+  assert.equal(button.textContent,'copy');
+});
+
 test('expected screenshot limits and export permissions are not submitted as software errors', () => {
   const context = vm.createContext({ isMissingDocumentError });
   for (const name of ['diagnosticErrorMessage', 'isExportAccessDeniedError', 'isExpectedOperationalError']) load(name, context);

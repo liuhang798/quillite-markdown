@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "3.0.2"
+	appVersion      = "3.1.0"
 	maxRecent       = 10
 )
 
@@ -62,17 +62,24 @@ var formulaReferenceMarkdown string
 var formatReferenceMarkdown string
 
 type Document struct {
-	Path         string `json:"path"`
-	Name         string `json:"name"`
-	Directory    string `json:"directory"`
-	Content      string `json:"content"`
-	ModifiedAt   string `json:"modifiedAt"`
-	Size         int64  `json:"size"`
-	ReplacedPath string `json:"replacedPath,omitempty"`
-	ReadOnly     bool   `json:"readOnly,omitempty"`
-	Revision     string `json:"revision,omitempty"`
-	Draft        bool   `json:"draft,omitempty"`
-	Warning      string `json:"warning,omitempty"`
+	Path             string            `json:"path"`
+	Name             string            `json:"name"`
+	Directory        string            `json:"directory"`
+	Content          string            `json:"content"`
+	ModifiedAt       string            `json:"modifiedAt"`
+	Size             int64             `json:"size"`
+	ReplacedPath     string            `json:"replacedPath,omitempty"`
+	ReadOnly         bool              `json:"readOnly,omitempty"`
+	Revision         string            `json:"revision,omitempty"`
+	Draft            bool              `json:"draft,omitempty"`
+	Warning          string            `json:"warning,omitempty"`
+	BundleKind       string            `json:"bundleKind,omitempty"`
+	BundleSessionID  string            `json:"bundleSessionId,omitempty"`
+	BundleTextPath   string            `json:"bundleTextPath,omitempty"`
+	ResourcePath     string            `json:"resourcePath,omitempty"`
+	PackageDirectory string            `json:"packageDirectory,omitempty"`
+	BundleConflict   bool              `json:"bundleConflict,omitempty"`
+	ExportWarnings   []TextPackWarning `json:"exportWarnings,omitempty"`
 }
 
 type FolderFile struct {
@@ -83,9 +90,10 @@ type FolderFile struct {
 }
 
 type FolderResult struct {
-	Root  string       `json:"root"`
-	Name  string       `json:"name"`
-	Files []FolderFile `json:"files"`
+	Root     string       `json:"root"`
+	Name     string       `json:"name"`
+	Files    []FolderFile `json:"files"`
+	Document *Document    `json:"document,omitempty"`
 }
 
 type RecentFileStatus struct {
@@ -500,6 +508,19 @@ func (a *App) readDocument(filePath string, remember bool) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, _, scoped, scopeErr := a.bundleWorkspaceContext(absPath); scoped {
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		if origin := a.bundleResourceOrigin(absPath); !sameFilesystemPath(origin, absPath) {
+			return a.readBundleDocument(origin, remember)
+		}
+		return nil, textPackError("BUNDLE_RESOURCE_NOT_DOCUMENT")
+	}
+	absPath = bundleOpenDocumentPath(absPath)
+	if isEditableBundlePath(absPath) {
+		return a.readBundleDocument(absPath, remember)
+	}
 	data, info, _, foundBookmark, bookmarkErr := a.readDocumentWithMacBookmark(absPath)
 	if !foundBookmark || bookmarkErr != nil {
 		data, err = readDocumentBytes(absPath)
@@ -526,7 +547,10 @@ func (a *App) markdownOpenDialogOptions() wailsruntime.OpenDialogOptions {
 	return wailsruntime.OpenDialogOptions{
 		Title: a.text("openMarkdown"),
 		Filters: []wailsruntime.FileFilter{
+			{DisplayName: a.textPackLabel("支持的文档", "Supported documents"), Pattern: "*.md;*.markdown;*.mdown;*.mkd;*.txt;*.textpack;*.textbundle"},
 			{DisplayName: a.text("markdownDocument"), Pattern: "*.md;*.markdown;*.mdown;*.mkd"},
+			{DisplayName: "TextPack", Pattern: "*.textpack"},
+			{DisplayName: "TextBundle", Pattern: "*.textbundle"},
 			{DisplayName: a.text("textFile"), Pattern: "*.txt"},
 			{DisplayName: a.text("allFiles"), Pattern: "*.*"},
 		},
@@ -538,7 +562,8 @@ func (a *App) OpenFile() (*Document, error) {
 	if err != nil || filePath == "" {
 		return nil, err
 	}
-	_ = a.rememberMacSecurityScopedPath(filePath, false)
+	filePath = bundleOpenDocumentPath(filePath)
+	_ = a.rememberMacSecurityScopedPath(filePath, strings.EqualFold(filepath.Ext(filePath), ".textbundle"))
 	return a.ReadFile(filePath)
 }
 
@@ -915,6 +940,9 @@ func createNewMarkdownFile(directories []string, baseName string, now time.Time)
 // SelectImage copies the selected image into the document's assets directory
 // and returns a portable, Markdown-friendly relative path.
 func (a *App) SelectImage(currentFile string) (string, error) {
+	if err := a.validateBundleImageDestination(currentFile); err != nil {
+		return "", err
+	}
 	imagePath, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title: a.text("selectImage"),
 		Filters: []wailsruntime.FileFilter{
@@ -929,21 +957,27 @@ func (a *App) SelectImage(currentFile string) (string, error) {
 	if a.embedsImages() {
 		return a.embeddedImage(imagePath, filepath.Dir(currentFile))
 	}
-	return importImageToAssets(currentFile, imagePath)
+	return a.importImageToAssets(currentFile, imagePath)
 }
 
 // ImportImage copies a dropped image into the document's assets directory.
 func (a *App) ImportImage(currentFile, sourcePath string) (string, error) {
+	if err := a.validateBundleImageDestination(currentFile); err != nil {
+		return "", err
+	}
 	_ = a.rememberMacSecurityScopedPath(sourcePath, false)
 	if a.embedsImages() {
 		return a.embeddedImage(sourcePath, filepath.Dir(currentFile))
 	}
-	return importImageToAssets(currentFile, sourcePath)
+	return a.importImageToAssets(currentFile, sourcePath)
 }
 
 // SavePastedImage stores image data received from the clipboard in the same
 // assets directory used by selected and dropped files.
 func (a *App) SavePastedImage(currentFile, dataURL string) (string, error) {
+	if err := a.validateBundleImageDestination(currentFile); err != nil {
+		return "", err
+	}
 	metadata, encoded, found := strings.Cut(strings.TrimSpace(dataURL), ",")
 	if !found || !strings.HasPrefix(strings.ToLower(metadata), "data:image/") || !strings.Contains(strings.ToLower(metadata), ";base64") {
 		return "", errors.New("clipboard data is not a base64 image")
@@ -974,10 +1008,18 @@ func (a *App) SavePastedImage(currentFile, dataURL string) (string, error) {
 		return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 	}
 	name := "image-" + time.Now().Format("20060102-150405.000") + extension
-	return writeImageAsset(currentFile, name, data)
+	return a.writeImageAsset(currentFile, name, data)
 }
 
 func importImageToAssets(currentFile, sourcePath string) (string, error) {
+	return importImageToAssetsWithWriter(currentFile, sourcePath, writeImageAsset)
+}
+
+func (a *App) importImageToAssets(currentFile, sourcePath string) (string, error) {
+	return importImageToAssetsWithWriter(currentFile, sourcePath, a.writeImageAsset)
+}
+
+func importImageToAssetsWithWriter(currentFile, sourcePath string, write func(string, string, []byte) (string, error)) (string, error) {
 	if strings.TrimSpace(sourcePath) == "" {
 		return "", errors.New("image path is empty")
 	}
@@ -1011,7 +1053,7 @@ func importImageToAssets(currentFile, sourcePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return writeImageAsset(currentFile, filepath.Base(source), data)
+	return write(currentFile, filepath.Base(source), data)
 }
 
 func imageAssetsDirectory(currentFile string) (assetsDirectory, documentDirectory string, err error) {
@@ -1073,6 +1115,10 @@ func writeImageAsset(currentFile, preferredName string, data []byte) (string, er
 			_ = os.Remove(destination)
 			return "", writeErr
 		}
+		if syncErr := file.Sync(); syncErr != nil {
+			_ = file.Close()
+			return "", syncErr // Retain this new attachment for recovery.
+		}
 		if closeErr := file.Close(); closeErr != nil {
 			_ = os.Remove(destination)
 			return "", closeErr
@@ -1089,7 +1135,16 @@ func writeImageAsset(currentFile, preferredName string, data []byte) (string, er
 // ReadImageData reads local images for the WebView. Direct file:// access is
 // blocked by WebView security rules, so previews use a data URL instead.
 func (a *App) ReadImageData(imagePath, documentDirectory string) (string, error) {
-	resolved, err := resolveLocalImagePath(imagePath, documentDirectory)
+	var resolved string
+	var err error
+	if scopedPath, scoped, scopeErr := a.bundleWorkspaceImagePath(imagePath, documentDirectory); scoped {
+		if scopeErr != nil {
+			return "", scopeErr
+		}
+		resolved = scopedPath // Already decoded and confined; never decode again.
+	} else {
+		resolved, err = resolveLocalImagePath(imagePath, documentDirectory)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -1124,10 +1179,9 @@ func resolveLocalImagePath(imagePath, documentDirectory string) (string, error) 
 		return "", errors.New("image path is empty")
 	}
 	if parsed, err := url.Parse(imagePath); err == nil && strings.EqualFold(parsed.Scheme, "file") {
-		imagePath, err = url.PathUnescape(parsed.Path)
-		if err != nil {
-			return "", err
-		}
+		// url.Parse already decoded Path. Decoding twice changes literal
+		// percent sequences in filenames (or rejects a valid percent sign).
+		imagePath = parsed.Path
 		if goruntime.GOOS == "windows" && len(imagePath) >= 3 && imagePath[0] == '/' && imagePath[2] == ':' {
 			imagePath = imagePath[1:]
 		}
@@ -1147,11 +1201,18 @@ func resolveLocalImagePath(imagePath, documentDirectory string) (string, error) 
 }
 
 func (a *App) OpenFolder() (*FolderResult, error) {
-	root, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{Title: a.text("openFolder")})
+	root, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{Title: a.text("openFolder"), TreatPackagesAsDirectories: true})
 	if err != nil || root == "" {
 		return nil, err
 	}
 	_ = a.rememberMacSecurityScopedPath(root, true)
+	if strings.EqualFold(filepath.Ext(root), ".textbundle") {
+		doc, err := a.ReadFile(root)
+		if err != nil {
+			return nil, err
+		}
+		return &FolderResult{Root: root, Name: filepath.Base(root), Files: []FolderFile{}, Document: doc}, nil
+	}
 	folder, err := a.ListFolder(root)
 	if err != nil {
 		return nil, err
@@ -1212,6 +1273,9 @@ func isDocumentAccessDenied(platform string, err error) bool {
 // without changing its contents. This catches read-only chat-app cache files,
 // restricted locations, and files currently locked against writes.
 func (a *App) CanEditFile(filePath string) bool {
+	if _, _, scoped, _ := a.bundleWorkspaceContext(filePath); scoped {
+		return false
+	}
 	editable := false
 	_, foundBookmark, bookmarkErr := a.withMacSecurityScopedPath(filePath, func(accessiblePath string) error {
 		editable = canEditFile(accessiblePath)
@@ -1231,6 +1295,16 @@ func canEditFile(filePath string) bool {
 		return false
 	}
 	cleaned := filepath.Clean(filePath)
+	if strings.EqualFold(filepath.Ext(cleaned), ".textbundle") {
+		if err := textPackNoLinks(cleaned); err != nil {
+			return false
+		}
+		snapshot, err := readEditableBundle(cleaned)
+		if err != nil {
+			return false
+		}
+		return canEditFile(filepath.Join(cleaned, filepath.FromSlash(snapshot.TextEntry)))
+	}
 	info, err := os.Stat(cleaned)
 	if err != nil || info.IsDir() {
 		return false
@@ -1247,6 +1321,12 @@ func (a *App) SaveFile(filePath, content string) (*Document, error) {
 }
 
 func (a *App) saveFile(filePath, content, revision string) (*Document, error) {
+	if _, _, scoped, _ := a.bundleWorkspaceContext(filePath); scoped {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED")
+	}
+	if isEditableBundlePath(filePath) {
+		return nil, textPackError("BUNDLE_SESSION_REQUIRED: use the original-package save operation")
+	}
 	if len(content) > maxSupportedDocumentBytes {
 		return nil, errors.New("DOCUMENT_TOO_LARGE: maximum supported document size is 64 MiB")
 	}
@@ -1402,9 +1482,9 @@ func (a *App) collectMarkdownFiles(root, current string, depth int, result *[]Fo
 			continue
 		}
 		fullPath := filepath.Join(current, entry.Name())
-		if entry.IsDir() {
+		if entry.IsDir() && !strings.EqualFold(filepath.Ext(entry.Name()), ".textbundle") {
 			a.collectMarkdownFiles(root, fullPath, depth+1, result)
-		} else if markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] {
+		} else if markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] || isEditableBundlePath(entry.Name()) {
 			relative, _ := filepath.Rel(root, fullPath)
 			directory, _ := filepath.Rel(root, filepath.Dir(fullPath))
 			if directory == "" {
@@ -1434,12 +1514,12 @@ func (a *App) recentFileStatuses(paths []string) []RecentFileStatus {
 		exists := false
 		_, foundBookmark, bookmarkErr := a.withMacSecurityScopedPath(filePath, func(accessiblePath string) error {
 			info, err := os.Stat(filepath.Clean(accessiblePath))
-			exists = err == nil && !info.IsDir()
+			exists = err == nil && (!info.IsDir() || strings.EqualFold(filepath.Ext(accessiblePath), ".textbundle"))
 			return err
 		})
 		if !foundBookmark || bookmarkErr != nil {
 			info, err := os.Stat(filepath.Clean(filePath))
-			exists = err == nil && !info.IsDir()
+			exists = err == nil && (!info.IsDir() || strings.EqualFold(filepath.Ext(filePath), ".textbundle"))
 		}
 		statuses = append(statuses, RecentFileStatus{
 			Path:   filePath,
@@ -1487,7 +1567,7 @@ func (a *App) SetRecentPinned(filePath string, pinned bool) (Preferences, error)
 		if pinned {
 			if pinnedIndex < 0 {
 				info, err := os.Stat(storedPath)
-				if err != nil || info.IsDir() {
+				if err != nil || (info.IsDir() && !strings.EqualFold(filepath.Ext(storedPath), ".textbundle")) {
 					return
 				}
 				prefs.PinnedRecentFiles = append([]string{storedPath}, prefs.PinnedRecentFiles...)
@@ -1628,6 +1708,9 @@ func (a *App) OpenExternal(rawURL string) error {
 
 func (a *App) OpenDefaultApps() error {
 	if goruntime.GOOS == "windows" {
+		if err := registerCurrentDocumentApplication(); err != nil {
+			return err
+		}
 		return exec.Command("explorer.exe", "ms-settings:defaultapps").Start()
 	}
 	return nil
@@ -1688,7 +1771,7 @@ func (a *App) DiscardChangesAndQuit() bool {
 
 func findMarkdownArgument(args []string) string {
 	for _, arg := range args {
-		if markdownExtensions[strings.ToLower(filepath.Ext(strings.Trim(arg, "\"")))] {
+		if markdownExtensions[strings.ToLower(filepath.Ext(strings.Trim(arg, "\"")))] || isEditableBundlePath(strings.Trim(arg, "\"")) {
 			return strings.Trim(arg, "\"")
 		}
 	}

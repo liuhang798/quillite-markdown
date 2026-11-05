@@ -271,6 +271,7 @@ function normalizeSVGTypography(svg, type = '', preserveForeground = false) {
   if (type === 'treemap-beta') normalizeTreemapDiagram(svg);
   if (type === 'mindmap') normalizeMindmapDiagram(svg);
   if (type === 'sankey-beta') normalizeSankeyDiagram(svg);
+  if (type === 'gantt') constrainGanttTodayMarker(svg);
   expandSVGViewBox(svg);
   applyReadableSVGWidth(svg, type);
 }
@@ -461,6 +462,24 @@ function normalizeXYChart(svg) {
   const match = transform.match(/translate\(\s*[-+\d.]+(?:e[-+]?\d+)?[ ,]+([-+\d.]+(?:e[-+]?\d+)?)\s*\)\s*rotate\(\s*270\s*\)/iu);
   if (!match) return;
   title.setAttribute('transform', `translate(-18, ${match[1]}) rotate(270)`);
+}
+
+function constrainGanttTodayMarker(svg) {
+  // Mermaid extrapolates today's date beyond a past/future schedule. Do not
+  // let that off-canvas decoration expand the task canvas to thousands of
+  // empty units: fitting or centering that canvas can hide every actual task.
+  // Keep the marker when it falls within Mermaid's original date viewport.
+  const box = svg.viewBox?.baseVal;
+  if (!box || box.width <= 0) return;
+  for (const marker of svg.querySelectorAll('g.today')) {
+    const line = marker.querySelector('line');
+    if (!line) continue;
+    const x1 = Number(line.getAttribute('x1')), x2 = Number(line.getAttribute('x2'));
+    if (Number.isFinite(x1) && Number.isFinite(x2)
+      && (Math.max(x1, x2) < box.x || Math.min(x1, x2) > box.x + box.width)) {
+      marker.style.display = 'none';
+    }
+  }
 }
 
 function expandSVGViewBox(svg, padding = 10) {

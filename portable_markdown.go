@@ -114,15 +114,45 @@ func (a *App) ExportPortableMarkdown(sourcePath, content string) (string, error)
 	if len(content) > maxSupportedDocumentBytes {
 		return "", errors.New("DOCUMENT_TOO_LARGE")
 	}
-	options := a.documentSaveDialogOptions(sourcePath)
-	options.DefaultFilename = strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath)) + "-portable.md"
+	origin := a.bundleResourceOrigin(sourcePath)
+	options := a.documentSaveDialogOptions(origin)
+	options.DefaultFilename = strings.TrimSuffix(filepath.Base(origin), filepath.Ext(origin)) + "-portable.md"
 	options.Filters = []wailsruntime.FileFilter{{DisplayName: a.text("portableMarkdown"), Pattern: "*.md"}}
 	target, err := wailsruntime.SaveFileDialog(a.ctx, options)
 	if err != nil || target == "" {
 		return "", err
 	}
 	_ = a.rememberMacSecurityScopedPath(target, false)
-	write := func(path string) error { return writeConflictCopy(sourcePath, path, []byte(content)) }
+	return a.exportPortableMarkdownTo(sourcePath, target, content)
+}
+
+func (a *App) exportPortableMarkdownTo(sourcePath, target, content string) (string, error) {
+	if len(content) > maxSupportedDocumentBytes {
+		return "", errors.New("DOCUMENT_TOO_LARGE")
+	}
+	if err := a.validateDocumentCopyTarget(sourcePath, target); err != nil {
+		return "", err
+	}
+	write := func(path string) error {
+		if err := a.validateDocumentCopyTarget(sourcePath, path); err != nil {
+			return err
+		}
+		if isEditableBundlePath(path) {
+			return textPackError("BUNDLE_SESSION_REQUIRED")
+		}
+		if err := validateTextPackPath(filepath.Base(path), false); err != nil {
+			return err
+		}
+		// Anchor publication to the verified directory handle. A parent alias
+		// swap after validation cannot redirect this create-only write into an
+		// original package or a managed recovery workspace.
+		root, err := textPackOpenRoot(filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		defer root.Close()
+		return textPackWriteNew(root, filepath.Base(path), []byte(content))
+	}
 	_, found, err := a.withMacSecurityScopedPath(target, write)
 	if !found {
 		err = write(target)

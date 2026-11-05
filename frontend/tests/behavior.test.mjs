@@ -27,15 +27,17 @@ test('opening an existing recent document updates it in place', () => {
 });
 
 test('recent documents show their source directory instead of a generic recently opened label', () => {
-  assert.match(renderer, /directory: doc\.directory \|\| directoryFromDocumentPath\(doc\.path\)/);
-  assert.match(renderer, /: \(file\.directory \|\| directoryFromDocumentPath\(file\.path\)\)/);
-  assert.match(renderer, /<small title="\$\{escapeHtml\(sub\)\}">\$\{escapeHtml\(sub\)\}<\/small>/);
+  assert.match(renderer, /directory: doc\.packageDirectory \|\| doc\.directory \|\| directoryFromDocumentPath\(doc\.path\)/);
+  assert.match(renderer, /const absoluteDirectory = directoryFromDocumentPath\(file\.path\)/);
+  assert.match(renderer, /const directory = file\.directory && file\.directory !== '\.' \? file\.directory : absoluteDirectory/);
+  assert.match(renderer, /<small class="file-meta-line" title="\$\{escapeHtml\(absoluteDirectory\)\}">[\s\S]*class="file-type-badge"[\s\S]*<span class="file-location">\$\{escapeHtml\(sub\)\}<\/span><\/small>/);
 });
 
 test('missing recent and favorite documents stay visible but cannot be opened', () => {
   assert.match(renderer, /const missing = state\.sidebarMode !== 'explorer' && file\.exists === false/);
   assert.match(renderer, /file-row\$\{pinned \? ' pinned' : ''\}\$\{missing \? ' missing' : ''\}/);
-  assert.match(renderer, /aria-disabled="true" data-missing="true" title=.*recentMissingTitle/);
+  assert.match(renderer, /const fullTitle = [^;]*recentMissingTitle/);
+  assert.match(renderer, /aria-disabled="true" data-missing="true" title="\$\{escapeHtml\(fullTitle\)\}"/);
   assert.match(renderer, /if \(button\.dataset\.missing === 'true'\) return/);
   assert.match(renderer, /recentMissingAria/);
   assert.match(renderer, /refreshLibraryFileStatuses\(\)/);
@@ -122,7 +124,7 @@ test('document context menu edits, favorites, reveals, or removes the selected d
   assert.match(renderer, /else if \(action === 'reveal'\) await revealFileInFolder\(filePath\)/);
   assert.match(renderer, /else if \(action === 'remove'\) \{[\s\S]*await clearSelectedRecentRecords\(\);[\s\S]*else await removeRecentRecord\(filePath\)/);
   assert.match(renderer, /async function editRecentDocument\(filePath\)[\s\S]*window\.quilliteMarkdown\.openRecentFile\(filePath\)[\s\S]*await toggleEditor\(true\)/);
-  assert.match(renderer, /async function saveLibraryDocumentAs\(filePath, \{ editAfterSave = false \} = \{\}\)[\s\S]*window\.quilliteMarkdown\.saveAs\(source\.path, source\.content\)[\s\S]*displayDocument\(saved\)/);
+  assert.match(renderer, /async function saveLibraryDocumentAs\(filePath, \{ editAfterSave = false \} = \{\}\)[\s\S]*chooseSaveDocumentFormat\(source\)[\s\S]*window\.quilliteMarkdown\.saveDocumentAsFormat\(source\.path, source\.content, source\.bundleSessionId \|\| '', format\)[\s\S]*displayDocument\(saved\)/);
   assert.match(renderer, /await window\.quilliteMarkdown\.showInFolder\(filePath\)/);
   assert.match(styles, /\.recent-context-menu \{[^}]*right: auto;[^}]*width: 190px;/);
 });
@@ -412,9 +414,9 @@ test('images support links, asset imports, drag and paste, and display scaling',
   assert.match(renderer, /function imageMarkdown\(imagePath, description, width = preferredImageWidth\(\)\)/);
   assert.match(renderer, /width="\$\{normalizedWidth\}%">`/);
   assert.match(renderer, /function insertLocalImage\(\)/);
-  assert.match(renderer, /window\.quilliteMarkdown\.selectImage\(target\.path\)/);
+  assert.match(renderer, /window\.quilliteMarkdown\.selectImage\(target\.resourcePath \|\| target\.path\)/);
   assert.match(renderer, /async function importAndInsertImage\(sourcePath, description = '', view = codeEditor\)/);
-  assert.match(renderer, /window\.quilliteMarkdown\.importImage\(target\.path, sourcePath\)/);
+  assert.match(renderer, /window\.quilliteMarkdown\.importImage\(target\.resourcePath \|\| target\.path, sourcePath\)/);
   assert.match(renderer, /window\.quilliteMarkdown\.savePastedImage\(path, await fileAsDataURL\(file\)\)/);
   assert.match(renderer, /imageInsertionTargetCurrent\(target, codeEditor, state\.documentSession, state\.currentFile\?\.path, state\.editing\)/);
   assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('paste', handleEditorPaste, true\)/);
@@ -543,7 +545,7 @@ test('unwritable documents explain the cause and offer Save Copy and Edit withou
   assert.match(renderer, /\$\('#saveCopyAndEdit'\)\.addEventListener\('click', savePermissionCopyAndEdit\)/);
   assert.match(styles, /\.edit-permission-reasons \{[^}]*border-left: 3px solid var\(--accent\);[^}]*background: var\(--accent-soft\);/);
   assert.match(renderer, /if \(state\.saveAsRequired && options\.auto\) return;/);
-  assert.match(renderer, /if \(state\.saveAsRequired && !options\.auto && !options\.conflictRevision\) saveAs = true;/);
+  assert.match(renderer, /if \(state\.saveAsRequired && !options\.auto && !options\.conflictRevision && !state\.currentFile\.bundleKind\) saveAs = true;/);
   assert.match(renderer, /state\.saveAsRequired = true;/);
   assert.match(renderer, /fallbackToSaveAs = true;/);
   assert.match(renderer, /if \(fallbackToSaveAs && isCurrentSession\(\)\) return await saveDocument\(true, options\);/);
@@ -696,7 +698,8 @@ test('the document outline renders as a persistent searchable tree or flat list'
   assert.match(renderer, /data-toc-toggle=/);
   assert.match(renderer, /writeCollapsedToc\(localStorage, state\.currentFile\?\.path, collapsed\)/);
   assert.match(renderer, /scrollDeltaForBounds\(\{[\s\S]*viewportTop,[\s\S]*viewportBottom,/);
-  assert.match(renderer, /function scheduleActiveTocRefresh\(\)[\s\S]*requestAnimationFrame\(\(\) => \{[\s\S]*updateActiveToc\(\)/);
+  assert.match(renderer, /function scheduleActiveTocRefresh\(event\)[\s\S]*if \(activeTocRefreshFrame !== undefined\) return;[\s\S]*requestAnimationFrame\(\(\) => \{[\s\S]*updateActiveToc\(\)/);
+  assert.ok(renderer.includes("addEventListener('scroll', scheduleActiveTocRefresh, { passive: true })"));
   assert.match(renderer, /function setFontScale\([\s\S]*applyTocDisplayStyles\(\);\s*scheduleActiveTocRefresh\(\)/);
   assert.match(renderer, /function applyPaneWidths\(\)[\s\S]*setEditorPreviewWidth\(state\.editorPreviewWidth\);\s*scheduleActiveTocRefresh\(\)/);
   assert.doesNotMatch(renderer, /panelRect\.top \+ 38|panelRect\.bottom - 34/);
@@ -1073,7 +1076,7 @@ test('PicGo Cloud uploads directly while local PicGo remains compatible and ever
   assert.match(renderer, /if \(!imageSettingsResponseCurrent\(revision\)\) return;[\s\S]*if \(selectedImageUploadMode\(\) === 'picgo'\) testPicGoConnection\(\{ automatic: true \}\)/);
   assert.match(renderer, /PICGO_DOWNLOAD_URL = 'https:\/\/picgo\.app\/'/);
   assert.match(renderer, /selectedImageUploadMode\(\) === 'picgo' && !state\.picGoConnectionReady[\s\S]*await testPicGoConnection\(\)/);
-  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath, target\)[\s\S]*uploadImageToPicGoCloud\(target\.path, localPath, operationId\)[\s\S]*uploadImageToPicGo\(target\.path, localPath, operationId\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true, cliError \}/);
+  assert.match(renderer, /async function uploadedOrLocalImagePath\(localPath, target\)[\s\S]*uploadImageToPicGoCloud\(target\.resourcePath \|\| target\.path, localPath, operationId\)[\s\S]*uploadImageToPicGo\(target\.resourcePath \|\| target\.path, localPath, operationId\)[\s\S]*return \{ path: localPath, uploaded: false, fallback: true, cliError \}/);
   assert.match(html, /id="imageUploadProgress"[\s\S]*id="imageUploadProgressPercent"[\s\S]*id="imageUploadProgressBar"/);
   assert.match(renderer, /function beginImageUploadProgress\(mode\)[\s\S]*imageUploadPreparing[\s\S]*function updateImageUploadProgress\(progress\)[\s\S]*imageUploadFinalizing/);
   assert.match(renderer, /finally \{[\s\S]*finishImageUploadProgress\(uploadRun, succeeded\)/);

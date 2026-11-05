@@ -27,6 +27,7 @@ function harness() {
   state.documentConflict = { session: 1, disk: null, mergedRevision: '', draft: null };
   const calls = [];
   const api = {
+    saveDocumentAsFormat: (...args) => api.saveConflictCopy(...args.slice(0, 2)),
     readDocumentConflict: async () => ({ path: '/a.md', content: 'disk', revision: 'disk-revision' }),
     saveFile: async (...args) => { calls.push(['write', ...args]); return { path: '/a.md', name: 'a.md', content: args[1], revision: 'saved' }; },
     saveAs: async () => { throw new Error('unsafe save-as called'); },
@@ -49,6 +50,7 @@ function harness() {
     reportSilentError() {}, isMissingDocumentError, console: { error() {} }, setTimeout() {}, clearTimeout() {},
   });
   vm.runInContext(conflictSource, context);
+  context.chooseSaveDocumentFormat = async () => 'markdown';
   return { context, state, calls, $, api };
 }
 

@@ -2,6 +2,46 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [Unreleased]
+
+## [3.1.0] - 2026-11-05
+
+### 简体中文
+
+- 新增 Mermaid 与数据图表大图查看，支持滚轮／按钮缩放、拖动平移、适应窗口和原始大小，覆盖阅读、分栏预览与即时渲染。修复甘特图的排期外“今天”标记撑大画布，导致适应窗口过小或 100% 显示空白的问题；排期内标记保留。
+- 侧边栏自动记住上次展开／收起状态，在首屏绘制前恢复，避免启动时展开再收起；分栏预览按光标相对高度定位，手动滚动预览时暂停跟随。
+- 文档列表调整为“名称／类型标签与路径”两行结构，后缀从标题移到第二行；TextPack、TextBundle 与普通 Markdown 有清晰类型标识，长路径省略不隐藏标签，真实文件名不变。
+- 修复本轮审计发现的保存与隐私问题：目录标题采用惰性解析，进入编辑不再绕过网络资源授权；普通 Markdown 备份不强制打包图片，TXT 另存保留纯文本与后缀；UTF-8 BOM 转包后重复保存不再叠加。便携导出等输出拒绝原包和受管工作区内部目标，图片插入在写入前核验全局工作区配额，不删除既有恢复材料。
+- 修复 Windows 安装生命周期回归脚本重复使用原位卸载目录导致后续安装被安全校验阻断的问题；后续阶段使用全新隔离目录，不放宽安装保护或删除未知卸载文件。
+- 修复 Windows 安装器遗漏 TextPack 文件关联与“打开方式”候选的问题，使用本应用专属登记与内嵌图标并保留用户已有默认选择；便携版可通过默认应用菜单主动登记，不在启动时自动修改系统关联。
+- TextPack／TextBundle 统一使用普通打开、编辑和保存流程，移除“导入”与“直接编辑”两套入口。“另存为”提供 Markdown、TextBundle 和 TextPack，TXT 另提供纯文本，默认当前格式，成功后切换新副本；手动和自动保存继续写回当前原包。包到包的另存保留全部附件和第三方元数据。
+- 原包崩溃恢复保存基准修订、受控持久工作区和新增附件；来源丢失仍可恢复为完整副本，外部变化不自动授权覆盖。保存前先持久化恢复快照，失败/部分提交暂停自动保存并保留材料。原包图片读取限制在工作区；网络资源继续需主动允许，不自动下载。
+- 合并官网错误日志排查修复：本地图片 file URL 只解码一次；显式再次导出或打印时仅重试之前失败的本地读取，附件恢复后无需重开文档。缺图仍阻止渲染类导出，并提示检查路径和权限；代码块复制失焦时提示重试，不再误报成功或产生未处理异常。
+- 修复从网页粘贴含 `\(...\)`、`\[...\]` 等公式的富文本时，反斜杠被重复转义而无法渲染的问题；兼容带有效 TeX 源信息的 KaTeX／MathML，避免重复文字。保留公式源码，不将普通括号或代码内容识别为公式，不自动重写已有损坏源码。
+- 优化阅读滚动时的目录跟随：同帧事件合并，标题定位改为少量实时测量，仅更新变化的活动章节及祖先，减少长文档中的主线程与布局开销。保留阅读进度、章节跳转和 Ctrl／⌘+滚轮缩放；Ubuntu 原生环境的实际流畅度仍需实机复测。
+- 统一导出面板提供“Markdown（含图片）”和“打包文档（含图片）”，分别生成普通 `.md + assets` 副本和新 `.textpack`；导出不修改源文档，不切换当前编辑文档。
+- 图片收集保留源文档与附件，支持 Markdown、引用式、HTML 和脚注中的普通图片；缺失、包外、网络或未验证资源明确提示，不将不完整包标成完全离线。网络图片不下载入包，首次导入会话需主动允许后才加载网络图片。
+- 导入会话同时拦截 CSS、SVG 和图表的自动外部图片请求；未授权时图表显示源码，渲染类导出和打印先确认授权。保留普通布局样式，不改写源文，普通非导入文档不受影响。
+- 导入校验包结构、路径、文件类型、资源指纹及大小上限，拒绝路径穿越、符号链接、重复路径和超限压缩包；目标仅新建，不覆盖已有文件。第一期不支持 `srcset` 等复杂响应式图片，明确提示后停止。
+
+### English
+
+- Add an enlarged Mermaid/data-chart viewer with wheel/button zoom, drag-to-pan, fit and actual-size controls across reading, split preview and live editing. Keep off-schedule Gantt today markers from stretching the canvas and making fitted charts tiny or 100% views empty; preserve in-range markers.
+- Restore the remembered sidebar state before first paint without a collapse animation. Align split preview with the caret’s relative height and pause following during manual preview navigation.
+- Move filename extensions into second-line type badges beside the location, keeping document names on the first line. TextPack, TextBundle and ordinary Markdown are clearly distinguished; long paths truncate without hiding the badge or renaming actual files.
+- Fix audited privacy and saving defects: parse outline titles inertly so editing cannot bypass remote-resource consent; keep ordinary Markdown backups free of mandatory image packing and preserve TXT content/extensions; stop UTF-8 BOM duplication after package conversion. Reject export targets inside the original package or managed workspaces, and enforce the shared workspace budget before inserting images without deleting recovery material.
+- Fix the Windows installation lifecycle regression using a fresh isolated destination after in-place uninstallation, avoiding a blocked repeat installation without weakening production guards or deleting unknown uninstallers.
+- Fix missing Windows TextPack associations and Open With candidates using application-owned registrations and embedded icons while preserving existing default choices. Portable users can explicitly register through the default-app menu; startup never silently changes associations.
+- Unify TextPack/TextBundle with ordinary document opening, editing and saving, removing separate import/direct-edit entries. Save As offers Markdown, TextBundle and TextPack, plus plain text for TXT, defaults to the current format and switches to the new copy only after success. Manual and automatic saves still update the current original package. Package-to-package copies retain all attachments and third-party metadata.
+- Recover original-package drafts with their base revision, durable controlled workspace and new assets, even when the source is missing. Persist recovery before saving; pause autosave on failure/partial publication without deleting recovery material. Local image reads stay scoped to the workspace; online resources still require opt-in and are not downloaded.
+- Integrate fixes from the production error-log audit: decode local image file URLs once; retry only failed local reads on explicit export or print, allowing restored attachments without reopening the document. Missing images still block rendered export with path/permission guidance. Unfocused code-copy failures show retry guidance instead of false success or an unhandled rejection.
+- Fix double-escaped backslashes when pasting rich text with math delimiters such as `\(...\)` and `\[...\]` from web pages. Recover a single formula from KaTeX/MathML with valid TeX source metadata. Preserve source without treating ordinary parentheses or code as math, or automatically rewriting previously damaged source.
+- Reduce scroll-time outline work by coalescing events per frame, measuring only a bounded selection of live heading positions, and updating only changed active links and ancestors. Preserve reading progress, chapter navigation and Ctrl/Command+wheel zoom. Native Ubuntu scrolling still requires device-level verification.
+- Add “Markdown (with images)” and “Pack document (with images)” to the unified export panel, creating an ordinary `.md + assets` copy or a new `.textpack`. Exports neither change the source nor switch the active editing document.
+- Preserve source documents and attachments while collecting ordinary Markdown, reference, HTML and footnote images. Explicitly report missing, outside-package, remote and unverified resources without claiming complete offline availability. Remote images are not downloaded into packages and require opt-in loading in the initial imported-document session.
+- Block automatic external image requests from CSS, SVG and charts in imported-document sessions; show chart source until permission is granted and request consent before rendered export or printing. Preserve ordinary layout styles and source text; ordinary non-imported documents are unaffected.
+- Validate bundle structure, paths, file types, resource fingerprints and size limits; reject traversal, symbolic links, duplicate paths and oversized archives. Outputs are create-only. Complex responsive images such as `srcset` are not supported in this phase and stop the operation with an explanation.
+
 ## [3.0.2] - 2026-10-30
 
 ### 简体中文

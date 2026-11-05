@@ -1,4 +1,5 @@
 <div align="center">
+
   <img src="build/appicon.png" width="96" alt="Quillite Markdown icon">
   <h1>Quillite Markdown</h1>
   <p><strong>A local Markdown workspace for focused reading and comfortable editing.</strong></p>
@@ -6,15 +7,21 @@
   <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
     <a href="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml"><img src="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml/badge.svg" alt="Build status"></a>
-    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.0.2-159A63" alt="Download V3.0.2"></a>
+    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.1.0-159A63" alt="Download V3.1.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/liuhang798/quillite-markdown" alt="MIT License"></a>
   </p>
   <p><a href="https://qm.ssssa.cn/">Official website</a> · <a href="https://qm.ssssa.cn/#download">Download</a> · <a href="#quick-start">Quick start</a> · <a href="#development">Build from source</a></p>
 </div>
 
+The sidebar automatically remembers its last expanded or collapsed state and restores it before first paint, without extra settings or a collapse animation. Split preview follows the caret at a similar relative height; manual preview scrolling pauses following until the next editor interaction.
+
+Charts support an enlarged viewer in reading mode, split preview and the live editor. Click **Enlarge chart**, scroll or use +/− to zoom, and drag to pan; **Fit to window** and **Actual size** reset the view. Mermaid diagrams in reading mode also open on click; data charts retain their legend interactions. Press Esc to close. Viewing does not change document content, chart configuration or export dimensions.
+
+Gantt charts retain their schedule viewport: out-of-range today markers do not stretch the canvas or hide chart content in fitted and actual-size views.
+
 Quillite Markdown is built with Go + Wails, without Electron. The Windows installer is about 13 MB. Read long documents, write READMEs, maintain technical notes and browse local Markdown folders; plain-text `.txt` files are supported too. Documents stay in local files, and no Quillite account is required.
 
-The current release is **V3.0.2**, adding on-demand PicGo CLI uploads, one-click preparation and upload-settings verification. It improves large-document loading, fixes outline equations, local document links, new-document saving and chart selection, and simplifies Spell check. See the [changelog](CHANGELOG.md) for this update and the [complete v3.0.0 record](docs/releases/3.0.0-details.md) for the previous major release.
+V3.1.0 adds TextPack/TextBundle opening, editing, saving and image-bundled export, chart zoom viewing, remembered sidebar state and improved preview alignment, with Gantt viewport, save-safety and image-loading fixes. See the [changelog](CHANGELOG.md) for details.
 
 ## Download
 
@@ -27,7 +34,7 @@ The current release is **V3.0.2**, adding on-demand PicGo CLI uploads, one-click
 - **[qm.ssssa.cn](https://qm.ssssa.cn/)** is the official website and the app's only update/download channel. GitHub retains source code, release records and build assets.
 - Windows installation shows the final destination before confirmation. A custom ordinary folder is treated as a parent for a dedicated product directory. Upgrades reuse only a validated installation directory; uninstalling preserves user documents.
 - Formal Windows Authenticode / Apple Developer ID certificates are not configured. SmartScreen or Gatekeeper may display warnings. Updates or file access may require authorization depending on the operating system; a prompt-free experience is not guaranteed.
-- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.0.2; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
+- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.1.0; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
 
 ## Quick start
 
@@ -36,6 +43,8 @@ Auto, English (US) and English (UK) are listed directly in the Spell check subme
 More → Spell check groups misspelling marks, dictionary language and clearing the personal dictionary. Export and Print remain in the reading-page actions (the document actions menu in narrow windows), without duplicate entries in More. Ctrl / ⌘ + P remains available.
 
 Heading equations retain subscripts, superscripts and fractions in the reading outline, editing outline and inline `[TOC]`. Search accepts formula source text; existing section anchors and document content remain unchanged.
+
+Unreleased fixes preserve math delimiters such as `\(...\)` and `\[...\]` during rich-text paste instead of double-escaping their backslashes; ordinary parentheses and code remain literal. Reading-outline tracking coalesces scroll events per frame, measures only a bounded selection of headings and updates only changed active sections. Browser regressions cover the optimization; native Ubuntu behavior still needs device-level verification.
 
 Leaving the editor restores the pre-edit reading position instead of jumping to the top. Newly opened documents still start at the top.
 
@@ -57,6 +66,8 @@ Local Markdown/text links resolve against the current file's directory and open 
 Switching modes preserves content, selection and undo history. The app remembers the mode and layout; leaving and reentering editing retains manual choices. Clicking a mode button again reapplies its automatic preview behavior. Swap the split orientation or drag the divider to adjust pane widths.
 
 ## Features
+
+Rendered exports such as Word, PDF and styled HTML stop if a local image cannot be read. Check the path, location and read permissions, then export again without reopening the document. “Package document with images” still explicitly reports missing resources without promising complete offline use.
 
 ### Live-rendered and source editing
 
@@ -108,6 +119,7 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 - Searchable, collapsible document outlines, document search, zoom, eight accent colors, light/dark themes and Chinese/English interfaces.
 - Body & math settings independently control body style, equation size and four body line-spacing presets. Preview before saving or cancel to restore; inline code uses a theme-aware neutral background in reading and live editing.
 - Windows Show in Folder selects the full file path without guessing the target from same-named window titles.
+- Document lists show the name without its extension on the first line and a type badge plus location on the second, distinguishing TextPack, TextBundle and ordinary Markdown. Long paths truncate without hiding the badge; hover to see complete names and paths. Actual files are never renamed.
 - Recent, Favorites and a folder explorer. Recent supports pinning, ordering and `Ctrl / ⌘` multi-selection removal. `Shift + click` selects an inclusive range; `Ctrl / ⌘ + Shift + click` adds a range to the selection. Removing records does not delete files.
 - Bulk removal uses a macOS-compatible in-app confirmation dialog from the toolbar, context menu or Delete key. Cancel preserves the selection; failures remain retryable without affecting Favorites or the unsaved document.
 - Rename, Save As, history versions and crash recovery. Restored content first enters the editor and is written to disk only after saving.
@@ -118,6 +130,15 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 
 ### Export and optional assistance
 
+- TextPack/TextBundle use the ordinary opening, editing and saving workflow, without separate import/direct-edit modes. Open `.textpack` through **Open**; drag in a TextBundle, select its `.textbundle` directory through **Open folder**, or enter the package in the file picker and select its text document. Ctrl/Command+S and 10-second autosave update the current original package.
+- The Windows installer registers the TextPack icon, double-click command and Open With candidate; replacing the editor executable alone does not update these system registrations, so run the new installer. Portable users can explicitly choose **More → Set as default MD app** to register candidates and open Windows Settings. Registration never runs automatically at startup or forcibly replaces a chosen default application.
+- **Save As** offers Markdown, TextBundle and TextPack, plus **Plain text** for a current TXT document. It defaults to the current format and extension before opening the system location dialog. Ordinary same-format Markdown backups do not force image collection; TXT copies preserve the exact text without parsing image syntax. Cross-folder Markdown copies still rebase supported image references. Editing continues in the new copy only after success; canceling leaves the current document unchanged. Package-to-package copies retain all resources and third-party metadata without overwriting an existing target. **Markdown (with images)** in the export panel creates an ordinary `.md + assets` copy without switching the current document; **Pack document (with images)** still creates a new `.textpack`. Neither export changes the source.
+- Package revisions cover text, images and metadata. External changes pause autosave and require comparison, an explicit merge or a complete copy. Unchanged ZIP entries and original `info.json` bytes are retained; directory saves safely replace only the text and create new images without deleting existing resources.
+- Recovery stores the original identity and base revision; complete baselines and new assets remain in the configuration directory’s `bundle-sessions`, with no automatic cleanup. Missing originals can be recovered into complete copies, never silently recreated or overwritten. Workspaces are capped at 64 / 2 GiB total, including a total-budget check before image insertion; each package at 256 MiB, text at 64 MiB and image at 25 MiB. Directory saves explicitly report partial attachment publication if text commit fails, retaining recovery material.
+- Online resources still require opt-in and are never downloaded automatically. Outline headings are parsed in inert containers, preventing heading images from bypassing consent when entering the editor. Local image reads stay inside the controlled workspace. Conversion preserves a single UTF-8 BOM without duplicating it on later saves. Portable Markdown, Markdown-with-images and package export/copy destinations cannot be inside the current original package or managed workspaces, and destination-directory symlinks/junctions are not followed; select the real directory directly. Direct package rename and Pandoc-based exports are not supported yet: close the document before renaming in the file manager, or export portable Markdown before using Pandoc. Ordinary rendered exports remain available.
+- Version history restores Markdown text while retaining the current package’s attachments and metadata; it is not full-package historical rollback. Crash-recovery baselines and new assets are preserved separately in the durable workspace.
+- Packaging and format conversion never download remote images. Missing, outside-package and unverified resources are reported; complete offline availability is not promised. Online images require explicit loading after opening a package. Ordinary Markdown, reference, HTML `img src` and footnote images are supported; complex responsive images such as `srcset` are not supported yet. Conversions create new targets only and reject unsafe paths, links and oversized archives.
+- Until network resources are allowed in the package-document session, charts show source and potentially network-bearing styles are disabled; ordinary image layout styles remain. Opting in restores rendering. Printing and rendered exports request permission first. This session-only policy never rewrites the source document.
 - One export entry point provides Word, styled/unstyled HTML, PDF, high-resolution PNG/JPEG and portable Markdown.
 - PDF prefers installed Edge / Chrome / Chromium, with system printing as fallback. Optional local Pandoc adds EPUB, RTF, ODT, LaTeX and other formats.
 - Offline English spell checking and a personal dictionary, plus document checks, folder search and preview-confirmed batch replacement.
