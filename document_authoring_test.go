@@ -95,7 +95,9 @@ func TestRenameCreateOnlyPublication(t *testing.T) {
 
 func TestSaveCopyNeverOverwritesAndKeepsDraftOnFailure(t *testing.T) {
 	a := testApp(t)
-	dir := t.TempDir()
+	// macOS temporary directories may start at the /var symlink. This test
+	// exercises a permitted destination, not the separate alias-rejection rule.
+	dir := textPackTestDirectory(t)
 	source := filepath.Join(dir, "draft.md")
 	target := filepath.Join(dir, "saved.md")
 	_ = os.WriteFile(source, []byte("draft"), 0600)
@@ -294,7 +296,7 @@ func TestImageReadingHasAByteLimitAndRejectsDirectories(t *testing.T) {
 
 func TestSaveCopyReceiptSurvivesLibraryPreferenceFailure(t *testing.T) {
 	a := testApp(t)
-	dir := t.TempDir()
+	dir := textPackTestDirectory(t)
 	source := filepath.Join(dir, "draft.md")
 	target := filepath.Join(dir, "saved.md")
 	_ = os.WriteFile(source, []byte("original draft"), 0600)
