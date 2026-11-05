@@ -5,7 +5,7 @@ import {createServer} from 'vite';
 const playwright=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
 // On macOS a real Control-click is a context click, not a selection click.
 const primary=process.platform==='darwin'?'Meta':'Control';
-const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error',plugins:[{
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:Number(process.env.RECENT_PORT)||41870,watch:null,hmr:false},logLevel:'error',plugins:[{
  name:'isolated-recent-selection',enforce:'pre',transform(code,id){if(id.replaceAll('\\','/').endsWith('/src/renderer.js'))return code+`\nwindow.recentAudit={seed(prefs){applyLibraryPreferences(prefs);setSidebarMode('recent');},snapshot(){return {selection:state.recentSelection,dirty:state.dirty,current:state.currentFile?.path,text:codeEditor?editorContent():null,favorites:state.favoriteFiles.map(f=>f.path),pins:state.pinnedRecentFiles};}};`;}
 }]});
 let browser;
@@ -28,7 +28,8 @@ try{
   window.quilliteMarkdown.reportErrorLog=async()=>{};
   window.recentAudit.seed(window.recentPrefs);
  });
- const row=name=>page.locator('.file-item').filter({has:page.locator('strong',{hasText:name})});
+ // File extensions are shown separately as type badges; identify the record by path.
+ const row=name=>page.locator(`.file-item[data-path="${encodeURIComponent(`C:/${name}`)}"]`);
  const selected=()=>page.evaluate(()=>recentAudit.snapshot().selection);
  await row('pinned.md').click({modifiers:[primary]});
  await row('missing.md').click({modifiers:[primary,'Shift']});
@@ -98,7 +99,8 @@ try{
  await page.evaluate(()=>window.failRemoval=false);
  await page.locator('#recentRemoveAction').click();
  await page.locator('#confirmRecentClear').click();await page.waitForFunction(()=>document.querySelectorAll('.file-item').length===1);
- assert.equal(await page.locator('.file-item strong').textContent(),'keep.md');
+ assert.equal(await page.locator('.file-item strong').textContent(),'keep');
+ assert.equal(await row('keep.md').count(),1);
  await row('keep.md').click({modifiers:[primary]});await row('keep.md').press('Delete');
  await page.locator('#confirmRecentClear').click();
  await page.locator('.empty-list').waitFor();

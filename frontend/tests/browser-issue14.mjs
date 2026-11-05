@@ -40,9 +40,12 @@ try {
  await page.locator('#hideLivePreviewButton').click();await page.waitForTimeout(100);assert.equal(await overlap(),false);
  await page.locator('#restoreLivePreviewButton').click();
  await page.setViewportSize({width:1366,height:768});
+ // Settle the preceding hide/restore/resize sequence before testing navigation.
+ // Otherwise WebKit can still be measuring the old editor viewport.
+ await page.waitForTimeout(500);
  await page.evaluate(()=>{window.auditView=document.querySelector('.cm-content').cmTile.root.view;});
  const select=async text=>{
-  await page.evaluate(text=>{const v=auditView,p=v.state.doc.toString().indexOf(text);v.dispatch({selection:{anchor:p},scrollIntoView:true});v.focus();},text);
+  await page.evaluate(text=>{const v=auditView,p=v.state.doc.toString().indexOf(text);v.focus();v.dispatch({selection:{anchor:p},scrollIntoView:true});},text);
   await page.waitForTimeout(200);
  };
  const visible=text=>page.evaluate(text=>{
@@ -54,7 +57,7 @@ try {
   }
   return false;
  },text);
- await select('段落 25');assert.ok(await visible('段落 25'));
+ await select('段落 25');assert.ok(await visible('段落 25'),'paragraph navigation must synchronize preview after layout settles');
  const top=await page.locator('.editor-preview-scroll').evaluate(el=>el.scrollTop);
  await page.keyboard.press('ArrowRight');assert.equal(await page.locator('.editor-preview-scroll').evaluate(el=>el.scrollTop),top,'visible cursor should not jump');
  await page.locator('.editor-preview-scroll').evaluate(el=>el.scrollTo({top:0,behavior:'instant'}));
