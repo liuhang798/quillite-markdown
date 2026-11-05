@@ -114,7 +114,16 @@ try {
     $machineExtension = 'HKLM:\Software\Classes\.textpack'
     if (Test-Path -LiteralPath $machineExtension) { throw 'Machine TextPack fixture is not pristine.' }
     if ((Read-Default $packExtension) -ne $otherProgId) { throw 'Unexpected fixture default before machine-wide test.' }
-    Remove-ItemProperty -LiteralPath $packExtension -Name '(default)'
+    # Registry defaults have an empty value name; '(default)' is only the
+    # provider's display label and is not portable to Remove-ItemProperty.
+    $fixtureKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Classes\.textpack', $true)
+    try {
+        if ($null -eq $fixtureKey -or $fixtureKey.GetValue('') -ne $otherProgId) { throw 'Unexpected writable TextPack fixture.' }
+        $fixtureKey.DeleteValue('')
+        if ($fixtureKey.GetValueNames().Contains('')) { throw 'Fixture default was not removed.' }
+    } finally {
+        if ($null -ne $fixtureKey) { $fixtureKey.Dispose() }
+    }
     New-Item -Path $machineExtension -Force | Out-Null
     Set-Item -LiteralPath $machineExtension -Value $machineProgId
     # The registered _?= mode runs the installed uninstaller in place, so it
