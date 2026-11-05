@@ -83,7 +83,7 @@ try {
     if(output&&name==='rendered-KaTeX')await page.screenshot({path:join(output,`issue16-pasted-live-${engine}.png`),animations:'disabled'});
     await page.locator('[data-editor-presentation="source"]').click();
     await page.locator('#markdownEditor > .cm-editor > .cm-scroller > .cm-content').focus();
-    await page.keyboard.press('Control+z');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
     assert.equal(await page.evaluate(()=>issue16Audit.editor()),pasteTarget,'paste is one undo-safe transaction');
   }
   await page.evaluate(text=>issue16Audit.replace(text),pasteTarget);

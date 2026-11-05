@@ -55,7 +55,7 @@ try {
     const editor=page.locator('#markdownEditor > .cm-editor');
     await editor.waitFor();
     await editor.locator('> .cm-scroller > .cm-content').focus();
-    await page.keyboard.press('Control+End');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
     await page.keyboard.insertText('\n\nUNSAVED SNAPSHOT');
     const before=await page.evaluate(()=>packUI.state.currentFile.content);
     const originalPath=await page.evaluate(()=>packUI.state.currentFile.path);
