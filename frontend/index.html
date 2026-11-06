@@ -126,6 +126,22 @@
       <svg viewBox="0 0 24 24"><path d="m10 7 5 5-5 5"/></svg>
     </button>
 
+    <div class="main-workspace">
+      <section id="updateBanner" class="update-banner hidden no-drag" role="region" data-i18n-aria-label="updateAvailableLabel" aria-label="软件更新">
+        <div class="update-banner-heading" aria-live="polite" aria-atomic="true">
+          <strong id="updateBannerLabel" class="update-banner-label" data-i18n="updateBannerLabel">有新版本</strong>
+          <span id="updateBannerVersion" class="update-banner-version"></span>
+        </div>
+        <span id="updateBannerCount" class="update-banner-count hidden"></span>
+        <p id="updateBannerSummary" class="update-banner-summary"></p>
+        <div class="update-banner-actions">
+          <button id="updateBannerOpen" class="update-banner-open" type="button" data-i18n="updateBannerOpen">更新</button>
+          <button id="updateBannerDismiss" class="update-banner-dismiss" type="button" data-i18n-title="updateBannerDismiss" data-i18n-aria-label="updateBannerDismiss" title="关闭，7 天内不再提示" aria-label="关闭，7 天内不再提示">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </section>
+      <div class="workspace-panes">
     <section class="reader-pane">
       <div id="welcome" class="welcome">
         <div class="welcome-shell">
@@ -428,6 +444,8 @@
       <div class="reading-progress"><span id="progressBar"></span></div>
       <small id="readingTime"></small>
     </aside>
+      </div>
+    </div>
   </main>
 
   <div id="dropOverlay" class="drop-overlay hidden">
@@ -1041,10 +1059,9 @@
         <span id="updateProgressLabel" data-i18n="downloadingUpdate">正在下载更新…</span>
       </div>
       <div class="update-footer">
-        <button id="updateLater" class="large-button secondary" type="button" data-i18n="remindLater">稍后提醒</button>
-        <button id="updateSnooze" class="large-button secondary" type="button" data-i18n="snooze30Days">30 天内不再提醒</button>
-        <button id="applyUpdate" class="large-button primary" type="button" data-i18n="downloadAndUpdate">下载并更新</button>
-        <button id="openUpdatePage" class="large-button secondary" type="button" data-i18n="openDownloadPage">打开下载页面</button>
+        <p id="updateInlineHint" class="update-inline-hint hidden" data-i18n="updateInlineHint">应用内自动下载并安装，无需手动下载安装包。</p>
+        <button id="applyUpdate" class="large-button primary hidden" type="button" data-i18n="downloadAndUpdate" aria-describedby="updateInlineHint">一键更新</button>
+        <button id="openUpdatePage" class="large-button secondary" type="button" data-i18n="openDownloadPage">打开下载链接</button>
       </div>
     </section>
   </div>

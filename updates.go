@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,18 +28,24 @@ var windowsUninstallerSafetyCheck = prepareWindowsUninstallerForUpdate
 var updateExecutablePath = os.Executable
 
 type UpdateInfo struct {
-	Checked               bool   `json:"checked"`
-	Suppressed            bool   `json:"suppressed"`
-	Available             bool   `json:"available"`
-	ManualInstallRequired bool   `json:"manualInstallRequired"`
-	ManualInstallReason   string `json:"manualInstallReason"`
-	ManualInstallerURL    string `json:"manualInstallerUrl"`
-	CurrentVersion        string `json:"currentVersion"`
-	LatestVersion         string `json:"latestVersion"`
-	ReleaseName           string `json:"releaseName"`
-	ReleaseNotes          string `json:"releaseNotes"`
-	ReleaseURL            string `json:"releaseUrl"`
-	PublishedAt           string `json:"publishedAt"`
+	Checked               bool                 `json:"checked"`
+	Suppressed            bool                 `json:"suppressed"`
+	Available             bool                 `json:"available"`
+	ManualInstallRequired bool                 `json:"manualInstallRequired"`
+	ManualInstallReason   string               `json:"manualInstallReason"`
+	ManualInstallerURL    string               `json:"manualInstallerUrl"`
+	CurrentVersion        string               `json:"currentVersion"`
+	LatestVersion         string               `json:"latestVersion"`
+	ReleaseName           string               `json:"releaseName"`
+	ReleaseNotes          string               `json:"releaseNotes"`
+	Summary               string               `json:"summary"`
+	SummaryZH             string               `json:"summaryZh"`
+	SummaryEN             string               `json:"summaryEn"`
+	Updates               []UpdateReleaseNotes `json:"updates"`
+	UpdateCount           int                  `json:"updateCount"`
+	UpdatesTruncated      bool                 `json:"updatesTruncated"`
+	ReleaseURL            string               `json:"releaseUrl"`
+	PublishedAt           string               `json:"publishedAt"`
 }
 
 // WindowsInstallSafety describes whether the current Windows installation can
@@ -74,12 +82,18 @@ func windowsInstallSafetyForPlatform(goos string, safe bool) WindowsInstallSafet
 }
 
 type updateRelease struct {
-	TagName     string               `json:"tag_name"`
-	Name        string               `json:"name"`
-	Body        string               `json:"body"`
-	HTMLURL     string               `json:"html_url"`
-	PublishedAt string               `json:"published_at"`
-	Assets      []updateReleaseAsset `json:"assets"`
+	TagName          string               `json:"tag_name"`
+	Name             string               `json:"name"`
+	Body             string               `json:"body"`
+	Summary          string               `json:"summary"`
+	SummaryZH        string               `json:"summaryZh"`
+	SummaryEN        string               `json:"summaryEn"`
+	Updates          []UpdateReleaseNotes `json:"updates"`
+	UpdateCount      int                  `json:"updateCount"`
+	UpdatesTruncated bool                 `json:"updatesTruncated"`
+	HTMLURL          string               `json:"html_url"`
+	PublishedAt      string               `json:"published_at"`
+	Assets           []updateReleaseAsset `json:"assets"`
 }
 
 type updateReleaseAsset struct {
@@ -89,13 +103,30 @@ type updateReleaseAsset struct {
 }
 
 type officialRelease struct {
-	Version     string                 `json:"version"`
-	TitleZH     string                 `json:"titleZh"`
-	TitleEN     string                 `json:"titleEn"`
-	NotesZH     string                 `json:"notesZh"`
-	NotesEN     string                 `json:"notesEn"`
-	PublishedAt string                 `json:"publishedAt"`
-	Assets      []officialReleaseAsset `json:"assets"`
+	Version          string                 `json:"version"`
+	TitleZH          string                 `json:"titleZh"`
+	TitleEN          string                 `json:"titleEn"`
+	NotesZH          string                 `json:"notesZh"`
+	NotesEN          string                 `json:"notesEn"`
+	SummaryZH        string                 `json:"summaryZh"`
+	SummaryEN        string                 `json:"summaryEn"`
+	Updates          []UpdateReleaseNotes   `json:"updates"`
+	UpdateCount      int                    `json:"updateCount"`
+	UpdatesTruncated bool                   `json:"updatesTruncated"`
+	PublishedAt      string                 `json:"publishedAt"`
+	Assets           []officialReleaseAsset `json:"assets"`
+}
+
+// Notes only: all installation targets and digests still come exclusively from
+// the latest release. Older package downloads are never used for incremental upgrades.
+type UpdateReleaseNotes struct {
+	Version        string `json:"version"`
+	PublishedAt    string `json:"publishedAt"`
+	SummaryZH      string `json:"summaryZh"`
+	SummaryEN      string `json:"summaryEn"`
+	NotesZH        string `json:"notesZh"`
+	NotesEN        string `json:"notesEn"`
+	NotesTruncated bool   `json:"notesTruncated"`
 }
 
 type officialReleaseAsset struct {
@@ -137,7 +168,7 @@ func (a *App) fetchOfficialLatestRelease() (*updateRelease, error) {
 		return nil, fmt.Errorf("official release catalog returned %s", response.Status)
 	}
 	var item officialRelease
-	if err := json.NewDecoder(response.Body).Decode(&item); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&item); err != nil {
 		return nil, fmt.Errorf("decode official release catalog: %w", err)
 	}
 	return a.mapOfficialRelease(item)
@@ -164,7 +195,41 @@ func (a *App) mapOfficialRelease(item officialRelease) (*updateRelease, error) {
 		HTMLURL:     officialDownloadPage,
 		PublishedAt: item.PublishedAt,
 		Assets:      make([]updateReleaseAsset, 0, len(item.Assets)),
+		SummaryZH:   boundedUpdateSummary(item.SummaryZH),
+		SummaryEN:   boundedUpdateSummary(item.SummaryEN),
 	}
+	mapped.Summary = mapped.SummaryZH
+	if a.language == "en" {
+		mapped.Summary = mapped.SummaryEN
+	}
+	if mapped.Summary == "" {
+		if mapped.SummaryZH != "" {
+			mapped.Summary = mapped.SummaryZH
+		} else {
+			mapped.Summary = mapped.SummaryEN
+		}
+	}
+	seen := map[string]bool{}
+	for _, update := range item.Updates {
+		if !validUpdateNotesVersion(update.Version) || seen[update.Version] || compareVersions(update.Version, appVersion) <= 0 || compareVersions(update.Version, item.Version) > 0 {
+			continue
+		}
+		seen[update.Version] = true
+		update.SummaryZH, update.SummaryEN = boundedUpdateSummary(update.SummaryZH), boundedUpdateSummary(update.SummaryEN)
+		update.NotesTruncated = update.NotesTruncated || len([]rune(update.NotesZH)) > 5000 || len([]rune(update.NotesEN)) > 5000
+		update.NotesZH, update.NotesEN = boundedUpdateNotes(update.NotesZH), boundedUpdateNotes(update.NotesEN)
+		mapped.Updates = append(mapped.Updates, update)
+	}
+	sort.Slice(mapped.Updates, func(i, j int) bool { return compareVersions(mapped.Updates[i].Version, mapped.Updates[j].Version) > 0 })
+	if len(mapped.Updates) > 12 {
+		mapped.Updates = mapped.Updates[:12]
+		mapped.UpdatesTruncated = true
+	}
+	mapped.UpdateCount = item.UpdateCount
+	if mapped.UpdateCount < len(mapped.Updates) {
+		mapped.UpdateCount = len(mapped.Updates)
+	}
+	mapped.UpdatesTruncated = mapped.UpdatesTruncated || item.UpdatesTruncated || mapped.UpdateCount > len(mapped.Updates)
 	base, _ := url.Parse(officialWebsiteBase)
 	for _, asset := range item.Assets {
 		assetURL, err := url.Parse(strings.TrimSpace(asset.URL))
@@ -209,9 +274,9 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 		windowsUninstallerSafe = windowsUninstallerSafetyCheck()
 	}
 	// A legacy uninstaller is remediated before the update check. If remediation
-	// is impossible, keep the manual installer fallback visible regardless of the
-	// ordinary 30-day reminder preference.
-	if !force && windowsUninstallerSafe {
+	// is impossible, keep the manual installer fallback for explicit checks and
+	// installation. Reminder snoozing never bypasses this silent safety check.
+	if !force {
 		prefs, err := a.readPreferences()
 		if err == nil && prefs.SuppressUpdateUntil != "" {
 			if until, parseErr := time.Parse(time.RFC3339, prefs.SuppressUpdateUntil); parseErr == nil && time.Now().Before(until) {
@@ -248,6 +313,12 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 		LatestVersion:         latest,
 		ReleaseName:           strings.TrimSpace(release.Name),
 		ReleaseNotes:          strings.TrimSpace(release.Body),
+		Summary:               release.Summary,
+		SummaryZH:             release.SummaryZH,
+		SummaryEN:             release.SummaryEN,
+		Updates:               release.Updates,
+		UpdateCount:           release.UpdateCount,
+		UpdatesTruncated:      release.UpdatesTruncated,
 		ReleaseURL:            release.HTMLURL,
 		PublishedAt:           release.PublishedAt,
 	}
@@ -264,6 +335,48 @@ func (a *App) CheckForUpdates(force bool) (UpdateInfo, error) {
 		return result, err
 	}
 	return result, nil
+}
+
+func boundedUpdateSummary(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	runes := []rune(value)
+	if len(runes) > 160 {
+		value = string(runes[:160])
+	}
+	return value
+}
+
+func boundedUpdateNotes(value string) string {
+	runes := []rune(value)
+	if len(runes) > 5000 {
+		return string(runes[:5000])
+	}
+	return value
+}
+
+func validUpdateNotesVersion(value string) bool {
+	if strings.Contains(strings.SplitN(value, "+", 2)[0], "-") || len(value) > 80 {
+		return false
+	}
+	core := strings.SplitN(value, "+", 2)[0]
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return false
+			}
+		}
+		if _, err := strconv.Atoi(part); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func fullInstallerURLForPlatform(assets []updateReleaseAsset, goos string) string {

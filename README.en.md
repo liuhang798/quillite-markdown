@@ -35,6 +35,7 @@ V3.1.0 adds TextPack/TextBundle opening, editing, saving and image-bundled expor
 - Windows installation shows the final destination before confirmation. A custom ordinary folder is treated as a parent for a dedicated product directory. Upgrades reuse only a validated installation directory; uninstalling preserves user documents.
 - Formal Windows Authenticode / Apple Developer ID certificates are not configured. SmartScreen or Gatekeeper may display warnings. Updates or file access may require authorization depending on the operating system; a prompt-free experience is not guaranteed.
 - Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.1.0; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
+- New releases appear in a banner without opening a dialog automatically. Dismiss the banner to pause automatic reminders for seven days; manual checks are still available. Open it to see missed-version notes and use **Update now** when supported, or open the official download link.
 
 ## Quick start
 

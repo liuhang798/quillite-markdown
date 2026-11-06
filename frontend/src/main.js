@@ -202,7 +202,7 @@ window.quilliteMarkdown = {
   listFolder: root => desktopRuntime ? Backend.ListFolder(root) : resolved({ root, files: [] }),
   getPreferences: () => desktopRuntime
     ? Backend.GetPreferences()
-    : resolved({ language: localStorage.getItem('language') || 'zh-CN', fontFamily: localStorage.getItem('fontFamily') || 'system', bodyTypography: readBodyTypography(localStorage), recentFiles: [], recentFileStatuses: [], pinnedRecentFiles: [], favoriteFiles: [], favoriteFileStatuses: [], explorerRoot: localStorage.getItem('explorerRoot') || '', usageAnalytics: true }),
+    : resolved({ language: localStorage.getItem('language') || 'zh-CN', fontFamily: localStorage.getItem('fontFamily') || 'system', bodyTypography: readBodyTypography(localStorage), recentFiles: [], recentFileStatuses: [], pinnedRecentFiles: [], favoriteFiles: [], favoriteFileStatuses: [], explorerRoot: localStorage.getItem('explorerRoot') || '', suppressUpdateUntil: localStorage.getItem('suppressUpdateUntil') || '', usageAnalytics: true }),
   needsLanguageSelection: () => desktopRuntime ? Backend.NeedsLanguageSelection() : resolved(false),
   removeRecent: filePath => desktopRuntime ? Backend.RemoveRecent(filePath) : resolved(),
   setRecentPinned: (filePath, pinned) => desktopRuntime ? Backend.SetRecentPinned(filePath, pinned) : resolved(),
@@ -287,16 +287,30 @@ window.quilliteMarkdown = {
       ? {
           checked: true,
           available: true,
-          currentVersion: '2.4.4',
+          currentVersion: '3.0.1',
           latestVersion: '3.1.0',
           releaseName: localStorage.getItem('language') === 'en' ? 'Quillite Markdown 3.1.0' : '轻阅 Markdown 3.1.0',
+          summaryZh: '支持图表放大查看和文档包编辑，新增不打断操作的顶部更新提示。',
+          summaryEn: 'Enlarge charts, edit document bundles, and see updates in a non-intrusive banner.',
           releaseNotes: localStorage.getItem('language') === 'en'
-            ? 'Added visual table editing, rich paste, and spell checking\nAdded PicGo image hosting with upload progress\nAdded a 12-format Export Center and crisp A4 image pages'
-            : '新增可视化表格、富文本粘贴与拼写检查\n新增 PicGo 图床和上传进度\n新增 12 种格式导出中心与 A4 高清图片分页',
+            ? '- Enlarge charts and edit document bundles.\n- Show updates in a non-intrusive banner.'
+            : '- 支持图表放大查看和文档包编辑。\n- 新版本在顶部横条提醒，不打断当前操作。',
+          updateCount: 2,
+          updatesTruncated: false,
+          updates: [
+            {version: '3.1.0', summaryZh: '支持图表放大查看和文档包编辑，新增不打断操作的顶部更新提示。', summaryEn: 'Enlarge charts, edit document bundles, and see updates in a non-intrusive banner.',
+              notesZh: '- 支持图表放大查看和文档包编辑。\n- 新版本在顶部横条提醒，不打断当前操作。', notesEn: '- Enlarge charts and edit document bundles.\n- Show updates in a non-intrusive banner.'},
+            {version: '3.0.2', summaryZh: '新增 PicGo CLI 按需上传，优化大文档体验与目录公式。', summaryEn: 'On-demand PicGo CLI uploads, smoother large documents and outline equations.',
+              notesZh: '- 新增 PicGo CLI 按需上传及配置验证。\n- 优化大文档加载体验，修复目录公式。', notesEn: '- Added on-demand PicGo CLI uploads and setup verification.\n- Improved large-document loading and outline equations.'}
+          ],
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
       : { checked: true, available: false, currentVersion: '3.1.0', latestVersion: '3.1.0' }),
-  snoozeUpdates: days => desktopRuntime ? Backend.SnoozeUpdates(days) : resolved(),
+  snoozeUpdates: days => {
+    if (desktopRuntime) return Backend.SnoozeUpdates(days);
+    localStorage.setItem('suppressUpdateUntil', new Date(Date.now() + Math.max(1, Math.min(365, days)) * 86400000).toISOString());
+    return resolved();
+  },
   downloadAndApplyUpdate: () => desktopRuntime ? Backend.DownloadAndApplyUpdate() : resolved(),
   onUpdateProgress: callback => desktopRuntime ? EventsOn('update:progress', callback) : () => {},
   onImageUploadProgress: callback => desktopRuntime ? EventsOn('image-upload:progress', callback) : () => {},

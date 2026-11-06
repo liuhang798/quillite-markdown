@@ -1,0 +1,10 @@
+{
+  "3.0.2": {
+    "summaryZh": "新增 PicGo CLI 按需上传，优化大文档阅读、目录公式与本地文档保存。",
+    "summaryEn": "Add on-demand PicGo CLI uploads and improve large documents, outline equations and local saving."
+  },
+  "3.1.0": {
+    "summaryZh": "支持图表放大查看和文档包编辑，新增不打断操作的顶部更新提示。",
+    "summaryEn": "Enlarge charts, edit document bundles, and see updates in a non-intrusive banner."
+  }
+}

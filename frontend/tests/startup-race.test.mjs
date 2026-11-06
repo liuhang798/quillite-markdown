@@ -5,13 +5,14 @@ import vm from 'node:vm';
 import {installDocumentLoadingFixture} from './document-loading-fixture.mjs';
 import {partitionRecentFiles} from '../src/library-state.js';
 import {sidebarStartsCollapsed} from '../src/reading-layout.js';
+import {updateReminderUntil} from '../src/update-reminder.js';
 const source=readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return{promise,resolve};};
 function harness() {
  const prefs=deferred(),initial=deferred(),mode=deferred(),calls=[];
- const state={documentOpenRequest:0,documentSession:0,explorerRequest:0,currentFile:null,recentFiles:[],pinnedRecentFiles:[],sidebarMode:'recent'};
- const context=vm.createContext({state,partitionRecentFiles,console,sidebarStartsCollapsed,toggleSidebar(){},document:{documentElement:{dataset:{}}},localStorage:{getItem:()=>null},els:{usageAnalyticsToggle:{}},window:{quilliteMarkdown:{
+ const state={documentOpenRequest:0,documentSession:0,explorerRequest:0,currentFile:null,recentFiles:[],pinnedRecentFiles:[],sidebarMode:'recent',updateDismissEpoch:0,updateReminderSuppressUntil:0};
+ const context=vm.createContext({state,partitionRecentFiles,updateReminderUntil,renderUpdateBanner:()=>{},console,sidebarStartsCollapsed,toggleSidebar(){},document:{documentElement:{dataset:{}}},localStorage:{getItem:()=>null},els:{usageAnalyticsToggle:{}},window:{quilliteMarkdown:{
   getPreferences:()=>{calls.push('prefs');return prefs.promise;},getInitialFile:()=>{calls.push('initial');return initial.promise;},getStartupMode:()=>mode.promise,
   getImageUploadSettings:async()=>({}),needsLanguageSelection:async()=>false,
  }},maybeDiscardChanges:()=>assert.fail('startup must never request discard of newer content'),
@@ -23,10 +24,15 @@ function harness() {
  for(const name of ['setAccentTheme','setColorMode','setFontScale','setFontFamily','syncBodyTypography','setDocumentWidth','setEditorLayout','scheduleMacWindowModeSync','applyImageUploadSettings','setLanguage','setSidebarMode','restoreExplorerAfterFirstPaint','openFirstRunLanguageDialog','scheduleAutomaticUpdateCheck'])context[name]=()=>{};
  context.reportSilentError=()=>calls.push('error');context.showToast=()=>calls.push('toast');context.t=k=>k;context.isMissingDocumentError=()=>false;
  installDocumentLoadingFixture(context,source);
- vm.runInContext(between('function beginDocumentOpen(', 'function syncDocumentAccessControls(')+between('async function loadInitialDocument(', "$('#newFileButton').addEventListener"),context);
+ vm.runInContext(between('function beginDocumentOpen(', 'function syncDocumentAccessControls(')+between('function applyUpdateReminderPreferences(', 'function renderUpdateDialogContent(')+between('async function loadInitialDocument(', "$('#newFileButton').addEventListener"),context);
  return {context,state,prefs,initial,mode,calls};
 }
 const flush=()=>new Promise(r=>setImmediate(r));
+test('late startup reminder preferences preserve a newer user dismissal',async()=>{
+ const h=harness(),init=h.context.initialize();await flush();h.context.beginDocumentOpen();
+ h.state.updateDismissEpoch++;const until=Date.now()+7*86400000;h.state.updateReminderSuppressUntil=until;
+ h.prefs.resolve({suppressUpdateUntil:''});await init;assert.equal(h.state.updateReminderSuppressUntil,until);
+});
 for(const completed of [false,true])test(`startup preserves ${completed?'completed':'pending'} user folder selection`,async()=>{
  const h=harness(),init=h.context.initialize();await flush();h.context.beginDocumentOpen();h.state.explorerRequest++;
  h.state.root=completed?'Chosen':null;h.state.explorerFiles=completed?[{path:'Chosen/user.md'}]:[];

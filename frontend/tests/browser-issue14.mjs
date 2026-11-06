@@ -71,12 +71,40 @@ try {
  await select('CODE_LINE_095');assert.ok(await visible('CODE_LINE_095'),'long code line must be visible');
  await select('WRAPPED_END');assert.ok(await visible('WRAPPED_END'),'column inside wrapped paragraph must be visible');
  assert.equal(await page.evaluate(()=>auditView.state.doc.toString()),doc,'navigation changed document');
- await page.evaluate(()=>{window.quilliteMarkdown.checkForUpdates=async()=>({checked:true,available:true,manualInstallRequired:true,manualInstallReason:'windows-portable',manualInstallerUrl:'https://qm.ssssa.cn/#download',currentVersion:'3.0.2',latestVersion:'3.0.3'});});
- await page.locator('#moreButton').click();await page.locator('[data-action="check-update"]').click();
+ await page.evaluate(()=>{
+  document.documentElement.dataset.platform='windows';
+  window.issue14UpdateCalls={pause:0,apply:0,external:0};
+  Object.assign(window.quilliteMarkdown,{
+   checkForUpdates:async()=>({checked:true,available:true,currentVersion:'3.1.0',latestVersion:'3.1.1',releaseNotes:'- 改进软件更新提示。'}),
+   snoozeUpdates:async()=>{window.issue14UpdateCalls.pause++;},
+   downloadAndApplyUpdate:async()=>{window.issue14UpdateCalls.apply++;},
+   openExternal:async()=>{window.issue14UpdateCalls.external++;}
+  });
+ });
+ const checkForUpdates=async()=>{
+  await page.locator('#moreButton').click();
+  await page.locator('[data-action="check-update"]').click();
+  await page.locator('#updateDialog').waitFor();
+ };
+ await checkForUpdates();
+ assert.deepEqual(await page.locator('#updateDialog .update-footer button:visible').allTextContents(),['一键更新','打开下载链接']);
+ assert.equal(await page.locator('#updateInlineHint').isVisible(),true);
+ assert.match(await page.locator('#updateInlineHint').innerText(),/自动下载并安装/);
+ await page.waitForFunction(()=>document.activeElement?.id==='closeUpdate');
+ if(process.env.ISSUE14_UPDATE_SCREENSHOT)await page.locator('#updateDialog .update-dialog').screenshot({path:process.env.ISSUE14_UPDATE_SCREENSHOT});
+ await page.locator('#closeUpdate').click();
+ await page.locator('#updateDialog').waitFor({state:'hidden'});
+ assert.equal(await page.locator('#updateBanner').isVisible(),true,'closing the dialog must leave the banner available');
+ assert.deepEqual(await page.evaluate(()=>window.issue14UpdateCalls),{pause:0,apply:0,external:0});
+ await page.evaluate(()=>{window.quilliteMarkdown.checkForUpdates=async()=>({checked:true,available:true,manualInstallRequired:true,manualInstallReason:'windows-portable',manualInstallerUrl:'https://qm.ssssa.cn/#download',currentVersion:'3.1.0',latestVersion:'3.1.1'});});
+ await checkForUpdates();
  await page.locator('#manualUpdateTitle').waitFor();
  assert.equal(await page.locator('#manualUpdateTitle').innerText(),'下载新版便携版');
  assert.equal(await page.locator('#applyUpdate').isVisible(),false);
+ assert.equal(await page.locator('#updateInlineHint').isVisible(),false);
+ assert.equal(await page.locator('#updateDialog .update-footer button:visible').count(),1);
  assert.match(await page.locator('#openUpdatePage').innerText(),/便携版/);
+ assert.deepEqual(await page.evaluate(()=>window.issue14UpdateCalls),{pause:0,apply:0,external:0});
  assert.deepEqual(errors,[]);
- console.log('PASS '+engine+': sidebar layouts, same-line/click sync, code-line/wrapped-column sync, portable update guidance');
+ console.log('PASS '+engine+': sidebar layouts, same-line/click sync, code-line/wrapped-column sync, two-action update dialog and portable guidance');
 } finally {await browser?.close();await new Promise(resolve=>server.httpServer.close(resolve));}

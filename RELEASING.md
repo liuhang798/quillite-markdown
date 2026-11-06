@@ -14,6 +14,10 @@ Update `CHANGELOG.md` and both README files for user-visible changes.
 
 Every release must have a matching `## [version]` section in `CHANGELOG.md`. The release workflow uses that section for the GitHub source-code release and synchronizes it to the official website, which is the only update and binary-download channel used by the app.
 
+Also add an entry for that exact version to `release-summaries.json`. Supply reviewed `summaryZh` and `summaryEn`: one plain-text line per language, at most 160 characters, naming the main user-facing features or improvements. This is the compact in-app update banner and website release highlight, not a replacement for the full changelog. Do not reuse an unrelated version's summary or generate it silently from the first bug-fix bullet. Validate it with `node scripts/release-summary.mjs <version>`; publishing must fail if either language is missing or invalid. Legacy website records without a summary remain readable through a compatible fallback.
+
+The official latest-release API uses the installed `currentVersion` to return a known count and bounded notes for published stable releases newer than that version. The banner shows only the latest highlight; the update dialog lists the skipped versions and explicitly marks omitted history or shortened notes. Installers and checksums always come from the latest release, never from a chain of intermediate downloads. Dismissing the banner suppresses automatic reminders globally for seven days, including releases published during that interval; manual checks remain available.
+
 ## 2. Verify locally
 
 ```bash

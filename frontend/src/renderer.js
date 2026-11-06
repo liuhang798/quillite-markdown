@@ -11,6 +11,7 @@ import { isFileDrag } from './file-drag.js';
 import { createImageInsertionTarget, imageInsertionTargetCurrent, mapImageInsertionTargets, separateImageFromTable } from './image-insertion-target.js';
 import { fitEditorSplit, normalizeEditorPreviewWidth } from './editor-split-layout.js';
 import { createToastPlacement } from './toast-placement.js';
+import { UPDATE_REMINDER_DAY, updateReminderUntil, updateReminderSuppressed, updateReminderText, updateReleaseSummary, updateReleaseNotes, updateReleaseHistory, updateReleaseCount } from './update-reminder.js';
 import { inlineFormatEdit, formatSelectionEdits, textColorEdit } from './inline-format-toggle.js';
 import { selectionHistory, withSelectionHistory } from './selection-history.js';
 import { findMarkdownLinkAt, linkEdit, footnoteEdit, validLinkDestination } from './link-editing.js';
@@ -355,6 +356,13 @@ const state = {
   savedContent: '',
   currentDocumentHasDiagrams: false,
   updateInfo: null,
+  updateReturnFocus: null,
+  updateBannerVisible: false,
+  updateReminderSuppressUntil: 0,
+  updateDismissPending: false,
+  updateDismissEpoch: 0,
+  updateCheckSerial: 0,
+  updateManualChecks: 0,
   usageAnalytics: true,
   imageUploadMode: 'local',
   picGoServerURL: 'http://127.0.0.1:36677',
@@ -586,8 +594,10 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     checkForUpdates: '检查更新', checkingForUpdates: '正在检查更新…', updateAvailableLabel: '软件更新', updateAvailable: '发现新版本',
     textStyle: '文字样式（正文／标题）',
     currentVersion: '当前版本', latestVersion: '最新版本', releaseNotes: '更新说明', noReleaseNotes: '此版本暂无更新说明。',
-    remindLater: '稍后提醒', snooze30Days: '30 天内不再提醒', updateSnoozed: '未来 30 天不再自动提醒更新', openDownloadPage: '打开下载页面', alreadyLatest: '当前已是最新版本', updateCheckFailed: '检查更新失败，请稍后重试',
-    downloadAndUpdate: '下载并更新', manualMacUpdateTitle: '此版本需要一次手动升级', manualMacUpdateDescription: 'macOS 2.5.0 使用了旧更新格式，无法安全替换完整应用。请从官网下载安装一次最新版；之后即可继续使用应用内自动更新。', manualMacUpdateButton: '打开官网下载新版', unsafeWindowsUninstallerTitle: '无法确认卸载程序安全性', unsafeWindowsUninstallerDescription: '当前卸载程序无法确认安全或无法完成风险处理，已原样保留，应用内更新暂不可用。请勿手动运行未知卸载程序；备份重要文档后，下载完整安装包并选择新的专属目录安装。', unsafeWindowsUninstallerButton: '下载完整安装包', installerRepairRequired: '需要修复安装组件', unsafeUninstallerDialogLabel: '安装安全警告', unsafeUninstallerDialogTitle: '当前卸载程序存在重大缺陷', unsafeUninstallerDialogDescription: '检测到当前安装使用旧版卸载程序。该版本卸载时可能误删安装目录内由你创建的文档及其他文件。为避免数据损失，请不要卸载或继续使用热更新；请下载完整安装包并覆盖安装安全版本。安装前请先备份安装目录中的重要文件。', unsafeUninstallerDialogNote: '完成覆盖安装后，新版安全卸载程序会自动替换旧文件，之后即可恢复应用内更新。', unsafeUninstallerLater: '稍后处理', unsafeUninstallerDownload: '下载安全版本', downloadingUpdate: '正在下载更新… {percent}%', preparingUpdate: '正在安装更新…', updateFailed: '更新失败，请稍后重试', updateBlockedByUnsavedChanges: '请先保存当前文档再更新',
+    updateInlineHint: '应用内自动下载并安装，无需手动下载安装包', openDownloadPage: '打开下载链接', alreadyLatest: '当前已是最新版本', updateCheckFailed: '检查更新失败，请稍后重试',
+    updateBannerLabel: '有新版本', updateBannerOpen: '更新', updateBannerDismiss: '关闭更新提示，7 天内不再显示', updateBannerFallback: '查看本次新增功能与体验优化', updateBannerCount: '含 {count} 个版本更新', updateHistoryTruncated: '展示最近 {count} 个版本的更新说明，更新后也会包含更早版本的改进。', updateReminderSaveFailed: '未能保存提醒偏好，更新提示尚未暂停，请重试。',
+    updateNotesTruncated: '此版本更新说明较长，此处仅展示部分。', viewCompleteReleaseNotes: '查看官网更新日志',
+    downloadAndUpdate: '一键更新', manualMacUpdateTitle: '此版本需要一次手动升级', manualMacUpdateDescription: 'macOS 2.5.0 使用了旧更新格式，无法安全替换完整应用。请从官网下载安装一次最新版；之后即可继续使用应用内自动更新。', manualMacUpdateButton: '打开官网下载新版', unsafeWindowsUninstallerTitle: '无法确认卸载程序安全性', unsafeWindowsUninstallerDescription: '当前卸载程序无法确认安全或无法完成风险处理，已原样保留，应用内更新暂不可用。请勿手动运行未知卸载程序；备份重要文档后，下载完整安装包并选择新的专属目录安装。', unsafeWindowsUninstallerButton: '下载完整安装包', installerRepairRequired: '需要修复安装组件', unsafeUninstallerDialogLabel: '安装安全警告', unsafeUninstallerDialogTitle: '当前卸载程序存在重大缺陷', unsafeUninstallerDialogDescription: '检测到当前安装使用旧版卸载程序。该版本卸载时可能误删安装目录内由你创建的文档及其他文件。为避免数据损失，请不要卸载或继续使用热更新；请下载完整安装包并覆盖安装安全版本。安装前请先备份安装目录中的重要文件。', unsafeUninstallerDialogNote: '完成覆盖安装后，新版安全卸载程序会自动替换旧文件，之后即可恢复应用内更新。', unsafeUninstallerLater: '稍后处理', unsafeUninstallerDownload: '下载安全版本', downloadingUpdate: '正在下载更新… {percent}%', preparingUpdate: '正在安装更新…', updateFailed: '更新失败，请稍后重试', updateBlockedByUnsavedChanges: '请先保存当前文档再更新',
     formatToolbar: 'Markdown 格式工具栏', undoTitle: '撤回 (Ctrl+Z)', formatPainter: '格式刷', formatPainterTitle: '格式刷：复制选中文本的格式，再选中目标文本即可自动应用', formatCopied: '已复制格式，选中目标文本后自动应用', formatApplied: '格式已应用', formatNeedSelection: '请先选中要复制格式的文本', formatCleared: '已取消格式刷', heading: '标题', paragraph: '正文', heading1: '标题 1', heading2: '标题 2', heading3: '标题 3', heading4: '标题 4', heading5: '标题 5', heading6: '标题 6',
     boldTitle: '加粗 (Ctrl+B)', italicTitle: '斜体 (Ctrl+I)', strikethroughTitle: '删除线 (Ctrl+Shift+X)', highlightTitle: '高亮 (Ctrl+Shift+H)', textColorTitle: '文字颜色', textColorMenu: '选择文字颜色', textColorDefault: '默认颜色', textColorOption: '颜色', coloredText: '彩色文字', linkTitle: '插入链接 (Ctrl+K)', inlineCode: '行内代码', codeBlock: '代码块', quote: '引用', unorderedList: '无序列表', orderedList: '有序列表', taskList: '任务列表', horizontalRule: '分隔线', insertTable: '插入表格', insertImage: '插入图片', imageAlt: '图片说明',
     moreFormats: '更多格式', toolbarOverflow: '折叠的工具栏格式', extendedFormats: '扩展格式', boldItalic: '粗斜体', underline: '下划线', superscript: '上标', subscript: '下标', formulaBuilder: '学科公式 🔥', formulaShort: '公式', diagramBuilder: '图表生成器 🔥', diagramShort: '图表', diagramGuide: '查看图表教程 ↗', mermaidFlowchart: 'Mermaid 流程图', mermaidSequence: 'Mermaid 时序图', mermaidGantt: 'Mermaid 甘特图', mermaidDiagram: 'Mermaid 图表', mermaidRenderError: '图表语法有误', mermaidRenderHint: '请检查 Mermaid 源码，文档其他内容不受影响。', dataChart: '数据图表', dataChartRenderError: '数据图表配置有误', dataChartRenderHint: '请检查 ECharts JSON 配置，文档其他内容不受影响。', inlineMath: '行内公式', mathBlock: '块级公式', chemicalFormula: '化学公式', mathGuide: '查看公式教程 ↗', numberedMath: '编号公式', mathExpression: 'LaTeX 公式', hardBreak: '强制换行', footnote: '脚注', referenceLink: '引用式链接', collapsible: '折叠区块', keyboardKey: '键盘按键', autolink: '自动链接', escapeSyntax: '转义符号', htmlBlock: 'HTML 区块', comment: '注释', footnotes: '脚注', footnoteText: '脚注内容', referenceName: '引用名称', collapsibleTitle: '折叠标题',
@@ -679,8 +689,10 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     checkForUpdates: 'Check for updates', checkingForUpdates: 'Checking for updates…', updateAvailableLabel: 'SOFTWARE UPDATE', updateAvailable: 'A new version is available',
     textStyle: 'Text style (paragraph / headings)',
     currentVersion: 'Current version', latestVersion: 'Latest version', releaseNotes: 'What’s new', noReleaseNotes: 'No release notes are available for this version.',
-    remindLater: 'Remind me later', snooze30Days: 'Don’t remind me for 30 days', updateSnoozed: 'Automatic update reminders paused for 30 days', openDownloadPage: 'Open download page', alreadyLatest: 'You’re using the latest version', updateCheckFailed: 'Unable to check for updates. Try again later.',
-    downloadAndUpdate: 'Download & Update', manualMacUpdateTitle: 'One manual upgrade is required', manualMacUpdateDescription: 'macOS 2.5.0 used the retired update format and cannot safely replace the complete app. Install the latest version once from the website; future in-app updates will work normally.', manualMacUpdateButton: 'Get the latest version', unsafeWindowsUninstallerTitle: 'Uninstaller safety could not be confirmed', unsafeWindowsUninstallerDescription: 'The uninstaller could not be verified or remediated and has been preserved. In-app updating is unavailable. Do not run an unknown uninstaller. Back up important documents, then download the full installer and choose a new dedicated folder.', unsafeWindowsUninstallerButton: 'Download full installer', installerRepairRequired: 'Installation repair required', unsafeUninstallerDialogLabel: 'INSTALLATION SAFETY WARNING', unsafeUninstallerDialogTitle: 'The current uninstaller has a critical defect', unsafeUninstallerDialogDescription: 'This installation uses a legacy uninstaller that may delete documents or other files you created inside the install folder. To prevent data loss, do not uninstall or continue with in-app updates. Download the full installer and install the safe version over this copy. Back up important files in the install folder first.', unsafeUninstallerDialogNote: 'The full installation replaces the legacy uninstaller with the safe version and restores normal in-app updates.', unsafeUninstallerLater: 'Later', unsafeUninstallerDownload: 'Download safe version', downloadingUpdate: 'Downloading update… {percent}%', preparingUpdate: 'Installing update…', updateFailed: 'Update failed. Please try again.', updateBlockedByUnsavedChanges: 'Save the current document before updating',
+    updateInlineHint: 'Downloads and installs automatically in the app—no manual installer needed.', openDownloadPage: 'Open download link', alreadyLatest: 'You’re using the latest version', updateCheckFailed: 'Unable to check for updates. Try again later.',
+    updateBannerLabel: 'New version available', updateBannerOpen: 'Update', updateBannerDismiss: 'Dismiss update notice for 7 days', updateBannerFallback: 'See the latest features and improvements', updateBannerCount: 'Includes {count} version updates', updateHistoryTruncated: 'Showing the latest {count} versions; updating also includes improvements from earlier versions.', updateReminderSaveFailed: 'Could not save your reminder preference. Update notices have not been paused; try again.',
+    updateNotesTruncated: 'These release notes are long; only part is shown here.', viewCompleteReleaseNotes: 'View the website changelog',
+    downloadAndUpdate: 'Update now', manualMacUpdateTitle: 'One manual upgrade is required', manualMacUpdateDescription: 'macOS 2.5.0 used the retired update format and cannot safely replace the complete app. Install the latest version once from the website; future in-app updates will work normally.', manualMacUpdateButton: 'Get the latest version', unsafeWindowsUninstallerTitle: 'Uninstaller safety could not be confirmed', unsafeWindowsUninstallerDescription: 'The uninstaller could not be verified or remediated and has been preserved. In-app updating is unavailable. Do not run an unknown uninstaller. Back up important documents, then download the full installer and choose a new dedicated folder.', unsafeWindowsUninstallerButton: 'Download full installer', installerRepairRequired: 'Installation repair required', unsafeUninstallerDialogLabel: 'INSTALLATION SAFETY WARNING', unsafeUninstallerDialogTitle: 'The current uninstaller has a critical defect', unsafeUninstallerDialogDescription: 'This installation uses a legacy uninstaller that may delete documents or other files you created inside the install folder. To prevent data loss, do not uninstall or continue with in-app updates. Download the full installer and install the safe version over this copy. Back up important files in the install folder first.', unsafeUninstallerDialogNote: 'The full installation replaces the legacy uninstaller with the safe version and restores normal in-app updates.', unsafeUninstallerLater: 'Later', unsafeUninstallerDownload: 'Download safe version', downloadingUpdate: 'Downloading update… {percent}%', preparingUpdate: 'Installing update…', updateFailed: 'Update failed. Please try again.', updateBlockedByUnsavedChanges: 'Save the current document before updating',
     formatToolbar: 'Markdown formatting toolbar', undoTitle: 'Undo (Ctrl+Z)', formatPainter: 'Format painter', formatPainterTitle: 'Format painter: copy the selected text format, then select the target text to apply automatically', formatCopied: 'Format copied. Select the target text to apply automatically.', formatApplied: 'Format applied', formatNeedSelection: 'Select the text whose format you want to copy first', formatCleared: 'Format painter cancelled', heading: 'Heading', paragraph: 'Paragraph', heading1: 'Heading 1', heading2: 'Heading 2', heading3: 'Heading 3', heading4: 'Heading 4', heading5: 'Heading 5', heading6: 'Heading 6',
     boldTitle: 'Bold (Ctrl+B)', italicTitle: 'Italic (Ctrl+I)', strikethroughTitle: 'Strikethrough (Ctrl+Shift+X)', highlightTitle: 'Highlight (Ctrl+Shift+H)', textColorTitle: 'Text color', textColorMenu: 'Choose text color', textColorDefault: 'Default', textColorOption: 'Color', coloredText: 'colored text', linkTitle: 'Insert link (Ctrl+K)', inlineCode: 'Inline code', codeBlock: 'Code block', quote: 'Quote', unorderedList: 'Bulleted list', orderedList: 'Numbered list', taskList: 'Task list', horizontalRule: 'Horizontal rule', insertTable: 'Insert table', insertImage: 'Insert image', imageAlt: 'Image description',
     moreFormats: 'More formats', toolbarOverflow: 'Collapsed toolbar formats', extendedFormats: 'Extended formats', boldItalic: 'Bold italic', underline: 'Underline', superscript: 'Superscript', subscript: 'Subscript', formulaBuilder: 'Academic formulas 🔥', formulaShort: 'Formula', diagramBuilder: 'Diagram builder 🔥', diagramShort: 'Diagram', diagramGuide: 'Diagram guide ↗', mermaidFlowchart: 'Mermaid flowchart', mermaidSequence: 'Mermaid sequence diagram', mermaidGantt: 'Mermaid Gantt chart', mermaidDiagram: 'Mermaid diagram', mermaidRenderError: 'Invalid diagram syntax', mermaidRenderHint: 'Check the Mermaid source. The rest of the document is unaffected.', dataChart: 'Data chart', dataChartRenderError: 'Invalid data chart configuration', dataChartRenderHint: 'Check the ECharts JSON. The rest of the document is unaffected.', inlineMath: 'Inline formula', mathBlock: 'Display formula', chemicalFormula: 'Chemical formula', mathGuide: 'Formula guide ↗', numberedMath: 'Numbered formula', mathExpression: 'LaTeX expression', hardBreak: 'Hard line break', footnote: 'Footnote', referenceLink: 'Reference link', collapsible: 'Collapsible section', keyboardKey: 'Keyboard key', autolink: 'Autolink', escapeSyntax: 'Escape syntax', htmlBlock: 'HTML block', comment: 'Comment', footnotes: 'Footnotes', footnoteText: 'Footnote text', referenceName: 'reference', collapsibleTitle: 'Section title',
@@ -1185,6 +1197,8 @@ function applyStaticTranslations() {
     structuredDiagramState.definition = structuredDiagramDefinition(diagramWizardState.templateId, diagramLocale(), structuredDiagramState.model);
     renderStructuredDiagramEditor();
   }
+  renderUpdateBanner();
+  if (state.updateInfo && !$('#updateDialog')?.classList.contains('hidden')) renderUpdateDialogContent(state.updateInfo);
 }
 
 function applyPlatformShortcuts() {
@@ -11638,8 +11652,42 @@ async function submitFeedbackForm(event) {
   }
 }
 
-function openUpdateDialog(info) {
-  state.updateInfo = info;
+function renderUpdateBanner() {
+  const banner = $('#updateBanner');
+  if (!banner) return;
+  const info = state.updateInfo;
+  const available = Boolean(info?.available || info?.manualInstallRequired);
+  const visible = available && state.updateBannerVisible && !state.updateDismissPending
+    && !updateReminderSuppressed(state.updateReminderSuppressUntil);
+  banner.classList.toggle('hidden', !visible);
+  if (!visible) return;
+  const repairOnly = info.manualInstallRequired && !info.available;
+  const version = updateReminderText(info.latestVersion, 40).replace(/^[vV]/, '');
+  $('#updateBannerLabel').textContent = t(repairOnly ? 'installerRepairRequired' : 'updateBannerLabel');
+  $('#updateBannerVersion').classList.toggle('hidden', repairOnly || !version);
+  $('#updateBannerVersion').textContent = version ? `v${version}` : '';
+  const summary = repairOnly ? t('unsafeWindowsUninstallerDescription') : updateReleaseSummary(info, state.language, t('updateBannerFallback'));
+  $('#updateBannerSummary').textContent = summary;
+  $('#updateBannerSummary').title = summary;
+  const count = updateReleaseCount(info);
+  const countLabel = $('#updateBannerCount');
+  if (countLabel) {
+    countLabel.classList.toggle('hidden', count <= 1 || repairOnly);
+    countLabel.textContent = count > 1 ? t('updateBannerCount', {count}) : '';
+  }
+  $('#updateBannerOpen').disabled = applyingUpdate;
+  $('#updateBannerDismiss').disabled = state.updateDismissPending || applyingUpdate;
+}
+
+function applyUpdateReminderPreferences(prefs, dismissEpoch) {
+  // Preferences may have started loading before a user-triggered check and
+  // dismissal. An old startup snapshot must not undo the newer local intent.
+  if (dismissEpoch !== state.updateDismissEpoch) return;
+  state.updateReminderSuppressUntil = updateReminderUntil(prefs.suppressUpdateUntil);
+  renderUpdateBanner();
+}
+
+function renderUpdateDialogContent(info) {
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   const portableWindows = info.manualInstallReason === 'windows-portable';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
@@ -11647,47 +11695,116 @@ function openUpdateDialog(info) {
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
-  const releaseNotes = (info.releaseNotes || t('noReleaseNotes')).slice(0, 5000);
-  notesElement.innerHTML = DOMPurify.sanitize(marked.parse(releaseNotes));
+  const history = updateReleaseHistory(info, state.language);
+  const partialNotesNotice = `<p class="update-history-notice">${escapeHtml(t('updateNotesTruncated'))} <a href="https://qm.ssssa.cn/#changelog">${escapeHtml(t('viewCompleteReleaseNotes'))}</a></p>`;
+  const latestNotes = updateReleaseNotes(info.releaseNotes || t('noReleaseNotes'));
+  const releaseNotes = history.length
+    ? history.map(entry => `<section class="update-release-entry"><h3>v${escapeHtml(entry.version)}</h3>${entry.summary ? `<p class="update-release-summary">${escapeHtml(entry.summary)}</p>` : ''}${marked.parse(entry.notes || t('noReleaseNotes'))}${entry.notesTruncated ? partialNotesNotice : ''}</section>`).join('')
+      + (info.updatesTruncated ? `<p class="update-history-notice">${escapeHtml(t('updateHistoryTruncated', {count: history.length}))}</p>` : '')
+    : marked.parse(latestNotes.notes) + (latestNotes.notesTruncated ? partialNotesNotice : '');
+  notesElement.innerHTML = DOMPurify.sanitize(releaseNotes);
   notesElement.querySelectorAll('a').forEach(link => link.addEventListener('click', event => {
     const href = link.getAttribute('href') || '';
     if (!/^https?:\/\//i.test(href)) return;
     event.preventDefault();
     openExternal(href);
   }));
-  els.updateDialog.classList.remove('hidden');
-  document.body.classList.add('dialog-open');
   const platform = document.documentElement.dataset.platform;
   const manualInstallRequired = info.manualInstallRequired === true;
+  const inAppUpdateAvailable = !manualInstallRequired && (platform === 'darwin' || platform === 'windows');
   $('#manualUpdateNotice').classList.toggle('hidden', !manualInstallRequired);
   $('#manualUpdateTitle').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerTitle') : t(portableWindows ? 'portableUpdateTitle' : 'manualMacUpdateTitle');
   $('#manualUpdateDescription').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerDescription') : t(portableWindows ? 'portableUpdateDescription' : 'manualMacUpdateDescription');
-  $('#applyUpdate').classList.toggle('hidden', manualInstallRequired || (platform !== 'darwin' && platform !== 'windows'));
+  $('#applyUpdate').classList.toggle('hidden', !inAppUpdateAvailable);
+  $('#updateInlineHint').classList.toggle('hidden', !inAppUpdateAvailable);
   $('#openUpdatePage').textContent = unsafeWindowsUninstaller ? t('unsafeWindowsUninstallerButton') : (portableWindows ? t('portableUpdateButton') : (manualInstallRequired ? t('manualMacUpdateButton') : t('openDownloadPage')));
   $('#openUpdatePage').classList.toggle('primary', manualInstallRequired);
   $('#openUpdatePage').classList.toggle('secondary', !manualInstallRequired);
-  $('#updateSnooze').classList.toggle('hidden', unsafeWindowsUninstaller);
+}
+
+function openUpdateDialog(info) {
+  // An in-flight installer owns the dialog and its progress controls. A new
+  // check or repeated click must never reset its state or choose another build.
+  if (applyingUpdate || !info) return;
+  state.updateCheckSerial++;
+  state.updateReturnFocus = document.activeElement;
+  state.updateInfo = info;
+  renderUpdateDialogContent(info);
+  els.updateDialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
   $('#updateProgress').classList.add('hidden');
   $('#applyUpdate').disabled = false;
-  requestAnimationFrame(() => $('#openUpdatePage').focus());
+  requestAnimationFrame(() => {
+    if (!els.updateDialog.classList.contains('hidden')) $('#closeUpdate').focus();
+  });
 }
 
 function closeUpdate() {
   if (els.updateDialog.classList.contains('hidden')) return;
   els.updateDialog.classList.add('hidden');
   document.body.classList.remove('dialog-open');
-  $('#moreButton').focus();
+  const target = state.updateReturnFocus;
+  if (target?.isConnected && !target.disabled && target.getClientRects().length) target.focus();
+  else $('#moreButton').focus();
 }
 
 async function checkForUpdates(manual = false) {
+  if (applyingUpdate || (!manual && (state.updateManualChecks || !els.updateDialog.classList.contains('hidden')))) return;
+  const request = ++state.updateCheckSerial;
+  const dismissEpoch = state.updateDismissEpoch;
+  if (manual) state.updateManualChecks++;
   if (manual) showToast(t('checkingForUpdates'));
   try {
     const info = await window.quilliteMarkdown.checkForUpdates(manual);
-    if (info?.available || info?.manualInstallRequired) openUpdateDialog(info);
-    else if (manual && info?.checked) showToast(t('alreadyLatest'), 'success');
+    if (request !== state.updateCheckSerial || applyingUpdate || (!manual && (dismissEpoch !== state.updateDismissEpoch || !els.updateDialog.classList.contains('hidden')))) return;
+    if (info?.available || info?.manualInstallRequired) {
+      state.updateInfo = info;
+      state.updateBannerVisible = true;
+      renderUpdateBanner();
+      // Automatic checks only update the quiet notice. A modal requires the
+      // explicit menu action or the banner's Update button.
+      if (manual) openUpdateDialog(info);
+    } else if (info?.checked || info?.suppressed) {
+      state.updateBannerVisible = false;
+      renderUpdateBanner();
+      if (manual && info.checked) showToast(t('alreadyLatest'), 'success');
+    }
   } catch (error) {
     console.warn('Update check failed:', error);
-    if (manual) showToast(t('updateCheckFailed'), 'error');
+    if (manual && request === state.updateCheckSerial) showToast(t('updateCheckFailed'), 'error');
+  } finally {
+    if (manual) state.updateManualChecks--;
+  }
+}
+
+async function pauseUpdateReminder(days) {
+  if (state.updateDismissPending || applyingUpdate) return false;
+  const previousUntil = state.updateReminderSuppressUntil;
+  state.updateDismissPending = true;
+  state.updateDismissEpoch++;
+  state.updateReminderSuppressUntil = Date.now() + days * UPDATE_REMINDER_DAY;
+  renderUpdateBanner();
+  try {
+    await window.quilliteMarkdown.snoozeUpdates(days);
+    state.updateBannerVisible = false;
+    return true;
+  } catch (error) {
+    state.updateReminderSuppressUntil = previousUntil;
+    state.updateBannerVisible = Boolean(state.updateInfo?.available || state.updateInfo?.manualInstallRequired);
+    console.warn('Unable to save update reminder preference:', error);
+    showToast(t('updateReminderSaveFailed'), 'warning');
+    return false;
+  } finally {
+    state.updateDismissPending = false;
+    renderUpdateBanner();
+  }
+}
+
+async function dismissUpdateBanner() {
+  if (await pauseUpdateReminder(7)) {
+    // Do not steal focus from editing on an automatic arrival. Closing a notice
+    // by keyboard, however, must not leave focus on a now-hidden control.
+    if ($('#updateBanner')?.contains(document.activeElement)) $('#moreButton').focus();
   }
 }
 
@@ -12026,16 +12143,6 @@ function restoreSelectedDocumentVersion() {
   showToast(t('documentHistoryRestored'), 'success', 4600);
 }
 
-async function snoozeUpdates() {
-  try {
-    await window.quilliteMarkdown.snoozeUpdates(30);
-    closeUpdate();
-    showToast(t('updateSnoozed'), 'success');
-  } catch (error) {
-    console.warn('Unable to save update reminder preference:', error);
-  }
-}
-
 let applyingUpdate = false;
 
 function setUpdateProgress(done, total) {
@@ -12054,10 +12161,9 @@ async function startDownloadAndUpdate() {
     return;
   }
   applyingUpdate = true;
+  renderUpdateBanner();
   $('#applyUpdate').disabled = true;
   $('#openUpdatePage').disabled = true;
-  $('#updateLater').disabled = true;
-  $('#updateSnooze').disabled = true;
   $('#updateProgress').classList.remove('hidden');
   setUpdateProgress(0, 1);
   try {
@@ -12069,11 +12175,10 @@ async function startDownloadAndUpdate() {
     reportSilentError(error, 'update.apply');
     console.warn('In-app update failed:', error);
     applyingUpdate = false;
+    renderUpdateBanner();
     $('#updateProgress').classList.add('hidden');
     $('#applyUpdate').disabled = false;
     $('#openUpdatePage').disabled = false;
-    $('#updateLater').disabled = false;
-    $('#updateSnooze').disabled = false;
     const message = String(error);
     const key = /UPDATE_DOWNLOAD_INTERRUPTED/i.test(message) ? 'updateInterrupted'
       : /timeout|timed out|deadline exceeded/i.test(message) ? 'updateTimedOut' : 'updateFailed';
@@ -12116,7 +12221,9 @@ async function initialize() {
   setDocumentWidth(state.docWidth, true);
   setEditorLayout(state.editorLayout, true);
   scheduleMacWindowModeSync();
+  const updatePreferenceEpoch = state.updateDismissEpoch;
   const prefs = await window.quilliteMarkdown.getPreferences();
+  applyUpdateReminderPreferences(prefs, updatePreferenceEpoch);
   await setFontFamily(prefs.fontFamily || 'system', true, false);
   syncBodyTypography(prefs.bodyTypography);
   state.usageAnalytics = prefs.usageAnalytics !== false;
@@ -12381,8 +12488,8 @@ els.aboutDialog.querySelectorAll('[data-external]').forEach(link => link.addEven
   openExternal(link.dataset.external);
 }));
 $('#closeUpdate').addEventListener('click', closeUpdate);
-$('#updateLater').addEventListener('click', closeUpdate);
-$('#updateSnooze').addEventListener('click', snoozeUpdates);
+$('#updateBannerOpen').addEventListener('click', () => openUpdateDialog(state.updateInfo));
+$('#updateBannerDismiss').addEventListener('click', dismissUpdateBanner);
 $('#applyUpdate').addEventListener('click', startDownloadAndUpdate);
 window.quilliteMarkdown.onUpdateProgress(progress => {
   if (applyingUpdate) setUpdateProgress(Number(progress?.done) || 0, Number(progress?.total) || 0);

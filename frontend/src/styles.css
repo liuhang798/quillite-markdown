@@ -251,6 +251,32 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 :root[data-color-mode="dark"] .moon-icon { display: block; }
 
 .app-shell { height: calc(100vh - var(--titlebar-height)); display: flex; position: relative; }
+.main-workspace { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.workspace-panes { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+.update-banner { --update-banner-ink: color-mix(in srgb, var(--accent) 64%, var(--text)); flex: 0 0 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 7px 16px; border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 68%, var(--paper)); font-size: 12px; line-height: 1.5; }
+.update-banner-heading { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.update-banner-label { min-width: 0; overflow: hidden; color: var(--update-banner-ink); font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.update-banner-version { flex: 0 0 auto; max-width: 115px; padding: 1px 6px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 19%, var(--line)); border-radius: 5px; background: var(--paper-strong); color: var(--update-banner-ink); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.update-banner-count { flex: 0 0 auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.update-banner-summary { flex: 1 1 260px; min-width: 0; margin: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.update-banner-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.update-banner-open { height: 28px; min-width: 54px; padding: 0 12px; border: 1px solid transparent; border-radius: 6px; background: var(--update-banner-ink); color: var(--paper-strong); font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.update-banner-open:hover { filter: brightness(1.08); }
+.update-banner-dismiss { flex: 0 0 28px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.update-banner-dismiss svg { width: 16px; height: 16px; }
+.update-banner-dismiss:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.update-banner button:focus-visible { outline: 2px solid var(--update-banner-ink); outline-offset: 2px; }
+.update-banner button:disabled { opacity: .5; cursor: wait; }
+.app-shell:has(> .sidebar.collapsed) .update-banner { padding-left: 54px; }
+.update-release-entry + .update-release-entry { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.release-notes-content .update-release-entry h3 { margin: 0 0 8px; font-size: 14px; line-height: 1.5; }
+.release-notes-content .update-release-summary { margin: 0 0 12px; color: color-mix(in srgb, var(--accent) 64%, var(--text)); font-size: 13px; font-weight: 600; line-height: 1.6; }
+.release-notes-content .update-history-notice { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+@media (max-width: 900px) {
+  .update-banner { gap: 8px; padding-right: 10px; padding-left: 12px; }
+  .update-banner-count { display: none; }
+  .update-banner-actions { gap: 4px; }
+}
 .sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
@@ -1253,8 +1279,9 @@ html[lang="en"] #moreMenu .settings-submenu.popover button > span:first-child { 
 .release-notes-content ul { margin: 4px 0 10px; padding-left: 20px; }
 .release-notes-content li { margin: 3px 0; }
 .release-notes-content a { color: var(--accent-strong); text-underline-offset: 2px; }
-.update-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
-.update-footer .large-button { min-width: 112px; height: 40px; padding: 0 14px; }
+.update-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.update-inline-hint { flex: 1 1 auto; min-width: 0; margin: 0 auto 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.update-footer .large-button { flex-shrink: 0; min-width: 112px; height: 40px; padding: 0 14px; white-space: nowrap; }
 .update-progress { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; padding: 12px 14px; border-radius: 11px; background: var(--panel); }
 .update-progress-track { height: 6px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 22%, transparent); overflow: hidden; }
 .update-progress-bar { height: 100%; width: 0; border-radius: 4px; background: var(--accent-strong); transition: width .18s ease; }
@@ -1939,6 +1966,7 @@ body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { pad
   .accent-menu { right: 12px; width: min(306px, calc(100vw - 24px)); }
   .first-run-language-options { grid-template-columns: 1fr; }
   .update-footer { flex-wrap: wrap; }
+  .update-inline-hint { flex-basis: 100%; }
   .update-footer .large-button { flex: 1 1 140px; }
   .pdf-tutorial-dialog { padding: 24px; }
   .pdf-tutorial-steps { grid-template-columns: 1fr; }
@@ -1975,9 +2003,9 @@ body[data-editor-layout="editor-only"] .editor-outline-mode .editor-header { pad
      App dialogs are body children; document HTML dialogs must remain intact. */
   body > .dialog-backdrop, body > dialog, body > dialog::backdrop { display: none !important; }
   .reader-deferred-layout { content-visibility: visible; contain-intrinsic-size: none !important; }
-  .titlebar, .sidebar, .toc-panel, .document-meta, .article-footer, .rail-button, .editor-view, .back-to-top, .window-controls, .toast, .popover, .pane-resizer { display: none !important; }
+  .titlebar, .sidebar, .toc-panel, .document-meta, .article-footer, .rail-button, .editor-view, .back-to-top, .window-controls, .toast, .popover, .pane-resizer, .update-banner { display: none !important; }
   .image-upload-progress { display: none !important; }
-  html, body, .app-shell, .reader-pane { height: auto; overflow: visible; background: white; color: black; }
+  html, body, .app-shell, .main-workspace, .workspace-panes, .reader-pane { height: auto; overflow: visible; background: white; color: black; }
   .document-view { max-width: none; padding: 0; }
   .markdown-body { font-size: 11pt; color: black; }
   .code-block { max-width: 100%; overflow: visible; box-shadow: none; }

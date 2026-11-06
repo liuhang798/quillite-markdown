@@ -356,6 +356,9 @@ jobs:
       - name: Prepare release notes
         run: |
           version="${RELEASE_TAG#v}"
+          # A reviewed one-line summary is release metadata, not a blind excerpt
+          # from a potentially long or technical changelog. Missing copy blocks publication.
+          node scripts/release-summary.mjs "${version}" > release-summary.json
           awk -v heading="## [${version}]" '
             index($0, heading) == 1 { capture = 1; next }
             capture && /^## \[/ { exit }
@@ -408,10 +411,12 @@ jobs:
             --arg version "${version}" \
             --arg titleZh "轻阅 Markdown ${version}" \
             --arg titleEn "Quillite Markdown ${version}" \
+            --arg summaryZh "$(jq -r '.summaryZh' release-summary.json)" \
+            --arg summaryEn "$(jq -r '.summaryEn' release-summary.json)" \
             --rawfile notesZh release-notes-zh.md \
             --rawfile notesEn release-notes-en.md \
             --arg githubUrl "${github_url}" \
-            '{version:$version,titleZh:$titleZh,titleEn:$titleEn,notesZh:$notesZh,notesEn:$notesEn,githubUrl:$githubUrl,published:false}' > official-release.json
+            '{version:$version,titleZh:$titleZh,titleEn:$titleEn,summaryZh:$summaryZh,summaryEn:$summaryEn,notesZh:$notesZh,notesEn:$notesEn,githubUrl:$githubUrl,published:false}' > official-release.json
           curl --fail-with-body --retry 3 --retry-all-errors \
             -H "Authorization: Bearer ${RELEASE_API_TOKEN}" \
             -H "Content-Type: application/json" \

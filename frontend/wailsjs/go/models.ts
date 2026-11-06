@@ -1012,6 +1012,30 @@ export namespace main {
 	    }
 	}
 
+	export class UpdateReleaseNotes {
+	    version: string;
+	    publishedAt: string;
+	    summaryZh: string;
+	    summaryEn: string;
+	    notesZh: string;
+	    notesEn: string;
+	    notesTruncated: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateReleaseNotes(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.publishedAt = source["publishedAt"];
+	        this.summaryZh = source["summaryZh"];
+	        this.summaryEn = source["summaryEn"];
+	        this.notesZh = source["notesZh"];
+	        this.notesEn = source["notesEn"];
+	        this.notesTruncated = source["notesTruncated"];
+	    }
+	}
 	export class UpdateInfo {
 	    checked: boolean;
 	    suppressed: boolean;
@@ -1023,6 +1047,12 @@ export namespace main {
 	    latestVersion: string;
 	    releaseName: string;
 	    releaseNotes: string;
+	    summary: string;
+	    summaryZh: string;
+	    summaryEn: string;
+	    updates: UpdateReleaseNotes[];
+	    updateCount: number;
+	    updatesTruncated: boolean;
 	    releaseUrl: string;
 	    publishedAt: string;
 
@@ -1042,10 +1072,35 @@ export namespace main {
 	        this.latestVersion = source["latestVersion"];
 	        this.releaseName = source["releaseName"];
 	        this.releaseNotes = source["releaseNotes"];
+	        this.summary = source["summary"];
+	        this.summaryZh = source["summaryZh"];
+	        this.summaryEn = source["summaryEn"];
+	        this.updates = this.convertValues(source["updates"], UpdateReleaseNotes);
+	        this.updateCount = source["updateCount"];
+	        this.updatesTruncated = source["updatesTruncated"];
 	        this.releaseUrl = source["releaseUrl"];
 	        this.publishedAt = source["publishedAt"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+
 	export class WindowsInstallSafety {
 	    applicable: boolean;
 	    safe: boolean;

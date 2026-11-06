@@ -8,6 +8,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### 简体中文
 
+- 新版本以顶部横条提醒，不打断当前操作。关闭横条后暂停自动提醒 7 天；更新弹窗只保留“一键更新”和“打开下载链接”。可查看跨版本的双语摘要和更新记录；旧版官网或缺少摘要时仍可正常检查、下载更新。
 - 新增 Mermaid 与数据图表大图查看，支持滚轮／按钮缩放、拖动平移、适应窗口和原始大小，覆盖阅读、分栏预览与即时渲染。修复甘特图的排期外“今天”标记撑大画布，导致适应窗口过小或 100% 显示空白的问题；排期内标记保留。
 - 侧边栏自动记住上次展开／收起状态，在首屏绘制前恢复，避免启动时展开再收起；分栏预览按光标相对高度定位，手动滚动预览时暂停跟随。
 - 文档列表调整为“名称／类型标签与路径”两行结构，后缀从标题移到第二行；TextPack、TextBundle 与普通 Markdown 有清晰类型标识，长路径省略不隐藏标签，真实文件名不变。
@@ -26,6 +27,7 @@ All notable changes to Quillite Markdown are documented here.
 
 ### English
 
+- Show new versions in a non-intrusive banner, with a seven-day pause when dismissed. Keep only “Update now” and “Open download link” in the update dialog. Show bilingual summaries and missed-version history when available; checking and downloading still work with an older website or missing summaries.
 - Add an enlarged Mermaid/data-chart viewer with wheel/button zoom, drag-to-pan, fit and actual-size controls across reading, split preview and live editing. Keep off-schedule Gantt today markers from stretching the canvas and making fitted charts tiny or 100% views empty; preserve in-range markers.
 - Restore the remembered sidebar state before first paint without a collapse animation. Align split preview with the caret’s relative height and pause following during manual preview navigation.
 - Move filename extensions into second-line type badges beside the location, keeping document names on the first line. TextPack, TextBundle and ordinary Markdown are clearly distinguished; long paths truncate without hiding the badge or renaming actual files.

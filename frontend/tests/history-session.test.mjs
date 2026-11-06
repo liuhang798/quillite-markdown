@@ -10,7 +10,11 @@ function harness(){
   state:{documentSession:1,editing:true,currentFile:{path:'a.md'}},codeEditor:{},els:{documentHistoryDialog:node('dialog'),documentHistoryList:node('list'),documentHistoryPreview:node('preview'),documentHistoryStatus:node('status'),restoreDocumentHistory:node('restore'),aiSettingsDialog:node('dialog'),aiRewriteDialog:node('dialog'),aiReviewDialog:node('dialog')},
   document:{body:node('body')},window:{quilliteMarkdown:{}},sameDocumentPath:(a,b)=>a===b,t:k=>k,aiErrorMessage:e=>e.message,focusCodeEditor(){},documentHistoryEmpty(title){context.emptyTitle=title;},renderDocumentVersionList(){},renderDocumentVersionPreview(v){context.preview=v;},
  });
- for(const [from,to] of [['function closeDocumentHistory(','function documentHistoryEmpty('],['async function selectDocumentVersion(','async function snoozeUpdates(']])vm.runInContext(source.slice(source.indexOf(from),source.indexOf(to)),context);
+ for(const [from,to] of [['function closeDocumentHistory(','function documentHistoryEmpty('],['async function selectDocumentVersion(','let applyingUpdate = false;']]){
+  const start=source.indexOf(from),end=source.indexOf(to,start+from.length);
+  assert.ok(start>=0&&end>start,`Missing history test boundary: ${from} → ${to}`);
+  vm.runInContext(source.slice(start,end),context);
+ }
  const version=(id,path='a.md')=>({id,path,content:id});
  context.window.quilliteMarkdown.listDocumentVersions=async()=>[{id:'v1'}];
  context.window.quilliteMarkdown.getDocumentVersion=async(p,id)=>version(id,p);

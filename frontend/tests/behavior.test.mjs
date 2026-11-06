@@ -444,7 +444,8 @@ test('image controls fade without moving their pointer hit targets', () => {
 });
 
 test('the update dialog offers in-app download and apply with progress', () => {
-  assert.match(html, /id="applyUpdate"/);
+  assert.match(html, /id="applyUpdate"[^>]*aria-describedby="updateInlineHint"/);
+  assert.match(html, /id="updateInlineHint"[^>]*data-i18n="updateInlineHint"/);
   assert.match(html, /id="updateProgress"/);
   assert.match(html, /id="updateProgressBar"/);
   assert.match(html, /id="updateProgressLabel"/);
@@ -452,13 +453,25 @@ test('the update dialog offers in-app download and apply with progress', () => {
   assert.match(renderer, /await window\.quilliteMarkdown\.downloadAndApplyUpdate\(\)/);
   assert.match(renderer, /window\.quilliteMarkdown\.onUpdateProgress\(progress =>/);
   assert.match(renderer, /\$\('#applyUpdate'\)\.addEventListener\('click', startDownloadAndUpdate\)/);
-  assert.match(renderer, /platform !== 'darwin' && platform !== 'windows'/);
+  assert.match(renderer, /inAppUpdateAvailable = !manualInstallRequired && \(platform === 'darwin' \|\| platform === 'windows'\)/);
   assert.match(renderer, /state\.dirty && state\.currentFile\?\.path\) \{\s*await saveDocument\(false, \{ auto: true, silent: true \}\)/);
   assert.match(renderer, /setTimeout\(\(\) => window\.quilliteMarkdown\.closeWindow\(\), 500\)/);
   assert.match(styles, /\.update-progress-bar \{ height: 100%; width: 0; border-radius: 4px; background: var\(--accent-strong\);/);
   assert.match(renderer, /openExternal\(installerURL \|\| 'https:\/\/qm\.ssssa\.cn\/#download'\)/);
   assert.match(mainSource, /releaseUrl: 'https:\/\/qm\.ssssa\.cn\/#download'/);
   assert.doesNotMatch(mainSource, /github\.com\/liuhang798\/quillite-markdown\/releases/);
+});
+
+test('the update dialog uses one-click copy and only the banner offers a seven-day pause', () => {
+  assert.match(renderer, /downloadAndUpdate: '一键更新'/);
+  assert.match(renderer, /downloadAndUpdate: 'Update now'/);
+  assert.match(renderer, /openDownloadPage: '打开下载链接'/);
+  assert.match(renderer, /openDownloadPage: 'Open download link'/);
+  assert.match(html, /id="closeUpdate"/);
+  assert.match(html, /id="updateBannerDismiss"/);
+  assert.doesNotMatch(html, /id="(?:updateLater|updateSnooze)"/);
+  assert.doesNotMatch(renderer, /#(?:updateLater|updateSnooze)\b|pauseUpdateReminder\(30\)/);
+  assert.match(renderer, /function dismissUpdateBanner\(\)\s*\{\s*if \(await pauseUpdateReminder\(7\)\)/);
 });
 
 test('Word, HTML, and PDF export are available through the unified Export document action', () => {
@@ -493,7 +506,7 @@ test('Word, HTML, and PDF export are available through the unified Export docume
   assert.match(renderer, /if \(action === 'export-center'\) openExportCenter\(\)/);
   assert.match(styles, /html\[data-platform="darwin"\] \.pdf-tutorial-windows \{ display: none; \}/);
   assert.match(styles, /html\[data-platform="darwin"\] \.pdf-tutorial-macos \{ display: block; \}/);
-  assert.match(styles, /@media print \{[\s\S]*\.toast, \.popover, \.pane-resizer \{ display: none !important; \}/);
+  assert.match(styles, /@media print \{[\s\S]*\.toast, \.popover, \.pane-resizer, \.update-banner \{ display: none !important; \}/);
   assert.match(styles, /@media print \{[\s\S]*\.markdown-body pre, \.code-block pre \{[^}]*white-space: pre-wrap !important;[^}]*overflow-wrap: anywhere;/);
   assert.match(styles, /@media print \{[\s\S]*\.markdown-table-scroll table, \.markdown-body table \{[^}]*table-layout: fixed;/);
 });
@@ -1031,8 +1044,9 @@ test('unverified Windows uninstallers preserve files and require a new install d
   assert.match(renderer, /选择新的专属目录安装/);
   assert.match(renderer, /Uninstaller safety could not be confirmed/);
   assert.match(renderer, /choose a new dedicated folder/);
-  assert.match(renderer, /function openUpdateDialog\(info\)[\s\S]*manualInstallReason === 'windows-unsafe-uninstaller'[\s\S]*#applyUpdate'[\s\S]*manualInstallRequired/);
-  assert.match(renderer, /if \(info\?\.available \|\| info\?\.manualInstallRequired\) openUpdateDialog\(info\)/);
+  assert.match(renderer, /function renderUpdateDialogContent\(info\)[\s\S]*manualInstallReason === 'windows-unsafe-uninstaller'[\s\S]*inAppUpdateAvailable = !manualInstallRequired/);
+  assert.match(renderer, /function openUpdateDialog\(info\)[\s\S]*renderUpdateDialogContent\(info\)/);
+  assert.match(renderer, /if \(info\?\.available \|\| info\?\.manualInstallRequired\) \{[\s\S]*renderUpdateBanner\(\);[\s\S]*if \(manual\) openUpdateDialog\(info\)/);
   assert.match(renderer, /manualInstallRequired \? state\.updateInfo\?\.manualInstallerUrl[\s\S]*installerURL \|\| 'https:\/\/qm\.ssssa\.cn\/#download'/);
 });
 
