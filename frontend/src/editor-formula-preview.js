@@ -4,7 +4,7 @@ import { isolateHistory } from '@codemirror/commands';
 import { scanMarkdownFormulas } from './formula-editing.js';
 import { editorImageItems } from './image-layout.js';
 import { renderLatexResult } from './math-rendering.js';
-import { mediaOwnedByInnerEditor } from './media-ownership.js';
+import { mediaOwnedByInnerEditor, singleLineMedia } from './media-ownership.js';
 import { editableProjectionSync } from './editable-owner.js';
 import {editorHasComposition, transactionComposing} from './editor-composition.js';
 
@@ -66,14 +66,14 @@ function compactEmbeddedImages(source) {
   };
   return { text, originalPosition };
 }
-export function editorFormulaItems(doc) {
+export function editorFormulaItems(doc, tableCell = false) {
   const source = doc.toString();
   let scanSource = source, restorePosition = position => position;
   if (source.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT) {
     const compacted = compactEmbeddedImages(source);
     if (compacted) { scanSource = compacted.text; restorePosition = compacted.originalPosition; }
   }
-  const formulas = scanMarkdownFormulas(scanSource, { maxSourceLength: Infinity, maxTokens: Infinity });
+  const formulas = scanMarkdownFormulas(scanSource, { maxSourceLength: Infinity, maxTokens: Infinity, tableCell });
   const deferred = source.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT || formulas.length > FORMULA_PREVIEW_LIMIT;
   return formulas.map(item => {
     const from = restorePosition(item.from), to = restorePosition(item.to, true);
@@ -92,8 +92,8 @@ export function hydrateFormulaItems(items, ranges) {
   }
   return changes;
 }
-function initialItems(doc) {
-  return doc.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT ? [] : editorFormulaItems(doc);
+function initialItems(doc, tableCell) {
+  return doc.length >= FORMULA_PREVIEW_DOCUMENT_LIMIT ? [] : editorFormulaItems(doc, tableCell);
 }
 function sameRange(a, b) { return a.from === b.from && a.to === b.to; }
 function currentItem(view, item, doc) {
@@ -203,7 +203,7 @@ function decorate(items, state, enabled, openRanges = []) {
 export const editorFormulaField = StateField.define({
   create(state) {
     const enabled = state.facet(formulaPreviewContext).enabled !== false;
-    return decorate(enabled ? initialItems(state.doc) : [], state, enabled);
+    return decorate(enabled ? initialItems(state.doc, state.facet(singleLineMedia)) : [], state, enabled);
   },
   update(value, transaction) {
     if (!transaction.docChanged && !transaction.selection && !transaction.effects.length && !transaction.reconfigured) return value;
@@ -214,10 +214,10 @@ export const editorFormulaField = StateField.define({
       openRanges = openRanges.map(map).filter(range => range.from <= range.to);
       items = items.filter(item => !touched.some(range => range.from < item.to && range.to > item.from
         || range.from === range.to && range.from > item.from && range.from < item.to)).map(item => ({ ...item, ...map(item) }));
-      if (transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = enabled ? initialItems(transaction.newDoc) : [];
+      if (transaction.annotation(editableProjectionSync) || transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) items = enabled ? initialItems(transaction.newDoc, transaction.startState.facet(singleLineMedia)) : [];
     }
     for (const effect of transaction.effects) {
-      if (effect.is(setFormulaDisplay)) { enabled = effect.value !== 'source'; items = enabled ? initialItems(transaction.newDoc) : []; }
+      if (effect.is(setFormulaDisplay)) { enabled = effect.value !== 'source'; items = enabled ? initialItems(transaction.newDoc, transaction.startState.facet(singleLineMedia)) : []; }
       if (effect.is(refreshFormulaPreviews) && effect.value.doc === transaction.newDoc && enabled) items = effect.value.items;
       if (effect.is(hydrateFormulaPreviews) && effect.value.doc === transaction.newDoc && enabled) {
         const hydrated = new Map(effect.value.items.map(item => [item.from, item]));
@@ -257,19 +257,20 @@ const scanner = ViewPlugin.fromClass(class {
   }
   scan() {
     if (editorHasComposition(this.view)) { this.schedule(true, 100); return; }
-    const doc = this.view.state.doc, generation = this.generation;
+    const { doc } = this.view.state, generation = this.generation;
+    const tableCell = this.view.state.facet(singleLineMedia);
     const apply = items => {
       if (generation !== this.generation || doc !== this.view.state.doc || !this.view.state.field(editorFormulaField, false)?.enabled) return;
       if (editorHasComposition(this.view)) { this.schedule(true, 100); return; }
       this.view.dispatch({ effects: refreshFormulaPreviews.of({ doc, items }) });
       this.hydrate();
     };
-    if (doc.length < FORMULA_PREVIEW_DOCUMENT_LIMIT) { apply(editorFormulaItems(doc)); return; }
+    if (doc.length < FORMULA_PREVIEW_DOCUMENT_LIMIT) { apply(editorFormulaItems(doc, tableCell)); return; }
     const fallback = () => {
       if (generation !== this.generation) return;
       this.worker?.terminate(); this.worker = null;
       // A worker/CSP failure must not silently disable all valid formulas.
-      if (generation === this.generation && doc === this.view.state.doc) apply(editorFormulaItems(doc));
+      if (generation === this.generation && doc === this.view.state.doc) apply(editorFormulaItems(doc, tableCell));
     };
     try {
       this.worker = new Worker(new URL('./formula-scan-worker.js', import.meta.url), { type: 'module' });
@@ -280,7 +281,7 @@ const scanner = ViewPlugin.fromClass(class {
         apply(event.data.items.map(item => ({ ...item, html: undefined, open: false })));
       };
       this.worker.onerror = event => { event.preventDefault(); fallback(); };
-      this.worker.postMessage(doc.toString());
+      this.worker.postMessage({ source: doc.toString(), tableCell });
     } catch { fallback(); }
   }
   hydrate() {

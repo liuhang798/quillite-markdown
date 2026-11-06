@@ -108,8 +108,72 @@ function textView(view, text) {
   return { text, segments };
 }
 
-function details(source, from, to, expression, displayMode) {
-  let cleaned = expression.trim(), mode = displayMode ? 'block' : 'inline', equationNumber = '1';
+export function tableFormulaExpression(source) {
+  return source.replace(/\\\|/g, '|');
+}
+
+export function tableFormulaVisualSource(expression) {
+  return expression.replace(/(\\*)\|/g, (match, slashes, index) => {
+    if (!(slashes.length % 2)) return slashes + '\\|';
+    // TeX's \| is a double bar, but in GFM that same spelling decodes to
+    // one literal bar. The named TeX alias avoids a structural pipe.
+    const boundary = /[a-zA-Z]/.test(expression[index + match.length] || '') ? ' ' : '';
+    return slashes.slice(0, -1) + '\\Vert' + boundary;
+  });
+}
+
+function tableCellView(view) {
+  const { text } = view;
+  if (!text.includes('\\|')) return view;
+  const parts = [], segments = [];
+  let from = 0, local = 0;
+  const append = (start, end) => {
+    const part = sliceView(view, start, end);
+    parts.push(part.text);
+    for (const segment of part.segments) segments.push({ ...segment, start: local + segment.start, end: local + segment.end });
+    local += part.text.length;
+  };
+  for (const match of text.matchAll(/\\\|/g)) {
+    append(from, match.index);
+    const start = offset(view, match.index), end = offset(view, match.index + 2, true);
+    if (start === null || end === null) return null;
+    // Marked consumes one escape before each pipe in this cell. Map the
+    // resulting character back to both original code units for edit/copy ranges.
+    segments.push({ start: local, end: ++local, from: start, width: end - start });
+    parts.push('|');
+    from = match.index + 2;
+  }
+  append(from, text.length);
+  return { text: parts.join(''), segments };
+}
+
+function tableRowViews(view, start, row) {
+  const separators = [];
+  let slashes = 0;
+  for (let i = 0; i < row.length; i++) {
+    if (row[i] === '|' && !(slashes % 2)) separators.push(i);
+    slashes = row[i] === '\\' ? slashes + 1 : 0;
+  }
+  const cells = [];
+  let from = 0;
+  for (const to of [...separators, row.length]) {
+    const part = row.slice(from, to);
+    if (part.trim() || (from && to < row.length)) {
+      const first = from + part.length - part.trimStart().length;
+      cells.push(tableCellView(sliceView(view, start + first, start + Math.max(first, from + part.trimEnd().length))));
+    }
+    from = to + 1;
+  }
+  return cells;
+}
+
+function details(source, from, to, expression, displayMode, tableCell) {
+  const raw = source.slice(from, to);
+  // Keep escaped pipes in the editable source. Only rendering uses Marked's
+  // decoded expression; saving unchanged or editing adjacent TeX stays lossless.
+  const delimiter = raw.startsWith('\\(') ? 2 : 1;
+  let cleaned = (tableCell ? raw.slice(delimiter, -delimiter) : expression).trim();
+  let mode = displayMode ? 'block' : 'inline', equationNumber = '1';
   const numbered = cleaned.match(/\s*\\tag\{([^{}]*)\}\s*$/);
   if (numbered && displayMode) {
     mode = 'numbered';
@@ -121,20 +185,21 @@ function details(source, from, to, expression, displayMode) {
   const prefixEnd = lastLine <= from ? from : source.indexOf(source.slice(from, from + 2) === '$$' ? '$$' : '\\]', lastLine);
   const prefix = prefixEnd >= lastLine ? source.slice(lastLine, prefixEnd) : '';
   return {
-    from, to, raw: source.slice(from, to), source: chemistry ? chemistry[1].trim() : cleaned,
+    from, to, raw, source: chemistry ? chemistry[1].trim() : cleaned,
     expression: cleaned, previewExpression: expression.trim(),
     templateId: chemistry ? 'chem-custom' : 'custom', mode, equationNumber,
     continuationPrefix: /^[\s>]*$/.test(prefix) ? prefix : '',
+    ...(tableCell ? { tableCell: true } : {}),
   };
 }
 
-export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_SCAN_DOCUMENT_LIMIT, maxTokens = SCAN_TOKEN_LIMIT } = {}) {
+export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_SCAN_DOCUMENT_LIMIT, maxTokens = SCAN_TOKEN_LIMIT, tableCell = false } = {}) {
   const source = String(markdown);
   if (source.length >= maxSourceLength || exceedsContainerBudget(source)) return [];
   if (!source.includes('$') && !source.includes('\\(') && !source.includes('\\[')) return [];
-  const formulas = [], root = originalView(maskFrontmatter(source));
+  const formulas = [], root = originalView(tableCell ? source : maskFrontmatter(source));
   let tokenCount = 0;
-  const visit = (tokens, view, depth = 0) => {
+  const visit = (tokens, view, depth = 0, inTable = false) => {
     if (!view) return;
     if (depth > SCAN_DEPTH_LIMIT) throw new Error('FORMULA_SCAN_DEPTH');
     let cursor = 0;
@@ -147,22 +212,33 @@ export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_
       const own = sliceView(view, start, cursor);
       if (token.type === 'mathInline' || token.type === 'mathBlock') {
         const from = offset(own, 0), to = offset(own, token.raw.trimEnd().length, true);
-        if (from !== null && to !== null) formulas.push(details(source, from, to, token.text, token.type === 'mathBlock'));
+        if (from !== null && to !== null) formulas.push(details(source, from, to, token.text, token.type === 'mathBlock', inTable));
       } else if (token.type === 'list') visit(token.items, own, depth + 1);
       else if (token.type === 'table') {
-        let cellCursor = 0;
-        for (const row of [token.header, ...token.rows]) for (const cell of row) {
-          const at = own.text.indexOf(cell.text, cellCursor);
-          if (at < 0) continue;
-          cellCursor = at + cell.text.length;
-          visit(cell.tokens, sliceView(own, at, cellCursor), depth + 1);
+        let line = 0, lineStart = 0;
+        for (const rawRow of sourceLines(own.text)) {
+          const row = line === 0 ? token.header : token.rows[line - 2];
+          if (row) {
+            const cells = tableRowViews(own, lineStart, rawRow.replace(/\n$/, ''));
+            row.forEach((cell, column) => {
+              const projected = cells[column];
+              if (projected?.text === cell.text) visit(cell.tokens, projected, depth + 1, true);
+            });
+          }
+          line++;
+          lineStart += rawRow.length;
         }
       } else if (token.tokens && !['code', 'codespan', 'html', 'image'].includes(token.type)) {
-        visit(token.tokens, textView(own, token.text ?? token.raw), depth + 1);
+        visit(token.tokens, textView(own, token.text ?? token.raw), depth + 1, inTable);
       }
     }
   };
-  try { visit(lexer.lexer(root.text), root); }
+  try {
+    if (tableCell) {
+      const projected = tableCellView(root);
+      if (projected) visit(lexer.Lexer.lexInline(projected.text, lexer.defaults), projected, 0, true);
+    } else visit(lexer.lexer(root.text), root);
+  }
   catch { return []; } // Never return partial/unreliable edit ranges or block source editing.
   return formulas.sort((a, b) => a.from - b.from);
 }
@@ -194,9 +270,11 @@ export function matchPreviewFormulas(formulas, previews, allowOrdered = true) {
 // Keep the draft intact and explain the Markdown constraint instead of
 // escaping LaTeX blindly (which could change its mathematical meaning).
 export function tableFormulaConstraint(source, range, output) {
-  const table = findMarkdownTableAt(source, range.from);
-  if (!table || range.from < table.tableFrom || range.from > table.tableTo
-    || (range.from <= table.tableFrom && range.to >= table.tableTo)) return null;
+  if (!range.tableCell) {
+    const table = findMarkdownTableAt(source, range.from);
+    if (!table || range.from < table.tableFrom || range.from > table.tableTo
+      || (range.from <= table.tableFrom && range.to >= table.tableTo)) return null;
+  }
   if (output.displayMode || /[\r\n]/.test(output.markdown)) return 'formulaTableInline';
   for (const match of output.markdown.matchAll(/(\\*)\|/g)) {
     if (!(match[1].length % 2)) return 'formulaTablePipe';

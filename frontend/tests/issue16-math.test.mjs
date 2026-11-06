@@ -37,6 +37,27 @@ test('rich math clipboard preserves explicit display math while escaping surroun
   assert.equal((parser.parse(source).match(/class="math-block"/g) || []).length, 1);
 });
 
+test('rich clipboard preserves dollar-delimited subscripts, fractions and escaped dollars', () => {
+  const inline = String.raw`\frac{a_1}{b^2} + \text{\$5}`;
+  const display = String.raw`\frac{x_1}{y^2}`;
+  const source = htmlToMarkdown('<p>plain_text and $x_1$ then $' + inline + '$.</p><p>$$' + display + '$$</p>');
+  assert.equal(source, 'plain\\_text and $x_1$ then $' + inline + '$.\n\n$$' + display + '$$');
+  const rendered = parser.parse(source);
+  assert.deepEqual(scanMarkdownFormulas(source).map(formula => formula.source), ['x_1', inline, display]);
+  assert.equal((rendered.match(/<msub>/g) || []).length, 3);
+  assert.equal((rendered.match(/<mfrac>/g) || []).length, 2);
+  assert.doesNotMatch(rendered, /class="katex-error"/);
+});
+
+test('dollar preservation leaves prices, escaped dollars, incomplete formulas and code literal', () => {
+  const source = htmlToMarkdown(String.raw`<p>Prices $5 and $10.</p><p>Literal \$x_1$.</p><p>Unclosed $x_2.</p><p><code>$\frac{x_3}{y}$</code></p><pre><code>$$x_4$$</code></pre>`);
+  assert.match(source, /Prices \$5 and \$10\./);
+  assert.match(source, /Unclosed \$x\\_2\./);
+  assert.ok(source.includes(String.raw`$\frac{x_3}{y}$`));
+  assert.equal(scanMarkdownFormulas(source).length, 0);
+  assert.doesNotMatch(parser.parse(source), /class="math-(?:inline|block)"/);
+});
+
 test('rich clipboard recovers one original formula from KaTeX instead of duplicating MathML and visual layers', () => {
   for (const display of [false, true]) {
     const expression = String.raw`\boldsymbol{f(x)\cdot f(-x)=常数}`;

@@ -4,7 +4,8 @@ import { scanMarkdownFormulas } from './formula-editing.js';
 // frontmatter or HTML into false formulas. No document data leaves this worker.
 self.onmessage = event => {
   try {
-    self.postMessage({ items: scanMarkdownFormulas(event.data, { maxSourceLength: Infinity, maxTokens: Infinity }) });
+    const { source, tableCell } = event.data;
+    self.postMessage({ items: scanMarkdownFormulas(source, { maxSourceLength: Infinity, maxTokens: Infinity, tableCell }) });
   } catch {
     self.postMessage({ error: true });
   }

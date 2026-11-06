@@ -19,6 +19,7 @@ All notable changes to Quillite Markdown are documented here.
 - 原包崩溃恢复保存基准修订、受控持久工作区和新增附件；来源丢失仍可恢复为完整副本，外部变化不自动授权覆盖。保存前先持久化恢复快照，失败/部分提交暂停自动保存并保留材料。原包图片读取限制在工作区；网络资源继续需主动允许，不自动下载。
 - 合并官网错误日志排查修复：本地图片 file URL 只解码一次；显式再次导出或打印时仅重试之前失败的本地读取，附件恢复后无需重开文档。缺图仍阻止渲染类导出，并提示检查路径和权限；代码块复制失焦时提示重试，不再误报成功或产生未处理异常。
 - 修复从网页粘贴含 `\(...\)`、`\[...\]` 等公式的富文本时，反斜杠被重复转义而无法渲染的问题；兼容带有效 TeX 源信息的 KaTeX／MathML，避免重复文字。保留公式源码，不将普通括号或代码内容识别为公式，不自动重写已有损坏源码。
+- 修复网页富文本粘贴时 `$...$` 和 `$$...$$` 中的下标、分式命令被错误转义，以及表格中含转义竖线的公式在即时编辑与阅读预览中表现不一致的问题。不自动重写既有文档。
 - 优化阅读滚动时的目录跟随：同帧事件合并，标题定位改为少量实时测量，仅更新变化的活动章节及祖先，减少长文档中的主线程与布局开销。保留阅读进度、章节跳转和 Ctrl／⌘+滚轮缩放；Ubuntu 原生环境的实际流畅度仍需实机复测。
 - 统一导出面板提供“Markdown（含图片）”和“打包文档（含图片）”，分别生成普通 `.md + assets` 副本和新 `.textpack`；导出不修改源文档，不切换当前编辑文档。
 - 图片收集保留源文档与附件，支持 Markdown、引用式、HTML 和脚注中的普通图片；缺失、包外、网络或未验证资源明确提示，不将不完整包标成完全离线。网络图片不下载入包，首次导入会话需主动允许后才加载网络图片。
@@ -38,6 +39,7 @@ All notable changes to Quillite Markdown are documented here.
 - Recover original-package drafts with their base revision, durable controlled workspace and new assets, even when the source is missing. Persist recovery before saving; pause autosave on failure/partial publication without deleting recovery material. Local image reads stay scoped to the workspace; online resources still require opt-in and are not downloaded.
 - Integrate fixes from the production error-log audit: decode local image file URLs once; retry only failed local reads on explicit export or print, allowing restored attachments without reopening the document. Missing images still block rendered export with path/permission guidance. Unfocused code-copy failures show retry guidance instead of false success or an unhandled rejection.
 - Fix double-escaped backslashes when pasting rich text with math delimiters such as `\(...\)` and `\[...\]` from web pages. Recover a single formula from KaTeX/MathML with valid TeX source metadata. Preserve source without treating ordinary parentheses or code as math, or automatically rewriting previously damaged source.
+- Preserve subscripts and fraction commands in `$...$` and `$$...$$` formulas pasted from rich text, and render formulas with escaped table pipes consistently in live editing and reading. Existing documents are not rewritten automatically.
 - Reduce scroll-time outline work by coalescing events per frame, measuring only a bounded selection of live heading positions, and updating only changed active links and ancestors. Preserve reading progress, chapter navigation and Ctrl/Command+wheel zoom. Native Ubuntu scrolling still requires device-level verification.
 - Add “Markdown (with images)” and “Pack document (with images)” to the unified export panel, creating an ordinary `.md + assets` copy or a new `.textpack`. Exports neither change the source nor switch the active editing document.
 - Preserve source documents and attachments while collecting ordinary Markdown, reference, HTML and footnote images. Explicitly report missing, outside-package, remote and unverified resources without claiming complete offline availability. Remote images are not downloaded into packages and require opt-in loading in the initial imported-document session.

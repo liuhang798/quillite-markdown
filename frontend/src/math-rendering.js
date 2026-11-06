@@ -22,13 +22,19 @@ function escapedAt(source, index) {
   return slashes % 2 === 1;
 }
 
+export function isInlineDollarOpen(source, index) {
+  return source[index] === '$' && source[index + 1] !== '$' && !/\s/.test(source[index + 1] || '');
+}
+
+export function isInlineDollarClose(source, index) {
+  return source[index] === '$' && !/\s/.test(source[index - 1] || '')
+    && source[index - 1] !== '\\' && !/\d/.test(source[index + 1] || '');
+}
+
 function inlineDollarMatch(source) {
-  if (!source.startsWith('$') || source.startsWith('$$') || /[\s\t]/.test(source[1] || '')) return undefined;
+  if (!isInlineDollarOpen(source, 0)) return undefined;
   for (let index = 1; index < source.length && source[index] !== '\n'; index++) {
-    if (source[index] !== '$' || escapedAt(source, index)) continue;
-    const previous = source[index - 1];
-    const next = source[index + 1] || '';
-    if (/\s/.test(previous) || previous === '\\' || /\d/.test(next)) continue;
+    if (!isInlineDollarClose(source, index)) continue;
     return { raw: source.slice(0, index + 1), text: source.slice(1, index) };
   }
   return undefined;

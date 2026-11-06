@@ -45,7 +45,9 @@ More → Spell check groups misspelling marks, dictionary language and clearing 
 
 Heading equations retain subscripts, superscripts and fractions in the reading outline, editing outline and inline `[TOC]`. Search accepts formula source text; existing section anchors and document content remain unchanged.
 
-Unreleased fixes preserve math delimiters such as `\(...\)` and `\[...\]` during rich-text paste instead of double-escaping their backslashes; ordinary parentheses and code remain literal. Reading-outline tracking coalesces scroll events per frame, measures only a bounded selection of headings and updates only changed active sections. Browser regressions cover the optimization; native Ubuntu behavior still needs device-level verification.
+V3.1.0 preserves `\(...\)`, `\[...\]`, `$...$`, and `$$...$$` formulas pasted from rich text and makes formulas with escaped table pipes consistent across reading and live editing.
+
+Reading-outline tracking coalesces scroll events per frame, measures only a bounded selection of headings and updates only changed active sections. Browser regressions cover the optimization; native Ubuntu behavior still needs device-level verification.
 
 Leaving the editor restores the pre-edit reading position instead of jumping to the top. Newly opened documents still start at the top.
 

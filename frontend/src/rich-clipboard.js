@@ -2,7 +2,7 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { decodeHTML } from 'entities';
-import { formulaMarkdownMatches } from './math-rendering.js';
+import { formulaMarkdownMatches, isInlineDollarClose, isInlineDollarOpen, mathBlockExtension } from './math-rendering.js';
 
 const RICH_HTML_PATTERN = /<(?:h[1-6]|p|div|br|strong|b|em|i|u|s|strike|del|a|ul|ol|li|blockquote|pre|code|table|img|span|math)\b/i;
 const MAX_RICH_CLIPBOARD_HTML = 5 * 1024 * 1024;
@@ -10,14 +10,53 @@ const SAFE_LINK_PATTERN = /^(?:https?:|#)/i;
 const SAFE_IMAGE_PATTERN = /^https?:\/\//i;
 
 // HTML-to-Markdown escaping must not double TeX's backslashes or turn its
-// underscores into Markdown escapes. Only explicit, balanced LaTeX delimiters
-// are opaque; ordinary/escaped parentheses and code retain Turndown's rules.
+// underscores into Markdown escapes. Code nodes do not pass through this hook.
 function escapeWithLatex(source, escape) {
+  if (!/[$\\]/.test(source)) return escape(source);
   const parts = [];
-  let end = 0, cursor = 0;
+  let end = 0, cursor = 0, dollarBoundary = 0;
+  const preserve = last => {
+    parts.push(escape(source.slice(end, cursor)), source.slice(cursor, last));
+    end = cursor = last;
+  };
   while (cursor < source.length) {
+    if (source[cursor] === '$') {
+      if (source[cursor + 1] === '$') {
+        // Display math is a block, not a pair of inline dollars. This hook
+        // sees individual HTML text nodes; each paragraph is converted alone.
+        const block = cursor === 0 ? mathBlockExtension.tokenizer(source) : null;
+        if (block && block.text.trim()) preserve(block.raw.length);
+        else cursor += 2;
+        continue;
+      }
+      if (isInlineDollarOpen(source, cursor)) {
+        // An unescaped dollar or line end bounds a candidate. Don't jump over
+        // a rejected delimiter (e.g. a second price) and consume later math.
+        if (dollarBoundary <= cursor) {
+          dollarBoundary = cursor + 1;
+          for (; dollarBoundary < source.length; dollarBoundary++) {
+            const character = source[dollarBoundary];
+            if (character === '$' || character === '\r' || character === '\n') break;
+            if (character === '\\' && /[\\$]/.test(source[dollarBoundary + 1] || '')) dollarBoundary++;
+          }
+        }
+        if (dollarBoundary > cursor + 1 && isInlineDollarClose(source, dollarBoundary)) {
+          preserve(dollarBoundary + 1);
+          continue;
+        }
+      }
+      cursor++;
+      continue;
+    }
     if (source[cursor] !== '\\') { cursor++; continue; }
     if (source[cursor + 1] === '\\') { cursor += 2; continue; }
+    if (source[cursor + 1] === '$') {
+      // Turndown doubles the literal slash but does not escape dollars. Keep
+      // both characters visible without exposing a new formula opener.
+      parts.push(escape(source.slice(end, cursor + 1)), '\\$');
+      end = cursor += 2;
+      continue;
+    }
     const open = source[cursor + 1];
     if (open !== '(' && open !== '[') { cursor++; continue; }
     const close = open === '(' ? ')' : ']';
@@ -29,8 +68,7 @@ function escapeWithLatex(source, escape) {
       if (source[last + 1] === close) break;
     }
     if (last < source.length && source[last] === '\\' && source[last + 1] === close) {
-      parts.push(escape(source.slice(end, cursor)), source.slice(cursor, last + 2));
-      end = cursor = last + 2;
+      preserve(last + 2);
     } else cursor = last;
   }
   parts.push(escape(source.slice(end)));

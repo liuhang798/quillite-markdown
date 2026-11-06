@@ -51,7 +51,7 @@ import { clampFontScale, readFontScaleStorage, recommendedFontScale } from './fo
 import { escapeMarkdownText, highlightExtension, prepareFootnotes } from './markdown-formats.js';
 import { buildFormulaExpression, buildFormulaMarkdown, FORMULA_DISCIPLINES, FORMULA_GROUP_LABELS, formulaInlineHasNewline, formulaPreviewExpression, formulaTemplateById, searchFormulaTemplates, formulaValues, parseFormulaMarkdown, resolveFormulaOutput } from './formula-templates.js';
 import { applyFormulaInlineLayout, formulaInlineLayout } from './formula-templates.js';
-import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas, tableFormulaConstraint } from './formula-editing.js';
+import { findFormulaAt, scanMarkdownFormulas, formulaEditIsCurrent, formulaReplacement, formulaInsertion, matchPreviewFormulas, tableFormulaConstraint, tableFormulaExpression, tableFormulaVisualSource } from './formula-editing.js';
 import { mathExtensions, renderLatexResult, collectFormulaRendering, formulaMarkdownMatches } from './math-rendering.js';
 import { formulaFallbackSource } from './formula-export.js';
 import { FORMULA_STRUCTURES, hasFormulaPlaceholders } from './formula-visual-policy.js';
@@ -2333,7 +2333,8 @@ function syncFormulaVisualEditor() {
   const request = ++formulaVisualRequest, context = formulaWizardState.context;
   const markdown = els.formulaMarkdownSource.value;
   const parsedSource = parseFormulaMarkdown(markdown);
-  const sourceExpression = parsedSource.expression.replace(/\s*\\tag\{[^{}]*\}\s*$/, '');
+  const sourceExpression = (formulaWizardState.editRange?.tableCell ? tableFormulaExpression(parsedSource.expression) : parsedSource.expression)
+    .replace(/\s*\\tag\{[^{}]*\}\s*$/, '');
   const sourceIsDelimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(markdown.trim());
   const visualInline = sourceIsDelimited ? !parsedSource.displayMode : formulaWizardState.mode === 'inline';
   const expression = visualInline ? formulaInlineLayout(sourceExpression).expression : sourceExpression;
@@ -2347,7 +2348,8 @@ function syncFormulaVisualEditor() {
       const delimited = /^(\$\$[\s\S]*\$\$|\$[\s\S]*\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/.test(current);
       const mode = tag ? 'numbered' : delimited ? parsed.displayMode ? 'block' : 'inline' : formulaWizardState.mode;
       const layout = formulaInlineLayout(parsed.expression).layout;
-      try { els.formulaMarkdownSource.value = buildFormulaMarkdown(mode, mode === 'inline' ? applyFormulaInlineLayout(value, layout) : value, tag?.[1] || $('#formulaNumber').value); }
+      const sourceValue = formulaWizardState.editRange?.tableCell ? tableFormulaVisualSource(value) : value;
+      try { els.formulaMarkdownSource.value = buildFormulaMarkdown(mode, mode === 'inline' ? applyFormulaInlineLayout(sourceValue, layout) : sourceValue, tag?.[1] || $('#formulaNumber').value); }
       catch { els.formulaPreview.textContent = t('formulaInlineMultiline'); $('#insertFormula').disabled = true; return; }
       formulaWizardState.mode = mode;
       $('#formulaNumberField').classList.toggle('hidden', mode !== 'numbered');
@@ -2602,7 +2604,7 @@ function renderFormulaPreview(expression, displayMode, markdown = els.formulaMar
     $('#insertFormula').disabled = true;
     return;
   }
-  const result = renderLatexResult(expression, displayMode);
+  const result = renderLatexResult(formulaWizardState.editRange?.tableCell ? tableFormulaExpression(expression) : expression, displayMode);
   els.formulaPreview.innerHTML = DOMPurify.sanitize(result.html);
   $('#insertFormula').disabled = !expression || !result.valid;
   // Validation feedback belongs to this dialog, not to later valid content.
@@ -2810,7 +2812,8 @@ function insertGeneratedFormula() {
     showToast(t('formulaInlineMultiline'), 'warning', undefined, formulaWizardState);
     return;
   }
-  if (!output.expression || !renderLatexResult(output.expression, output.displayMode).valid) {
+  const previewExpression = editRange?.tableCell ? tableFormulaExpression(output.expression) : output.expression;
+  if (!output.expression || !renderLatexResult(previewExpression, output.displayMode).valid) {
     showToast(t('formulaInvalid'), 'warning', undefined, formulaWizardState);
     return;
   }
