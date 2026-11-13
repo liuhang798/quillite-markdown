@@ -25,7 +25,7 @@
     "codemirror": "^6.0.2",
     "dictionary-en": "^4.0.0",
     "dictionary-en-gb": "^3.0.0",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.17",
     "echarts": "^6.1.0",
     "echarts-wordcloud": "^2.1.0",
     "entities": "^8.1.0",
