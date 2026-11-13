@@ -20,7 +20,7 @@ window.issue16Audit={
   formulas:()=>codeEditor.state.field(editorFormulaField).items.map(({raw,html,from,to})=>({raw,html,from,to})),
   replace:text=>codeEditor.dispatch({changes:{from:0,to:codeEditor.state.doc.length,insert:text},selection:{anchor:text.length}}),
   export:()=>{const div=document.createElement('div');renderMarkdownTo(div,state.currentFile,state.currentFile.content);return div.innerHTML;},
-  paste:(html,plain)=>{const data=new DataTransfer();data.setData('text/html',html);data.setData('text/plain',plain);codeEditor.contentDOM.focus();codeEditor.contentDOM.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));}
+  paste:(html,plain,markdown)=>{const data=new DataTransfer();if(html)data.setData('text/html',html);if(plain)data.setData('text/plain',plain);if(markdown)data.setData('text/markdown',markdown);codeEditor.contentDOM.focus();codeEditor.contentDOM.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));}
 };`;
   }
 }]});
@@ -117,6 +117,39 @@ try {
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   assert.equal(await page.evaluate(()=>issue16Audit.editor()),pasteTarget,'dollar math paste remains one undo transaction');
 
+  // Synthetic clipboard fixtures: emulate a copy-button payload that mixes
+  // Markdown's outer delimiters with individual rendered math nodes.
+  const annotatedMath=(visible,tex)=>`<math><semantics><mtext>${visible}</mtext><annotation encoding="application/x-tex">${tex}</annotation></semantics></math>`;
+  const mixedHTML=`<p>Given $f'(x)=${annotatedMath('f(x)','f(x)')}$.</p>`;
+  const cleanMath="f'(x)=f(x)";
+  const cleanDollar=`Given $${cleanMath}$.`;
+  const fallbackMath=String.raw`\frac{x}{2}`;
+  const fallbackSource=`**Fallback** $${fallbackMath}$.`;
+  const fallbackExplicit=String.raw`**Fallback** \(${fallbackMath}\).`;
+  const incompleteHTML=String.raw`<p><strong>Fallback</strong> $\frac{${annotatedMath('x','x')}}$.</p>`;
+  for (const {name,html,plain,markdown,expected,expression} of [
+    {name:'mixed HTML + plain Markdown',html:mixedHTML,plain:cleanDollar,expected:cleanDollar,expression:cleanMath},
+    {name:'mixed HTML only',html:mixedHTML,expected:cleanDollar,expression:cleanMath},
+    {name:'invalid mixed HTML with an intact plain counterpart',html:incompleteHTML,plain:fallbackSource,expected:fallbackSource,expression:fallbackMath},
+    {name:'invalid mixed HTML with explicit Markdown',html:incompleteHTML,plain:'Fallback x divided by 2.',markdown:fallbackExplicit,expected:fallbackExplicit,expression:fallbackMath},
+  ]) {
+    await page.evaluate(text=>issue16Audit.replace(text),pasteTarget);
+    await page.evaluate(({html,plain,markdown})=>issue16Audit.paste(html,plain,markdown),{html,plain,markdown});
+    const expectedSource=pasteTarget+expected;
+    assert.equal(await page.evaluate(()=>issue16Audit.editor()),expectedSource,name+' preserves exact valid source');
+    await page.waitForFunction(expression=>[...document.querySelectorAll('#editorPreviewContent .math-inline')].some(node=>decodeURIComponent(node.dataset.mathSource)===expression),expression);
+    assert.equal(await dollarPreview.locator('.math-inline .katex').count(),1,name+' renders one complete formula');
+    assert.equal(await dollarPreview.locator('.katex-error').count(),0,name+' does not emit a nested or invalid formula');
+    await page.locator('[data-editor-presentation="live"]').click();
+    await page.waitForFunction(()=>issue16Audit.formulas().length===1);
+    assert.match((await page.evaluate(()=>issue16Audit.formulas()))[0].html,/class="katex"/,name+' renders in live editing');
+    assert.equal(await page.evaluate(()=>issue16Audit.editor()),expectedSource,name+' is unchanged by switching editor modes');
+    await page.locator('[data-editor-presentation="source"]').click();
+    await page.locator('#markdownEditor > .cm-editor > .cm-scroller > .cm-content').focus();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+    assert.equal(await page.evaluate(()=>issue16Audit.editor()),pasteTarget,name+' remains one undo transaction');
+  }
+
   const tableRaw=String.raw`$\left\|x\right\|$`;
   const tableSource=`| A | B |\n| --- | --- |\n| ${tableRaw} | $y$ |`;
   await page.evaluate(text=>issue16Audit.replace(text),tableSource);
@@ -158,5 +191,5 @@ try {
   assert.equal(await tablePreview.locator('td').count(),2);
   assert.equal(decodeURIComponent(await tablePreview.locator('td:last-child .math-inline').getAttribute('data-math-source')),'y');
   assert.deepEqual(errors,[]);
-  console.log(`PASS ${engine}: issue 16 complete 11-formula sample in reading/export/split/live; rich math paste with exact dollar math and literal prices; escaped GFM table formula preview, no-op and edit`);
+  console.log(`PASS ${engine}: issue 16 original 11 formulas; dollar math, mixed HTML/Markdown paste and undo; escaped GFM table formula preview, no-op and edit`);
 } finally {await browser?.close();await server.close();}

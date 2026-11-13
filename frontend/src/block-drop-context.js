@@ -3,8 +3,8 @@ import { markdownParser } from './markdown-parser.js';
 // Continuation prefix for the actual quote/list owning a prose drop position.
 // Derive it from syntax nodes, including lazy continuation lines, rather than
 // interpreting an arbitrary leading dash or greater-than character as markup.
-export function blockDropPrefix(source, position) {
-  const tree = markdownParser.parse(source), containers = [];
+export function blockDropPrefix(source, position, tree = markdownParser.parse(source)) {
+  const containers = [];
   for (let node = tree.resolveInner(position, -1); node; node = node.parent) {
     if (['FencedCode', 'CodeBlock', 'HTMLBlock'].includes(node.name)) return '';
     if (['ListItem', 'Blockquote'].includes(node.name)) containers.push(node);

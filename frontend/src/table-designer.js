@@ -3,6 +3,13 @@ import { codeProjection } from './projected-code.js';
 
 export const TABLE_LIMITS = Object.freeze({ minRows: 2, maxRows: 20, minColumns: 1, maxColumns: 12, minWidth: 170, maxWidth: 360, defaultWidth: 220 });
 
+// Bound the cost of per-cell editors, and keep tables that exceed the grid
+// dialog's editing limits away from its clamping resize operations.
+export const LIVE_TABLE_CELL_LIMIT = 120;
+export function usesLightweightTable(cells, rows, columns) {
+  return cells > LIVE_TABLE_CELL_LIMIT || rows > TABLE_LIMITS.maxRows || columns > TABLE_LIMITS.maxColumns;
+}
+
 const WIDTH_METADATA = /^\s*<!--\s*quillite-table-widths:\s*([\d,\s]+)\s*-->\s*$/i;
 const DIVIDER_CELL = /^:?-{3,}:?$/;
 

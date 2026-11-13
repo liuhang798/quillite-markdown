@@ -9,28 +9,29 @@ import { decodeHTML } from 'entities';
 import { scanMarkdownFormulas } from './formula-editing.js';
 import { editorImageItems } from './image-layout.js';
 import { scanTextColorSpans } from './text-colors.js';
-import { EditableBlockWidget, tableCellRanges, safeCellInsertion, editableFieldContains, focusEditableBlock, keepVisibleBlockStable, forwardEditableEffects, syncEditableSelections, syncEditableSearch, syncEditableSpelling, extendEditableSelection, editableClipboardMode, editableSearchSelection } from './live-editable-block.js';
+import { EditableBlockWidget, lightweightTableCell, tableCellRanges, safeCellInsertion, tableFollowingBlank, editableFieldContains, focusEditableBlock, keepVisibleBlockStable, forwardEditableEffects, syncEditableSelections, syncEditableSearch, syncEditableSpelling, extendEditableSelection, editableClipboardMode, editableSearchSelection } from './live-editable-block.js';
 import { editableForwardedChange, editableProjectionSync, resolveEditableOwner } from './editable-owner.js';
 import { protectedBlockReplacement, crossSelection, crossSelectionField } from './editable-cross-selection.js';
 import { structuredHtmlBlocks } from './html-block-editing.js';
-import { sourceReturnPanel, revealSourceReturnCaret } from './source-return-panel.js';
+import { sourceReturnPanel, preserveSourceBlockPosition, revealSourceReturnCaret } from './source-return-panel.js';
 import { activeDiagramSourceItem, returnDiagramSourceToRendered, editorDiagramField, isRenderedDiagramSelection } from './editor-diagram-preview.js';
 import { installCrossBlockDrag } from './editable-drag-selection.js';
 import { installEditableTextDrag } from './editable-text-drag.js';
 import { codeFenceRepairs } from './code-fence-editing.js';
 import { codeProjection, indentedCodeProjection, mapProjection, fieldPosition, fieldOffset, fieldText, fieldInsertion, composeProjections } from './projected-code.js';
 import { blockDropPrefix } from './block-drop-context.js';
-import { findMarkdownTables, tableProjection } from './table-designer.js';
+import { findMarkdownTables, tableProjection, usesLightweightTable } from './table-designer.js';
 import { renderedContainerRanges, mediaOwnedByInnerEditor } from './media-ownership.js';
 import { liveSelectionDisplay } from './live-selection-layer.js';
 import {compositionSession, editorHasComposition, liveComposition, editorCompositionState, stateComposing, transactionComposing} from './editor-composition.js';
-export {editorHasComposition} from './editor-composition.js';
+export {afterComposition, editorHasComposition} from './editor-composition.js';
 import { imageDefinitionsField, imageDefinitionsFor, updateImageDefinitions, footnotesField, footnotesFor, updateFootnotes, footnoteBodyContext } from './editor-reference-context.js';
 import { footnoteProjection } from './footnote-editing.js';
 import { prepareFootnotes } from './markdown-formats.js';
 import { normalizeSetextCaret } from './editor-formatting.js';
 import { findMarkdownLinkAt, validLinkDestination, markdownReferenceKey } from './link-editing.js';
 import { inlineCodeLines } from './inline-code-syntax.js';
+import { liveRangeIndex } from './live-range-index.js';
 export { resolveEditableOwner } from './editable-owner.js';
 export {spellingDecorations, setSpellingDecorations} from './spelling-decorations.js';
 export { pasteEditableTableGrid, canPasteEditableTableGrid } from './live-editable-block.js';
@@ -52,6 +53,8 @@ export const livePreviewPhrases = {
   'Section title': '折叠标题', 'Section content': '区块正文', 'Comment (not shown when reading)': '注释（阅读时不显示）',
   'Collapse content': '收起正文', 'Expand content': '展开正文', 'Return to rendered view': '返回渲染',
   'Editing block source': '正在编辑区块源码',
+  'Large table · click a cell to edit': '大表格 · 点击单元格直接编辑',
+  'Edit table source': '编辑表格源码',
   'Edit footnote': '编辑脚注',
   'Footnote content': '脚注正文', 'Footnote': '脚注',
   'Separate comment and heading': '分离注释，恢复标题',
@@ -104,7 +107,9 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
     return {...definition,kind:'footnote-definition',raw:source.slice(definition.from,definition.to),
       contentFrom:definition.bodyFrom,contentTo:definition.to,projection,block:true};
   });
-  const formulas = scanMarkdownFormulas(source).filter(formula=>!noteBlocks.some(block=>overlaps(formula,block)));
+  const overlapsNote = liveRangeIndex(noteBlocks);
+  const formulas = scanMarkdownFormulas(source).filter(formula=>!overlapsNote(formula.from, formula.to));
+  const overlapsFormula = liveRangeIndex(formulas);
   // TeX punctuation is opaque to Markdown. Preserve offsets and whitespace,
   // but do not let underscores/asterisks inside inline equations steal an
   // enclosing emphasis delimiter. Never write this parsing projection back.
@@ -117,8 +122,10 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   const metadata = inFootnote ? null : frontmatterRange(source);
   const parsedSource = inFootnote ? pieces.join('') : maskFrontmatter(pieces.join(''));
   let tree = markdownParser.parse(parsedSource);
+  let originalTree = parsedSource === source ? tree : null;
   const references = new Set(definitions?.keys()), headings = [], imageRanges = [];
   const tableLayouts = findMarkdownTables(source,tree);
+  const layoutsByStart = new Map(tableLayouts.map(table => [table.tableFrom, table]));
   const tableMetadata = new Set(tableLayouts.filter(table => table.hasWidthMetadata).map(table => table.from));
   const images = editorImageItems(source);
   const htmlProtected = [...formulas, ...images, ...noteBlocks, ...(metadata ? [metadata] : [])];
@@ -176,12 +183,13 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   };
   collect(tree.topNode);
   const inlineImages = new Set([...imageRanges, ...images].map(image => `${image.from}:${image.to}`));
-  const blocksWrapper = (from, to, openEnd, closeStart) => blocked.some(range => overlaps({from,to},range)
-    && !((range.mode === 'inline' || inlineImages.has(`${range.from}:${range.to}`))
-      && range.from >= openEnd && range.to <= closeStart));
   const htmlBlocks = structuredHtmlBlocks(source, htmlProtected);
   plan.widgets.push(...htmlBlocks,...noteBlocks);
   blocked.push(...htmlBlocks);
+  const overlapsBlocked = liveRangeIndex(blocked), overlapsHtml = liveRangeIndex(htmlBlocks), overlapsImage = liveRangeIndex(imageRanges);
+  const blocksWrapper = (from, to, openEnd, closeStart) => overlapsBlocked(from, to, range =>
+    !((range.mode === 'inline' || inlineImages.has(`${range.from}:${range.to}`))
+      && range.from >= openEnd && range.to <= closeStart));
   if (htmlBlocks.length) {
     // CommonMark's raw HTML node can swallow the rest of a quoted container.
     // Parse surrounding Markdown again with owned widgets blanked out, keeping
@@ -196,13 +204,13 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   }
   const visit = node => {
     const name = node.name, raw = source.slice(node.from, node.to), parts = children(node);
-    if (name !== 'Document' && htmlBlocks.some(range => overlaps(node, range))) {
+    if (name !== 'Document' && overlapsHtml(node.from, node.to)) {
       // Visit the containing quote/list so surrounding prose and its markers
       // still render. Only the structured HTML itself belongs to its widget.
       if (!['Blockquote', 'BulletList', 'OrderedList', 'ListItem'].includes(name)
-        || htmlBlocks.some(range => range.from <= node.from && node.to <= range.to)) return;
+        || overlapsHtml(node.from, node.to, range => range.from <= node.from && node.to <= range.to)) return;
     }
-    if (formulas.some(range => overlaps(node, range)) && name !== 'Document' && !parts.length) return;
+    if (name !== 'Document' && !parts.length && overlapsFormula(node.from, node.to)) return;
     if (name === 'Image') return; // The existing image extension owns these ranges.
     if (name === 'CommentBlock' && tableMetadata.has(node.from)) { hide(node.from,node.to); return; }
     if (node.parent?.name !== 'Document' && ['HTMLBlock', 'CommentBlock'].includes(name)) return;
@@ -230,7 +238,7 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
         if (nested && last && source[last.to - 1] === '\n' && finalLineEnd >= last.to
           && /^[\t >]*$/.test(source.slice(last.to, finalLineEnd))) pieces.push({from:finalLineEnd,to:finalLineEnd});
         const contentFrom = pieces[0]?.from ?? (nested ? fences[1].from : source.indexOf('\n', node.from) + 1);
-        const projection = nested ? codeProjection(source,pieces,contentFrom,blockDropPrefix(source,Math.max(0,node.from-1)),node) : undefined;
+        const projection = nested ? codeProjection(source,pieces,contentFrom,blockDropPrefix(source,Math.max(0,node.from-1),originalTree ??= markdownParser.parse(source)),node) : undefined;
         plan.widgets.push({ from: node.from, to: node.to, kind: 'code', raw, language, text: projection?.text ?? (pieces[0] ? source.slice(contentFrom,pieces.at(-1).to) : ''), contentFrom, contentTo: pieces.at(-1)?.to ?? contentFrom, projection,
           fences:fences.map(f=>({from:f.from,to:f.to})), block: true });
         for (const child of parts.filter(child => child.name === 'CodeMark')) hide(child.from, child.to);
@@ -257,18 +265,23 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
       if (name !== 'Table' && /<\/?(?:details|summary|div)\b/i.test(raw)) return;
       // Tables delegate media to their cell editors. Other HTML keeps its
       // original media owners; executable/interactive HTML is never mounted.
-      if ((name !== 'Table' && (formulas.some(range => overlaps(node, range)) || imageRanges.some(range => overlaps(node, range)) || /<img\b/i.test(raw))) || /<(?:script|style|iframe|object|embed|input|button|form)\b/i.test(raw)) return;
+      if ((name !== 'Table' && (overlapsFormula(node.from, node.to) || overlapsImage(node.from, node.to) || /<img\b/i.test(raw))) || /<(?:script|style|iframe|object|embed|input|button|form)\b/i.test(raw)) return;
       const projection = name === 'Table' ? tableProjection(source,node) : undefined;
       const projectedCells = projection ? tableCellRanges(projection.text) : [];
       const cells = projectedCells?.map(cell=>({...cell,from:fieldPosition({projection},cell.from),to:fieldPosition({projection},cell.to)}));
       if (name === 'Table' && !cells) return; // Irregular rows retain lossless source.
-      const layout=tableLayouts.find(table=>table.tableFrom===node.from);
+      const layout=layoutsByStart.get(node.from);
       // Width metadata belongs to this rendered block, not to preceding prose.
       // Partial selection protects it with the table skeleton; whole-block
       // moves/deletes include it, and source-return exposes one coherent range.
       const from=layout?.hasWidthMetadata?layout.from:node.from;
       plan.widgets.push({ from, to: node.to, kind: name === 'Table' ? 'table' : 'html', raw:source.slice(from,node.to), cells, projection,
-        ...(projection?{renderSource:tableRenderSource(projection.text),alignments:layout?.model.alignments,widths:layout?.hasWidthMetadata?layout.model.widths:undefined}:{}),block: true });
+        ...(projection ? {
+          lightweight: usesLightweightTable(cells.length, cells.at(-1)?.row + 1, layout?.model.alignments.length),
+          renderSource: tableRenderSource(projection.text),
+          alignments: layout?.model.alignments,
+          widths: layout?.hasWidthMetadata ? layout.model.widths : undefined
+        } : {}), block: true });
       return;
     }
     if (/^(ATXHeading|SetextHeading)[1-6]$/.test(name)) {
@@ -393,11 +406,12 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
     parts.forEach(visit);
   };
   visit(tree.topNode);
+  const overlapsBlock = liveRangeIndex(plan.widgets.filter(item => item.block));
   // Line decorations retain the real document/selection. Derive indentation
   // from parser containers, not the number of spaces or literal `>` characters.
   // Repeated quote classes alone cannot represent nested rails in a flat editor.
   for (const [from, layout] of containerLines) {
-    if (plan.widgets.some(item => item.block && item.from <= from && from < item.to)) continue;
+    if (overlapsBlock(from, from + 1)) continue;
     const style = [`--live-list-depth:${layout.lists}`, `--live-quote-depth:${layout.quotes.length}`,
       `--live-quote-top:${layout.starts * 13}px`, `--live-quote-bottom:${layout.ends * 13}px`,
       `--live-marker-width:${layout.markerWidth ?? 1}em`];
@@ -423,11 +437,12 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   for (const reference of noteData.references) {
     // Tables/details own their inner editor's references; never mount a second
     // replacement inside the outer block widget.
-    if (!plan.widgets.some(item => item.block && overlaps(item,reference))) plan.widgets.push({...reference,kind:'footnote'});
+    if (!overlapsBlock(reference.from, reference.to)) plan.widgets.push({...reference,kind:'footnote'});
   }
   // A math expression must never acquire Markdown emphasis or hidden escapes.
-  for (const key of ['marks', 'hides', 'widgets']) plan[key] = plan[key].filter(item => noteBlocks.includes(item) || htmlBlocks.includes(item) || item.kind === 'table'
-    || !formulas.some(range => overlaps(item, range) && !(key === 'marks' && range.mode === 'inline' && item.from < range.from && item.to > range.to)));
+  const ownedBlocks = new Set([...noteBlocks, ...htmlBlocks]);
+  for (const key of ['marks', 'hides', 'widgets']) plan[key] = plan[key].filter(item => ownedBlocks.has(item) || item.kind === 'table'
+    || !overlapsFormula(item.from, item.to, range => !(key === 'marks' && range.mode === 'inline' && item.from < range.from && item.to > range.to)));
   return plan;
 }
 
@@ -548,6 +563,46 @@ class SourceNotice extends WidgetType {
   toDOM() { const node = document.createElement('div'); node.className = 'cm-live-source-notice'; node.textContent = this.label; node.setAttribute('role', 'status'); return node; }
 }
 
+function revealLightweightTableRow(view, item, position) {
+  const editor = resolveEditableOwner(view)?.view;
+  if (!editor?.requestMeasure) return;
+  const doc = editor.state.doc, selection = editor.state.selection;
+  let index = item.cells.findIndex(cell => cell.from <= position && position <= cell.to);
+  if (index < 0) index = 0;
+  const events = ['wheel', 'pointerdown', 'keydown', 'touchstart'];
+  let cancelled = false;
+  const finish = () => {
+    cancelled = true;
+    for (const type of events) editor.dom.removeEventListener(type, finish, true);
+  };
+  for (const type of events) editor.dom.addEventListener(type, finish, true);
+  const valid = () => !cancelled && !editor.destroyed && !view.destroyed && editor.state.doc === doc
+    && editor.state.selection.eq(selection) && view.state.field(livePreviewField, false)?.sourceBlock === null;
+  const measure = attempt => {
+    if (!valid()) { finish(); return; }
+    editor.requestMeasure({
+      read() {
+        if (!valid()) return 0;
+        for (const element of view.dom.querySelectorAll('.cm-live-table-lightweight')) {
+          const cell = lightweightTableCell(element, item, index);
+          if (!cell) continue;
+          const row = cell.getBoundingClientRect(), port = editor.scrollDOM.getBoundingClientRect();
+          if (row.top < port.top || row.bottom > port.bottom) return row.top - port.top - 30;
+          break;
+        }
+        return 0;
+      },
+      write(delta) {
+        if (!valid()) { finish(); return; }
+        if (delta) editor.scrollDOM.scrollTop += delta;
+        if (attempt < 3) editor.dom.ownerDocument.defaultView.requestAnimationFrame(() => measure(attempt + 1));
+        else finish();
+      }
+    });
+  };
+  queueMicrotask(() => measure(0));
+}
+
 export function activeSourceItem(view) {
   if(view.destroyed||view.state.readOnly)return null;
   const live=view.state.field(livePreviewField,false);
@@ -559,7 +614,7 @@ export function returnSourceToRendered(view) {
   if(!item||view.state.sliceDoc(item.from,item.to)!==item.raw)return false;
   let selection=view.state.selection;
   const fields=item.cells||[{from:item.contentFrom??item.from,to:item.contentTo??item.to}];
-  if(selection.ranges.length===1&&selection.main.empty){
+  if(selection.ranges.length===1&&(selection.main.empty || item.lightweight)){
     const head=selection.main.head;
     const nearest=fields.reduce((best,field)=>{
       const position=Math.max(field.from,Math.min(field.to,head));
@@ -567,9 +622,10 @@ export function returnSourceToRendered(view) {
     },null);
     selection=EditorSelection.cursor(nearest?.position??item.from);
   }
-  view.dispatch({effects:liveSourceBlock.of(null),selection});
+  view.dispatch({effects: item.lightweight ? [liveSourceBlock.of(null), editableSearchSelection.of(false)] : liveSourceBlock.of(null),selection});
   if(view.state.selection.ranges.length>1||!focusEditableBlock(view))view.focus();
-  if(view.requestMeasure)revealSourceReturnCaret(view);
+  if (item.lightweight) revealLightweightTableRow(view, item, view.state.selection.main.head);
+  else if(view.requestMeasure)revealSourceReturnCaret(view);
   return true;
 }
 
@@ -627,18 +683,20 @@ function decorate(plan, state, sourceBlock = null, searchSelection = false) {
       inline: () => [editorLivePreview, livePreviewContext.of(state.facet(livePreviewContext)), state.facet(livePreviewContext).nestedExtensions || []],
       source: (view, position) => view.dispatch({ effects: liveSourceBlock.of(item.from), selection: { anchor: position } }),
     }) : new LiveWidget(item, state);
-    // Footnotes, indented code and pipe-less final cells can end exactly at
-    // their widget boundary. That end is still editable text, not the next
-    // document line; let coordinate queries reach the child at that boundary.
+    // A table owns the end of its last row even when its final cell has a
+    // closing pipe. Leaving this edge outside the widget creates a phantom
+    // empty line that places the caret after the pipe instead of below it.
+    // For other blocks include the end when it belongs to an editable field.
     const editableEnd = editable && (item.contentTo === item.to || item.cells?.some(cell=>cell.to===item.to));
-    decorations.push(Decoration.replace({ widget, block: !!item.block, inclusive: false, inclusiveEnd: !!editableEnd, atomicWidget: stableInline }).range(item.from, item.to));
+    decorations.push(Decoration.replace({ widget, block: !!item.block, inclusive: false, inclusiveEnd: item.kind === 'table' || !!editableEnd, atomicWidget: stableInline || !!item.lightweight }).range(item.from, item.to));
   }
   let lastEnd = -1;
+  const overlapsReplacement = liveRangeIndex(replacements);
   for (const item of [...plan.hides].sort((a, b) => a.from - b.from || b.to - a.to)) {
     // Keep the displayed text stable during caret placement and drag selection.
     // Syntax editing is an explicit mode, not a side effect of pointer-down.
     if (searchSelection && state.selection.ranges.some(range=>!range.empty&&overlaps(item,range))) continue;
-    if (item.from < lastEnd || replacements.some(range => overlaps(item, range)) || (sourceBlock !== null && plan.widgets.some(block => block.from === sourceBlock && overlaps(block, item)))) continue;
+    if (item.from < lastEnd || overlapsReplacement(item.from, item.to) || (sourceItem && overlaps(sourceItem, item))) continue;
     decorations.push(Decoration.replace({ hiddenSyntax: true, inclusive: false }).range(item.from, item.to)); lastEnd = item.to;
   }
   return Decoration.set(decorations, true);
@@ -660,7 +718,7 @@ export function visibleLiveDecorations(state) {
 }
 
 export const livePreviewField = StateField.define({
-  create(state) { const plan = buildLivePlan(state.doc.toString(),footnotesFor(state),state.facet(footnoteBodyContext),imageDefinitionsFor(state)); return { plan, composing: false, sourceBlock: null, formatSelection: null, searchSelection: false, decorations: decorate(plan, state) }; },
+  create(state) { const plan = buildLivePlan(state.doc.toString(),footnotesFor(state),state.facet(footnoteBodyContext),imageDefinitionsFor(state)); return { plan, composing: false, tableSeparator: null, sourceBlock: null, formatSelection: null, searchSelection: false, decorations: decorate(plan, state) }; },
   update(value, transaction) {
     let composing = transactionComposing(transaction, value.composing);
     let formatSelection = transaction.docChanged || transaction.selection ? null : value.formatSelection;
@@ -675,7 +733,11 @@ export const livePreviewField = StateField.define({
     }
     // Preserve native IME DOM while composition is active. Reparse only after it
     // commits. All ordinary changes are CodeMirror transactions, including undo.
-    if (composing) return { ...value, composing, formatSelection: null, decorations: value.decorations.map(transaction.changes) };
+    if (composing) {
+      const separator = value.tableSeparator ?? tableSeparatorEditLine(transaction)?.from;
+      return { ...value, composing, tableSeparator: separator == null ? null : transaction.changes.mapPos(separator, -1),
+        formatSelection: null, decorations: value.decorations.map(transaction.changes) };
+    }
     const plan = transaction.docChanged || value.composing || transaction.effects.some(effect=>effect.is(updateFootnotes)||effect.is(updateImageDefinitions)) ? buildLivePlan(transaction.newDoc.toString(),footnotesFor(transaction.state),transaction.state.facet(footnoteBodyContext),imageDefinitionsFor(transaction.state)) : value.plan;
     if (!transaction.docChanged && !transaction.selection && !transaction.reconfigured && !transaction.effects.length && !value.composing) return value;
     if (sourceBlock !== null && !plan.widgets.some(item => item.from === sourceBlock && selected(transaction.state, item))) sourceBlock = null;
@@ -684,9 +746,14 @@ export const livePreviewField = StateField.define({
     // F3/Mod-g continue navigating even after the panel has closed.
     let searchSelection = transaction.isUserEvent('select.search') || transaction.isUserEvent('input.replace')
       || !transaction.selection && value.searchSelection;
+    if (searchSelection && transaction.selection && transaction.newSelection.ranges.length === 1) {
+      const { from, to } = transaction.newSelection.main;
+      const table = plan.widgets.find(item => item.lightweight && from >= item.from && to <= item.to);
+      if (table) sourceBlock = table.from;
+    }
     if (searchPanelOpen(transaction.startState) && !searchPanelOpen(transaction.state)) searchSelection = false;
     for (const effect of transaction.effects) if (effect.is(editableSearchSelection)) searchSelection = effect.value;
-    return { plan, composing, sourceBlock, formatSelection, searchSelection, decorations: decorate(plan, transaction.state, sourceBlock, searchSelection) };
+    return { plan, composing, tableSeparator: null, sourceBlock, formatSelection, searchSelection, decorations: decorate(plan, transaction.state, sourceBlock, searchSelection) };
   },
   provide: field => [EditorView.decorations.compute([field], visibleLiveDecorations), renderedContainerRanges.compute([field], state => {
     const live = state.field(field);
@@ -954,6 +1021,39 @@ export function protectRenderedBlockSelection(transaction) {
   const source = state.doc.toString(), blocks = renderedEditableBlocks(state);
   const safe = protectedBlockReplacement(source, selection.from, selection.to, changes[0].insert, blocks);
   return safe ? { ...safe, annotations: transaction.annotations, effects: transaction.effects, scrollIntoView: transaction.scrollIntoView } : transaction;
+}
+
+function tableBeforeBlank(state, line) {
+  if (line.number === 1 || line.text.trim()) return null;
+  const live = state.field(livePreviewField, false);
+  const end = state.doc.line(line.number - 1).to;
+  return live?.plan.widgets.find(item => item.kind === 'table' && item.to === end && item.from !== live.sourceBlock) ?? null;
+}
+
+function tableSeparatorEditLine(tr) {
+  const state = tr.startState, cursor = state.selection.main;
+  if (!tr.docChanged || state.readOnly || !cursor.empty || state.selection.ranges.length !== 1
+    || tr.annotation(editableProjectionSync) || tr.annotation(editableForwardedChange)
+    || !(tr.isUserEvent('input.type') || tr.isUserEvent('input.paste'))) return null;
+  const line = state.doc.lineAt(cursor.head);
+  if (!tableBeforeBlank(state, line)) return null;
+  let insertsOnLine = true;
+  tr.changes.iterChanges((from, to) => { if (from < line.from || to > line.to) insertsOnLine = false; });
+  return insertsOnLine ? line : null;
+}
+
+function preserveTableSeparator(tr) {
+  // Moving the text to a new line while a candidate is still active breaks
+  // the browser's marked range. The live plan stays frozen until commit.
+  if (stateComposing(tr.startState) || tr.isUserEvent('input.type.compose')) return tr;
+  const line = tableSeparatorEditLine(tr);
+  if (!line) return tr;
+  const start = tr.changes.mapPos(line.from, -1);
+  if (!tr.newDoc.lineAt(start).text.trim()) return tr;
+  // Keep the separator in the same history event as the new text, including
+  // paste and native text input. Merely placing the caret never edits Markdown.
+  const changes = ChangeSet.of({ from: start, insert: '\n' }, tr.newDoc.length);
+  return [tr, { changes, selection: tr.newSelection.map(changes, 1), sequential: true }];
 }
 
 export function renderedEditableBlocks(state, sourceContext = false) {
@@ -1483,6 +1583,7 @@ export function normalizeLiveInlineWhitespace(tr) {
 }
 
 export const editorLivePreview = [editorCompositionState, imageDefinitionsField, footnotesField, livePreviewField, crossSelectionField,
+  EditorState.transactionFilter.of(preserveTableSeparator),
   EditorState.transactionFilter.of(preserveLiveReferenceLabels),
   EditorState.transactionFilter.of(unwrapLiveInlineBoundary),
   EditorState.transactionFilter.of(unwrapLiveCommentBoundary),
@@ -1537,6 +1638,20 @@ export const editorLivePreview = [editorCompositionState, imageDefinitionsField,
     const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (position === null) return null;
     const live = view.state.field(livePreviewField), line = view.state.doc.lineAt(position);
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !editorHasComposition(view)) {
+      const table = tableBeforeBlank(view.state, line);
+      const next = table && tableFollowingBlank(view.state.doc, table.to);
+      if (next && next.number !== line.number) {
+        let anchor = next.from;
+        return {
+          update(update) { anchor = update.changes.mapPos(anchor); },
+          get(nextEvent) {
+            const head = nextEvent === event ? anchor : view.posAtCoords({ x: nextEvent.clientX, y: nextEvent.clientY }, false);
+            return EditorSelection.create([head === anchor ? EditorSelection.cursor(anchor, 1) : EditorSelection.range(anchor, head)]);
+          },
+        };
+      }
+    }
     let start = line.from, end = line.to;
     const hidden = [];
     visibleLiveDecorations(view.state).between(line.from, line.to, (from, to, value) => {
@@ -1585,7 +1700,15 @@ export const editorLivePreview = [editorCompositionState, imageDefinitionsField,
     },
   }),
   ViewPlugin.define(view => compositionSession(view, active => {
-    if (!view.destroyed && view.state.field(livePreviewField, false)) view.dispatch({effects:liveComposition.of(active)});
+    const state = view.state, live = state.field(livePreviewField, false);
+    if (view.destroyed || !live) return;
+    const start = live.tableSeparator;
+    if (!active && start !== null && state.doc.lineAt(start).text.trim()) {
+      const changes = ChangeSet.of({ from: start, insert: '\n' }, state.doc.length);
+      // Use the composition history event so Undo removes both the committed
+      // text and its separator. Cancellation leaves the original line alone.
+      view.dispatch({ changes, selection: state.selection.map(changes, 1), effects: liveComposition.of(false), userEvent: 'input.type.compose' });
+    } else view.dispatch({ effects: liveComposition.of(active) });
   }), {eventHandlers:{
     compositionstart() { this.start(); return false; },
     compositionupdate() { this.start(); return false; },

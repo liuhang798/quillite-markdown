@@ -43,7 +43,7 @@ import { aiModelOptions } from './ai-model-options.js';
 import { exceedsAIInputLimit, protectEmbeddedImages, aiInputCharacterCount } from './ai-input.js';
 import { transformMarkdownImages } from './portable-images.js';
 import { prepareTextPackExport } from './textpack.js';
-import { normalizeImageRows } from './image-layout.js';
+import { imageSourceKind, normalizeImageRows } from './image-layout.js';
 import { deleteAIModelCache, readAIModelCache, writeAIModelCache } from './ai-model-cache.js';
 import { ACCENT_THEMES, normalizeAccentTheme, normalizeColorMode, readAppearanceStorage, resolveMacColorMode, temporaryMacColorModeAfterToggle } from './appearance.js';
 import { previewWheelZoomDirection } from './font-wheel-zoom.js';
@@ -64,10 +64,10 @@ import { resolveDocumentLink } from './document-links.js';
 import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
 import { documentListName } from './document-list-name.js';
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
-import { createTableModel, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, serializeTableReplacement, stripTableWidthMetadata, TABLE_LIMITS } from './table-designer.js';
+import { createTableModel, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, serializeTableReplacement, stripTableWidthMetadata, TABLE_LIMITS, usesLightweightTable } from './table-designer.js';
 import { resolveEditableTable, findEditableTableAt, tableInsertion } from './table-editing.js';
 import {parseTableClipboardTSV,TABLE_CLIPBOARD_LIMIT} from './table-clipboard.js';
-import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from './rich-clipboard.js';
+import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText, selectClipboardMarkdown } from './rich-clipboard.js';
 import { hasOverlappingReviewSuggestions, locateAIReviewSuggestions } from './ai-review.js';
 import { applyAITextDiff, buildAITextDiff, changedAITextSegments } from './ai-text-diff.js';
 import { detectAISensitiveContent, redactAISensitiveContent, restoreAISensitiveContent, restoreAISuggestions } from './ai-privacy.js';
@@ -109,9 +109,11 @@ let embeddedImagePreview;
 let sourceImageFolding;
 let editorLivePreview;
 let editorHasComposition = view => !!(view?.compositionStarted || view?.composing);
+let afterEditorComposition;
 let livePreviewContext;
 let buildLivePlan;
 let liveFormatSelection;
+let liveSourceBlock;
 let resolveEditableOwner;
 let resolveEditorPasteTarget;
 let pasteEditableTableGrid;
@@ -786,6 +788,8 @@ Object.assign(translations['zh-CN'], {
   editThisDiagram: '编辑此图表',
   editorInitializationFailed: '编辑器加载失败，文档内容已保留。请再次点击“编辑”重试。',
   editorSourceRecovery: '编辑器显示扩展异常，已切换为源码编辑。本次运行暂不显示行内图片、公式和图表；正文、保存及撤回仍可使用。',
+  editorPresentationWaiting: '正在等待输入法完成组字，随后会自动切换编辑模式。',
+  editorPresentationStillComposing: '输入法尚未结束组字。请确认或取消候选词后，再切换编辑模式。',
   virtualFileDropUnsupported: '此拖放内容没有可用的本地文件路径。请先保存到本地后再拖入，图片也可以复制后粘贴。',
   updateTimedOut: '更新下载超时，当前版本未替换。请检查网络后重试，或点击“官网下载”获取完整安装包。',
   updateInterrupted: '更新下载连接中断，自动重试后仍未完成，当前版本未替换。请检查网络后重试，或从官网下载完整安装包。',
@@ -897,6 +901,8 @@ Object.assign(translations.en, {
   editThisDiagram: 'Edit this diagram',
   editorInitializationFailed: 'The editor could not load. Your document is retained. Click Edit again to retry.',
   editorSourceRecovery: 'A display extension failed. Source editing is available for this session; inline image, formula and diagram previews are paused. Text, saving and undo remain available.',
+  editorPresentationWaiting: 'The editor will switch modes after the input method finishes composing.',
+  editorPresentationStillComposing: 'The input method is still composing. Confirm or cancel the candidate, then switch modes again.',
   virtualFileDropUnsupported: 'This dropped item has no usable local file path. Save it locally before dropping it, or copy and paste the image.',
   updateTimedOut: 'The update timed out; the current version was not replaced. Check your network and retry, or download the full installer from the official website.',
   updateInterrupted: 'The update connection was interrupted and automatic retries did not finish. The current version was not replaced. Check your network and retry, or download the full installer from the official website.',
@@ -1363,9 +1369,11 @@ function loadEditorDependencies() {
     editorPresentation = new Compartment();
     editorLivePreview = livePreviewModule.editorLivePreview;
     editorHasComposition = livePreviewModule.editorHasComposition;
+    afterEditorComposition = livePreviewModule.afterComposition;
     livePreviewContext = livePreviewModule.livePreviewContext;
     buildLivePlan = livePreviewModule.buildLivePlan;
     liveFormatSelection = livePreviewModule.liveFormatSelection;
+    liveSourceBlock = livePreviewModule.liveSourceBlock;
     resolveEditableOwner = livePreviewModule.resolveEditableOwner;
     spellcheckDecorationField = livePreviewModule.spellingDecorations;
     spellcheckDecorationEffect = livePreviewModule.setSpellingDecorations;
@@ -1433,6 +1441,8 @@ function editorPresentationExtensions() {
         nestedExtensions: mediaExtensions,
         nestedEffects: [setFormulaDisplayEffect, setDiagramDisplayEffect, refreshDiagramThemeEffect, updateImagePreviewDirectory],
         renderTocTitle: source => tocTitleHTML(createTocTitle(inertInlineTocLabel(source))),
+        renderTable: (target, source, definitions) => renderLightweightTable(target, source, definitions),
+        releaseTable: root => { const target = root.querySelector('.cm-live-block-content'); if (target) cancelPreviewImages(target); },
         render: (source, item) => item.kind === 'code' ? DOMPurify.sanitize(`<pre><code>${hljs.getLanguage(item.language) ? hljs.highlight(item.text, { language: item.language }).value : escapeHtml(item.text)}</code></pre>`, { ALLOWED_TAGS: ['pre', 'code', 'span'], ALLOWED_ATTR: ['class'] }) : DOMPurify.sanitize(marked.parse(source, { gfm: true, breaks: true }), {
           ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'p', 'br', 'hr', 'div', 'span', 'strong', 'em', 'del', 's', 'u', 'sub', 'sup', 'mark', 'kbd', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
           ALLOWED_ATTR: ['align', 'colspan', 'rowspan', 'title'],
@@ -4036,6 +4046,18 @@ function openTableDialog(existing = null) {
   const source = codeEditor.state.doc.toString();
   const selection = codeEditor.state.selection.main;
   existing ||= findEditableTableAt(source, selection.head) || findEditableTableAt(source, selection.from);
+  if (existing) {
+    const rows = existing.model.cells.length, columns = existing.model.alignments.length;
+    if (usesLightweightTable(rows * columns, rows, columns)) {
+      // Resizing in the grid dialog clamps its model to TABLE_LIMITS. Never
+      // enter that dialog with a table whose source must remain complete.
+      const position = Math.max(existing.tableFrom, Math.min(selection.head, existing.tableTo - 1));
+      codeEditor.dispatch({ selection: { anchor: position }, scrollIntoView: true,
+        ...(liveSourceBlock && { effects: liveSourceBlock.of(existing.from) }) });
+      focusCodeEditor();
+      return;
+    }
+  }
   tableDesignerState = {
     editor: codeEditor, documentSession: state.documentSession, path: state.currentFile.path, source,
     insertionRange: {from:selection.from,to:selection.to},
@@ -5108,12 +5130,13 @@ async function handleEditorPaste(event) {
     return;
   }
   if ((!destination.plainText || pasteView.state.selection.ranges.length > 1) && html && hasRichClipboardHTML(html) && (!file || plainText.trim())) {
-    const markdownSource = htmlToMarkdown(html);
+    const converted = htmlToMarkdown(html);
+    const markdownSource = file ? converted : selectClipboardMarkdown(converted, event.clipboardData?.getData('text/markdown'), plainText);
     if (markdownSource) {
       event.preventDefault();
       pasteView.dispatch({ ...(pasteView.state.selection.ranges.length > 1 ? replaceLiveSelections(pasteView.state, markdownSource, plainText || markdownToPlainText(markdownSource)) : pasteView.state.replaceSelection(markdownSource)),
         userEvent: 'input.paste', annotations: isolateHistory.of('full'), scrollIntoView: true });
-      showToast(t('richPasteConverted'), 'success', 2400);
+      if (markdownSource === converted) showToast(t('richPasteConverted'), 'success', 2400);
       return;
     }
   }
@@ -5958,8 +5981,47 @@ function syncEditorLayoutOptions() {
   if (current) current.textContent = t(editorLayoutLabel());
 }
 
-function setEditorPresentation(mode) {
-  if (editorHasComposition(codeEditor)) return;
+let pendingEditorPresentation;
+
+function cancelEditorPresentationChange() {
+  const pending = pendingEditorPresentation;
+  if (!pending) return;
+  pendingEditorPresentation = null;
+  pending.cancel?.();
+  if (showToast.owner === pending) hideToast();
+}
+
+function setEditorPresentation(mode, restoreFocus = true) {
+  cancelEditorPresentationChange();
+  if (!state.editing || !codeEditor || editorSourceFallback || isPlainTextFile(state.currentFile?.path)) return;
+  const view = codeEditor;
+  if (!editorHasComposition(view)) {
+    applyEditorPresentation(mode, restoreFocus);
+    return;
+  }
+  const session = state.documentSession, path = state.currentFile?.path;
+  const pending = pendingEditorPresentation = { cancel: null };
+  const deadline = Date.now() + 8000;
+  showToast(t('editorPresentationWaiting'), 'info', 8000, pending);
+  pending.cancel = afterEditorComposition(view, () => {
+    const focus = document.activeElement;
+    cancelEditorPresentationChange();
+    // Don't pull focus away from another control while replaying a delayed click.
+    applyEditorPresentation(mode, restoreFocus && (view.dom.contains(focus) || focus?.matches('[data-editor-presentation]')));
+  }, () => {
+    if (pendingEditorPresentation !== pending) return false;
+    if (!state.editing || codeEditor !== view || state.documentSession !== session || state.currentFile?.path !== path) {
+      cancelEditorPresentationChange();
+      return false;
+    }
+    if (Date.now() < deadline || !editorHasComposition(view)) return true;
+    cancelEditorPresentationChange();
+    showToast(t('editorPresentationStillComposing'), 'warning');
+    return false;
+  });
+}
+
+function applyEditorPresentation(mode, restoreFocus) {
   state.editorPresentation = mode === 'source' ? 'source' : 'live';
   if (state.editorPresentation === 'live') {
     state.formulaDisplay = 'preview';
@@ -5973,7 +6035,7 @@ function setEditorPresentation(mode) {
   // Couple only an explicit mode action to preview visibility. Manual preview
   // controls and restored layout preferences remain independent afterwards.
   setEditorLayout(state.editorPresentation === 'live' ? 'editor-only' : state.lastSplitLayout, true);
-  codeEditor?.focus();
+  if (restoreFocus) codeEditor.focus();
 }
 
 function setEditorFormulaDisplay(mode) {
@@ -6974,16 +7036,26 @@ function scheduleActiveTocRefresh(event) {
 
 function updateWindowTitle() {
   const name = state.currentFile?.name || t('appName');
-  document.title = `${state.dirty ? '● ' : ''}${name} · ${t('appName')}`;
+  const title = `${state.dirty ? '● ' : ''}${name} · ${t('appName')}`;
+  if (document.title !== title) document.title = title;
 }
 
+let lastDirtyBridgeUpdate;
 function setDirty(dirty) {
   state.dirty = Boolean(dirty) || Boolean(state.documentConflict);
-  window.quilliteMarkdown.setDirty(state.dirty);
-  els.editorSaveState.textContent = t(state.dirty ? 'unsaved' : 'saved');
-  els.editorSaveState.title = '';
-  if (state.documentConflict) els.editorSaveState.textContent = t('conflictPaused');
-  els.editorSaveState.classList.toggle('dirty', state.dirty);
+  if (!lastDirtyBridgeUpdate || lastDirtyBridgeUpdate.session !== state.documentSession || lastDirtyBridgeUpdate.dirty !== state.dirty) {
+    // This global native flag only needs each transition, not one bridge
+    // request per keystroke. Always initialize it for a new document.
+    const update = { session: state.documentSession, dirty: state.dirty };
+    lastDirtyBridgeUpdate = update;
+    Promise.resolve(window.quilliteMarkdown.setDirty(update.dirty)).catch(() => {
+      if (lastDirtyBridgeUpdate === update) lastDirtyBridgeUpdate = undefined;
+    });
+  }
+  const label = t(state.documentConflict ? 'conflictPaused' : state.dirty ? 'unsaved' : 'saved');
+  if (els.editorSaveState.textContent !== label) els.editorSaveState.textContent = label;
+  if (els.editorSaveState.title) els.editorSaveState.title = '';
+  if (els.editorSaveState.classList.contains('dirty') !== state.dirty) els.editorSaveState.classList.toggle('dirty', state.dirty);
   updateWindowTitle();
 }
 
@@ -7006,6 +7078,7 @@ function releaseRenderedResources(container) {
 
 function suspendEditorPreview() {
   clearPreviewSourceMap(els.editorPreview);
+  hidePreviewLocateHint();
   cancelScheduledEditorPreview();
   renderEditorPreview.generation = (renderEditorPreview.generation || 0) + 1;
   cancelMermaidRendering(els.editorPreview);
@@ -7305,7 +7378,7 @@ function* prepareMarkdownPresentation(container, doc, content) {
   return {tableLayouts, deferred, prepared, sourceMap, renderedMath, html, cacheKey};
 }
 
-function importedImagePresentation(html) {
+function importedImagePresentation(html, { cleanStyles = true } = {}) {
   // A template is inert: remove network-bearing image attributes before any
   // nodes enter the live document, not after a request has already started.
   const template = document.createElement('template');
@@ -7347,7 +7420,7 @@ function importedImagePresentation(html) {
     // Retain only presentation properties whose value grammar cannot load a
     // resource. CSSStyleDeclaration parses each value; never copy CSS text or
     // resource-bearing shorthands such as background, mask, filter or content.
-    if (element.hasAttribute('style')) {
+    if (cleanStyles && element.hasAttribute('style')) {
       const safeStyles = safeStyleNames.map(name => [name, element.style?.getPropertyValue(name)]).filter(([, value]) => value);
       element.removeAttribute('style');
       for (const [name, value] of safeStyles) element.style.setProperty(name, value);
@@ -7457,8 +7530,60 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
   return diagramRender;
 }
 
+function renderLightweightTable(container, source, definitions) {
+  // Resolve references from the authoritative document; a table widget has
+  // no independent definitions. Reuse the same math/image renderer as reading.
+  const lexer = new marked.Lexer(marked.defaults);
+  for (const [label, value] of definitions || []) {
+    lexer.tokens.links[label] = { href: value.ref, title: value.title?.slice(1, -1) || undefined };
+  }
+  const html = DOMPurify.sanitize(marked.parser(lexer.lex(source), marked.defaults), {
+    ADD_ATTR: ['data-md-color'],
+    FORBID_TAGS: ['style', 'link', 'audio', 'video', 'source', 'track', 'form', 'input', 'button', 'textarea', 'select', 'image', 'use', 'feimage'],
+    FORBID_ATTR: ['srcset', 'background', 'poster', 'xlink:href', 'filter', 'mask', 'clip-path', 'cursor']
+  });
+  const template = document.createElement('template');
+  if (!state.blockImportedRemoteImages) template.innerHTML = html;
+  // This renderer applies a stricter style allowlist below, before mounting.
+  const content = state.blockImportedRemoteImages ? importedImagePresentation(html, { cleanStyles: false }) : template.content;
+  // Keep KaTeX's numeric layout geometry (fractions, superscripts, radicals).
+  // Discard all other CSS before mount, including possible resource loads.
+  const lengths = ['height', 'width', 'min-width', 'top', 'left', 'bottom', 'vertical-align', 'margin-left', 'margin-right', 'padding-left', 'border-bottom-width', 'border-top-width'];
+  for (const element of content.querySelectorAll('[style]')) {
+    const geometry = element.closest('.katex-html') ? lengths.map(name => [name, element.style?.getPropertyValue(name)])
+      .filter(([, value]) => value && /^(?:0|-?(?:\d+(?:\.\d+)?|\.\d+)(?:em|ex|px|%))$/.test(value.trim())) : [];
+    element.removeAttribute('style');
+    for (const [name, value] of geometry) element.style.setProperty(name, value);
+  }
+  // This is an editing surface: middle click, drag and keyboard activation
+  // must not turn rendered cell content into navigable links.
+  for (const link of content.querySelectorAll('a[href]')) link.removeAttribute('href');
+  for (const image of content.querySelectorAll('img')) {
+    if (image.dataset.remoteImageBlocked === 'true') continue;
+    const ref = image.getAttribute('src') || '';
+    const kind = imageSourceKind(ref);
+    if (!kind || kind === 'local' || (kind === 'remote' && state.blockImportedRemoteImages)) {
+      image.removeAttribute('src');
+      if (kind === 'local') image.dataset.markdownSrc = ref;
+      else image.dataset.remoteImageBlocked = 'true';
+    } else if (kind === 'remote' && ref.startsWith('//')) image.setAttribute('src', 'https:' + ref);
+    image.loading = 'lazy';
+    image.decoding = 'async';
+  }
+  for (const element of content.querySelectorAll('[data-md-color]')) {
+    const color = textColorValue(element.dataset.mdColor);
+    if (color) element.style.color = color;
+  }
+  container.replaceChildren(content);
+  loadPreviewImages(container, {
+    directory: state.currentFile?.directory || '',
+    readImageData: window.quilliteMarkdown.readImageData
+  });
+}
+
 function renderEditorPreview(content = state.currentFile?.content || '') {
   if (!state.currentFile || state.editorLayout === 'editor-only') return;
+  hidePreviewLocateHint();
   const generation = (renderEditorPreview.generation || 0) + 1;
   renderEditorPreview.generation = generation;
   try {
@@ -7563,6 +7688,7 @@ async function readDocumentForOpen(request, read, options = {}) {
 
 function displayDocument(doc, { addToLibrary = true, presentation = null } = {}) {
   if (!doc?.path) return;
+  cancelEditorPresentationChange();
   cancelReadingPositionRestore();
   readingPosition = null;
   editorEntryPosition = null;
@@ -7617,6 +7743,7 @@ function displayDocument(doc, { addToLibrary = true, presentation = null } = {})
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  cancelEditorPresentationChange();
   documentLoading?.cancel();
   cancelReadingPositionRestore();
   readingPosition = null;
@@ -7899,19 +8026,34 @@ function previewBlockAtPointer(event) {
   return previewPointerTarget(els.editorPreview, event);
 }
 
+let previewLocateFrame = 0, previewLocatePointer = null;
 function hidePreviewLocateHint() {
+  if (previewLocateFrame) cancelAnimationFrame(previewLocateFrame);
+  previewLocateFrame = 0;
+  previewLocatePointer = null;
   els.previewLocateHint.classList.add('hidden');
 }
 
 function showPreviewLocateHint(event) {
-  if (!state.editing || !codeEditor) return hidePreviewLocateHint();
-  const block = previewBlockAtPointer(event);
-  const line = Number(block?.dataset.line);
-  if (!Number.isFinite(line)) return hidePreviewLocateHint();
-  els.previewLocateHint.querySelector('span').textContent = t('previewLocateHint', { line });
-  els.previewLocateHint.style.left = `${Math.max(8, Math.min(event.clientX + 16, window.innerWidth - 260))}px`;
-  els.previewLocateHint.style.top = `${Math.max(8, Math.min(event.clientY + 18, window.innerHeight - 50))}px`;
-  els.previewLocateHint.classList.remove('hidden');
+  if (!state.editing || !codeEditor || state.editorLayout === 'editor-only') return hidePreviewLocateHint();
+  previewLocatePointer = { target: event.target, clientX: event.clientX, clientY: event.clientY };
+  if (previewLocateFrame) return;
+  const session = state.documentSession;
+  previewLocateFrame = requestAnimationFrame(() => {
+    previewLocateFrame = 0;
+    const pointer = previewLocatePointer;
+    previewLocatePointer = null;
+    if (!pointer || session !== state.documentSession || !state.editing || !codeEditor
+      || state.editorLayout === 'editor-only' || !els.editorPreview.contains(pointer.target)) return hidePreviewLocateHint();
+    const block = previewPointerTarget(els.editorPreview, pointer, { hover: true });
+    const line = Number(block?.dataset.line);
+    if (!Number.isFinite(line)) return hidePreviewLocateHint();
+    const caption = els.previewLocateHint.querySelector('span'), label = t('previewLocateHint', { line });
+    if (caption.textContent !== label) caption.textContent = label;
+    els.previewLocateHint.style.left = `${Math.max(8, Math.min(pointer.clientX + 16, window.innerWidth - 260))}px`;
+    els.previewLocateHint.style.top = `${Math.max(8, Math.min(pointer.clientY + 18, window.innerHeight - 50))}px`;
+    els.previewLocateHint.classList.remove('hidden');
+  });
 }
 
 function locateEditorFromPreview(event) {
@@ -7996,6 +8138,7 @@ async function toggleEditor(forceEditing) {
       if (requestedSession !== state.documentSession || !state.currentFile || !sameDocumentPath(state.currentFile.path, requestedPath)) return;
     }
     cancelReadingPositionRestore();
+    if (!nextEditing) cancelEditorPresentationChange();
     if (nextEditing) {
       readingPosition = {
         session: requestedSession,
@@ -13223,7 +13366,11 @@ document.addEventListener('keydown', event => {
   }
 });
 document.querySelectorAll('[data-editor-presentation]').forEach(button => {
-  button.addEventListener('mousedown', event => event.preventDefault());
+  button.addEventListener('mousedown', event => {
+    // Normally keep the editor selection. During composition allow the native
+    // focus handoff so the IME can finish on its own before reconfiguring.
+    if (!editorHasComposition(codeEditor)) event.preventDefault();
+  });
   button.addEventListener('click', () => setEditorPresentation(button.dataset.editorPresentation));
   button.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -13231,7 +13378,7 @@ document.querySelectorAll('[data-editor-presentation]').forEach(button => {
     const target = button.parentElement.querySelector(`[data-editor-presentation="${mode}"]`);
     if (!target || target.disabled) return;
     event.preventDefault();
-    setEditorPresentation(mode);
+    setEditorPresentation(mode, false);
     target.focus({ preventScroll: true });
   });
 });

@@ -371,6 +371,11 @@ function decorate(items, state, session) {
   return { items, session, decorations: Decoration.set(decorations, true), atoms: Decoration.set(atoms, true) };
 }
 
+function retainOpenImageSources(next, previous) {
+  const open = new Map(previous.filter(item => item.open).map(item => [item.from, item.to]));
+  return next.map(item => ({ ...item, open: open.get(item.from) === item.to }));
+}
+
 export const imagePreviewField = StateField.define({
   create(state) { return decorate(editorImageGroups(state.doc.toString(),imageDefinitionsFor(state)), state, createSession(state)); },
   update(value, transaction) {
@@ -388,12 +393,11 @@ export const imagePreviewField = StateField.define({
         session = createSession(transaction.state, { ...session.context, directory: effect.value });
         items = editorImageGroups(transaction.newDoc.toString(),imageDefinitionsFor(transaction.state));
       }
-      if (effect.is(refreshImagePreviews) && effect.value.doc === transaction.newDoc) items = effect.value.items.map(item => ({ ...item, open: items.find(previous => previous.from === item.from && previous.to === item.to)?.open || false }));
+      if (effect.is(refreshImagePreviews) && effect.value.doc === transaction.newDoc) items = retainOpenImageSources(effect.value.items, items);
       if (effect.is(toggleImageSource)) items = items.map(item => item.from === effect.value.from && item.to === effect.value.to ? { ...item, open: !item.open } : item);
     }
     if (imageDefinitionsFor(transaction.startState) !== imageDefinitionsFor(transaction.state)) {
-      items = editorImageGroups(transaction.newDoc.toString(),imageDefinitionsFor(transaction.state)).map(item=>({...item,
-        open:items.find(previous=>previous.from===item.from && previous.to===item.to)?.open || false}));
+      items = retainOpenImageSources(editorImageGroups(transaction.newDoc.toString(),imageDefinitionsFor(transaction.state)), items);
     }
     if (transaction.selection || transaction.effects.some(effect => effect.is(refreshImagePreviews))) items = items.map(item => transaction.newSelection.ranges.some(range => range.head > item.from && range.head < item.to || range.anchor > item.from && range.anchor < item.to) ? { ...item, open: true } : item);
     if (transactionComposing(transaction)) return {items, session,
@@ -404,9 +408,11 @@ export const imagePreviewField = StateField.define({
 });
 
 const imagePreviewScanner = ViewPlugin.fromClass(class {
-  constructor(view) { this.view = view; this.session = view.state.field(imagePreviewField).session; this.timer = null; this.cancelScan = null; }
+  constructor(view) { this.view = view; this.session = view.state.field(imagePreviewField).session; this.timer = null; this.cancelScan = null; this.layoutFrame = null; }
   update(update) {
-    if (update.geometryChanged || update.viewportChanged) requestAnimationFrame(() => {
+    if (this.layoutFrame === null && update.state.field(imagePreviewField).items.some(item => item.row)
+      && (update.geometryChanged || update.viewportChanged)) this.layoutFrame = requestAnimationFrame(() => {
+      this.layoutFrame = null;
       if (!this.view.destroyed) this.view.dom.querySelectorAll('.cm-embedded-image.is-image-row').forEach(positionImageControls);
     });
     const session = update.state.field(imagePreviewField).session;
@@ -421,7 +427,10 @@ const imagePreviewScanner = ViewPlugin.fromClass(class {
       this.view.dispatch({ effects: refreshImagePreviews.of({ doc, items }) });
     }); }, 250);
   }
-  destroy() { clearTimeout(this.timer); this.cancelScan?.(); this.session.dispose(); }
+  destroy() {
+    clearTimeout(this.timer); this.cancelScan?.(); this.session.dispose();
+    if (this.layoutFrame !== null) cancelAnimationFrame(this.layoutFrame);
+  }
 });
 
 export const embeddedImagePreview = [imageDefinitionsField, imagePreviewField, imagePreviewScanner, EditorView.atomicRanges.of(view => view.state.field(imagePreviewField).atoms)];

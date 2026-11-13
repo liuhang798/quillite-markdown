@@ -76,7 +76,9 @@ export function sourceReturnPanel(readSource, returnSource) {
     const doc=root.dom.ownerDocument, dom=doc.createElement('div');
     dom.className='cm-live-source-panel';dom.hidden=true;
     const button=doc.createElement('button');
-    button.type='button';button.onmousedown=event=>event.preventDefault();dom.append(button);
+    button.type='button';
+    button.onmousedown=event=>event.preventDefault();
+    dom.append(button);
     let queued=false,alive=true,target=null;
     let pointer=null,area=null;
     const hover=()=>dom.classList.toggle('is-source-hovered',!!pointer&&!!area&&pointer.x>=area.left&&pointer.x<=area.right&&pointer.y>=area.top&&pointer.y<=area.bottom);
@@ -110,22 +112,49 @@ export function sourceReturnPanel(readSource, returnSource) {
           // occupies layout space or floats outside this block's viewport.
           const y=Math.max(port.top+3,top-27);
           if(y+24>Math.min(port.bottom,bottom))return null;
-          return {left,right,top:y,bottom:Math.min(port.bottom,bottom),x:right-rect.left-4,y:y-rect.top};
+          return {left,right,top:y,bottom:Math.min(port.bottom,bottom),x:right-rect.left-4,y:y-rect.top, persistent: !!item.lightweight};
         },
         write(position){
           if(!alive||owner!==target||owner.destroyed||owner.state!==expected)return;
           area=position;dom.hidden=!position;
+          dom.classList.toggle('is-source-persistent', !!position?.persistent);
           if(position){dom.style.left=position.x+'px';dom.style.top=position.y+'px';}
           hover();
         },
       });
     };
     const schedule=()=>{if(!queued&&alive){queued=true;queueMicrotask(sync);}};
-    button.onclick=()=>{
+    const returnCurrent=()=>{
       // Resolve current source state again. A document switch or projection
       // rebuild between pointer-down and click cannot edit a stale owner.
       if(target&&candidates().includes(target))returnSource(target);
       schedule();
+    };
+    // WebKit can deliver a complete pointer gesture but suppress click over
+    // a search selection. Complete the primary gesture only on the same
+    // lightweight source block; keep ordinary keyboard and AT activation.
+    let press=null, handledPointer=false;
+    button.onpointerdown=event=>{
+      handledPointer=false;
+      const item=target&&readSource(target);
+      press=event.isPrimary&&event.button===0&&item?.lightweight
+        ? { id:event.pointerId, view:target, doc:target.state.doc, from:item.from, x:event.clientX, y:event.clientY } : null;
+    };
+    button.onpointercancel=()=>{press=null;};
+    button.onpointerleave=()=>{press=null;};
+    button.onpointerup=event=>{
+      const gesture=press;press=null;
+      if(!gesture||gesture.id!==event.pointerId||gesture.view!==target||gesture.doc!==target.state.doc
+        || Math.abs(event.clientX-gesture.x)>8||Math.abs(event.clientY-gesture.y)>8
+        || readSource(target)?.from!==gesture.from) return;
+      const hit=doc.elementFromPoint(event.clientX,event.clientY);
+      if(!button.contains(hit))return;
+      handledPointer=true;
+      returnCurrent();
+    };
+    button.onclick=event=>{
+      if(handledPointer&&event.detail>0){handledPointer=false;return;}
+      returnCurrent();
     };
     const sourceChanged=event=>{
       const view=event.detail;

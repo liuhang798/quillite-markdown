@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { history, isolateHistory, undo, redo } from '@codemirror/commands';
 import { editorLivePreview, editorPastePrefersPlain, replaceLiveSelections } from '../src/editor-live-preview.js';
-import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText } from '../src/rich-clipboard.js';
+import { hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText, selectClipboardMarkdown } from '../src/rich-clipboard.js';
 
 const renderer = fs.readFileSync(new URL('../src/renderer.js', import.meta.url), 'utf8');
 const handler = renderer.slice(renderer.indexOf('async function handleEditorPaste('), renderer.indexOf('async function initializeCodeEditor('));
@@ -15,12 +15,12 @@ function harness(source = 'before\nafter', selection = { anchor: 7, head: 12 }, 
     extensions: [history(), editorLivePreview, EditorState.allowMultipleSelections.of(true), EditorState.readOnly.of(readOnly)] }),
     dispatch(spec) { const tr = spec.state ? spec : view.state.update(spec); events.push(tr); view.state = tr.state; } };
   const context = vm.createContext({ state: { editing: true, currentFile: { path: 'memory.md' }, documentSession: 1 },
-    codeEditor: view, hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText, replaceLiveSelections, isolateHistory, t: key => key,
+    codeEditor: view, hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText, selectClipboardMarkdown, replaceLiveSelections, isolateHistory, t: key => key,
     resolveEditorPasteTarget: (_root,target) => target.closest() === root ? {view,literalField,plainText:literalField||editorPastePrefersPlain(view.state)} : null,
     showToast: value => notices.push(value) });
   vm.runInContext(handler, context);
-  const event = (html, plain = 'Rich', owner = root) => ({ defaultPrevented: false,
-    target: { closest: () => owner }, clipboardData: { items: [], getData: type => type === 'text/html' ? html : plain },
+  const event = (html, plain = 'Rich', owner = root, markdown = '') => ({ defaultPrevented: false,
+    target: { closest: () => owner }, clipboardData: { items: [], getData: type => ({ 'text/html': html, 'text/plain': plain, 'text/markdown': markdown })[type] || '' },
     preventDefault() { this.defaultPrevented = true; } });
   return { view, events, notices, event, nested, paste: context.handleEditorPaste };
 }
@@ -60,6 +60,23 @@ test('rich paste across a rendered code boundary defers to native literal text a
 test('unsafe rich clipboard links are filtered by the actual paste handler', async () => {
   const h = harness(); await h.paste(h.event('<p><a href="javascript:alert(1)">safe text</a></p>'));
   assert.equal(h.view.state.doc.toString(), 'before\nsafe text');
+});
+
+test('math clipboard uses equivalent explicit Markdown only to replace invalid rich math', async () => {
+  const html = String.raw`<p><strong>Value</strong> $\frac{<math><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>}$. </p>`;
+  const explicit = String.raw`**Value** \(\frac{x}{2}\).`;
+  const h = harness();
+  const event = h.event(html, 'Value x divided by 2.', undefined, explicit);
+  await h.paste(event);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(h.view.state.doc.toString(), 'before\n' + explicit);
+  assert.equal(h.events.length, 1);
+  assert.equal(undo(h.view), true);
+  assert.equal(h.view.state.doc.toString(), 'before\nafter');
+
+  const distinct = harness();
+  await distinct.paste(distinct.event(html, String.raw`Different $\frac{x}{2}$.`));
+  assert.match(distinct.view.state.doc.toString(), /^before\n\*\*Value\*\* /, 'do not replace surrounding rich prose with an unrelated plain flavor');
 });
 
 test('HTML-only mixed clipboard derives literal text rather than clearing code selections',async()=>{

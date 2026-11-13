@@ -4,7 +4,7 @@ import { defaultKeymap, undo, redo, isolateHistory, indentWithTab } from '@codem
 import { registerEditableOwner, resolveEditableOwner, editableProjectionSync, editableForwardedChange } from './editable-owner.js';
 import { editableBoundaryTarget } from './editable-boundary.js';
 import { crossSelection, crossSelectionField } from './editable-cross-selection.js';
-import { fieldPosition, fieldOffset, fieldText, fieldInsertion, changedFieldPosition } from './projected-code.js';
+import { fieldPosition, fieldOffset, fieldInsertion, changedFieldPosition } from './projected-code.js';
 import { imageDefinitionsFor, imageDefinitionsField, inheritedImageDefinitions, updateImageDefinitions, footnotesFor, footnotesField, inheritedFootnotes, updateFootnotes, footnoteBodyContext } from './editor-reference-context.js';
 import { singleLineMedia } from './media-ownership.js';
 import { nestedSourcePanel, revealSourceReturnCaret, preserveSourceBlockPosition } from './source-return-panel.js';
@@ -52,15 +52,26 @@ export function safeCellInsertion(text) {
   return text.replace(/\r\n?|\n/g, ' ').replace(/(\\*)\|/g, (match, slashes) => slashes.length % 2 ? match : `${slashes}\\|`);
 }
 
+// A GFM table needs a blank separator before new prose. If there is already
+// a second blank line, place the caret there without changing the document.
+export function tableFollowingBlank(doc, end) {
+  const row = doc.lineAt(end);
+  if (row.to !== end || row.number === doc.lines) return null;
+  const first = doc.line(row.number + 1);
+  if (first.text.trim()) return null;
+  const second = first.number < doc.lines ? doc.line(first.number + 1) : null;
+  return second && !second.text.trim() ? second : first;
+}
+
 // A final GFM cell may omit its closing pipe while nonempty. Once cleared,
 // its preceding separator would be read as the row's closing pipe, losing a
 // column. Materialize only the missing boundary in the same user transaction.
 export function emptyTableCellBoundary(source, item, field, text) {
   if (item.kind !== 'table' || text.trim() || !item.cells?.length) return null;
   if (item.cells.some(cell => cell.row === field.row && cell.column > field.column)) return null;
-  const end = source.indexOf('\n', field.to);
+  const end = typeof source === 'string' ? source.indexOf('\n', field.to) : source.lineAt(field.to).to;
   const to = end < 0 ? source.length : end;
-  if (!/^[ \t]*$/.test(source.slice(field.to, to))) return null;
+  if (!/^[ \t]*$/.test(typeof source === 'string' ? source.slice(field.to, to) : source.sliceString(field.to, to))) return null;
   return {from: to, insert: '|'};
 }
 
@@ -116,6 +127,11 @@ export function retainFootnoteCaretPadding(source, item, selection) {
 }
 
 const controllers = new WeakMap();
+export function lightweightTableCell(root, item, index) {
+  const controller = controllers.get(root);
+  return controller?.widget.item.from === item.from && controller.widget.item.raw === item.raw
+    ? controller.cellElement?.(index) : null;
+}
 function editableTableGridTarget(inner) {
   if(inner.destroyed||inner.state.readOnly||inner.state.selection.ranges.length!==1||editorHasComposition(inner))return null;
   const direct=controllers.get(inner.dom.closest('.cm-live-table'));
@@ -148,13 +164,13 @@ export function editableClipboardMode(view) {
   if (!controller?.valid()) return null;
   const index = controller.editors.indexOf(view);
   if (index < 0) return null;
-  const range = controller.ranges()[index];
+  const range = controller.range(index);
   return ['code', 'comment'].includes(controller.widget.item.kind) || range.role === 'summary' ? 'plain' : 'rich';
 }
 export function normalizeEditableInsertion(inner, text) {
   const controller = controllers.get(inner.dom.closest('.cm-live-editable-block'));
   if (!controller?.valid()) return text;
-  const range = controller.ranges()[controller.editors.indexOf(inner)];
+  const range = controller.range(controller.editors.indexOf(inner));
   if (controller.widget.item.kind === 'table') return safeCellInsertion(text);
   if (range?.role === 'summary') return text.replace(/\r\n?|\n/g, ' ').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   const owner = resolveEditableOwner(inner, {from:0,to:inner.state.doc.length}, true);
@@ -209,7 +225,7 @@ export function syncEditableSearch(view) {
   for (const controller of children) {
     controller.syncing=true;
     try {controller.ranges().forEach((range,index)=>{
-      const inner=controller.editors[index];if(inner.destroyed)return;
+      const inner=controller.editors[index];if(!inner || inner.destroyed)return;
       const projected=projectSearchMatches(matches,range);
       if(!sameSearchMatches(inner.state.field(projectedSearchMatches),projected)) inner.dispatch({effects:updateProjectedSearch.of(projected)});
     });} finally {controller.syncing=false;}
@@ -226,7 +242,7 @@ export function syncEditableSelections(view, searchSelection = false) {
       const inner = controller.editors[index];
       // Pointer selection is dispatched before focus leaves the inner editor.
       // A cross-field range must paint its inner portion during that handoff.
-      if (inner.destroyed || (inner.hasFocus && !view.state.field(crossSelectionField, false))) return;
+      if (!inner || inner.destroyed || (inner.hasFocus && !view.state.field(crossSelectionField, false))) return;
       const clamp = position => fieldOffset(range,position);
       const selected = view.state.selection.ranges.filter(r=>r.to>range.from&&r.from<range.to).map(r=>EditorSelection.range(clamp(r.anchor),clamp(r.head)));
       const next = EditorSelection.create(selected.length ? selected : [EditorSelection.range(clamp(selection.anchor),clamp(selection.head))]);
@@ -247,7 +263,7 @@ export function syncEditableSpelling(view) {
     controller.syncing = true;
     try { controller.ranges().forEach((range,index) => {
       const inner = controller.editors[index];
-      if (inner.destroyed) return;
+      if (!inner || inner.destroyed) return;
       const next = ['code','comment'].includes(controller.widget.item.kind)
         ? Decoration.none : projectSpellingDecorations(marks,range);
       if (!RangeSet.eq([inner.state.field(spellingDecorations)],[next])) inner.dispatch({effects:setSpellingDecorations.of(next)});
@@ -264,6 +280,7 @@ export function extendEditableSelection(view, direction, vertical = false) {
     const ranges = controller.ranges(), index = ranges.findIndex(range => selection.head >= range.from && selection.head <= range.to);
     if (index < 0) continue;
     const range = ranges[index], inner = controller.editors[index];
+    if (!inner) return false;
     const local = EditorSelection.cursor(fieldOffset(range,selection.head));
     const moved = vertical ? inner.moveVertically(local, direction > 0) : inner.moveByChar(local, direction > 0);
     let head = fieldPosition(range,moved.head);
@@ -287,7 +304,7 @@ export function forwardEditableEffects(view, effects) {
     const controller = controllers.get(root);
     if (controller?.view !== view || !controller.valid()) continue;
     controller.syncing = true;
-    try { for (const inner of controller.editors) if (!inner.destroyed) {
+    try { for (const inner of controller.editors) if (inner && !inner.destroyed) {
       if (editorHasComposition(inner) || controller.pendingEffects.has(inner)) controller.deferEffects(inner, effects);
       else inner.dispatch({ effects });
     } }
@@ -302,9 +319,11 @@ export function focusEditableBlock(view, searchSelection = false) {
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
     if (controller?.view !== view || !controller.valid()) continue;
-    const index = controller.ranges().findIndex(range => selection.from >= range.from && selection.to <= range.to);
+    const ranges = controller.ranges();
+    const index = ranges.findIndex(range => selection.from >= range.from && selection.to <= range.to);
     if (index < 0) continue;
-    const inner = controller.editors[index], range = controller.ranges()[index];
+    const inner = controller.activate?.(index) || controller.editors[index], range = ranges[index];
+    if (!inner) return false;
     controller.syncing = true;
     try {
       projectedSearchSelections.set(inner, searchSelection);
@@ -371,20 +390,25 @@ function codeColors(doc, widget) {
   return Decoration.set(ranges, true);
 }
 
-function applyTablePresentation(root, item) {
+function applyTablePresentation(root, item, previous) {
   if (item.kind !== 'table') return;
+  const widthsChanged = !previous || item.widths?.join() !== previous.widths?.join();
+  const alignmentsChanged = !previous || item.alignments?.join() !== previous.alignments?.join();
+  if (!widthsChanged && !alignmentsChanged) return;
   const table = root.querySelector('table');
   if (!table) return;
-  table.querySelector(':scope > colgroup')?.remove();
-  table.style.width = '';
-  if (item.widths) {
-    const cols = document.createElement('colgroup');
-    for (const width of item.widths) { const col=document.createElement('col');col.style.width=`${width}px`;cols.append(col); }
-    table.prepend(cols);table.style.width=`${item.widths.reduce((sum,width)=>sum+width,0)}px`;
+  if (widthsChanged) {
+    table.querySelector(':scope > colgroup')?.remove();
+    table.style.width = '';
+    if (item.widths) {
+      const cols = document.createElement('colgroup');
+      for (const width of item.widths) { const col=document.createElement('col');col.style.width=`${width}px`;cols.append(col); }
+      table.prepend(cols);table.style.width=`${item.widths.reduce((sum,width)=>sum+width,0)}px`;
+    }
   }
   // Changing only the delimiter row must refresh alignment without remounting
   // the focused cell editor. The source renderer supplies only sanitized HTML.
-  if (item.alignments) for (const row of table.rows) [...row.cells].forEach((cell,index)=>cell.setAttribute('align',item.alignments[index] || 'left'));
+  if (alignmentsChanged) for (const row of table.rows) [...row.cells].forEach((cell,index)=>cell.setAttribute('align',item.alignments?.[index] || 'left'));
 }
 
 export class EditableBlockWidget extends WidgetType {
@@ -415,22 +439,38 @@ export class EditableBlockWidget extends WidgetType {
     const controller = controllers.get(root);
     if (!controller || controller.widget.item.kind !== this.item.kind || controller.widget.readOnly !== this.readOnly || controller.widget.labels.join() !== this.labels.join()
       || controller.widget.options.context !== this.options.context) return false;
-    if (this.item.cells && controller.editors.length !== this.item.cells.length) return false;
+    if (controller.widget.item.lightweight !== this.item.lightweight || this.item.cells && controller.cellCount !== this.item.cells.length) return false;
+    const previous = controller.widget.item;
+    const previousWidget = controller.widget;
     controller.widget = this;
+    if (this.item.lightweight && !controller.refreshTable(previousWidget)) {
+      controller.widget = previousWidget;
+      return false;
+    }
     controller.sync(view);
-    applyTablePresentation(root,this.item);
+    applyTablePresentation(root,this.item,previous);
     const number=root.querySelector(':scope > .cm-live-footnote-number');
     if(number){number.textContent=String(this.item.number);number.title=`${this.labels[10]} ${this.item.number} [${this.item.label}]`;}
     return true;
   }
-  destroy(root) { const controller = controllers.get(root); controller?.cancelSync?.(); controller?.pendingEffects.forEach(pending => pending.cancel()); controller?.unregister.forEach(remove => remove()); controller?.editors.forEach(editor => {clearNativeCodeInputScroll(editor);editor.destroy();}); controllers.delete(root); }
+  destroy(root) {
+    const controller = controllers.get(root);
+    controller?.cancelSync?.();
+    controller?.stopPointer?.();
+    controller?.pendingEffects.forEach(pending => pending.cancel());
+    controller?.unregister.forEach(remove => remove?.());
+    controller?.editors.forEach(editor => { if (editor) {clearNativeCodeInputScroll(editor);editor.destroy();} });
+    if (this.item.lightweight) this.options.context.releaseTable?.(root);
+    controllers.delete(root);
+  }
   toDOM(view) {
     const root = document.createElement('div');
     root.className = `cm-live-widget cm-live-${this.item.kind} cm-live-editable-block`;
+    if (this.item.lightweight) root.classList.add('cm-live-table-lightweight');
     root.contentEditable = 'false';
     for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'paste', 'copy', 'cut', 'compositionstart', 'compositionupdate', 'compositionend']) root.addEventListener(type, event => event.stopPropagation());
     const controller = {
-      widget: this, view, editors: [], unregister: [], syncing: false,
+      widget: this, view, editors: [], unregister: [], syncing: false, cellCount: this.item.cells?.length,
       pendingEffects: new Map(), cancelSync: null,
       deferEffects(inner, effects) {
         let pending = this.pendingEffects.get(inner);
@@ -446,11 +486,25 @@ export class EditableBlockWidget extends WidgetType {
         if (this.cancelSync) return;
         this.cancelSync = afterComposition(view, () => { this.cancelSync = null; this.sync(); }, () => this.valid() && controllers.get(root) === this);
       },
+      range(index) {
+        const item = this.widget.item, focused = this.editors[index]?.hasFocus;
+        if (item.kind === 'table' && focused) return retainEditableCellPadding(view.state.doc, item.cells[index], view.state.selection);
+        if (item.kind === 'footnote-definition' && focused) return retainFootnoteCaretPadding(view.state.doc, item, view.state.selection);
+        return item.cells ? item.cells[index] : { from: item.contentFrom, to: item.contentTo, projection: item.projection };
+      },
       ranges() {
-        const item=this.widget.item;
-        if(item.kind==='table')return item.cells.map((field,index)=>this.editors[index]?.hasFocus
-          ? retainEditableCellPadding(view.state.doc,field,view.state.selection) : field);
-        if(item.kind==='footnote-definition'&&this.editors[0]?.hasFocus)return [retainFootnoteCaretPadding(view.state.doc,item,view.state.selection)];
+        const item = this.widget.item;
+        if (item.kind === 'table') {
+          // At most one child owns focus. Use the active element once, rather
+          // than querying document focus for every mounted table cell.
+          const active = view.root.activeElement;
+          const index = active ? this.editors.findIndex(editor => editor?.contentDOM === active) : -1;
+          if (index < 0 || !this.editors[index].hasFocus) return item.cells;
+          const ranges = item.cells.slice();
+          ranges[index] = retainEditableCellPadding(view.state.doc, ranges[index], view.state.selection);
+          return ranges;
+        }
+        if (item.kind === 'footnote-definition') return [this.range(0)];
         return item.cells || [{ from: item.contentFrom, to: item.contentTo, projection:item.projection }];
       },
       // Equality may retain this controller across unrelated document edits.
@@ -458,9 +512,12 @@ export class EditableBlockWidget extends WidgetType {
       valid() { return !view.destroyed && !view.state.readOnly && root.isConnected && view.state.sliceDoc(this.widget.item.from, this.widget.item.to) === this.widget.item.raw; },
       sync() {
         this.syncing = true;
+        const doc = view.state.doc;
         try {
           this.ranges().forEach((range, i) => {
-            const editor = this.editors[i], text = fieldText(view.state.doc.toString(),range);
+            const editor = this.editors[i];
+            if (!editor) return;
+            const text = range.projection?.text ?? doc.sliceString(range.from, range.to);
             const previous = editor.state.doc.toString();
             const effects=this.widget.references && imageDefinitionsFor(editor.state)!==this.widget.references
               ? [updateImageDefinitions.of(this.widget.references)] : [];
@@ -482,18 +539,40 @@ export class EditableBlockWidget extends WidgetType {
     };
     controllers.set(root, controller);
     const isTable = this.item.kind === 'table', isDetails = this.item.kind === 'details', isFootnote=this.item.kind==='footnote-definition';
+    const lazy = !!this.item.lightweight;
     const isProse = isDetails || isFootnote || this.item.kind === 'html-content';
     if(isFootnote){const number=document.createElement('span');number.className='cm-live-footnote-number';number.textContent=String(this.item.number);number.title=`${this.labels[10]} ${this.item.number} [${this.item.label}]`;root.append(number);}
     const content = document.createElement('div'); content.className = 'cm-live-block-content'; root.append(content);
-    const mounts = [];
+    let mounts = [];
     if (isTable) {
       // Use the safe renderer for alignment and table structure, not editable HTML.
-      content.innerHTML = this.options.context.render?.(this.item.renderSource ?? this.item.raw, this.item) || '';
+      if (lazy && this.options.context.renderTable) this.options.context.renderTable(content, this.item.renderSource, this.references);
+      else content.innerHTML = this.options.context.render?.(this.item.renderSource ?? this.item.raw, this.item) || '';
       // Only this table owns the source cells. A generated image row (or other
       // nested HTML table) belongs to its cell editor, not to this mapping.
       const table = content.querySelector('table');
       if (table) for (const row of table.rows) for (const cell of row.cells) mounts.push(cell);
-      if (mounts.length !== this.item.cells.length) { content.textContent = this.item.raw; return root; }
+      if (mounts.length !== this.item.cells.length || lazy && mounts.some((cell, i) =>
+        cell.cellIndex !== this.item.cells[i].column || cell.parentElement.rowIndex !== this.item.cells[i].row)) {
+        content.textContent = this.item.raw;
+        mounts = [];
+      }
+      root.addEventListener('mousedown', event => {
+        // The empty footer is not a cell or a horizontal scrollbar. The
+        // widget swallows mouse events, so send this plain click to the text
+        // view ourselves instead of leaving the last cell focused.
+        if (event.button !== 0 || event.detail !== 1 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+          || (event.target !== root && event.target !== content) || !controller.valid() || editorHasComposition(view)) return;
+        const rendered = content.querySelector('table');
+        if (!rendered || event.clientY <= rendered.getBoundingClientRect().bottom) return;
+        const box = content.getBoundingClientRect();
+        if (content.offsetHeight > content.clientHeight && event.clientY >= box.top + content.clientHeight && event.clientY < box.bottom) return;
+        const line = tableFollowingBlank(view.state.doc, controller.widget.item.to);
+        if (!line) return;
+        event.preventDefault();
+        view.dispatch({ selection: EditorSelection.cursor(line.from, 1), userEvent: 'select.pointer' });
+        view.focus();
+      });
     } else if (isDetails) {
       const header = document.createElement('div'); header.className = 'cm-live-details-header';
       const summary = document.createElement('div'); summary.className = 'cm-live-details-title';
@@ -511,13 +590,13 @@ export class EditableBlockWidget extends WidgetType {
       view.dispatch({ selection: { anchor: after ? Math.min(view.state.doc.length, item.to + 1) : Math.max(0, item.from - 1) } });
       view.focus(); return true;
     };
-    mounts.forEach((mount, index) => {
+    const mountEditor = (mount, index) => {
       mount.replaceChildren();
-      const range = controller.ranges()[index];
+      const range = controller.range(index);
       const isSummary = range.role === 'summary';
       const history = command => () => { if (controller.valid()) runEditableHistory(view, command); return true; };
       const move = step => () => {
-        const next = controller.editors[index + step];
+        const next = controller.activate?.(index + step) || controller.editors[index + step];
         if (!next) return leave(step > 0);
         const hiddenBody = next.dom.closest('.cm-live-details-body');
         if (hiddenBody?.hidden) { hiddenBody.hidden = false; const toggle = root.querySelector('.cm-live-details-header button'); toggle.textContent = controller.widget.labels[7]; toggle.setAttribute('aria-expanded', 'true'); view.requestMeasure(); }
@@ -533,7 +612,8 @@ export class EditableBlockWidget extends WidgetType {
           ranges: controller.ranges(), index, direction, vertical });
         if (!target) return false;
         if (target.index !== undefined) {
-          const next = controller.editors[target.index];
+          const next = controller.activate?.(target.index) || controller.editors[target.index];
+          if (!next) return false;
           const hiddenBody = next.dom.closest('.cm-live-details-body');
           if (hiddenBody?.hidden) {
             hiddenBody.hidden = false;
@@ -558,7 +638,7 @@ export class EditableBlockWidget extends WidgetType {
         view.focus(); return true;
       };
       const editor = new EditorView({ parent: mount,
-        state: EditorState.create({ doc: fieldText(view.state.doc.toString(),range), extensions: [
+        state: EditorState.create({ doc: range.projection?.text ?? view.state.doc.sliceString(range.from, range.to), extensions: [
           imageDefinitionsField, ...(this.references ? [inheritedImageDefinitions.of(this.references)] : []),
           footnotesField, ...(this.footnotes ? [inheritedFootnotes.of(this.footnotes)] : []),
           footnoteBodyContext.of(isFootnote || view.state.facet(footnoteBodyContext)),
@@ -624,7 +704,7 @@ export class EditableBlockWidget extends WidgetType {
               }
               return false;
             },
-            focus() { if (controller.valid()) view.dispatch({ selection: mapEditableSelection(editor.state.selection, offset => fieldPosition(controller.ranges()[index],offset)),
+            focus() { if (controller.valid()) view.dispatch({ selection: mapEditableSelection(editor.state.selection, offset => fieldPosition(controller.range(index),offset)),
               ...(projectedSearchSelections.get(editor) ? {effects: editableSearchSelection.of(true)} : {}), annotations: isolateHistory.of('before') }); return false; },
           }),
         ] }),
@@ -634,7 +714,7 @@ export class EditableBlockWidget extends WidgetType {
           if (!controller.syncing && controller.widget.item.kind === 'code') trackCodeInputScroll(inner, transactions);
           inner.update(transactions);
           if (controller.syncing || !controller.valid()) return;
-          const range = controller.ranges()[index], selection = inner.state.selection;
+          const range = controller.range(index), selection = inner.state.selection;
           const transaction = { selection: mapEditableSelection(selection, offset => fieldPosition(range,offset)) };
           // A child scroll request must reach the actual document scroller,
           // including when removing a large media widget shrinks several parents.
@@ -653,7 +733,7 @@ export class EditableBlockWidget extends WidgetType {
             changes.iterChanges((from, to, _newFrom, _newTo, text) => {
               transaction.changes.push({ from: fieldPosition(range,from), to: fieldPosition(range,to), insert: fieldInsertion(range,text.toString() + suffix) });
             });
-            const cellBoundary = emptyTableCellBoundary(view.state.doc.toString(), controller.widget.item, range, inner.state.doc.toString());
+            const cellBoundary = isTable && emptyTableCellBoundary(view.state.doc, controller.widget.item, range, inner.state.doc.toString());
             if (cellBoundary) transaction.changes.push(cellBoundary);
             if (range.projection) {
               // Map the new inner selection using the new code's line prefixes,
@@ -678,19 +758,149 @@ export class EditableBlockWidget extends WidgetType {
           }
         },
       });
-      controller.editors.push(editor);
-      controller.unregister.push(registerEditableOwner(editor, view, () => controller.ranges()[index], () => controller.valid()));
-    });
+      controller.editors[index] = editor;
+      controller.unregister[index] = registerEditableOwner(editor, view, () => controller.range(index), () => controller.valid());
+      return editor;
+    };
+    if (!lazy) mounts.forEach(mountEditor);
+    else {
+      // There is one projected cell editor, not an editor per row. Keep
+      // rendered content in the other cells, including media and alignment.
+      let active = -1, stale = false, savedCell = null;
+      const indexOf = new WeakMap();
+      controller.cellElement = index => mounts[index];
+      const indexMounts = () => mounts.forEach((cell, index) => indexOf.set(cell, index));
+      indexMounts();
+      const repaint = () => {
+        const widget = controller.widget, item = widget.item;
+        if (!widget.options.context.renderTable) return false;
+        widget.options.context.renderTable(content, item.renderSource, widget.references);
+        const table = content.querySelector('table'), cells = [];
+        if (table) for (const row of table.rows) for (const cell of row.cells) cells.push(cell);
+        const exact = cells.length === item.cells.length && cells.every((cell, i) =>
+          cell.cellIndex === item.cells[i].column && cell.parentElement.rowIndex === item.cells[i].row);
+        if (!exact) content.textContent = item.raw;
+        mounts = exact ? cells : [];
+        indexMounts();
+        applyTablePresentation(root, item);
+        stale = false;
+        return exact;
+      };
+      const unmount = () => {
+        if (active < 0) return;
+        const inner = controller.editors[active];
+        controller.pendingEffects.get(inner)?.cancel();
+        controller.pendingEffects.delete(inner);
+        controller.unregister[active]?.();
+        inner.destroy();
+        delete controller.editors[active];
+        delete controller.unregister[active];
+        if (mounts[active] && savedCell) mounts[active].append(savedCell);
+        active = -1;
+        savedCell = null;
+      };
+      controller.activate = index => {
+        if (!mounts[index] || !controller.valid()) return null;
+        if (active === index) return controller.editors[index];
+        if (active >= 0 && editorHasComposition(controller.editors[active])) return null;
+        unmount();
+        if (stale && !repaint()) return null;
+        const mount = mounts[index];
+        if (!mount) return null;
+        active = index;
+        savedCell = mount.ownerDocument.createDocumentFragment();
+        while (mount.firstChild) savedCell.append(mount.firstChild);
+        return mountEditor(mount, index);
+      };
+      controller.refreshTable = previous => {
+        const item = controller.widget.item, old = previous.item;
+        if (previous.references === controller.widget.references && item.raw === old.raw && item.renderSource === old.renderSource) return true;
+        if (active < 0) { repaint(); return true; }
+        const before = old.cells[active], after = item.cells[active];
+        // For a normal keystroke in the active cell, do not rebuild the
+        // table or detach the focused DOM (in particular during IME).
+        if (previous.references !== controller.widget.references || !before || !after
+          || before.row !== after.row || before.column !== after.column
+          || old.raw.slice(0, before.from - old.from) !== item.raw.slice(0, after.from - item.from)
+          || old.raw.slice(before.to - old.from) !== item.raw.slice(after.to - item.from)) return false;
+        stale = true;
+        return true;
+      };
+      const doc = root.ownerDocument;
+      let stop = null;
+      controller.stopPointer = () => stop?.();
+      const staticPosition = (cell, index, x, y) => {
+        const range = controller.range(index);
+        const source = view.state.sliceDoc(range.from, range.to);
+        if (cell.textContent !== source) return null;
+        const caret = doc.caretPositionFromPoint?.(x, y);
+        const browserRange = !caret && doc.caretRangeFromPoint?.(x, y);
+        const node = caret?.offsetNode || browserRange?.startContainer;
+        const offset = caret?.offset ?? browserRange?.startOffset;
+        if (!node || !cell.contains(node) || !Number.isInteger(offset)) return null;
+        const prefix = doc.createRange();
+        prefix.selectNodeContents(cell);
+        prefix.setEnd(node, offset);
+        return Math.min(source.length, prefix.toString().length);
+      };
+      root.addEventListener('mousedown', event => {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('.cm-editor') !== view.dom) return;
+        const cell = event.target.closest('td, th'), index = indexOf.get(cell);
+        if (index === undefined || mounts[index] !== cell) return;
+        // Hit-test the visible glyphs before replacing them with CodeMirror.
+        // Use native projected hit-testing for cells with hidden Markdown.
+        const hit = staticPosition(cell, index, event.clientX, event.clientY);
+        const inner = controller.activate(index);
+        if (!inner) return;
+        event.preventDefault();
+        const point = next => inner.posAtCoords({x:next.clientX, y:next.clientY}, false);
+        const position = hit ?? point(event);
+        if (!Number.isInteger(position)) return;
+        const anchor = event.shiftKey ? inner.state.selection.main.anchor : position;
+        inner.focus();
+        inner.dispatch({selection:{anchor,head:position},userEvent:'select.pointer'});
+        stop?.();
+        const move = next => {
+          if (inner.destroyed || !next.buttons || controller.editors[index] !== inner) { stop?.(); return; }
+          const head = point(next);
+          if (Number.isInteger(head)) {
+            next.preventDefault();
+            inner.dispatch({selection:{anchor,head},userEvent:'select.pointer'});
+          }
+        };
+        const end = () => stop?.();
+        stop = () => {
+          doc.removeEventListener('mousemove', move, true);
+          doc.removeEventListener('mouseup', end, true);
+          doc.defaultView.removeEventListener('blur', end);
+          stop = null;
+        };
+        doc.addEventListener('mousemove', move, true);
+        doc.addEventListener('mouseup', end, true);
+        doc.defaultView.addEventListener('blur', end);
+      });
+      root.addEventListener('click', event => { if (event.target.closest('a')) event.preventDefault(); });
+    }
     const actions = document.createElement('div'); actions.className = 'cm-live-block-actions';
     const action = (label, callback) => { const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.onmousedown = event => event.preventDefault(); button.onclick = event => { event.stopPropagation(); if (controller.valid()) callback(event); }; actions.append(button); };
-    if (isTable && this.options.context.editTable) action(this.labels[1], () => controller.widget.options.context.editTable(controller.widget.item, view));
-    action(this.labels[0], event => {
+    if (isTable && !lazy && this.options.context.editTable) action(this.labels[1], () => controller.widget.options.context.editTable(controller.widget.item, view));
+    action(lazy ? view.state.phrase('Edit table source') : this.labels[0], event => {
       const position = Math.max(controller.widget.item.from, Math.min(view.state.selection.main.head, controller.widget.item.to));
       const open=()=>{controller.widget.options.source(view, position);view.focus();};
-      if(event.detail>0)preserveSourceBlockPosition(view,controller.widget.item.from,root.getBoundingClientRect().top,open);
+      if(lazy) {
+        open();
+        view.dispatch({effects:EditorView.scrollIntoView(position,{y:'nearest'})});
+      }
+      else if(event.detail>0)preserveSourceBlockPosition(view,controller.widget.item.from,root.getBoundingClientRect().top,open);
       else {open();revealSourceReturnCaret(view);}
     });
-    root.append(actions);
+    if (lazy) {
+      actions.className = 'cm-live-large-table-header';
+      const hint = document.createElement('span');
+      hint.textContent = view.state.phrase('Large table · click a cell to edit');
+      actions.prepend(hint);
+      root.prepend(actions);
+    } else root.append(actions);
     applyTablePresentation(root,this.item);
     return root;
   }

@@ -2,11 +2,22 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [Unreleased]
-
 ## [3.1.0] - 2026-11-05
 
 ### 简体中文
+
+2026-11-13 同版本重打包：
+
+- 修复即时渲染中点击表格下方空白时光标落到最后一行的问题；在表格后输入正文会保留必要的空行，表格不再意外展开为源码。
+- 修复输入法组字期间点击「即时渲染／源码」没有反应的问题。组字结束后自动完成切换，不需要再次点击。
+- 编辑时仅用细下划线提示其他同词匹配，不再显示亮绿底色；实际选区和查找结果保留原样式。
+- 优化即时渲染中的大表格：保留完整排版，只为当前单元格按需开启编辑器。点击、拖选按实际字符定位；仅主动选择“编辑表格源码”时展开源码。
+- 减少即时编辑的重复工作：复用未变化的公式和表格布局，复用嵌套代码块的语法树，跳过无媒体文档的不必要扫描，合并重复的保存状态通知和预览悬停计算。
+- 修复网页富文本粘贴时把已有美元分隔符与公式节点重复套用的问题。若转换后的公式仍无效，仅在剪贴板提供可渲染且公式外内容一致的 Markdown 时采用备用源码；保留既有文档和无法可靠恢复的源码。
+
+已安装 3.1.0 的用户请从官网下载对应平台的新安装包；版本号不变，不会触发应用内更新。
+
+此前的 3.1.0 更新：
 
 - 新版本以顶部横条提醒，不打断当前操作。关闭横条后暂停自动提醒 7 天；更新弹窗只保留“一键更新”和“打开下载链接”。可查看跨版本的双语摘要和更新记录；旧版官网或缺少摘要时仍可正常检查、下载更新。
 - 新增 Mermaid 与数据图表大图查看，支持滚轮／按钮缩放、拖动平移、适应窗口和原始大小，覆盖阅读、分栏预览与即时渲染。修复甘特图的排期外“今天”标记撑大画布，导致适应窗口过小或 100% 显示空白的问题；排期内标记保留。
@@ -27,6 +38,19 @@ All notable changes to Quillite Markdown are documented here.
 - 导入校验包结构、路径、文件类型、资源指纹及大小上限，拒绝路径穿越、符号链接、重复路径和超限压缩包；目标仅新建，不覆盖已有文件。第一期不支持 `srcset` 等复杂响应式图片，明确提示后停止。
 
 ### English
+
+2026-11-13 rebuild (same version):
+
+- Keep clicks below rendered tables out of the last row. Typing below a table preserves the required blank separator so the table stays rendered.
+- Fix Live editing / Source clicks being lost during IME composition. The requested mode switches automatically after composition ends.
+- Show other occurrences of selected text with a subtle underline instead of a green fill. Actual selections and search results keep their existing styles.
+- Keep large tables rendered and mount only the active cell editor. Click and drag to place the caret or select text; source editing stays an explicit action.
+- Reuse unchanged formulas, table layout and nested code syntax trees. Skip unnecessary media scans and coalesce repeated save-state and preview hover work.
+- Prevent nested math delimiters when rich HTML mixes dollar-delimited formulas and annotated formula fragments. Use alternate clipboard Markdown only when its formulas render and the surrounding source matches. Existing documents and unrecoverable source remain unchanged.
+
+If 3.1.0 is already installed, download the refreshed package from the official website. Rebuilds with the same version do not trigger an in-app update.
+
+Earlier 3.1.0 changes:
 
 - Show new versions in a non-intrusive banner, with a seven-day pause when dismissed. Keep only “Update now” and “Open download link” in the update dialog. Show bilingual summaries and missed-version history when available; checking and downloading still work with an older website or missing summaries.
 - Add an enlarged Mermaid/data-chart viewer with wheel/button zoom, drag-to-pan, fit and actual-size controls across reading, split preview and live editing. Keep off-schedule Gantt today markers from stretching the canvas and making fitted charts tiny or 100% views empty; preserve in-range markers.

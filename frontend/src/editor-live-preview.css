@@ -100,6 +100,19 @@
    Vertical margins are invisible to CodeMirror's height map and shift clicks. */
 .cm-live-table, .cm-live-html { position: relative; padding: 8px 0; max-width: 100%; cursor: text; }
 .cm-live-table { contain: inline-size; }
+.cm-live-large-table-header {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 6px 12px; padding: 0 0 7px; color: var(--muted); font: 12px/1.5 system-ui;
+}
+.cm-live-large-table-header button {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+  color: var(--accent-strong); padding: 4px 8px; cursor: pointer; font: inherit;
+}
+.cm-live-large-table-header button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-live-table-lightweight table { table-layout: fixed; }
+.cm-live-table-lightweight :is(td, th) { vertical-align: top; overflow-wrap: anywhere; }
+.cm-live-table-lightweight img { max-width: 100%; height: auto; }
+.cm-live-table-lightweight .math-inline { overflow-wrap: normal; }
 .cm-live-block-content { overflow-x: auto; }
 .cm-live-block-content table { width: 100%; border-collapse: collapse; font-size: .95em; }
 .cm-live-block-content td, .cm-live-block-content th { border: 1px solid var(--line); padding: 7px 12px; min-width: 70px; }
@@ -132,7 +145,7 @@
 .cm-editor.cm-live-preview .cm-line.cm-live-source-last { border-radius: 0 0 7px 7px; border-bottom: 1px solid var(--line); }
 .cm-editor.cm-live-preview .cm-line.cm-live-source-first.cm-live-source-last { border-radius: 7px; }
 .cm-live-source-panel { position: absolute; z-index: 6; transform: translateX(-100%); opacity: 0; pointer-events: none; font: 11px/1.4 system-ui; }
-.cm-live-source-panel.is-source-hovered, .cm-live-source-panel:hover, .cm-live-source-panel:focus-within { opacity: 1; pointer-events: auto; }
+.cm-live-source-panel.is-source-hovered, .cm-live-source-panel.is-source-persistent, .cm-live-source-panel:hover, .cm-live-source-panel:focus-within { opacity: 1; pointer-events: auto; }
 @media (hover: none) { .cm-live-source-panel { opacity: 1; pointer-events: auto; } }
 .cm-live-source-panel[hidden] { display: none; }
 .cm-live-source-panel button { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--accent-strong); padding: 3px 7px; font: inherit; cursor: pointer; white-space: nowrap; }
@@ -156,6 +169,16 @@
 .cm-editor .cm-live-inner .cm-content { padding: 0; min-height: 1.8em; font: inherit; caret-color: var(--accent-strong); }
 .cm-editor .cm-live-inner .cm-line { padding: 0; }
 .cm-editor .cm-live-inner .cm-gutters { display: none; }
+/* Same-word matches are hints, not additional editable selections. */
+.cm-editor .cm-content .cm-selectionMatch:not(.cm-searchMatch) {
+  background-color: transparent;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.17em;
+}
+.cm-editor .cm-content .cm-searchMatch .cm-selectionMatch { text-decoration-line: none; }
 .cm-editor.cm-live-preview.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
 .cm-editor.cm-live-preview > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
 .cm-editor .cm-live-inner .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 32%, transparent); }

@@ -2,10 +2,14 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { decodeHTML } from 'entities';
-import { formulaMarkdownMatches, isInlineDollarClose, isInlineDollarOpen, mathBlockExtension } from './math-rendering.js';
+import { formulaMarkdownMatches, isInlineDollarClose, isInlineDollarOpen, mathBlockExtension, renderLatexResult } from './math-rendering.js';
+import { scanMarkdownFormulas } from './formula-editing.js';
 
 const RICH_HTML_PATTERN = /<(?:h[1-6]|p|div|br|strong|b|em|i|u|s|strike|del|a|ul|ol|li|blockquote|pre|code|table|img|span|math)\b/i;
 const MAX_RICH_CLIPBOARD_HTML = 5 * 1024 * 1024;
+const MAX_CLIPBOARD_MATH_SOURCE = 32 * 1024;
+const MAX_CLIPBOARD_FORMULAS = 64;
+const MAX_CLIPBOARD_MATH_WORK = 8 * 1024;
 const SAFE_LINK_PATTERN = /^(?:https?:|#)/i;
 const SAFE_IMAGE_PATTERN = /^https?:\/\//i;
 
@@ -100,7 +104,100 @@ function clipboardMath(node) {
   const markdown = display ? `\\[\n${expression}\n\\]` : `\\(${expression}\\)`;
   // An untrusted annotation must describe exactly one formula, never break out
   // through a closing delimiter and introduce surrounding Markdown content.
-  return formulaMarkdownMatches(markdown, expression, display) ? { markdown, display } : null;
+  return formulaMarkdownMatches(markdown, expression, display) ? { markdown, expression, display } : null;
+}
+
+function clipboardFormulaRanges(source) {
+  if (source.length >= MAX_CLIPBOARD_MATH_SOURCE) return [];
+  const items = scanMarkdownFormulas(source, { maxSourceLength: MAX_CLIPBOARD_MATH_SOURCE, maxTokens: 8192 });
+  return items.length <= MAX_CLIPBOARD_FORMULAS
+    && items.reduce((total, item) => total + item.previewExpression.length, 0) <= MAX_CLIPBOARD_MATH_WORK ? items : [];
+}
+
+// Keep track of which delimiters are ours. Never strip nested delimiters
+// found in literal clipboard text or change an existing Markdown document.
+let clipboardMathFragments = null;
+
+function restoreClipboardMath(markdown, { pattern, formulas }) {
+  if (!formulas.size) return markdown;
+  const merged = new Set();
+  let remaining = MAX_CLIPBOARD_MATH_WORK;
+  // Keep terminal control words separate from following text letters
+  // (e.g. \sin followed by h must not become \sinh).
+  const expand = (marker, offset, source) => {
+    const expression = formulas.get(marker).expression;
+    return /\\[a-z]+$/i.test(expression) && /[a-z]/i.test(source[offset + marker.length] || '')
+      ? expression + ' ' : expression;
+  };
+  for (const item of clipboardFormulaRanges(markdown)) {
+    if (!item.raw.startsWith('$')) continue;
+    const markers = item.previewExpression.match(pattern);
+    if (!markers) continue;
+    const fragments = markers.map(marker => formulas.get(marker));
+    // Standalone TeX validation cannot detect a new link, table, or emphasis
+    // boundary formed by joining a fragment and surrounding Markdown.
+    if (fragments.some(formula => !formula || /[\[\]|*`~]/.test(formula.expression))) continue;
+    // Text between HTML nodes has already gone through Markdown escaping.
+    // If it contains backslashes we cannot safely distinguish original TeX
+    // from new escapes. Leave it intact and let the format fallback decide.
+    const surroundingTex = item.previewExpression.replace(pattern, '');
+    if (surroundingTex.includes('\\')) continue;
+    // A dollar followed by a price and prose can look balanced to the
+    // Markdown lexer. Don't turn that prose into math around a fragment.
+    if (item.mode === 'inline' && /^\d/.test(surroundingTex) && /\b[a-z]{2,}\b/i.test(surroundingTex)) continue;
+    const expression = item.previewExpression.replace(pattern, expand);
+    if (expression.length > remaining) continue;
+    remaining -= expression.length;
+    const raw = item.raw.replace(pattern, expand);
+    const display = item.mode !== 'inline';
+    if (formulaMarkdownMatches(raw, expression, display) && renderLatexResult(expression, display).valid) {
+      for (const marker of markers) merged.add(marker);
+    }
+  }
+  return markdown.replace(pattern, (marker, offset, source) => {
+    const formula = formulas.get(marker);
+    if (!formula) return marker;
+    return merged.has(marker) ? expand(marker, offset, source) : formula.markdown;
+  });
+}
+
+function clipboardMathAudit(source) {
+  const items = clipboardFormulaRanges(source);
+  if (!items.length) return null;
+  const surroundings = [];
+  let cursor = 0;
+  for (const item of items) {
+    if (item.from < cursor) return null;
+    surroundings.push(source.slice(cursor, item.from), item.mode);
+    cursor = item.to;
+  }
+  surroundings.push(source.slice(cursor));
+  const formulas = items.map(item => ({
+    expression: item.previewExpression,
+    valid: Boolean(item.previewExpression) && renderLatexResult(item.previewExpression, item.mode !== 'inline').valid
+  }));
+  return { surroundings: JSON.stringify(surroundings), formulas, valid: formulas.every(formula => formula.valid) };
+}
+
+export function selectClipboardMarkdown(converted, markdown, plain) {
+  if (converted.length >= MAX_CLIPBOARD_MATH_SOURCE || !/\$|\\[(\[]/.test(converted)) return converted;
+  const candidates = [...new Set([markdown, plain])].filter(source =>
+    source && source !== converted && source.length < MAX_CLIPBOARD_MATH_SOURCE && /\$|\\[(\[]/.test(source));
+  if (!candidates.length) return converted;
+  // Ignore line-ending and outer blank-line differences, not indentation:
+  // four leading spaces can turn a real formula into a literal code block.
+  const normalize = source => source.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+  const rich = clipboardMathAudit(normalize(converted));
+  if (!rich || rich.valid) return converted;
+  for (const source of candidates) {
+    const normalized = normalize(source);
+    const alternate = clipboardMathAudit(normalized);
+    // Only replace the math, never introduce alternate links/images/HTML or
+    // drop prose, code or structure discarded by neither representation.
+    if (alternate?.valid && alternate.surroundings === rich.surroundings
+      && rich.formulas.every((formula, i) => !formula.valid || formula.expression === alternate.formulas[i].expression)) return normalized;
+  }
+  return converted;
 }
 
 function officeListReplacement(content, node) {
@@ -187,7 +284,12 @@ function createRichTextConverter() {
     },
     replacement: (_content, node) => {
       const formula = formulas.get(node);
-      return formula.display ? `\n\n${formula.markdown}\n\n` : formula.markdown;
+      if (formula.display) return `\n\n${formula.markdown}\n\n`;
+      if (!clipboardMathFragments) return formula.markdown;
+      const { prefix, formulas: fragments } = clipboardMathFragments;
+      const marker = `${prefix}${fragments.size}q`;
+      fragments.set(marker, formula);
+      return marker;
     }
   });
   return converter;
@@ -203,7 +305,15 @@ export function hasRichClipboardHTML(html) {
 export function htmlToMarkdown(html) {
   const source = String(html || '').trim();
   if (!source) return '';
-  return richTextConverter.turndown(source)
+  const previous = clipboardMathFragments;
+  const prefix = `quilliteclipmath${Math.random().toString(36).slice(2)}x`;
+  const fragments = source.length < MAX_CLIPBOARD_MATH_SOURCE && source.includes('$')
+    ? { prefix, pattern: new RegExp(`${prefix}\\d+q`, 'g'), formulas: new Map() } : null;
+  clipboardMathFragments = fragments;
+  let converted;
+  try { converted = richTextConverter.turndown(source); }
+  finally { clipboardMathFragments = previous; }
+  return (fragments ? restoreClipboardMath(converted, fragments) : converted)
     .replace(/\u00a0/g, ' ')
     .replace(/^(\s*)([-+*]|\d+[.)])\s{2,}/gm, '$1$2 ')
     // Turndown encodes an HTML <br> as two trailing spaces. Do not erase

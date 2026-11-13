@@ -47,6 +47,12 @@ Heading equations retain subscripts, superscripts and fractions in the reading o
 
 V3.1.0 preserves `\(...\)`, `\[...\]`, `$...$`, and `$$...$$` formulas pasted from rich text and makes formulas with escaped table pipes consistent across reading and live editing.
 
+Mixed rich-text paste avoids nested math delimiters and can use verified alternate Markdown from the clipboard without rewriting existing files.
+
+Large tables stay rendered in live mode. Click a cell to edit inline; Edit table source opens the Markdown explicitly.
+
+Other occurrences of selected text use a subtle underline and are not part of the selection.
+
 Reading-outline tracking coalesces scroll events per frame, measures only a bounded selection of headings and updates only changed active sections. Browser regressions cover the optimization; native Ubuntu behavior still needs device-level verification.
 
 Leaving the editor restores the pre-edit reading position instead of jumping to the top. Newly opened documents still start at the top.
@@ -65,6 +71,10 @@ Local Markdown/text links resolve against the current file's directory and open 
 | Click Source | Show Markdown syntax; long Base64 image payloads still use compact labels | Opens automatically in the remembered orientation |
 | Click Restore preview or the preview close button | Keep the current editing mode | Open or close independently; subsequent typing preserves this choice |
 | Press `Ctrl / ⌘ + E` | Switch between editing and the full reading preview | Separate from the Live editing / Source control |
+
+If you click a mode while an input method is composing, the editor waits for the candidate to be committed or cancelled, then switches automatically.
+
+Click the blank line below a rendered table to continue editing the document. Typing keeps the blank line required to separate the table from prose.
 
 Switching modes preserves content, selection and undo history. The app remembers the mode and layout; leaving and reentering editing retains manual choices. Clicking a mode button again reapplies its automatic preview behavior. Swap the split orientation or drag the divider to adjust pane widths.
 

@@ -60,6 +60,8 @@ jobs:
           export IME_BROWSER=webkit
           node frontend/tests/browser-ime-start-selection.mjs
           node frontend/tests/browser-ime-background.mjs
+          export EDITOR_PRESENTATION_BROWSER=webkit
+          node frontend/tests/browser-editor-presentation.mjs
           export RECENT_BROWSER=webkit
           node frontend/tests/browser-recent-selection.mjs
           export ISSUE14_BROWSER=webkit
@@ -68,6 +70,18 @@ jobs:
           node frontend/tests/browser-issue15.mjs
           export ISSUE16_BROWSER=webkit
           node frontend/tests/browser-issue16.mjs
+          export TABLE_BROWSER=webkit
+          node frontend/tests/browser-large-editable-table.mjs
+          export TABLE_FOLLOWING_LINE_BROWSER=webkit
+          node frontend/tests/browser-table-following-line.mjs
+          export PROJECTION_BROWSER=webkit
+          node frontend/tests/browser-projected-editor-cost.mjs
+          export FORMULA_REUSE_BROWSER=webkit
+          node frontend/tests/browser-formula-dom-reuse.mjs
+          export PREVIEW_HOVER_BROWSER=webkit
+          node frontend/tests/browser-preview-hover-performance.mjs
+          export SELECTION_BROWSER=webkit
+          node frontend/tests/browser-selection-match.mjs
           export ISSUE17_BROWSER=webkit
           node frontend/tests/browser-issue17.mjs
           export TEXTPACK_BROWSER=webkit

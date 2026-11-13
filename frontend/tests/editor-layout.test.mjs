@@ -39,26 +39,40 @@ function harness(saved = null) {
     dataset: { editorLayout }, classList: { toggle() {} },
     setAttribute(name, value) { this[name] = value; },
   }));
-  const editor = { state: { field() { return null; } }, requestMeasure() {}, dispatch() {}, focus() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
+  const editor = { dom: { contains() { return false; } }, state: { field() { return null; } }, requestMeasure() {}, dispatch() {}, focus() {}, content: '# Draft', selection: [2, 5], undo: ['# Original'] };
+  const queued = new Set();
   const context = vm.createContext({
     state: { editorPreviewWidth: 47, dirty: true, reviewResults: ['suggestion'] },
     document: { body: { dataset: {} }, querySelectorAll: selector => selector === '[data-editor-presentation]' ? [] : buttons },
     localStorage: { setItem: (key, value) => storage.set(key, value) },
-    $: () => current, t: key => key, showToast() {},
+    $: () => current, t: key => key, showToast() {}, isPlainTextFile: path => /\.txt$/i.test(path || ''),
+    editorSourceFallback: false,
     codeEditor: editor, scheduleFormatToolbarLayout() {}, schedulePaneWidthRefresh() {},
     updatePaneResizerVisibility() {}, suspendEditorPreview() {}, renderEditorPreview() {}, editorContent: () => editor.content,
     editorPresentation: { reconfigure: extensions => extensions }, editorPresentationExtensions: () => [],
     editorFormulaField: {}, editorHasComposition: view => !!(view?.compositionStarted || view?.composing),
+    afterEditorComposition(view, callback, valid) {
+      const tick = () => {
+        if (!valid()) { queued.delete(tick); return; }
+        if (context.editorHasComposition(view)) return;
+        queued.delete(tick);
+        callback();
+      };
+      queued.add(tick);
+      return () => queued.delete(tick);
+    },
   });
   vm.runInContext(functions, context);
   context.setEditorLayout(context.normalizeEditorLayout(storage.get('editorLayout')), true);
-  return { context, storage, buttons, editor, current };
+  return { context, storage, buttons, editor, current, queued, tick: () => [...queued].forEach(run => run()) };
 }
 
 test('mode switching leaves the first native composition key untouched',()=>{
  const h=harness();h.editor.compositionStarted=true;
+ h.context.state.editing=true; h.context.state.currentFile={path:'draft.md'};
  const before=JSON.stringify(h.context.state);
  h.context.setEditorPresentation('source');assert.equal(JSON.stringify(h.context.state),before);
+ assert.equal(h.queued.size,1);
  assert.equal(h.storage.has('editorPresentation'),false);
 });
 
@@ -145,13 +159,37 @@ test('explicit mode actions hide or restore preview while manual visibility stay
   }
 });
 
-test('IME composition blocks both mode and automatic layout changes', () => {
-  const {context,storage,editor}=harness('editor-left');
+test('IME composition defers the requested mode and layout until commit', () => {
+  const {context,storage,editor,tick,queued}=harness('editor-left');
+  context.state.editing=true; context.state.currentFile={path:'draft.md'};
   context.state.editorPresentation='source'; editor.composing=true;
   context.setEditorPresentation('live');
+  tick();
   assert.equal(context.state.editorPresentation,'source');
   assert.equal(context.state.editorLayout,'editor-left');
   assert.equal(storage.has('editorPresentation'),false);
+  editor.composing=false;
+  tick();
+  assert.equal(context.state.editorPresentation,'live');
+  assert.equal(context.state.editorLayout,'editor-only');
+  assert.equal(storage.get('editorPresentation'),'live');
+  assert.equal(queued.size,0);
+});
+
+test('pending mode changes use only the latest click and stay in the original editing session', () => {
+  for (const invalidate of [null, state => state.documentSession++, state => state.editing = false, state => state.currentFile = {path:'other.md'}]) {
+    const {context,storage,editor,tick,queued}=harness('editor-left');
+    Object.assign(context.state, { editing:true, currentFile:{path:'draft.md'}, documentSession:1, editorPresentation:'live' });
+    editor.composing=true;
+    context.setEditorPresentation('live');
+    context.setEditorPresentation('source');
+    assert.equal(queued.size,1);
+    invalidate?.(context.state);
+    editor.composing=false;
+    tick();
+    assert.equal(queued.size,0);
+    assert.equal(storage.get('editorPresentation'), invalidate ? undefined : 'source');
+  }
 });
 
 test('editor-only guards scheduled, direct and cursor rendering and explicitly refreshes exports', () => {

@@ -154,7 +154,7 @@ func TestEditorPresentationControlsPreviewVisibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(data)
-	start, end := strings.Index(source, "function setEditorPresentation(mode)"), strings.Index(source, "function setEditorFormulaDisplay(mode)")
+	start, end := strings.Index(source, "function applyEditorPresentation("), strings.Index(source, "function setEditorFormulaDisplay(")
 	if start < 0 || end <= start {
 		t.Fatal("presentation action missing")
 	}

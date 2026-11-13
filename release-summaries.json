@@ -4,7 +4,7 @@
     "summaryEn": "Add on-demand PicGo CLI uploads and improve large documents, outline equations and local saving."
   },
   "3.1.0": {
-    "summaryZh": "支持图表放大和文档包编辑，新增顶部更新提示，并修复公式粘贴与表格公式渲染。",
-    "summaryEn": "Enlarge charts, edit document bundles, see unobtrusive update banners, and use more reliable formula pasting and rendering."
+    "summaryZh": "支持图表放大、文档包编辑和顶部更新提示，优化即时渲染的大表格编辑，修复表格下方输入错位、输入法切换模式和公式粘贴。",
+    "summaryEn": "Enlarge charts, edit document bundles, and see update banners; enjoy faster live tables, reliable typing below tables, IME mode switches, and formula pasting."
   }
 }

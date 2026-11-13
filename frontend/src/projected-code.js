@@ -48,8 +48,16 @@ export function indentedCodeProjection(source, node) {
 export function fieldPosition(range, offset) {
   const projection = range.projection;
   if (!projection) return range.from + offset;
-  let segment;
-  for (const candidate of projection.segments) { if (candidate.offset > offset) break; segment = candidate; }
+  const { segments } = projection;
+  let lo = 0, hi = segments.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (segments[mid].offset > offset) hi = mid;
+    else lo = mid + 1;
+  }
+  // Equal offsets choose the last segment (e.g. the final empty code line
+  // after its hidden quote prefix), just like the sequential projection.
+  const segment = segments[lo - 1];
   return segment ? Math.min(segment.to,segment.from+offset-segment.offset) : range.from;
 }
 export function fieldOffset(range, position) {

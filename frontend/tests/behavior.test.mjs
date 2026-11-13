@@ -904,7 +904,7 @@ test('export center groups formats and only exposes settings required by the sel
 });
 
 test('rich clipboard HTML converts to Markdown and selected source has Markdown or plain-text copy options', () => {
-  assert.match(renderer, /import \{ hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText \} from '\.\/rich-clipboard\.js'/);
+  assert.match(renderer, /import \{ hasRichClipboardHTML, htmlToMarkdown, markdownToPlainText, selectClipboardMarkdown \} from '\.\/rich-clipboard\.js'/);
   assert.match(renderer, /async function handleEditorPaste\(event\)[\s\S]*getData\('text\/html'\)[\s\S]*hasRichClipboardHTML\(html\)[\s\S]*htmlToMarkdown\(html\)[\s\S]*state\.replaceSelection\(markdownSource\)/);
   assert.match(renderer, /codeEditor\.contentDOM\.addEventListener\('contextmenu', openEditorClipboardMenu\)/);
   assert.match(renderer, /async function copyEditorSelection\(mode\)[\s\S]*markdownToPlainText\(markdownSource\)[\s\S]*navigator\.clipboard\.writeText\(output\)/);

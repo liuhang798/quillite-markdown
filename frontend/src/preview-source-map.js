@@ -221,14 +221,19 @@ export function previewCursorRect(container, line, column = 0) {
   return target.getBoundingClientRect();
 }
 
-export function previewPointerTarget(container, event) {
+export function previewPointerTarget(container, event, { hover = false } = {}) {
   const direct = event.target?.closest?.('[data-line]');
-  if (direct && container.contains(direct) && !direct.querySelector('[data-line]')) return direct;
   if (event.target?.closest?.('.footnotes')) return null;
+  if (direct && container.contains(direct) && (!direct.childElementCount || (!hover && !direct.querySelector('[data-line]')))) return direct;
+  // A hint is optional; don't search a full document when hovering in a
+  // margin or a large container. Explicit right-click still maps precisely.
+  if (hover && (!direct || !container.contains(direct))) return null;
+  const leaves = hover ? boundedHoverLeaves(direct) : (direct || container).querySelectorAll('[data-line]');
+  if (!leaves) return null;
   let target = null, distance = Infinity;
-  for (const el of (direct || container).querySelectorAll('[data-line]')) {
+  for (const el of leaves) {
     // Prefer mapped text leaves to an enclosing multi-line paragraph/list.
-    if (el.querySelector('[data-line]')) continue;
+    if (!hover && el.querySelector('[data-line]')) continue;
     for (const rect of el.getClientRects()) {
       const dy = Math.max(rect.top - event.clientY, event.clientY - rect.bottom, 0);
       const dx = Math.max(rect.left - event.clientX, event.clientX - rect.right, 0);
@@ -237,4 +242,21 @@ export function previewPointerTarget(container, event) {
     }
   }
   return target || direct;
+}
+
+function boundedHoverLeaves(root) {
+  // Walk at most a small local subtree. querySelectorAll would allocate every
+  // descendant before a cap could help. Geometry is always read live.
+  const walker = root.ownerDocument.createTreeWalker(root, 1); // SHOW_ELEMENT
+  const anchors = new Set();
+  const parents = new Set();
+  let seen = 0;
+  for (let element; (element = walker.nextNode());) {
+    if (++seen > 48) return null;
+    if (!element.hasAttribute('data-line')) continue;
+    anchors.add(element);
+    const parent = element.parentElement?.closest('[data-line]');
+    if (parent) parents.add(parent);
+  }
+  return [...anchors].filter(element => !parents.has(element));
 }

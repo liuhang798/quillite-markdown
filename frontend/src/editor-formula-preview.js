@@ -117,44 +117,66 @@ export function deleteRenderedEquation(view, item, doc) {
     selection: { anchor: current.from }, annotations: isolateHistory.of('full'), userEvent: 'delete.formula' });
   view.focus(); return true;
 }
+const mountedFormulas = new WeakMap();
 class FormulaWidget extends WidgetType {
   constructor(item, state) {
     super(); this.item = item; this.doc = state.doc; this.context = state.facet(formulaPreviewContext);
+    this.readOnly = state.readOnly;
     this.labels = Object.fromEntries(Object.keys(formulaPreviewPhrases).map(key => [key, state.phrase(key)]));
   }
-  eq(other) { return this.doc === other.doc && sameRange(this.item, other.item) && this.item.open === other.item.open
-    && this.item.html === other.item.html && this.context === other.context && this.labels['Edit equation'] === other.labels['Edit equation']; }
+  samePresentation(other) {
+    return this.item.open === other.item.open && this.item.mode === other.item.mode
+      && this.item.html === other.item.html && this.context === other.context && this.readOnly === other.readOnly
+      && Object.keys(this.labels).every(key => this.labels[key] === other.labels[key]);
+  }
+  eq(other) {
+    return this.doc === other.doc && sameRange(this.item, other.item) && this.item.raw === other.item.raw
+      && this.samePresentation(other);
+  }
   ignoreEvent() { return true; }
+  updateDOM(root, _view, previous) {
+    const mounted = mountedFormulas.get(root);
+    if (!mounted || !previous || !this.samePresentation(previous)) return false;
+    // Reuse the costly sanitized KaTeX tree, but bind interactions to the
+    // current immutable document and source range, not the original closure.
+    mounted.item = this.item;
+    mounted.doc = this.doc;
+    return true;
+  }
+  destroy(root) { mountedFormulas.delete(root); }
   toDOM(view) {
-    const item = this.item, block = item.mode !== 'inline';
+    const {item, labels, context} = this, block = item.mode !== 'inline';
     const root = document.createElement(block ? 'div' : 'span');
     root.className = `cm-formula-render ${block ? 'is-block' : 'is-inline'}${item.open || !item.html ? ' is-source-open' : ''}`;
     root.contentEditable = 'false'; root.tabIndex = 0; root.setAttribute('role', 'group');
-    root.setAttribute('aria-label', this.labels['Equation: Enter to edit; Delete to remove']);
-    root.title = this.labels['Equation: Enter to edit; Delete to remove'];
+    root.setAttribute('aria-label', labels['Equation: Enter to edit; Delete to remove']);
+    root.title = labels['Equation: Enter to edit; Delete to remove'];
+    const mounted = { item, doc: this.doc };
+    mountedFormulas.set(root, mounted);
+    const current = () => mountedFormulas.has(root) && currentItem(view, mounted.item, mounted.doc);
     const edit = () => {
-      const current = currentItem(view, item, this.doc);
-      if (current && !view.state.readOnly) this.context.edit?.(current, view);
+      const found = current();
+      if (found && !view.state.readOnly) context.edit?.(found, view);
     };
     const content = document.createElement('span'); content.className = 'cm-formula-content'; root.append(content);
     // No author-provided HTML is used. Use the same sanitizer as document preview.
-    if (item.html && this.context.sanitize) content.innerHTML = this.context.sanitize(item.html);
+    if (item.html && context.sanitize) content.innerHTML = context.sanitize(item.html);
     else if (!item.html) {
-      content.textContent = this.labels['Equation could not be rendered; source is retained'];
+      content.textContent = labels['Equation could not be rendered; source is retained'];
       root.classList.add('is-error');
     }
     const tools = document.createElement('span'); tools.className = 'cm-formula-tools'; root.append(tools);
     for (const action of ['edit', 'source']) {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.formulaAction = action;
-      button.textContent = this.labels[action === 'edit' ? 'Edit equation' : item.open ? 'Hide equation source' : 'Show equation source'];
+      button.textContent = labels[action === 'edit' ? 'Edit equation' : item.open ? 'Hide equation source' : 'Show equation source'];
       button.disabled = view.state.readOnly || action === 'source' && !item.html;
       button.onmousedown = event => event.preventDefault();
       button.onclick = event => {
         event.stopPropagation();
         if (action === 'edit') edit();
         else {
-          const current = currentItem(view, item, this.doc); if (!current) return;
-          view.dispatch({ effects: toggleFormulaSource.of({ from: current.from, to: current.to }), selection: { anchor: current.to }, scrollIntoView: true });
+          const found = current(); if (!found) return;
+          view.dispatch({ effects: toggleFormulaSource.of({ from: found.from, to: found.to }), selection: { anchor: found.to }, scrollIntoView: true });
           view.focus();
         }
       };
@@ -163,23 +185,24 @@ class FormulaWidget extends WidgetType {
     root.onmousedown = event => {
       if (event.target.closest('button')) return;
       event.preventDefault();
-      const current = currentItem(view, item, this.doc); if (!current) return;
-      view.dispatch({ selection: { anchor: current.from, head: current.to } }); root.focus();
+      const found = current(); if (!found) return;
+      view.dispatch({ selection: { anchor: found.from, head: found.to } }); root.focus();
     };
     root.ondblclick = event => { if (!event.target.closest('button')) { event.preventDefault(); edit(); } };
     root.onkeydown = event => {
       if (event.target !== root || event.isComposing) return;
       if (event.key === 'Enter') { event.preventDefault(); edit(); }
       else if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault(); deleteRenderedEquation(view, item, this.doc);
+        event.preventDefault();
+        if (mountedFormulas.has(root)) deleteRenderedEquation(view, mounted.item, mounted.doc);
       } else if (event.key === 'Escape' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        event.preventDefault(); const current = currentItem(view, item, this.doc); if (!current) return;
-        view.dispatch({ selection: { anchor: event.key === 'ArrowLeft' ? current.from : current.to } }); view.focus();
+        event.preventDefault(); const found = current(); if (!found) return;
+        view.dispatch({ selection: { anchor: event.key === 'ArrowLeft' ? found.from : found.to } }); view.focus();
       }
     };
     root.addEventListener('copy', event => {
-      const current = currentItem(view, item, this.doc); if (!current || !event.clipboardData) return;
-      event.preventDefault(); event.stopPropagation(); event.clipboardData.setData('text/plain', current.raw);
+      const found = current(); if (!found || !event.clipboardData) return;
+      event.preventDefault(); event.stopPropagation(); event.clipboardData.setData('text/plain', found.raw);
     });
     return root;
   }

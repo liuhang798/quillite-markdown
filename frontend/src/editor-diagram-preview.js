@@ -82,7 +82,12 @@ function nestedDiagramRanges(raw, limit) {
 // HTML, examples, unfinished fences and ambiguous mappings retain source.
 export function editorDiagramItems(doc) {
   if (doc.length > DIAGRAM_PREVIEW_DOCUMENT_LIMIT) return [];
-  const source = doc.toString(), crlf = [];
+  const source = doc.toString();
+  // A renderable diagram must have a supported fenced info string. This is
+  // only a precheck; container, code, math and fence identity still use the
+  // full grammar below. Avoid re-lexing all prose for every keystroke.
+  if (!/[`~]{3}[^\S\r\n]*(?:mermaid|echarts)(?=[^\S\r\n]*(?:[\r\n]|$))/i.test(source)) return [];
+  const crlf = [];
   for (let i = source.indexOf('\r\n'); i >= 0; i = source.indexOf('\r\n', i + 2)) crlf.push(i - crlf.length);
   const normalized = source.replace(/\r\n?/g, '\n');
   const originalPosition = position => {

@@ -54,6 +54,10 @@ export function imageAlignment(style) {
 }
 
 export function editorImageItems(source, definitions) {
+  // An image node necessarily starts with ![ or an HTML img tag. Keep the
+  // parser authoritative once either marker occurs, including inside code,
+  // but don't traverse an image-free document at every preview refresh.
+  if (!source.includes('![') && !/<img\b/i.test(source)) return [];
   return markdownImageRanges(source, { preview: true, definitions }).filter(item => {
     if (item.previewFrom === undefined || item.previewTo > source.length || !imageSourceKind(item.ref)) return false;
     return !item.attributes?.some((a, i, all) => all.findIndex(b => a.name === b.name) !== i);

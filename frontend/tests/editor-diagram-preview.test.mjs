@@ -14,6 +14,16 @@ const fence = (body = 'pie\n"One": 1', engine = 'mermaid') => `\`\`\`${engine}\n
 const create = (doc, context = {}) => EditorState.create({ doc, extensions: [history(), editorDiagramField, diagramPreviewContext.of(context)] });
 const viewFor = state => { const view = { state, focus() {} }; view.dispatch = spec => { view.state = view.state.update(spec).state; }; return view; };
 
+test('diagram candidate check preserves supported fenced info strings and containers', () => {
+  for (const source of [
+    '~~~  Mermaid  \nflowchart TD\nA-->B\n~~~',
+    '> ````ECHARTS\r\n> {}\r\n> ````',
+    '````ECHARTS \t\r\n{}\r\n````',
+    '- ~~~mermaid\n  graph TD\n  A-->B\n  ~~~',
+  ]) assert.equal(editorDiagramItems(source).length, 1);
+  assert.deepEqual(editorDiagramItems('# Diagrams\n\nMermaid and ECharts are names, not fences.'), []);
+});
+
 test('card selection painting only replaces an exact rendered atom, not source or surrounding text',()=>{
   const state=create('Before\n\n'+fence()+'\n\nAfter'),item=state.field(editorDiagramField).items[0];
   for(const range of [EditorSelection.range(item.from,item.to),EditorSelection.range(item.to,item.from)])

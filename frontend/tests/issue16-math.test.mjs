@@ -4,7 +4,7 @@ import { Marked } from 'marked';
 import { mathExtensions, renderLatex } from '../src/math-rendering.js';
 import { scanMarkdownFormulas } from '../src/formula-editing.js';
 import { buildLivePlan } from '../src/editor-live-preview.js';
-import { hasRichClipboardHTML, htmlToMarkdown } from '../src/rich-clipboard.js';
+import { hasRichClipboardHTML, htmlToMarkdown, selectClipboardMarkdown } from '../src/rich-clipboard.js';
 import { readFileSync } from 'node:fs';
 
 const parser = new Marked({ gfm: true, breaks: true, extensions: mathExtensions });
@@ -98,4 +98,57 @@ test('math clipboard boundaries do not inject Markdown through untrusted formula
   const source = htmlToMarkdown(`<span class="katex"><annotation encoding="application/x-tex">${expression}</annotation></span>`);
   assert.equal(scanMarkdownFormulas(source).length, 0);
   assert.doesNotMatch(parser.parse(source), /<strong>/);
+});
+
+const annotation = expression => `<math><semantics><mtext>visible</mtext><annotation encoding="application/x-tex">${expression}</annotation></semantics></math>`;
+
+test('math fragments inside one dollar formula are merged without touching other content', () => {
+  const source = htmlToMarkdown(`<p><strong>Given</strong> $h(x)=${annotation('f(x)')}+${annotation('g(x)')}$; also ${annotation('x^2')}.</p>`);
+  assert.equal(source, String.raw`**Given** $h(x)=f(x)+g(x)$; also \(x^2\).`);
+  assert.equal((parser.parse(source).match(/class="katex"/g) || []).length, 2);
+  assert.doesNotMatch(parser.parse(source), /katex-error/);
+  const block = htmlToMarkdown(`<p>$$y=${annotation('x_1')}$$</p>`);
+  assert.equal(block, '$$y=x_1$$');
+  assert.match(parser.parse(block), /class="math-block".*<msub>/);
+});
+
+test('merged TeX fragments keep command boundaries and do not admit new delimiter breaks', () => {
+  const merged = htmlToMarkdown(`<p>$y=${annotation(String.raw`\sin`)}h$</p>`);
+  assert.equal(merged, String.raw`$y=\sin h$`);
+  const invalid = htmlToMarkdown(`<p>$y=${annotation(String.raw`\text{a $x$}`)}$</p>`);
+  assert.ok(invalid.includes(String.raw`\(\text{a $x$}\)`), 'do not drop delimiters when the outer token would split');
+  const price = htmlToMarkdown(`<p>Ticket costs $5 and ${annotation('x')} USD$.</p>`);
+  assert.equal(price, String.raw`Ticket costs $5 and \(x\) USD$.`, 'do not merge a price and prose as a formula');
+  const link = htmlToMarkdown(`<a href="https://example.test/">$x=${annotation(']')}(file:///secret.png)$</a>`);
+  assert.equal(link, String.raw`[$x=\(]\)(file:///secret.png)$](https://example.test/)`);
+  assert.equal((parser.parse(link).match(/<a /g) || []).length, 1, 'keep the original link without creating a nested link');
+  const bold = htmlToMarkdown(`<strong>$x=${annotation('*')} y$</strong>`);
+  assert.equal(bold, String.raw`**$x=\(*\) y$**`);
+  assert.match(parser.parse(bold), /<strong>/);
+});
+
+test('malformed source already present in plain text nodes or code is not rewritten', () => {
+  const malformed = String.raw`$f'(x)=\(f(x)\)$`;
+  const literal = htmlToMarkdown(`<p>${malformed}</p><pre><code>${malformed}</code></pre>`);
+  assert.equal(literal, malformed + '\n\n```\n' + malformed + '\n```');
+});
+
+test('Markdown fallback fixes only matched formulas and keeps all other converted content', () => {
+  const damaged = String.raw`**Given** $f'(x)=\(f(x)\)$.`;
+  const markdown = String.raw`**Given** \(f'(x)=f(x)\).`;
+  const plain = "**Given** $f'(x)=f(x)$.";
+  assert.equal(selectClipboardMarkdown(damaged, markdown, plain), markdown);
+  assert.equal(selectClipboardMarkdown(damaged, '', plain), plain);
+  assert.equal(selectClipboardMarkdown(damaged, markdown + ' ![extra](file:///private.png)', plain), plain);
+  assert.equal(selectClipboardMarkdown(damaged, markdown.replace('Given', 'Other'), ''), damaged);
+  assert.equal(selectClipboardMarkdown(damaged, '    ' + markdown, ''), damaged);
+  assert.equal(selectClipboardMarkdown(damaged, '\r\n' + markdown + '\r\n', ''), markdown);
+  assert.equal(selectClipboardMarkdown(damaged, '', "Given $f'(x)=f(x)$."), damaged);
+  assert.equal(selectClipboardMarkdown(damaged, '', damaged), damaged);
+  assert.equal(selectClipboardMarkdown(plain, markdown, ''), plain);
+  assert.equal(selectClipboardMarkdown('`' + damaged + '`', '', '`' + plain + '`'), '`' + damaged + '`');
+  const partiallyValid = String.raw`$x=1$ and $\bogus$`;
+  assert.equal(selectClipboardMarkdown(partiallyValid, '$x=2$ and $y=3$', ''), partiallyValid);
+  assert.equal(selectClipboardMarkdown(partiallyValid, String.raw`$x=1$ and \(\)`, ''), partiallyValid);
+  assert.equal(selectClipboardMarkdown(partiallyValid, '$x=1$ and $y=3$', ''), '$x=1$ and $y=3$');
 });
