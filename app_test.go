@@ -2952,7 +2952,14 @@ func TestPortableImagesIncludeProjectedFootnotes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, guard := range []string{"function documentImageRanges(source)", "footnoteProjection(source,note)", "from:fieldPosition(range,item.from)", "const ranges = documentImageRanges(source)", "for (const item of documentImageRanges(source))"} {
+	for _, guard := range []string{
+		"function documentMediaRanges(source)",
+		"footnoteProjection(source,note)",
+		"from:fieldPosition(range,item.from)",
+		"const { images: ranges, hasVideo } = documentMediaRanges(source)",
+		"return documentMediaRanges(source).images",
+		"for (const item of documentImageRanges(source))",
+	} {
 		if !strings.Contains(string(data), guard) {
 			t.Fatalf("portable/save-as image traversal lost guard: %s", guard)
 		}
@@ -3249,7 +3256,13 @@ func TestTableWhitespaceRenderingDoesNotRewriteDocuments(t *testing.T) {
 	if strings.Count(string(data), "stripTableWidthMetadata(tableRenderSource(frontmatterRenderSource(content)))") != 2 {
 		t.Fatal("reading and export must both normalize table delimiters only in rendering input")
 	}
-	if !strings.Contains(string(data), "extensions: [tableWhitespace]") {
+	parser, err := os.ReadFile("frontend/src/markdown-parser.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "extensions: markdownExtensions") ||
+		!strings.Contains(string(parser), "export const markdownExtensions = [tableWhitespace,") ||
+		!strings.Contains(string(parser), "markdownLanguage.parser.configure(markdownExtensions)") {
 		t.Fatal("editor language must share the whitespace-aware table parser")
 	}
 }

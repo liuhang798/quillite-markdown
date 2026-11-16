@@ -6,5 +6,9 @@
   "3.1.0": {
     "summaryZh": "支持图表放大、文档包编辑和顶部更新提示，优化即时渲染的大表格编辑，修复表格下方输入错位、输入法切换模式和公式粘贴。",
     "summaryEn": "Enlarge charts, edit document bundles, and see update banners; enjoy faster live tables, reliable typing below tables, IME mode switches, and formula pasting."
+  },
+  "3.2.0": {
+    "summaryZh": "新增本地 MP4／WebM 和 HTTPS 视频点播，优化即时渲染中的大表格、图片预览和公式定位。",
+    "summaryEn": "Play local MP4/WebM and HTTPS video in live editing, and enjoy smoother large tables, image previews, and formula navigation."
   }
 }

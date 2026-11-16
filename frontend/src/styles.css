@@ -605,7 +605,69 @@ body[data-doc-width="full"] .document-view { padding-left: 44px; padding-right: 
 .markdown-body hr { border: 0; height: 1px; background: var(--line); margin: 2.6em 0; }
 .markdown-body img { display: block; max-width: 100%; margin: 2em auto; border-radius: 10px; box-shadow: var(--shadow); }
 .markdown-body img.local-image-loading { min-width: 180px; min-height: 72px; background: linear-gradient(90deg, var(--panel), var(--paper-strong), var(--panel)); box-shadow: none; }
+.markdown-body img.local-image-loading.local-image-reserved { min-width: 0; min-height: 0; box-sizing: border-box; }
 .markdown-body img.local-image-error { min-width: 180px; min-height: 48px; padding: 12px; border: 1px dashed var(--line); background: var(--panel); box-shadow: none; }
+.markdown-body .qm-local-video, .cm-live-video .qm-local-video { margin: 1.4em 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow-wrap: anywhere; }
+.cm-live-video { margin: 7px 12px 9px 0; min-width: 0; }
+.cm-live-video .qm-local-video { margin: 0; line-height: 1.5; }
+.cm-live-video__source { padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--muted); cursor: pointer; font: inherit; font-size: .92em; }
+.cm-live-video__source:hover { color: var(--accent-strong); border-color: var(--accent); }
+.cm-live-video__source:focus-visible, .cm-live-video .qm-local-video__action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.qm-local-video__title { display: block; margin: 0 0 8px; color: var(--text); font-weight: 650; }
+.qm-local-video__stage { max-width: 100%; }
+.qm-local-video__player { display: block; width: 100%; max-width: 100%; max-height: 65vh; border-radius: 6px; background: #151818; }
+.qm-local-video__controls, .local-video-choice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.qm-local-video__controls { margin-top: 8px; }
+.qm-local-video__controls button, .local-video-choice button { padding: 6px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--text); cursor: pointer; font: inherit; font-size: .92em; }
+.qm-local-video__controls button:first-child, .local-video-choice button[value="reference"] { color: var(--accent-strong); border-color: var(--accent); }
+.qm-local-video__status, .qm-video-static { color: var(--muted); font-size: .92em; }
+.qm-local-video__notice { color: var(--muted); font-size: .82em; }
+.qm-local-video__print { display: none; }
+.local-video-choice { width: min(430px, calc(100% - 36px)); padding: 20px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--paper); box-shadow: var(--shadow); }
+.local-video-choice::backdrop { background: #17251f70; }
+.local-video-choice h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.local-video-choice p { overflow-wrap: anywhere; }
+.local-video-choice-actions { justify-content: flex-end; }
+.video-insert-dialog { width: min(476px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--line); border-radius: 18px; color: var(--text); background: var(--paper-strong); box-shadow: var(--shadow); }
+.video-insert-dialog[open] { overflow: auto; }
+.video-insert-dialog::backdrop { background: #18251f72; backdrop-filter: blur(3px); }
+.video-insert-dialog [hidden] { display: none !important; }
+.video-insert-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.video-insert-heading h2 { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.3; }
+.video-insert-icon, .video-drop-icon { flex: 0 0 auto; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent-strong); }
+.video-insert-dialog button { font: inherit; cursor: pointer; }
+.video-source-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 11px; background: var(--panel); }
+.video-source-tabs button { min-height: 37px; padding: 7px; border: 1px solid transparent; border-radius: 8px; color: var(--muted); background: transparent; font-size: 13px; font-weight: 600; }
+.video-source-tabs button[aria-selected="true"] { border-color: var(--line); color: var(--accent-strong); background: var(--paper-strong); box-shadow: 0 1px 2px #0000000d; }
+.video-source-tabs button:hover { color: var(--accent-strong); }
+.video-insert-panels { margin: 17px 0; min-height: 136px; }
+.video-source-panel { display: grid; align-content: start; gap: 8px; }
+.video-drop-zone { width: 100%; min-height: 136px; display: flex; align-items: center; justify-content: center; gap: 13px; padding: 17px 14px; text-align: start; border: 1px dashed color-mix(in srgb, var(--accent) 58%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--accent-soft) 62%, var(--paper-strong)); color: var(--text); }
+.video-drop-zone:hover, .video-drop-zone.dragging, .video-drop-zone.has-file { border-color: var(--accent); background: var(--accent-soft); }
+.video-drop-zone.has-file { border-style: solid; }
+.video-drop-zone:disabled { cursor: wait; }
+.video-drop-text { display: grid; min-width: 0; gap: 6px; }
+.video-drop-label { color: var(--accent-strong); font-weight: 700; line-height: 1.3; }
+.video-drop-detail, .video-insert-help { color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.video-source-panel label { font-size: 13px; font-weight: 650; }
+.video-source-panel input { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--panel); font: inherit; }
+.video-insert-help, .video-insert-error { margin: 0; }
+.video-insert-error { color: var(--md-color-red); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.video-source-panel input[aria-invalid="true"] { border-color: var(--md-color-red); }
+.video-insert-dialog :is(button, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.video-insert-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 15px; border-top: 1px solid var(--line); }
+.video-insert-actions button { min-height: 39px; padding: 7px 15px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--paper-strong); font-size: 13px; font-weight: 600; }
+.video-insert-actions button:hover { background: var(--panel); }
+.video-insert-actions .video-insert-confirm { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+.video-insert-actions .video-insert-confirm:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, var(--text)); }
+.video-insert-actions .video-insert-confirm:disabled { background: var(--panel); border-color: var(--line); color: var(--muted); cursor: default; }
+@media (max-width: 480px) {
+  .video-insert-dialog { padding: 17px; border-radius: 14px; }
+}
+@media print {
+  .qm-local-video__print { display: block; }
+  .qm-local-video__stage, .qm-local-video__controls, .qm-local-video__status, .qm-local-video__title { display: none !important; }
+}
 .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.8em 0; font-family: inherit; font-size: .88em; }
 /* Intrinsic image widths must not collapse neighboring prose to one glyph.
    Explicit colgroups/inline widths still win, as in the live table editor. */
@@ -806,6 +868,10 @@ body[data-editor-layout="editor-only"] #restoreLivePreviewButton { display: inli
 .cm-image-tools button:focus-visible { outline: 2px solid var(--accent, #119966); outline-offset: 2px; }
 .cm-image-frame { display: flex; min-height: 40px; }
 .cm-image-frame img { max-width: 100%; max-height: 300px; height: auto; object-fit: contain; border-radius: 4px; }
+/* Keep the lazy image eligible to load, but let only the placeholder affect layout
+   until the load handler can reveal the image and preserve the editing caret. */
+.cm-image-frame img.is-pending { position: absolute; top: 0; left: 0; max-width: 1px; max-height: 1px; visibility: hidden; pointer-events: none; }
+.cm-image-frame:has(> img.is-pending) { min-height: var(--quillite-pending-image-frame-height, 40px); }
 .cm-image-frame [hidden], .cm-embedded-image.is-source-open .cm-image-frame { display: none; }
 .cm-image-error { font: 12px/1.6 system-ui, sans-serif; color: var(--muted, #68716b); }
 .cm-image-cards { display: flex; gap: 12px; }

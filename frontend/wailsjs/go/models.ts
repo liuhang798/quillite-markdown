@@ -651,6 +651,24 @@ export namespace main {
 	        this.clearSecret = source["clearSecret"];
 	    }
 	}
+	export class LocalVideoFile {
+	    reference: string;
+	    name: string;
+	    size: number;
+	    external: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new LocalVideoFile(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.reference = source["reference"];
+	        this.name = source["name"];
+	        this.size = source["size"];
+	        this.external = source["external"];
+	    }
+	}
 	export class PandocExportInput {
 	    sourcePath: string;
 	    title: string;

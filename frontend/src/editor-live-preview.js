@@ -1,5 +1,6 @@
 import { ChangeSet, EditorSelection, EditorState, Facet, Prec, StateEffect, StateField, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, ViewPlugin, keymap } from '@codemirror/view';
+import { TreeFragment } from '@lezer/common';
 import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/lang-markdown';
 import { searchPanelOpen } from '@codemirror/search';
 import { markdownParser, tableRenderSource } from './markdown-parser.js';
@@ -13,6 +14,7 @@ import { EditableBlockWidget, lightweightTableCell, tableCellRanges, safeCellIns
 import { editableForwardedChange, editableProjectionSync, resolveEditableOwner } from './editable-owner.js';
 import { protectedBlockReplacement, crossSelection, crossSelectionField } from './editable-cross-selection.js';
 import { structuredHtmlBlocks } from './html-block-editing.js';
+import { standaloneLiveVideoSource } from './editor-video-preview.js';
 import { sourceReturnPanel, preserveSourceBlockPosition, revealSourceReturnCaret } from './source-return-panel.js';
 import { activeDiagramSourceItem, returnDiagramSourceToRendered, editorDiagramField, isRenderedDiagramSelection } from './editor-diagram-preview.js';
 import { installCrossBlockDrag } from './editable-drag-selection.js';
@@ -62,7 +64,17 @@ export const livePreviewPhrases = {
 const overlaps = (a, b) => a.from < b.to && b.from < a.to;
 const children = node => { const result = []; for (let child = node.firstChild; child; child = child.nextSibling) result.push(child); return result; };
 
-export function buildLivePlan(source, footnotes = null, inFootnote = false, definitions = null) {
+const unmaskedPlanTrees = new WeakMap();
+
+function liveParseFragments(plan, changes) {
+  const tree = unmaskedPlanTrees.get(plan);
+  if (!tree) return undefined;
+  const ranges = [];
+  changes.iterChangedRanges((fromA, toA, fromB, toB) => ranges.push({ fromA, toA, fromB, toB }));
+  return TreeFragment.applyChanges(TreeFragment.addTree(tree), ranges);
+}
+
+export function buildLivePlan(source, footnotes = null, inFootnote = false, definitions = null, fragments) {
   const plan = { marks: [], hides: [], lines: [], widgets: [], oversized: source.length > LIVE_PREVIEW_LIMIT };
   if (plan.oversized) {
     // Base64 size is not prose size. Parse a compact projection, then restore
@@ -92,6 +104,7 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
       return position + difference;
     };
     const projected = buildLivePlan(compact,footnotes,inFootnote,definitions);
+    unmaskedPlanTrees.delete(projected); // These offsets are about to be restored to the original document.
     const range = item => ({ ...item, from: restore(item.from), ...(item.to === undefined ? {} : { to: restore(item.to) }) });
     for (const key of ['marks', 'hides', 'lines']) projected[key] = projected[key].map(range);
     projected.widgets = projected.widgets.map(item => {
@@ -121,7 +134,9 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   pieces.push(source.slice(formulaEnd));
   const metadata = inFootnote ? null : frontmatterRange(source);
   const parsedSource = inFootnote ? pieces.join('') : maskFrontmatter(pieces.join(''));
-  let tree = markdownParser.parse(parsedSource);
+  // Only reuse a tree when both inputs are the exact editor source, never a
+  // formula/footnote/frontmatter projection whose offsets may be re-masked.
+  let tree = markdownParser.parse(parsedSource, parsedSource === source ? fragments : undefined);
   let originalTree = parsedSource === source ? tree : null;
   const references = new Set(definitions?.keys()), headings = [], imageRanges = [];
   const tableLayouts = findMarkdownTables(source,tree);
@@ -204,6 +219,10 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   }
   const visit = node => {
     const name = node.name, raw = source.slice(node.from, node.to), parts = children(node);
+    // Standalone video blocks have their own inert editor widget and source
+    // toggle. Don't layer generic HTML decorations over the same range.
+    if ((name === 'Paragraph' || name === 'HTMLBlock') && node.parent?.name === 'Document'
+      && standaloneLiveVideoSource(raw)) return;
     if (name !== 'Document' && overlapsHtml(node.from, node.to)) {
       // Visit the containing quote/list so surrounding prose and its markers
       // still render. Only the structured HTML itself belongs to its widget.
@@ -443,6 +462,7 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   const ownedBlocks = new Set([...noteBlocks, ...htmlBlocks]);
   for (const key of ['marks', 'hides', 'widgets']) plan[key] = plan[key].filter(item => ownedBlocks.has(item) || item.kind === 'table'
     || !overlapsFormula(item.from, item.to, range => !(key === 'marks' && range.mode === 'inline' && item.from < range.from && item.to > range.to)));
+  if (parsedSource === source && originalTree === tree) unmaskedPlanTrees.set(plan, tree);
   return plan;
 }
 
@@ -451,6 +471,10 @@ function selected(state, item, wholeLine = true) {
   const to = wholeLine ? state.doc.lineAt(item.to).to : item.to;
   return state.selection.ranges.some(range => range.empty ? range.head >= from && range.head <= to : range.from <= to && range.to >= from);
 }
+
+const editableWidget = item => ['table', 'code', 'details', 'html-content', 'comment', 'footnote-definition'].includes(item.kind);
+const stableInlineWidget = item => !item.block && ['task', 'bullet', 'text', 'break', 'footnote'].includes(item.kind);
+const selectionSensitiveWidget = item => item.kind !== 'comment-heading-repair' && !editableWidget(item) && !stableInlineWidget(item);
 
 class LiveWidget extends WidgetType {
   constructor(item, state) { super(); this.item = item; this.doc = state.doc; this.context = state.facet(livePreviewContext); this.label = state.phrase('Click to edit source'); this.taskLabel = state.phrase('Toggle task'); this.tableLabel = state.phrase('Edit table'); this.footnoteLabel = state.phrase('Edit footnote'); this.repairLabel = state.phrase('Separate comment and heading'); }
@@ -673,8 +697,8 @@ function decorate(plan, state, sourceBlock = null, searchSelection = false) {
     if (item.kind === 'comment-heading-repair') {
       decorations.push(Decoration.widget({widget:new LiveWidget(item,state),block:true,side:-1}).range(item.from));continue;
     }
-    const editable = ['table', 'code', 'details', 'html-content', 'comment', 'footnote-definition'].includes(item.kind);
-    const stableInline = !item.block && ['task', 'bullet', 'text', 'break', 'footnote'].includes(item.kind);
+    const editable = editableWidget(item);
+    const stableInline = stableInlineWidget(item);
     if (editable && sourceBlock === item.from) decorations.push(Decoration.widget({ widget: new SourceReturnWidget(item, state), block: true, side: -1 }).range(item.from));
     if (editable ? sourceBlock === item.from : !stableInline && selected(state, item)) continue;
     replacements.push(item);
@@ -738,7 +762,10 @@ export const livePreviewField = StateField.define({
       return { ...value, composing, tableSeparator: separator == null ? null : transaction.changes.mapPos(separator, -1),
         formatSelection: null, decorations: value.decorations.map(transaction.changes) };
     }
-    const plan = transaction.docChanged || value.composing || transaction.effects.some(effect=>effect.is(updateFootnotes)||effect.is(updateImageDefinitions)) ? buildLivePlan(transaction.newDoc.toString(),footnotesFor(transaction.state),transaction.state.facet(footnoteBodyContext),imageDefinitionsFor(transaction.state)) : value.plan;
+    const plan = transaction.docChanged || value.composing || transaction.effects.some(effect=>effect.is(updateFootnotes)||effect.is(updateImageDefinitions))
+      ? buildLivePlan(transaction.newDoc.toString(), footnotesFor(transaction.state), transaction.state.facet(footnoteBodyContext), imageDefinitionsFor(transaction.state),
+        transaction.docChanged && !value.composing ? liveParseFragments(value.plan, transaction.changes) : undefined)
+      : value.plan;
     if (!transaction.docChanged && !transaction.selection && !transaction.reconfigured && !transaction.effects.length && !value.composing) return value;
     if (sourceBlock !== null && !plan.widgets.some(item => item.from === sourceBlock && selected(transaction.state, item))) sourceBlock = null;
     // Only explicit search navigation reveals hidden syntax. Ordinary mouse
@@ -753,7 +780,14 @@ export const livePreviewField = StateField.define({
     }
     if (searchPanelOpen(transaction.startState) && !searchPanelOpen(transaction.state)) searchSelection = false;
     for (const effect of transaction.effects) if (effect.is(editableSearchSelection)) searchSelection = effect.value;
-    return { plan, composing, tableSeparator: null, sourceBlock, formatSelection, searchSelection, decorations: decorate(plan, transaction.state, sourceBlock, searchSelection) };
+    // A caret move normally changes neither hidden syntax nor widgets. Only
+    // redecorate for a changed plan/context or a changed source/search reveal.
+    const keepDecorations = plan === value.plan && !value.composing && !transaction.reconfigured
+      && sourceBlock === value.sourceBlock && searchSelection === value.searchSelection
+      && (!transaction.selection || !searchSelection && !plan.widgets.some(item => selectionSensitiveWidget(item)
+        && selected(transaction.startState, item) !== selected(transaction.state, item)));
+    const decorations = keepDecorations ? value.decorations : decorate(plan, transaction.state, sourceBlock, searchSelection);
+    return { plan, composing, tableSeparator: null, sourceBlock, formatSelection, searchSelection, decorations };
   },
   provide: field => [EditorView.decorations.compute([field], visibleLiveDecorations), renderedContainerRanges.compute([field], state => {
     const live = state.field(field);
@@ -1290,17 +1324,31 @@ export function resolveEditorPasteTarget(root, target) {
   return {view,literalField:mode === 'plain',plainText:mode === 'plain' || editorPastePrefersPlain(view.state)};
 }
 
-function liveInlineWrappers(plan,source) {
-  return plan.marks.filter(mark=>/^cm-live-(strong|em|strike|highlight|color|link|inline-code|u|sup|sub|kbd|mark)$/.test(mark.className)).map(mark=>{
+const inlineHideIndexes = new WeakMap();
+function liveInlineWrappers(plan, source, className) {
+  const marks = plan.marks.filter(mark => className ? mark.className === className
+    : /^cm-live-(strong|em|strike|highlight|color|link|inline-code|u|sup|sub|kbd|mark)$/.test(mark.className));
+  if (!marks.length) return [];
+  let index = inlineHideIndexes.get(plan);
+  if (!index) {
+    const starts = new Map(), ends = new Map(), pairs = new Set();
+    for (const hide of plan.hides) {
+      if (!starts.has(hide.from)) starts.set(hide.from, hide);
+      if (!ends.has(hide.to)) ends.set(hide.to, hide);
+      pairs.add(`${hide.from}:${hide.to}`);
+    }
+    inlineHideIndexes.set(plan, index = { starts, ends, pairs });
+  }
+  return marks.map(mark=>{
     if(mark.className==='cm-live-link'&&source[mark.from]==='<'&&source[mark.to-1]==='>'
-      &&plan.hides.some(h=>h.from===mark.from&&h.to===mark.from+1)&&plan.hides.some(h=>h.from===mark.to-1&&h.to===mark.to)){
+      &&index.pairs.has(`${mark.from}:${mark.from+1}`)&&index.pairs.has(`${mark.to-1}:${mark.to}`)){
       const label=source.slice(mark.from+1,mark.to-1);
       // CommonMark email autolinks imply mailto; without it the shortened
       // explicit link would silently become a relative document path.
       const target=/^[a-z][a-z\d+.-]*:/i.test(label)?label:`mailto:${label}`;
       return{...mark,open:{from:mark.from,to:mark.from+1},close:{from:mark.to-1,to:mark.to},openText:'[',closeText:`](<${target.replaceAll('&','&amp;').replaceAll('\\','&#92;')}>)`,literalLabel:true};
     }
-    const link=mark.className==='cm-live-link',open=plan.hides.find(h=>link?h.to===mark.from:h.from===mark.from),close=plan.hides.find(h=>link?h.from===mark.to:h.to===mark.to);
+    const link=mark.className==='cm-live-link',open=(link?index.ends:index.starts).get(mark.from),close=(link?index.starts:index.ends).get(mark.to);
     // Link labels use the *original* reference name even after their visible
     // text is shortened. Do not accidentally borrow a neighbouring marker.
     if(link){
@@ -1322,8 +1370,9 @@ export function preserveLiveReferenceLabels(tr) {
   if(!live||live.composing||live.searchSelection||tr.startState.readOnly||!tr.docChanged
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange)
     ||!(tr.isUserEvent('input')||tr.isUserEvent('delete')))return tr;
+  if (!live.plan.marks.some(mark => mark.className === 'cm-live-link')) return tr;
   const source=tr.startState.doc.toString(),edits=[];
-  for(const mark of liveInlineWrappers(live.plan,source).filter(mark=>mark.implicitReference)){
+  for(const mark of liveInlineWrappers(live.plan,source,'cm-live-link').filter(mark=>mark.implicitReference)){
     let inside=false,outside=false;
     tr.changes.iterChangedRanges((from,to)=>{
       if(from>=mark.open.to&&to<=mark.close.from)inside=true;
@@ -1350,8 +1399,9 @@ export function protectLiveInlineCode(tr) {
   if(!live||live.composing||live.searchSelection||tr.startState.readOnly||!tr.docChanged
     ||tr.annotation(editableProjectionSync)||tr.annotation(editableForwardedChange)
     ||!(tr.isUserEvent('input')||tr.isUserEvent('delete')))return tr;
+  if (!live.plan.marks.some(mark => mark.className === 'cm-live-inline-code')) return tr;
   const source=tr.startState.doc.toString(),edits=[],bodies=[];
-  for(const mark of liveInlineWrappers(live.plan,source).filter(m=>m.className==='cm-live-inline-code')){
+  for(const mark of liveInlineWrappers(live.plan,source,'cm-live-inline-code')){
     let inside=false,outside=false;
     tr.changes.iterChangedRanges((from,to)=>{
       if(from>=mark.open.to&&to<=mark.close.from)inside=true;
@@ -1595,7 +1645,13 @@ export const editorLivePreview = [editorCompositionState, imageDefinitionsField,
   liveSelectionDisplay((view, range) => view.state.field(livePreviewField).plan.widgets.some(widget => overlaps(widget, range)),
     (view, range) => isRenderedDiagramSelection(view.state, range)),
   EditorState.transactionFilter.of(tr => {
-    if (!tr.docChanged || tr.startState.readOnly || stateComposing(tr.startState)) return tr;
+    if (!tr.docChanged || tr.startState.readOnly || stateComposing(tr.startState)
+      || !(tr.isUserEvent('input') || tr.isUserEvent('move.drop'))) return tr;
+    const live = tr.startState.field(livePreviewField, false);
+    // No fence repair is possible in a document containing only ordinary
+    // prose/tables. Avoid projecting every table cell on each keystroke.
+    if (!live?.plan.widgets.some(item => item.kind === 'code' && !item.indented
+      || item.kind === 'details' || item.kind === 'html-content' || item.kind === 'footnote-definition')) return tr;
     const changes = codeFenceRepairs(tr, renderedEditableBlocks(tr.startState));
     return changes.length ? [tr, {changes, sequential:true}] : tr;
   }), EditorState.transactionFilter.of(protectRenderedBlockSelection),

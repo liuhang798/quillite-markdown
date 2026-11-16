@@ -1,6 +1,6 @@
 // Pure source transformations: never fetch resources or edit the open document.
 // Filesystem/MIME checks and archive limits are enforced again by the backend.
-import { documentImageRanges, imageReplacement, MAX_PORTABLE_BYTES } from './portable-images.js';
+import { documentMediaRanges, imageReplacement, MAX_PORTABLE_BYTES } from './portable-images.js';
 
 const encoder = new TextEncoder();
 const MAX_IMAGES = 512;
@@ -12,8 +12,8 @@ const isEmbedded = ref => /^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i.test(ref);
 
 function inspect(source) {
   if (typeof source !== 'string' || source.length > MAX_PORTABLE_BYTES || encoder.encode(source).length > MAX_PORTABLE_BYTES) throw new Error('TEXTPACK_LIMIT');
-  let ranges;
-  try { ranges = documentImageRanges(source); }
+  let ranges, hasVideo;
+  try { ({ images: ranges, hasVideo } = documentMediaRanges(source)); }
   catch (error) {
     if (String(error.message).includes('PORTABLE_UNSUPPORTED_IMAGE')) throw new Error('TEXTPACK_UNSUPPORTED_IMAGE');
     throw error;
@@ -21,8 +21,15 @@ function inspect(source) {
   if (ranges.length > 4096) throw new Error('TEXTPACK_LIMIT');
   // These are not collected as images. Be conservative, even in an example
   // code block: never turn an incomplete resource scan into an offline promise.
-  const external = /<(?:style|link|iframe|object|embed|video|audio|svg)\b|\bstyle\s*=|\burl\s*\(/i.test(source);
-  return { ranges, external };
+  const external = /<(?:style|link|iframe|object|embed|audio|svg)\b|\bstyle\s*=|\burl\s*\(/i.test(source);
+  return { ranges, external, hasVideo };
+}
+
+function uncollectedWarnings(external, hasVideo) {
+  const warnings = [];
+  if (external) warnings.push(warning('EXTERNAL_RESOURCES', ''));
+  if (hasVideo) warnings.push(warning('VIDEO_NOT_INCLUDED', ''));
+  return warnings;
 }
 
 function replaceImages(source, ranges, resolve) {
@@ -58,9 +65,8 @@ function exportReferenceAllowed(ref) {
 
 export function prepareTextPackExport(source, {assetDirectory = 'assets'} = {}) {
   if (!/^assets(?:\/[A-Za-z0-9_-]+)*$/.test(assetDirectory)) throw new Error('TEXTPACK_INVALID');
-  const { ranges, external } = inspect(source), warnings = [], images = [], cache = new Map();
-  let remoteCount = 0, unsupportedCount = external ? 1 : 0;
-  if (external) warnings.push(warning('EXTERNAL_RESOURCES', ''));
+  const { ranges, external, hasVideo } = inspect(source), warnings = uncollectedWarnings(external, hasVideo), images = [], cache = new Map();
+  let remoteCount = 0, unsupportedCount = warnings.length;
   const content = replaceImages(source, ranges, ref => {
     if (cache.has(ref)) return cache.get(ref);
     if (cache.size >= MAX_IMAGES) throw new Error('TEXTPACK_LIMIT');
@@ -92,9 +98,8 @@ function packageAssetPath(ref) {
 function encodedAsset(path) { return path.split('/').map(part => encodeURIComponent(part)).join('/'); }
 
 export function prepareTextBundleImport(source, assets = []) {
-  const { ranges, external } = inspect(source), warnings = [], available = new Set(assets), cache = new Map();
-  let remoteCount = 0, missingCount = 0, unsupportedCount = external ? 1 : 0;
-  if (external) warnings.push(warning('EXTERNAL_RESOURCES', ''));
+  const { ranges, external, hasVideo } = inspect(source), warnings = uncollectedWarnings(external, hasVideo), available = new Set(assets), cache = new Map();
+  let remoteCount = 0, missingCount = 0, unsupportedCount = warnings.length;
   // Missing placeholders cannot collide with a real imported attachment.
   let missingDirectory = 'assets/quillite-missing';
   const foldedAssets = [...available].map(path => path.toLowerCase());

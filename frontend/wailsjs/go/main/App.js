@@ -10,6 +10,10 @@ export function ApplyWorkspaceReplace(arg1, arg2) {
   return window['go']['main']['App']['ApplyWorkspaceReplace'](arg1, arg2);
 }
 
+export function BeginLocalVideo(arg1, arg2) {
+  return window['go']['main']['App']['BeginLocalVideo'](arg1, arg2);
+}
+
 export function CanEditFile(arg1) {
   return window['go']['main']['App']['CanEditFile'](arg1);
 }
@@ -46,6 +50,14 @@ export function ClearRecoverySnapshot() {
   return window['go']['main']['App']['ClearRecoverySnapshot']();
 }
 
+export function CopyLocalVideoToAssets(arg1, arg2) {
+  return window['go']['main']['App']['CopyLocalVideoToAssets'](arg1, arg2);
+}
+
+export function DescribeDroppedLocalVideo(arg1, arg2) {
+  return window['go']['main']['App']['DescribeDroppedLocalVideo'](arg1, arg2);
+}
+
 export function DetectPandoc() {
   return window['go']['main']['App']['DetectPandoc']();
 }
@@ -68,6 +80,10 @@ export function DiscoverAIModels(arg1) {
 
 export function DownloadAndApplyUpdate() {
   return window['go']['main']['App']['DownloadAndApplyUpdate']();
+}
+
+export function EndLocalVideo(arg1) {
+  return window['go']['main']['App']['EndLocalVideo'](arg1);
 }
 
 export function ExportDOCX(arg1, arg2, arg3) {
@@ -216,6 +232,10 @@ export function OpenFile() {
 
 export function OpenFolder() {
   return window['go']['main']['App']['OpenFolder']();
+}
+
+export function OpenLocalVideoExternally(arg1, arg2) {
+  return window['go']['main']['App']['OpenLocalVideoExternally'](arg1, arg2);
 }
 
 export function OpenRecentFile(arg1) {
@@ -368,6 +388,10 @@ export function SelectFeedbackImages() {
 
 export function SelectImage(arg1) {
   return window['go']['main']['App']['SelectImage'](arg1);
+}
+
+export function SelectLocalVideo(arg1) {
+  return window['go']['main']['App']['SelectLocalVideo'](arg1);
 }
 
 export function SelectPandoc() {

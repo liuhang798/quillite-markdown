@@ -86,10 +86,13 @@ test('toolbar hides overflow and dynamically mirrors collapsed commands into Mor
   assert.match(html, /data-overflow-priority="\d+"/);
   assert.match(renderer, /new ResizeObserver\(scheduleFormatToolbarLayout\)/);
   assert.match(renderer, /bar\.scrollWidth <= bar\.clientWidth \+ 1/);
-  assert.match(renderer, /rebuildOverflowFormatOptions\(\)/);
+  assert.match(renderer, /rebuildOverflowFormatOptions\(collapsed\)/);
   assert.match(html, /class="extended-format-button popular-format-button"[^>]*data-format="formula-builder"[^>]*data-overflow-priority="-1"/);
   assert.match(html, /class="extended-format-button popular-format-button"[^>]*data-format="diagram-builder"[^>]*data-overflow-priority="-2"/);
-  assert.match(renderer, /const hasOverflow = candidates\.some\(element => element\.hidden\);[\s\S]*els\.moreFormatButton\.hidden = !hasOverflow/);
+  assert.match(renderer, /els\.moreFormatButton\.hidden = true;[\s\S]*if \(bar\.scrollWidth > bar\.clientWidth \+ 1\) \{\s*els\.moreFormatButton\.hidden = false/);
+  assert.match(html, /data-format="image"[^\n]*<\/button>\s*<button[^>]*data-format="local-video"[^>]*data-format-overflow="local-video"[^>]*data-i18n-aria-label="insertVideo"[^>]*aria-haspopup="dialog"[^>]*>\s*<svg/);
+  assert.doesNotMatch(html, /id="videoFormatGroup"|data-format-command="local-video"/);
+  assert.match(renderer, /element\.hidden = element\.dataset\.formatOverflow === 'local-video' && !canInsertLocalVideo\(\);\s*return !element\.hidden/);
 });
 
 test('double equals syntax renders a semantic highlight', () => {

@@ -135,14 +135,52 @@ try {
     const status = await page.evaluate(() => ({...largeTableTest.status(), line:largeTableTest.selectedLine()}));
     throw new Error(`Click did not place caret on glyph boundary: ${JSON.stringify(status)}; ${errors.join('; ')}`, {cause});
   });
-  await page.keyboard.press(undoKey);
-  await page.waitForFunction(expected => largeTableTest.text() === expected, source);
+  await big.evaluate(node => {
+    window.largeTableDOM = node.querySelector('table');
+    window.largeTableUntouched = node.querySelector('tbody tr:last-child td');
+  });
   await page.keyboard.press('Tab');
   await activeCell.filter({hasText:'remark 1'}).waitFor();
   assert.equal(await activeCell.count(), 1, 'Tab moves the lazy editor, without mounting a second one');
+  assert.ok(await big.evaluate(node => node.querySelector('table') === window.largeTableDOM
+    && node.querySelector('tbody tr:last-child td') === window.largeTableUntouched), 'editing plain text then Tab must not replace unrelated cells');
+  assert.equal(await firstCell.textContent(), 'FiXeld 1', 'previous cell displays its authoritative new text');
   await page.keyboard.press('Shift+Tab');
-  await activeCell.filter({hasText:'Field 1'}).waitFor();
+  await activeCell.filter({hasText:'FiXeld 1'}).waitFor();
   assert.equal(await activeCell.count(), 1, 'Shift+Tab moves the lazy editor back');
+  await page.keyboard.press(undoKey);
+  await page.waitForFunction(expected => largeTableTest.text() === expected, source);
+
+  // A nontrivial edit must still use the normal renderer. This verifies both
+  // the fallback and that switching away does not expose Markdown literally.
+  const selectAllKey = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
+  await activeCell.locator('.cm-content').press(selectAllKey);
+  await page.keyboard.insertText('**Strong**');
+  const richEdit = source.replace(first, first.replace('Field 1', '**Strong**'));
+  await page.waitForFunction(expected => largeTableTest.text() === expected, richEdit);
+  await page.keyboard.press('Tab');
+  await firstCell.locator('strong').getByText('Strong', {exact:true}).waitFor();
+  assert.equal(await activeCell.count(), 1);
+  await page.keyboard.press('Shift+Tab');
+  await activeCell.filter({hasText:'Strong'}).waitFor();
+  await page.keyboard.press(undoKey);
+  await page.waitForFunction(expected => largeTableTest.text() === expected, source);
+
+  for (const [input, raw, visible] of [['', '', ''], ['A|B', String.raw`A\|B`, 'A|B']]) {
+    await activeCell.locator('.cm-content').press(selectAllKey);
+    if (input) await page.keyboard.insertText(input);
+    else await page.keyboard.press('Backspace');
+    const expected = source.replace(first, first.replace('Field 1', raw));
+    await page.waitForFunction(expected => largeTableTest.text() === expected, expected);
+    const next = big.locator('tbody tr').first().locator('td').nth(1);
+    await next.click();
+    await next.locator('.cm-editor').waitFor();
+    assert.equal(await firstCell.textContent(), visible, 'non-plain cells still render with GFM semantics');
+    await firstCell.click();
+    await firstCell.locator('.cm-editor').waitFor();
+    await page.keyboard.press(undoKey);
+    await page.waitForFunction(expected => largeTableTest.text() === expected, source);
+  }
 
   // A fresh static cell must support drag selection on the very first gesture.
   const dragCell = big.locator('tbody tr').nth(2).locator('td').first();

@@ -29,7 +29,7 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "3.1.0"
+	appVersion      = "3.2.0"
 	maxRecent       = 10
 )
 
@@ -167,6 +167,7 @@ type App struct {
 	aiRewriteGeneration      uint64
 	aiReviewCancel           context.CancelFunc
 	aiReviewGeneration       uint64
+	localVideo               localVideoState
 }
 
 func NewApp() *App {
@@ -537,6 +538,7 @@ func (a *App) readDocument(filePath string, remember bool) (*Document, error) {
 	if remember {
 		_ = a.rememberFile(absPath)
 	}
+	a.rememberLocalVideoDocument(absPath)
 	return &Document{
 		Path: absPath, Name: filepath.Base(absPath), Directory: filepath.Dir(absPath),
 		Content: string(data), ModifiedAt: info.ModTime().Format(time.RFC3339Nano), Size: info.Size(), Revision: documentRevision(data), Draft: a.isDraft(absPath),

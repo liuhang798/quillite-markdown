@@ -4,7 +4,7 @@ import {markdownLanguage, markdown} from '@codemirror/lang-markdown';
 import {EditorState} from '@codemirror/state';
 import {syntaxTree,ensureSyntaxTree} from '@codemirror/language';
 import {marked} from 'marked';
-import {markdownParser, tableWhitespace, tableRenderSource} from '../src/markdown-parser.js';
+import {markdownParser, markdownExtensions, tableRenderSource} from '../src/markdown-parser.js';
 import {buildLivePlan} from '../src/editor-live-preview.js';
 import {findMarkdownTables} from '../src/table-designer.js';
 
@@ -17,7 +17,7 @@ test('table whitespace preserves cell offsets in standalone and editor parsers',
     assert.equal(findMarkdownTables(source).length,1);
     assert.match(marked.parse(tableRenderSource(source)),/<table>/);
     assert.equal(tableRenderSource(source).length,source.length);
-    const state=EditorState.create({doc:source,extensions:[markdown({base:markdownLanguage,extensions:[tableWhitespace]})]});
+    const state=EditorState.create({doc:source,extensions:[markdown({base:markdownLanguage,extensions:markdownExtensions})]});
     // State creation may stop at its small parse budget under parallel load.
     // Compare complete trees, not an intentionally partial background parse.
     const parsed=ensureSyntaxTree(state,state.doc.length,5000);assert.ok(parsed);

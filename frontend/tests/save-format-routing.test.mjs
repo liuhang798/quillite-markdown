@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { rebaseMarkdownImages } from '../src/portable-images.js';
+import { documentMediaRanges, rebaseMarkdownImages } from '../src/portable-images.js';
 import { directoryFromDocumentPath } from '../src/library-state.js';
 import { prepareTextPackExport } from '../src/textpack.js';
 
@@ -19,7 +19,7 @@ function harness(target = '/same/copy.md') {
       return {path: '/copy.' + args[3], content};
     }
   };
-  const context = vm.createContext({ desktopRuntime: true, Backend, rebaseMarkdownImages, directoryFromDocumentPath,
+  const context = vm.createContext({ desktopRuntime: true, Backend, documentMediaRanges, rebaseMarkdownImages, directoryFromDocumentPath,
     prepareTextPackExport, crypto: {randomUUID: () => 'test-id'} });
   vm.runInContext(functions, context);
   return {context, Backend, calls};
@@ -50,6 +50,16 @@ test('same-folder Windows Markdown aliases preserve references without case-sens
   const saved = await c.saveDocumentAsFormat('C:\\same\\ORIGINAL.MARKDOWN', text, '', 'markdown');
   assert.equal(saved.content, text);
   assert.deepEqual(calls.map(call => call[0]), ['choose', 'copy']);
+});
+
+test('an ordinary copy reports that a video does not move to a new directory', async () => {
+  const text = '<video controls src="assets/例子.mp4"></video>';
+  const {context: relocated} = harness('/elsewhere/copy.md');
+  const saved = await relocated.saveDocumentAsFormat('/same/original.md', text, '', 'markdown');
+  assert.equal(saved.content, text);
+  assert.equal(saved.exportWarnings?.[0]?.code, 'VIDEO_NOT_INCLUDED');
+  const {context: same} = harness();
+  assert.equal((await same.saveDocumentAsFormat('/same/original.md', text, '', 'markdown')).exportWarnings, undefined);
 });
 
 test('relocated ordinary Markdown retains established rebase behavior without collecting missing files', async () => {

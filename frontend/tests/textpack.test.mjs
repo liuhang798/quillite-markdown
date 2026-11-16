@@ -102,9 +102,49 @@ test('unsupported responsive images fail explicitly rather than a misleading com
 });
 
 test('uncollected embedded resources produce conservative warnings', () => {
-  const result = prepareTextPackExport('<video src="clip.mp4"></video>\n<div style="background:url(image.png)"></div>');
+  const result = prepareTextPackExport('<div style="background:url(image.png)"></div>');
   assert.equal(result.unsupportedCount,1); assert.equal(result.warnings[0].code,'EXTERNAL_RESOURCES');
   assert.equal(result.images.length,0);
+});
+
+test('video markup is retained verbatim and reported without including files or signed URLs', () => {
+  const source = [
+    '<video controls preload="none" src="assets/local%20clip.mp4"></video>',
+    '<VIDEO src="https://example.invalid/clip.webm?token=private" />',
+    'Inline <video><source src="assets/alternate.mp4" type="video/mp4"></video> after.',
+    '<video controls>\n<source src="assets/multiline.mp4">\n</video>'
+  ].join('\n\n');
+  const expected = [{ code: 'VIDEO_NOT_INCLUDED', reference: '' }];
+  for (const prepare of [prepareTextPackExport, prepareTextBundleImport]) {
+    const result = prepare(source);
+    assert.equal(result.content, source);
+    assert.equal(result.unsupportedCount, 1);
+    assert.deepEqual(result.warnings, expected);
+    assert.equal(result.images?.length || 0, 0);
+  }
+  const alongside = prepareTextPackExport(source + '\n\n![Image](photo.png)', { assetDirectory: 'assets/quillite-test' });
+  assert.equal(alongside.content, source + '\n\n![Image](<assets/quillite-test/image-001.png>)');
+  assert.deepEqual(alongside.images, [{ source: 'photo.png', target: 'assets/quillite-test/image-001.png' }]);
+  assert.deepEqual(alongside.warnings, expected);
+});
+
+test('video examples and ordinary links are not playable attachments', () => {
+  const source = [
+    '```html\n<video><source src="example.mp4"></video>\n```',
+    '<!-- <video src="comment.mp4"></video> -->',
+    '`<video src="inline.mp4"></video>`', '[ordinary link](assets/example.mp4)',
+    '<div title="<video src=quoted.mp4>">label</div>'
+  ].join('\n\n');
+  const result = prepareTextPackExport(source);
+  assert.equal(result.content, source);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('a video elsewhere never unblocks an unsupported responsive image', () => {
+  const picture = '<picture><source src="scaled.webp"><img src="ordinary.webp"></picture>';
+  for (const video of ['<video src="clip.mp4" />', '<video><source src="clip.mp4"></video>']) {
+    assert.throws(() => prepareTextPackExport(video + '\n\n' + picture), /TEXTPACK_UNSUPPORTED_IMAGE/);
+  }
 });
 
 test('resource and document limits stop before unbounded work', () => {

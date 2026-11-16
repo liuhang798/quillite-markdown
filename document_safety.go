@@ -42,6 +42,7 @@ func (a *App) savedDocumentReceipt(path, content string, remember bool) (*Docume
 	if remember {
 		_ = a.rememberFile(absPath)
 	}
+	a.rememberLocalVideoDocument(absPath)
 	return doc, nil
 }
 

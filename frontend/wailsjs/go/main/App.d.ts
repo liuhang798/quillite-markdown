@@ -6,6 +6,8 @@ export function AddFavorite(arg1:string):Promise<main.Preferences>;
 
 export function ApplyWorkspaceReplace(arg1:string,arg2:Array<string>):Promise<Array<main.WorkspaceApplyResult>>;
 
+export function BeginLocalVideo(arg1:string,arg2:string):Promise<string>;
+
 export function CanEditFile(arg1:string):Promise<boolean>;
 
 export function CancelAIDocumentReview():Promise<void>;
@@ -24,6 +26,10 @@ export function ChooseTextBundleSource(arg1:string):Promise<main.TextBundleSourc
 
 export function ClearRecoverySnapshot():Promise<void>;
 
+export function CopyLocalVideoToAssets(arg1:string,arg2:string):Promise<string>;
+
+export function DescribeDroppedLocalVideo(arg1:string,arg2:string):Promise<main.LocalVideoFile>;
+
 export function DetectPandoc():Promise<main.PandocStatus>;
 
 export function DiagnoseAIProvider(arg1:main.AISettingsInput):Promise<main.AIDiagnosticResult>;
@@ -35,6 +41,8 @@ export function DiscardChangesAndQuit():Promise<boolean>;
 export function DiscoverAIModels(arg1:main.AIModelDiscoveryInput):Promise<Array<string>>;
 
 export function DownloadAndApplyUpdate():Promise<void>;
+
+export function EndLocalVideo(arg1:string):Promise<void>;
 
 export function ExportDOCX(arg1:string,arg2:string,arg3:string):Promise<string>;
 
@@ -109,6 +117,8 @@ export function OpenExternal(arg1:string):Promise<void>;
 export function OpenFile():Promise<main.Document>;
 
 export function OpenFolder():Promise<main.FolderResult>;
+
+export function OpenLocalVideoExternally(arg1:string,arg2:string):Promise<void>;
 
 export function OpenRecentFile(arg1:string):Promise<main.Document>;
 
@@ -185,6 +195,8 @@ export function SearchWorkspace(arg1:main.WorkspaceQuery):Promise<main.Workspace
 export function SelectFeedbackImages():Promise<Array<main.FeedbackImageSelection>>;
 
 export function SelectImage(arg1:string):Promise<string>;
+
+export function SelectLocalVideo(arg1:string):Promise<main.LocalVideoFile>;
 
 export function SelectPandoc():Promise<main.PandocStatus>;
 

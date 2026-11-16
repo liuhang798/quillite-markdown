@@ -16,6 +16,32 @@ export const embeddedImageItems = editorImageItems;
 export const imagePreviewContext = Facet.define({ combine: values => values[0] || {} });
 const displayedSources = new WeakMap();
 const displayedSessions = new WeakMap();
+const measuredFrameHeights = new WeakMap();
+const pendingCaretAnchors = new WeakSet();
+const pendingFrameHeight = '--quillite-pending-image-frame-height';
+
+function imageFrameKey(group, image, dimensions) {
+  return !group.row && group.images.length === 1 && image.sourceKind === 'local'
+    ? JSON.stringify([image.ref, dimensions.width, dimensions.height]) : null;
+}
+
+function reserveImageFrame(frame, view, record) {
+  const measured = record.layoutKey && measuredFrameHeights.get(record.session)?.get(record.layoutKey);
+  if (measured && measured.width === view.contentDOM.clientWidth) {
+    frame.style.setProperty(pendingFrameHeight, `${measured.height}px`);
+  } else frame.style.removeProperty(pendingFrameHeight);
+}
+
+function rememberImageFrame(frame, view, record) {
+  if (!record?.layoutKey) return;
+  const width = view.contentDOM.clientWidth, height = frame.offsetHeight;
+  if (!width || height <= 40) return;
+  let measured = measuredFrameHeights.get(record.session);
+  if (!measured) measuredFrameHeights.set(record.session, measured = new Map());
+  measured.delete(record.layoutKey);
+  measured.set(record.layoutKey, { width, height });
+  if (measured.size > 128) measured.delete(measured.keys().next().value);
+}
 export const imagePreviewPhrases = {
   'Embedded image': '内嵌图片', 'Local image': '本地图片', 'Online image': '在线图片', 'Image group': '图片组',
   '$ images': '$ 张图片', 'Show source': '查看源码', 'Hide source': '收起源码',
@@ -34,6 +60,58 @@ export const imagePreviewPhrases = {
 export const toggleImageSource = StateEffect.define();
 export const refreshImagePreviews = StateEffect.define();
 export const updateImagePreviewDirectory = StateEffect.define();
+
+// A widget can change height outside an editor transaction. Keep a visible
+// caret below it at its old screen position, including inside projected editors.
+function settleImage(img, status, widget, view, loaded) {
+  const doc = img.ownerDocument, selection = doc.getSelection();
+  let host = view.dom;
+  for (let parent; (parent = host.parentElement?.closest('.cm-editor'));) host = parent;
+  const active = doc.activeElement, focus = selection?.focusNode, offset = selection?.focusOffset;
+  let caret, before, outer, scroller;
+  if (!pendingCaretAnchors.has(host) && active?.matches('.cm-content') && host.contains(active) && focus && active.contains(focus)
+      && !widget.contains(focus) && (widget.compareDocumentPosition(focus) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+    outer = EditorView.findFromDOM(host);
+    scroller = outer.scrollDOM;
+    caret = doc.createRange();
+    caret.setStart(focus, offset);
+    before = caret.getBoundingClientRect();
+    const viewport = scroller.getBoundingClientRect();
+    // Do not snap back to a caret the user has scrolled away from.
+    if (!before.height || before.top < Math.max(0, viewport.top)
+        || before.bottom > Math.min(doc.documentElement.clientHeight, viewport.bottom)) before = null;
+  }
+  img.classList.remove('is-pending');
+  const frame = img.parentElement;
+  frame.style.removeProperty(pendingFrameHeight);
+  img.hidden = !loaded;
+  status.hidden = loaded;
+  if (loaded) rememberImageFrame(frame, view, displayedSources.get(img));
+  else status.textContent = view.state.phrase('Image could not be displayed; view source to inspect it');
+  view.requestMeasure();
+  if (before) {
+    pendingCaretAnchors.add(host);
+    const docAtReveal = outer.state.doc;
+    // Let CodeMirror take its normal measure/anchor pass first, then apply only
+    // the remaining caret displacement. One anchor covers a batch of images.
+    outer.requestMeasure();
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    for (const name of ['wheel', 'pointerdown', 'keydown']) {
+      scroller.addEventListener(name, cancel, {capture: true, passive: true, signal: controller.signal});
+    }
+    doc.defaultView.requestAnimationFrame(() => {
+      pendingCaretAnchors.delete(host);
+      const cancelled = controller.signal.aborted;
+      controller.abort();
+      if (cancelled || outer.destroyed || outer.state.doc !== docAtReveal || !focus.isConnected
+          || doc.activeElement !== active || selection.focusNode !== focus || selection.focusOffset !== offset) return;
+      const after = caret.getBoundingClientRect();
+      const delta = (after.top - before.top) / (outer.scaleY || 1);
+      if (after.height && Math.abs(delta) > 1) scroller.scrollTop += delta;
+    });
+  }
+}
 
 // UI-only selection; changing the active image never touches Markdown/history.
 function selectImageControls(root, index) {
@@ -183,8 +261,14 @@ class ImageWidget extends WidgetType {
       const frame = document.createElement('div'); frame.className = 'cm-image-frame'; card.append(frame);
       const img = document.createElement('img'); img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; frame.append(img);
       const status = document.createElement('span'); status.className = 'cm-image-error'; frame.append(status);
-      img.addEventListener('load', () => { if (!img.isConnected || !this.session.active) return; img.hidden = false; status.hidden = true; view.requestMeasure(); });
-      img.addEventListener('error', () => { if (!img.isConnected || !this.session.active) return; img.hidden = true; status.hidden = false; status.textContent = view.state.phrase('Image could not be displayed; view source to inspect it'); view.requestMeasure(); });
+      img.addEventListener('load', () => {
+        if (!img.isConnected || !this.session.active || !img.classList.contains('is-pending')) return;
+        settleImage(img, status, root, view, true);
+      });
+      img.addEventListener('error', () => {
+        if (!img.isConnected || !this.session.active || !img.classList.contains('is-pending')) return;
+        settleImage(img, status, root, view, false);
+      });
     }
     if (this.item.row) {
       const closeSizes = () => { if (!root.matches(':hover') && !root.matches(':focus-within')) { root.querySelectorAll('.cm-image-card').forEach(card => card.classList.remove('is-size-open')); selectImageControls(root, Number(root.dataset.activeImage || 0)); } };
@@ -262,8 +346,13 @@ class ImageWidget extends WidgetType {
       frame.style.justifyContent = { left: 'flex-start', center: 'center', right: 'flex-end' }[image.alignment];
       img.alt = image.alt; img.title = image.title || ''; img.style.width = imageDimensionStyle(dimensions.width); img.style.height = imageDimensionStyle(dimensions.height);
       const previous = displayedSources.get(img);
+      const layoutKey = imageFrameKey(group, image, dimensions);
       if (!group.open && (!previous || previous.ref !== image.ref || previous.session !== this.session)) {
-        const record = { ref: image.ref, session: this.session }; displayedSources.set(img, record);
+        const record = { ref: image.ref, session: this.session, layoutKey }; displayedSources.set(img, record);
+        // CodeMirror can briefly remount an offscreen image while editing a
+        // long block below it. Keep its last geometry during the fresh read.
+        reserveImageFrame(frame, view, record);
+        img.classList.add('is-pending');
         img.removeAttribute('src'); img.hidden = false; status.hidden = false; status.textContent = this.labels['Loading image…'];
         const apply = value => {
           if (!img.isConnected || displayedSources.get(img) !== record || !record.session.active || view.state.field(imagePreviewField, false)?.session !== record.session) return;
@@ -272,14 +361,18 @@ class ImageWidget extends WidgetType {
         if (image.sourceKind === 'local') {
           this.session.load(image.ref).then(apply).catch(() => {
             if (!img.isConnected || displayedSources.get(img) !== record || !this.session.active) return;
-            img.hidden = true; status.hidden = false; status.textContent = this.labels['Image could not be displayed; view source to inspect it']; view.requestMeasure();
+            settleImage(img, status, root, view, false);
           });
         } else if (image.sourceKind === 'remote' && this.session.context.blockRemoteImages) {
+          img.classList.remove('is-pending');
           img.hidden = true; status.hidden = false;
           status.textContent = this.labels['Online image not loaded; use the document preview to allow network access'];
         } else {
           img.src = image.ref.startsWith('//') ? `https:${image.ref}` : image.ref;
         }
+      } else if (!group.open && previous.layoutKey !== layoutKey) {
+        previous.layoutKey = layoutKey;
+        if (img.classList.contains('is-pending')) reserveImageFrame(frame, view, previous);
       }
       controlRoot.querySelectorAll('.cm-image-align-tools button').forEach(button => {
         const action = button.dataset.imageAction, sizeAction = action === 'size';

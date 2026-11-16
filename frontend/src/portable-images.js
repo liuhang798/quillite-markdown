@@ -12,17 +12,23 @@ const bytes = text => new TextEncoder().encode(text).length;
 const labelKey = text => text.replace(/^\[|\]$/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 const decode = (text, stripAngles = true) => (stripAngles ? text.replace(/^<|>$/g, '') : text).replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])|&(?:#[xX][0-9a-fA-F]+|#\d+|[A-Za-z][A-Za-z0-9]+);/g, (match, escaped) => escaped ?? decodeHTML(match));
 const local = ref => !/^(?:data:|https?:|\/\/|#)/i.test(ref);
+const videoMarkup = /<video(?=[\s/>])/i;
+const mediaTags = new Set(['video', 'audio', 'picture']);
 
-function htmlImages(html, base, preview) {
+function htmlImages(html, base, preview, media) {
   const result = [];
   let cursor = 0;
   while (cursor < html.length) {
     const start = html.indexOf('<', cursor); if (start < 0) break;
     if (html.startsWith('<!--', start)) { const end = html.indexOf('-->', start + 4); cursor = end < 0 ? html.length : end + 3; continue; }
     let i = start + 1;
+    const closing = html[i] === '/';
+    if (closing) i++;
+    const tagStart = i;
     while (/[A-Za-z0-9]/.test(html[i] || '') && i < html.length) i++;
-    const tag = html.slice(start + 1, i).toLowerCase();
-    if (['script', 'style', 'pre', 'code'].includes(tag)) {
+    const tag = html.slice(tagStart, i).toLowerCase();
+    const mediaTag = media && mediaTags.has(tag) && /[\s/>]/.test(html[i] || '');
+    if (!closing && ['script', 'style', 'pre', 'code'].includes(tag)) {
       const end = html.toLowerCase().indexOf(`</${tag}`, i); cursor = end < 0 ? html.length : end + tag.length + 2; continue;
     }
     const attributes = [];
@@ -44,7 +50,31 @@ function htmlImages(html, base, preview) {
       attributes.push(attribute);
     }
     cursor = i + 1;
-    if (['img', 'source'].includes(tag) && attributes.some(a => a.name === 'srcset' || (tag === 'source' && a.name === 'src'))) {
+    if (mediaTag) {
+      if (closing) {
+        if (media.open[tag]) {
+          let open;
+          do {
+            open = media.containers.pop();
+            media.open[open]--;
+          } while (open !== tag);
+        }
+      } else {
+        if (tag === 'video' && media.report) media.report.hasVideo = true;
+        if (html[i - 1] !== '/') {
+          media.containers.push(tag);
+          media.open[tag] = (media.open[tag] || 0) + 1;
+        }
+      }
+    }
+    if (closing) continue;
+    // An inert video card must not cause the editor's separate image
+    // decorators to load a fallback graphic from inside authored video HTML.
+    if (preview && media?.open.video) continue;
+    // A source inside video is an uncollected video attachment, not a
+    // responsive image. Keep it intact and let the caller report the video.
+    const videoSource = tag === 'source' && media?.containers.at(-1) === 'video';
+    if (!videoSource && ['img', 'source'].includes(tag) && attributes.some(a => a.name === 'srcset' || (tag === 'source' && a.name === 'src'))) {
       // The editor uses the img's actual src, not author-supplied responsive
       // candidates. Preserve all markup when aligning; portable export still
       // refuses complex responsive sources rather than silently losing them.
@@ -66,12 +96,28 @@ export function markdownImageDefinitions(source, tree) {
   return new Map([...markdownReferenceDefinitions(source,tree)].map(([label,{ref,title}])=>[label,{ref,title}]));
 }
 
-export function markdownImageRanges(source, { preview = false, definitions, excludedRanges = [] } = {}) {
+export function markdownImageRanges(source, { preview = false, definitions, excludedRanges = [], mediaReport } = {}) {
   const tree = markdownParser.parse(maskFrontmatter(source)), result = [];
+  // HTMLTag tokens can split <video><source ...></video> into three
+  // independent nodes. Track matching media containers across those nodes.
+  const media = videoMarkup.test(source) ? { containers: [], open: Object.create(null), report: mediaReport } : null;
   definitions ??= markdownImageDefinitions(source, tree);
   tree.iterate({ enter(node) {
     if(excludedRanges.some(range=>node.from>=range.from&&node.to<=range.to))return false;
+    if (preview && media && ['Image', 'HTMLTag', 'HTMLBlock'].includes(node.name)) {
+      // Keep an unclosed tag from affecting the next independent Markdown
+      // block, while sharing the stack between inline tags in the same block.
+      let scope = node.node;
+      while (scope.parent && scope.parent.name !== 'Document'
+        && !/^(?:Paragraph|HTMLBlock|TableCell|(?:ATX|Setext)Heading\d)$/.test(scope.name)) scope = scope.parent;
+      if (media.scope !== scope.from) {
+        media.scope = scope.from;
+        media.containers.length = 0;
+        media.open = Object.create(null);
+      }
+    }
     if (node.name === 'Image') {
+      if (preview && media?.open.video) return false;
       let paragraph = node.node.parent;
       while (paragraph && paragraph.name !== 'Paragraph') paragraph = paragraph.parent;
       const context = preview && paragraph ? { paragraphFrom: paragraph.from, paragraphTo: paragraph.to } : {};
@@ -96,7 +142,7 @@ export function markdownImageRanges(source, { preview = false, definitions, excl
     if (!['HTMLTag', 'HTMLBlock'].includes(node.name)) return;
     const html = source.slice(node.from, node.to);
     // No executable/stylesheet content is interpreted or fetched.
-    for (const image of htmlImages(html, node.from, preview)) result.push({ ...image, ...(preview ? (node.name === 'HTMLBlock' ? { blockFrom: node.from, blockTo: node.to } : (() => {
+    for (const image of htmlImages(html, node.from, preview, media)) result.push({ ...image, ...(preview ? (node.name === 'HTMLBlock' ? { blockFrom: node.from, blockTo: node.to } : (() => {
       let paragraph = node.node.parent;
       while (paragraph && paragraph.name !== 'Paragraph') paragraph = paragraph.parent;
       return paragraph ? { paragraphFrom: paragraph.from, paragraphTo: paragraph.to } : {};
@@ -109,18 +155,21 @@ export function markdownImageRanges(source, { preview = false, definitions, excl
 // Export/save-as scan the whole document, unlike preview widgets which scan
 // their own editable scope. Footnote continuations look like code to the root
 // parser, so scan their projected bodies and map only image ranges back.
-export function documentImageRanges(source) {
+export function documentMediaRanges(source) {
   const notes=source.includes('[^')?prepareFootnotes(source).definitions:new Map();
   const definitions=markdownImageDefinitions(source);
-  const result=markdownImageRanges(source,{definitions,excludedRanges:[...notes.values(),...scanMarkdownFormulas(source)]});
+  const mediaReport = { hasVideo: false };
+  const result=markdownImageRanges(source,{definitions,excludedRanges:[...notes.values(),...scanMarkdownFormulas(source)],mediaReport});
   for(const note of notes.values()) {
     const projection=footnoteProjection(source,note),range={from:note.bodyFrom,to:note.to,projection};
-    for(const item of markdownImageRanges(projection.text,{definitions,excludedRanges:scanMarkdownFormulas(projection.text)})) {
+    for(const item of markdownImageRanges(projection.text,{definitions,excludedRanges:scanMarkdownFormulas(projection.text),mediaReport})) {
       result.push({...item,from:fieldPosition(range,item.from),to:fieldPosition(range,item.to),continuationPrefix:projection.prefix});
     }
   }
-  return result.sort((a,b)=>a.from-b.from);
+  return { images: result.sort((a,b)=>a.from-b.from), hasVideo: mediaReport.hasVideo };
 }
+
+export function documentImageRanges(source) { return documentMediaRanges(source).images; }
 
 export function imageReplacement(item, ref) {
   if (item.kind === 'reference') return `![${item.alt}](<${ref}>${item.title ? ` ${item.title}` : ''})`.replaceAll('\n','\n'+(item.continuationPrefix||''));
@@ -130,7 +179,9 @@ export function imageReplacement(item, ref) {
 
 export async function transformMarkdownImages(source, resolve, { portable = false } = {}) {
   if (source.length > MAX_PORTABLE_BYTES || bytes(source) > MAX_PORTABLE_BYTES) throw new Error('PORTABLE_TOO_LARGE');
-  const ranges = documentImageRanges(source), replacements = [], cache = new Map();
+  const { images: ranges, hasVideo } = documentMediaRanges(source);
+  if (portable && hasVideo) throw new Error('PORTABLE_VIDEO_UNSUPPORTED');
+  const replacements = [], cache = new Map();
   let size = bytes(source);
   for (const item of ranges) {
     const embedded = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,[A-Za-z0-9+/=]+$/i.test(item.ref);

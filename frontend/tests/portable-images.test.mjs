@@ -6,6 +6,17 @@ import { detectAISensitiveContent, restoreAISensitiveContent, restoreAISuggestio
 
 const data = 'data:image/webp;base64,UklGRg==';
 
+test('editor image previews ignore video fallback while still showing surrounding images', () => {
+  const src = [
+    '<div><video poster="poster.png"><img src="nested.png"></video><img src="next.png"></div>',
+    'Prose <video>![Fallback](inline.webp)<img src="inline.png"></video> ![Normal](visible.webp)',
+    'Unfinished video <video><img src="hidden.png">',
+    '![After](after.webp)'
+  ].join('\n\n');
+  assert.deepEqual(markdownImageRanges(src, {preview:true}).map(item => item.ref),
+    ['next.png', 'visible.webp', 'after.webp']);
+});
+
 const footnoteDocument=body=>'Outside[^n]\n\n[^n]: Intro\n    \n    '+body.replaceAll('\n','\n    ')+'\n    \n    Tail\n\nAfter';
 for(const[kind,body]of [
  ['plain','![Photo](a.webp "title")'],['quote','> ![Photo](a.webp "title")'],
@@ -83,6 +94,31 @@ test('portable exports stop on remote, missing and complex images instead of par
  await assert.rejects(transformMarkdownImages('![x](https://example.com/a.webp)',()=>{throw Error('must not fetch')},{portable:true}),/PORTABLE_REMOTE/);
  await assert.rejects(transformMarkdownImages('![x](a.webp)',()=>'',{portable:true}),/PORTABLE_IMAGE_MISSING/);
  await assert.rejects(transformMarkdownImages('<img src="a.webp" srcset="b.webp 2x">',()=>data,{portable:true}),/PORTABLE_UNSUPPORTED/);
+});
+test('portable export fails before reading image assets when a real video would be omitted', async () => {
+  for (const video of [
+    '<video controls src="assets/local.mp4"></video>',
+    '<video src="https://example.invalid/remote.webm" />',
+    'Inline <video><source src="assets/clip.mp4"></video> after.',
+    footnoteDocument('<video><source src="assets/note.mp4"></video>')
+  ]) {
+    const source = '![Photo](a.webp)\n\n' + video;
+    await assert.rejects(transformMarkdownImages(source, () => {
+      assert.fail('must not start image reads when portable export is incomplete');
+    }, { portable: true }), /PORTABLE_VIDEO_UNSUPPORTED/);
+    assert.equal(await transformMarkdownImages(source, () => data), `![Photo](<${data}>)\n\n` + video);
+    assert.equal(rebaseMarkdownImages(source, '/home/me'), '![Photo](<file:///home/me/a.webp>)\n\n' + video);
+  }
+});
+
+test('portable export does not mistake code, comments, math or ordinary links for video', async () => {
+  const source = [
+    '```html\n<video><source src="example.mp4"></video>\n```',
+    '<!-- <video src="comment.mp4"></video> -->', '`<video src="inline.mp4"></video>`',
+    '$$\n\\text{<video src="equation.mp4">}\n$$',
+    '[ordinary link](assets/example.mp4)', '<div title="<video src=quoted.mp4>">label</div>'
+  ].join('\n\n');
+  assert.equal(await transformMarkdownImages(source, () => assert.fail('no images to read'), { portable: true }), source);
 });
 test('size and image-count limits prevent unreadable portable output',async()=>{
  await assert.rejects(transformMarkdownImages('![x](a.webp)',()=> 'data:image/png;base64,'+'A'.repeat(64*1024*1024),{portable:true}),/PORTABLE_TOO_LARGE/);

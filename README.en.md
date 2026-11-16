@@ -7,7 +7,7 @@
   <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
     <a href="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml"><img src="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml/badge.svg" alt="Build status"></a>
-    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.1.0-159A63" alt="Download V3.1.0"></a>
+    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.2.0-159A63" alt="Download V3.2.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/liuhang798/quillite-markdown" alt="MIT License"></a>
   </p>
   <p><a href="https://qm.ssssa.cn/">Official website</a> · <a href="https://qm.ssssa.cn/#download">Download</a> · <a href="#quick-start">Quick start</a> · <a href="#development">Build from source</a></p>
@@ -21,7 +21,7 @@ Gantt charts retain their schedule viewport: out-of-range today markers do not s
 
 Quillite Markdown is built with Go + Wails, without Electron. The Windows installer is about 13 MB. Read long documents, write READMEs, maintain technical notes and browse local Markdown folders; plain-text `.txt` files are supported too. Documents stay in local files, and no Quillite account is required.
 
-V3.1.0 adds TextPack/TextBundle opening, editing, saving and image-bundled export, chart zoom viewing, remembered sidebar state and improved preview alignment, with Gantt viewport, save-safety and image-loading fixes. See the [changelog](CHANGELOG.md) for details.
+V3.2.0 adds local MP4/WebM and direct HTTPS video playback in live editing, split preview, and reading. It also improves large-table editing, image loading, and formula navigation, and fixes Chinese bold rendering. See the [changelog](CHANGELOG.md) for details.
 
 ## Download
 
@@ -34,7 +34,7 @@ V3.1.0 adds TextPack/TextBundle opening, editing, saving and image-bundled expor
 - **[qm.ssssa.cn](https://qm.ssssa.cn/)** is the official website and the app's only update/download channel. GitHub retains source code, release records and build assets.
 - Windows installation shows the final destination before confirmation. A custom ordinary folder is treated as a parent for a dedicated product directory. Upgrades reuse only a validated installation directory; uninstalling preserves user documents.
 - Formal Windows Authenticode / Apple Developer ID certificates are not configured. SmartScreen or Gatekeeper may display warnings. Updates or file access may require authorization depending on the operating system; a prompt-free experience is not guaranteed.
-- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.1.0; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
+- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.2.0; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
 - New releases appear in a banner without opening a dialog automatically. Dismiss the banner to pause automatic reminders for seven days; manual checks are still available. Open it to see missed-version notes and use **Update now** when supported, or open the official download link.
 
 ## Quick start
@@ -75,6 +75,14 @@ Local Markdown/text links resolve against the current file's directory and open 
 If you click a mode while an input method is composing, the editor waits for the candidate to be committed or cancelled, then switches automatically.
 
 Click the blank line below a rendered table to continue editing the document. Typing keeps the blank line required to separate the table from prose.
+
+Live editing reuses existing layout where possible. Moving to the next cell after editing plain text in a large table refreshes just that cell; complex formatting still uses a full table render.
+
+In live editing, an image loading above the active line does not push the caret out of view.
+
+The split preview keeps space for unchanged local images during text edits. When the image count or column width changes, it uses the new layout instead of reusing the old size.
+
+For regular Markdown, click Insert video beside the image icon (under More formats when space is limited). Choose or drop an MP4 or WebM in Local file, or paste a direct HTTPS video URL in Online link, then select Insert video. You can also drop a local video directly into the editor. Relative paths are preferred; files outside the document folder can be referenced for this session or explicitly copied to `assets`. Videos load only on click in reading, split preview, and live editing. Each standalone live-editor card can expose its source without switching the whole editor. Unrelated edits preserve playback state, position, and volume. Playback depends on the system's codecs; use the system player if a local clip cannot play inline. Insert platform pages as ordinary links. Simple Typora-style `<video src>` references are recognized, and exports do not collect videos.
 
 Switching modes preserves content, selection and undo history. The app remembers the mode and layout; leaving and reentering editing retains manual choices. Clicking a mode button again reapplies its automatic preview behavior. Swap the split orientation or drag the divider to adjust pane widths.
 
@@ -167,6 +175,8 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 | Equations and charts | LaTeX, mhchem chemistry, `\tag{…}` numbering, Mermaid, ECharts |
 
 Preview builds on CommonMark/GFM with extensions such as highlights and footnotes. DOMPurify sanitizes HTML; unsafe scripts and URLs are not retained as executable content. Other readers may differ in their support for colors, image layouts, equations and charts.
+
+Quillite supports simple Chinese bold spans such as `**另一行（列）**的` without rewriting the source. Other readers may display this syntax literally.
 
 ## Privacy and network boundaries
 

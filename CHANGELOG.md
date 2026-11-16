@@ -2,6 +2,34 @@
 
 All notable changes to Quillite Markdown are documented here.
 
+## [Unreleased]
+
+## [3.2.0] - 2026-11-16
+
+### 简体中文
+
+- 普通 Markdown 支持插入和拖入本地 MP4、WebM。阅读、分栏和即时渲染均可点播；即时渲染中的独立视频可切换到该块源码，兼容 Typora 的 `<video src>` 写法（#18）。
+- 编辑工具栏的图片旁新增「插入视频」图标（空间不足时折入「更多格式」）。新弹窗分为「本地文件」和「网络链接」，选择文件或粘贴 HTTPS 视频直链后统一确认插入；分栏编辑无关正文时保留播放状态、进度和音量。
+
+- 修复中文加粗兼容性：`**另一行（列）**的` 等写法现在能正确渲染，原始 Markdown 不变（#21）。
+- 修复即时渲染中上方图片延迟加载或滚出视口后短暂重挂载时，正在编辑的行被挤出视口的问题（#20）。
+- 编辑正文时，分栏预览保留未改动的本地图片占位尺寸，避免图片重新读取期间预览位置跳动。
+- 同排图片数量或列宽改变时，分栏预览不再套用旧尺寸；取消旧预览时及时释放已加载图片的引用。
+- 减少即时渲染中移动光标、输入正文和切换大表格单元格的卡顿；只在必要时刷新排版、重画表格或同步查找与拼写标记。
+- 优化分栏预览中大量公式的定位，保留原位编辑能力。
+
+### English
+
+- Insert or drop local MP4 and WebM videos into regular Markdown. Play on demand in reading, split preview, and live editing. Standalone live-editor cards can show their source, including Typora-style `<video src>` references (#18).
+- The Insert video icon opens a dialog with separate Local file and Online link tabs and one confirmation action. Online videos connect only on click, and unrelated split-preview edits preserve playback.
+
+- Render Chinese bold spans such as `**另一行（列）**的` correctly without rewriting the original Markdown (#21).
+- Keep the active editing line in place when an image above it finishes loading or briefly remounts offscreen in live editing (#20).
+- Keep the split preview stable while unchanged local images reload after a text edit.
+- Drop stale image placeholder sizes when columns change and release loaded image references when a split preview is cancelled.
+- Reduce live editing stalls when moving the caret, typing, and moving between large-table cells. Skip unnecessary decoration, table, search, and spelling refreshes.
+- Index formula positions in the split preview in one pass, preserving in-place editing.
+
 ## [3.1.0] - 2026-11-05
 
 ### 简体中文

@@ -16,7 +16,7 @@ import {emptyCodeSeparator} from './code-fence-editing.js';
 import {spellingDecorations, setSpellingDecorations, projectSpellingDecorations} from './spelling-decorations.js';
 import {trackCodeInputScroll, setCodeInputScroll, holdsCodeInputScroll, handleCodeTextInput, captureNativeCodeInputScroll, finishNativeCodeInputScroll, clearNativeCodeInputScroll} from './code-input-scroll.js';
 import {sameFootnotePresentation} from './editor-reference-context.js';
-import {editorHasComposition, afterComposition} from './editor-composition.js';
+import {editorComposing, editorHasComposition, afterComposition} from './editor-composition.js';
 
 // Include empty cells, but never invent missing cells or discard extra columns.
 export function tableCellRanges(raw, base = 0) {
@@ -195,16 +195,23 @@ export function extendPointerSelection(event, inner) {
 export const editableSearchSelection = StateEffect.define();
 const projectedSearchSelections = new WeakMap();
 const sourceSearchCache = new WeakMap();
+const viewsWithProjectedSearch = new WeakSet();
+const viewsWithProjectedSpelling = new WeakSet();
 export function syncEditableSearch(view) {
-  if (view.destroyed || editorHasComposition(view)) return;
+  if (view.destroyed || editorComposing(view)) return;
+  let matches = view.state.field(projectedSearchMatches,false);
+  const panelOpen = matches == null && searchPanelOpen(view.state);
+  // Most updates have no search panel or inherited matches. Still make one
+  // clearing pass when a previous update projected matches into children.
+  if (!panelOpen && !matches?.length && !viewsWithProjectedSearch.has(view)) return;
+  if (editorHasComposition(view)) return;
   const children = [...view.dom.querySelectorAll('.cm-live-editable-block')].map(root=>controllers.get(root))
     .filter(c=>c?.view===view && c.valid());
-  if (!children.length) return;
-  let matches = view.state.field(projectedSearchMatches,false);
+  if (!children.length) { viewsWithProjectedSearch.delete(view); return; }
   if (matches == null) {
     matches = [];
     const query = getSearchQuery(view.state);
-    if (searchPanelOpen(view.state) && query.valid) {
+    if (panelOpen && query.valid) {
       let from=view.state.doc.length,to=0;
       for(const child of children){from=Math.min(from,child.widget.item.from);to=Math.max(to,child.widget.item.to);}
       let cached = sourceSearchCache.get(view);
@@ -222,14 +229,19 @@ export function syncEditableSearch(view) {
       matches=cached.matches.map(m=>({...m,selected:view.state.selection.ranges.some(r=>r.from===m.from&&r.to===m.to)}));
     }
   }
+  let hasMatches = false;
   for (const controller of children) {
     controller.syncing=true;
     try {controller.ranges().forEach((range,index)=>{
       const inner=controller.editors[index];if(!inner || inner.destroyed)return;
       const projected=projectSearchMatches(matches,range);
-      if(!sameSearchMatches(inner.state.field(projectedSearchMatches),projected)) inner.dispatch({effects:updateProjectedSearch.of(projected)});
+      const previous=inner.state.field(projectedSearchMatches);
+      if (projected.length) hasMatches = true;
+      if ((projected.length || previous?.length) && !sameSearchMatches(previous,projected)) inner.dispatch({effects:updateProjectedSearch.of(projected)});
     });} finally {controller.syncing=false;}
   }
+  if (hasMatches) viewsWithProjectedSearch.add(view);
+  else viewsWithProjectedSearch.delete(view);
 }
 export function syncEditableSelections(view, searchSelection = false) {
   if (editorHasComposition(view)) return;
@@ -255,8 +267,11 @@ export function syncEditableSelections(view, searchSelection = false) {
   }
 }
 export function syncEditableSpelling(view) {
-  if (editorHasComposition(view)) return;
+  if (view.destroyed || editorComposing(view)) return;
   const marks = view.state.field(spellingDecorations, false) || Decoration.none;
+  if (!marks.size && !viewsWithProjectedSpelling.has(view)) return;
+  if (editorHasComposition(view)) return;
+  let hasMarks = false;
   for (const root of view.dom.querySelectorAll('.cm-live-editable-block')) {
     const controller = controllers.get(root);
     if (controller?.view !== view || !controller.valid()) continue;
@@ -266,10 +281,13 @@ export function syncEditableSpelling(view) {
       if (!inner || inner.destroyed) return;
       const next = ['code','comment'].includes(controller.widget.item.kind)
         ? Decoration.none : projectSpellingDecorations(marks,range);
+      if (next.size) hasMarks = true;
       if (!RangeSet.eq([inner.state.field(spellingDecorations)],[next])) inner.dispatch({effects:setSpellingDecorations.of(next)});
       syncEditableSpelling(inner);
     }); } finally { controller.syncing = false; }
   }
+  if (hasMarks) viewsWithProjectedSpelling.add(view);
+  else viewsWithProjectedSpelling.delete(view);
 }
 export function extendEditableSelection(view, direction, vertical = false) {
   const selection = view.state.selection.main;
@@ -766,7 +784,7 @@ export class EditableBlockWidget extends WidgetType {
     else {
       // There is one projected cell editor, not an editor per row. Keep
       // rendered content in the other cells, including media and alignment.
-      let active = -1, stale = false, savedCell = null;
+      let active = -1, stale = false, savedCell = null, originalPlainCell = false;
       const indexOf = new WeakMap();
       controller.cellElement = index => mounts[index];
       const indexMounts = () => mounts.forEach((cell, index) => indexOf.set(cell, index));
@@ -798,11 +816,26 @@ export class EditableBlockWidget extends WidgetType {
         if (mounts[active] && savedCell) mounts[active].append(savedCell);
         active = -1;
         savedCell = null;
+        originalPlainCell = false;
+      };
+      const updatePlainCell = () => {
+        // The original cell must be exactly the plain source we mounted.
+        // Only update a single text node's equivalent; rich Markdown, GFM
+        // autolinks, empty cells, and structural changes use the full renderer.
+        if (active < 0 || !savedCell || !originalPlainCell) return false;
+        const range = controller.widget.item.cells[active];
+        if (!range) return false;
+        const value = range.projection?.text ?? view.state.doc.sliceString(range.from, range.to);
+        if (!value || /[^\p{L}\p{M}\p{N} .,:;!?()\-，。；：！？、（）]/u.test(value) || /www\./i.test(value)) return false;
+        savedCell.firstChild.data = value;
+        stale = false;
+        return true;
       };
       controller.activate = index => {
         if (!mounts[index] || !controller.valid()) return null;
         if (active === index) return controller.editors[index];
         if (active >= 0 && editorHasComposition(controller.editors[active])) return null;
+        if (stale) updatePlainCell();
         unmount();
         if (stale && !repaint()) return null;
         const mount = mounts[index];
@@ -810,6 +843,10 @@ export class EditableBlockWidget extends WidgetType {
         active = index;
         savedCell = mount.ownerDocument.createDocumentFragment();
         while (mount.firstChild) savedCell.append(mount.firstChild);
+        const range = controller.widget.item.cells[index];
+        const source = range.projection?.text ?? view.state.doc.sliceString(range.from, range.to);
+        originalPlainCell = !!source && savedCell.childNodes.length === 1
+          && savedCell.firstChild.nodeType === 3 && savedCell.firstChild.textContent === source;
         return mountEditor(mount, index);
       };
       controller.refreshTable = previous => {

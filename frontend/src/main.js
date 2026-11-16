@@ -1,6 +1,6 @@
 import './styles.css';
 import * as Backend from '../wailsjs/go/main/App.js';
-import { rebaseMarkdownImages } from './portable-images.js';
+import { documentMediaRanges, rebaseMarkdownImages } from './portable-images.js';
 import { directoryFromDocumentPath } from './library-state.js';
 import { normalizeBodyTypography, readBodyTypography } from './body-typography.js';
 import { guardFileDropResolver } from './safe-file-drop.js';
@@ -71,7 +71,13 @@ async function saveDocumentCopy(filePath, content) {
   const prepared = await transform(content);
   const saved = await Backend.SaveDocumentCopy(filePath, target, prepared);
   if (!saved || saved.content !== prepared) throw new Error('DOCUMENT_CONFLICT: copy receipt mismatch');
-  return { ...saved, sourceContent: content, rebaseContent: transform };
+  const warnings = [...(saved.exportWarnings || [])];
+  if (relocated && !/\.txt$/i.test(filePath) && /<video(?=[\s/>])/i.test(content)) {
+    let hasVideo = true;
+    try { hasVideo = documentMediaRanges(content).hasVideo; } catch { /* warn conservatively */ }
+    if (hasVideo) warnings.push({ code: 'VIDEO_NOT_INCLUDED', reference: '' });
+  }
+  return { ...saved, sourceContent: content, rebaseContent: transform, ...(warnings.length ? {exportWarnings: warnings} : {}) };
 }
 
 async function saveDocumentAsFormat(filePath, content, sessionId = '', format = '') {
@@ -177,6 +183,12 @@ window.quilliteMarkdown = {
   saveExportImageSlices: (filePath, title, format, dataURLs) => desktopRuntime ? Backend.SaveExportImageSlices(filePath, title, format, dataURLs) : resolved(''),
   saveExportImagePages: (filePath, title, format, dataURLs) => desktopRuntime ? Backend.SaveExportImagePages(filePath, title, format, dataURLs) : resolved(dataURLs.map((_, index) => `page-${index + 1}`)),
   selectImage: filePath => desktopRuntime ? Backend.SelectImage(filePath) : resolved(''),
+  selectLocalVideo: documentPath => desktopRuntime ? Backend.SelectLocalVideo(documentPath) : resolved(null),
+  describeDroppedLocalVideo: (documentPath, path) => desktopRuntime ? Backend.DescribeDroppedLocalVideo(documentPath, path) : resolved(null),
+  copyLocalVideoToAssets: (documentPath, reference) => desktopRuntime ? Backend.CopyLocalVideoToAssets(documentPath, reference) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  beginLocalVideo: (documentPath, reference) => desktopRuntime ? Backend.BeginLocalVideo(documentPath, reference) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  endLocalVideo: url => desktopRuntime ? Backend.EndLocalVideo(url) : resolved(),
+  openLocalVideoExternally: (documentPath, reference) => desktopRuntime ? Backend.OpenLocalVideoExternally(documentPath, reference) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   importImage: (filePath, sourcePath) => desktopRuntime ? Backend.ImportImage(filePath, sourcePath) : resolved(sourcePath),
   savePastedImage: (filePath, dataURL) => desktopRuntime ? Backend.SavePastedImage(filePath, dataURL) : resolved(dataURL),
   getImageUploadSettings: () => desktopRuntime ? Backend.GetImageUploadSettings() : resolved({ mode: 'local', serverUrl: 'http://127.0.0.1:36677', hasSecret: false, hasCloudToken: false }),
@@ -275,12 +287,12 @@ window.quilliteMarkdown = {
   onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   onAIProgress: callback => desktopRuntime ? EventsOn('ai:progress', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.1.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.2.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   getWindowsInstallSafety: () => desktopRuntime
     ? Backend.GetWindowsInstallSafety()
-    : resolved({ applicable: false, safe: true, currentVersion: '3.1.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
+    : resolved({ applicable: false, safe: true, currentVersion: '3.2.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
@@ -305,7 +317,7 @@ window.quilliteMarkdown = {
           ],
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '3.1.0', latestVersion: '3.1.0' }),
+      : { checked: true, available: false, currentVersion: '3.2.0', latestVersion: '3.2.0' }),
   snoozeUpdates: days => {
     if (desktopRuntime) return Backend.SnoozeUpdates(days);
     localStorage.setItem('suppressUpdateUntil', new Date(Date.now() + Math.max(1, Math.min(365, days)) * 86400000).toISOString());

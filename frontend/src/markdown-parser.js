@@ -1,5 +1,6 @@
 import { markdownLanguage } from '@codemirror/lang-markdown';
 import { Table } from '@lezer/markdown';
+import { cjkStrongSyntax } from './cjk-strong.js';
 
 // Lezer 1.7.2 rejects whitespace after a delimiter row's final pipe.
 // Reuse its table parser (including escapes, inline nodes and containers),
@@ -31,7 +32,8 @@ export const tableWhitespace = {
   }]
 };
 
-export const markdownParser = markdownLanguage.parser.configure(tableWhitespace);
+export const markdownExtensions = [tableWhitespace, cjkStrongSyntax(markdownLanguage.parser)];
+export const markdownParser = markdownLanguage.parser.configure(markdownExtensions);
 
 // Marked 15 also rejects a terminal tab on the delimiter row. Convert tabs
 // only inside real table delimiter nodes for rendering, retaining UTF-16 and

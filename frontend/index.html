@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file: https: http:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file: https: http:; media-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';">
+  <meta name="referrer" content="no-referrer">
   <title data-i18n="appName">轻阅 Markdown</title>
   <link rel="stylesheet" href="/startup-layout.css">
   <script src="/startup-layout.js"></script>
@@ -375,6 +376,7 @@
             <span class="format-divider" data-divider-before="asset"></span>
             <button type="button" data-format="table" data-format-overflow="table" data-format-label="insertTable" data-format-group="asset" data-overflow-priority="20" data-i18n-title="insertTable" title="插入表格"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16M15 4v16"/></svg></button>
             <button type="button" data-format="image" data-format-overflow="image" data-format-label="insertImage" data-format-group="asset" data-overflow-priority="10" data-i18n-title="insertImage" title="插入图片"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 2-2 6 5"/></svg></button>
+            <button type="button" data-format="local-video" data-format-overflow="local-video" data-format-label="insertVideo" data-format-group="asset" data-overflow-priority="9" data-i18n-title="insertVideo" data-i18n-aria-label="insertVideo" title="插入视频…" aria-label="插入视频…" aria-haspopup="dialog" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg></button>
             <span class="format-divider" data-divider-before="extended"></span>
             <button type="button" class="extended-format-button icon-format-button" data-format="bold-italic" data-format-overflow="bold-italic" data-format-label="boldItalic" data-format-group="extended" data-overflow-priority="-4" data-format-command="bold-italic" data-i18n-title="boldItalic" data-i18n-aria-label="boldItalic" title="粗斜体" aria-label="粗斜体"><span class="bold-italic-label" aria-hidden="true"><strong>B</strong><em>I</em></span></button>
             <button type="button" class="extended-format-button icon-format-button" data-format="underline" data-format-overflow="underline" data-format-label="underline" data-format-group="extended" data-overflow-priority="-3" data-format-command="underline" data-i18n-title="underline" data-i18n-aria-label="underline" title="下划线" aria-label="下划线"><span class="underline-label" aria-hidden="true">U</span></button>
@@ -560,7 +562,7 @@
     <button data-action="ai-settings"><span class="menu-label" data-i18n="aiAssistant">AI 助手</span> <span data-i18n="aiSettingsHint">多模型</span></button>
     <button data-action="feedback"><span class="menu-label" data-i18n="feedback">意见反馈</span> <span data-i18n="feedbackShortHint">建议与异常</span></button>
     <button data-action="check-update"><span class="menu-label" data-i18n="checkForUpdates">检查更新</span></button>
-    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.1.0</span></button>
+    <button data-action="about"><span class="menu-label" data-i18n="about">关于</span> <span>3.2.0</span></button>
   </div>
 
   <div id="codeLangMenu" class="popover code-lang-menu hidden no-drag" role="menu" aria-labelledby="codeLangMenuLabel">
@@ -580,6 +582,55 @@
       <div id="overflowFormatOptions"></div>
     </div>
   </div>
+
+  <dialog id="videoInsertDialog" class="video-insert-dialog no-drag" aria-labelledby="videoInsertTitle">
+    <header class="video-insert-heading">
+      <span class="video-insert-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg></span>
+      <h2 id="videoInsertTitle" data-i18n="videoInsertTitle">插入视频</h2>
+    </header>
+    <form id="videoInsertForm" novalidate>
+      <div id="videoSourceTabs" class="video-source-tabs" role="tablist" data-i18n-aria-label="videoSource" aria-label="视频来源">
+        <button id="videoLocalTab" type="button" role="tab" aria-controls="videoLocalPanel" aria-selected="true" data-i18n="videoSourceLocal" autofocus>本地文件</button>
+        <button id="videoNetworkTab" type="button" role="tab" aria-controls="videoNetworkPanel" aria-selected="false" tabindex="-1" data-i18n="videoSourceNetwork">网络链接</button>
+      </div>
+      <div class="video-insert-panels">
+        <section id="videoLocalPanel" class="video-source-panel" role="tabpanel" aria-labelledby="videoLocalTab">
+          <button id="pickLocalVideo" type="button" class="video-drop-zone" aria-describedby="videoLocalFormats videoLocalError">
+            <span class="video-drop-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 16v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3M12 16V3m-4 4 4-4 4 4"/></svg></span>
+            <span class="video-drop-text">
+              <span id="videoLocalAction" class="video-drop-label" data-i18n="videoPickLocal">选择文件</span>
+              <span id="videoLocalFormats" class="video-drop-detail" data-i18n="videoLocalFormats">也可拖入 MP4 或 WebM 文件</span>
+              <span id="videoLocalSelected" class="video-drop-detail" hidden></span>
+            </span>
+          </button>
+          <p id="videoLocalError" class="video-insert-error" role="alert" hidden></p>
+        </section>
+        <section id="videoNetworkPanel" class="video-source-panel" role="tabpanel" aria-labelledby="videoNetworkTab" hidden>
+          <label for="networkVideoUrl" data-i18n="videoNetworkUrl">视频直链</label>
+          <input id="networkVideoUrl" type="url" inputmode="url" placeholder="https://example.com/video" autocomplete="off" spellcheck="false" aria-describedby="networkVideoHelp networkVideoError">
+          <p id="networkVideoHelp" class="video-insert-help" data-i18n="videoNetworkHelp">粘贴 HTTPS 视频文件地址。视频平台的播放页请使用普通链接，点击播放前不会联网。</p>
+          <p id="networkVideoError" class="video-insert-error" role="alert" hidden></p>
+        </section>
+      </div>
+      <div class="video-insert-actions">
+        <button id="cancelVideoInsert" type="button" data-i18n="cancel">取消</button>
+        <button id="confirmVideoInsert" type="submit" class="video-insert-confirm" data-i18n="videoInsertTitle" disabled>插入视频</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="localVideoChoice" class="local-video-choice no-drag" aria-labelledby="localVideoChoiceTitle" aria-describedby="localVideoChoiceHint">
+    <form method="dialog">
+      <h2 id="localVideoChoiceTitle" data-i18n="localVideoChoiceTitle">如何引用此视频？</h2>
+      <p id="localVideoChoiceFile"></p>
+      <p id="localVideoChoiceHint" data-i18n="localVideoChoiceHint">视频位于文档目录外。仅引用不会复制文件；若要随文档迁移，请复制到 assets。</p>
+      <div class="local-video-choice-actions">
+        <button value="cancel" data-i18n="cancel" autofocus>取消</button>
+        <button value="copy" data-i18n="localVideoCopy">复制到 assets</button>
+        <button value="reference" data-i18n="localVideoReference">仅引用</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="aiToolbarMenu" class="popover ai-toolbar-menu hidden no-drag" role="menu" aria-labelledby="aiToolbarButton">
     <div class="popover-label" data-i18n="aiToolbarMenuLabel">AI 工具</div>
@@ -787,7 +838,7 @@
         <div>
           <span class="eyebrow" data-i18n="aboutProductLabel">MARKDOWN 阅读与编辑器</span>
           <h2 id="aboutTitle" data-i18n="appName">轻阅 Markdown</h2>
-          <span class="about-version" data-i18n="aboutVersion">版本 3.1.0</span>
+          <span class="about-version" data-i18n="aboutVersion">版本 3.2.0</span>
         </div>
       </div>
       <p class="about-description" data-i18n="aboutDescription">一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。</p>
@@ -1020,7 +1071,7 @@
           <button id="selectFeedbackImages" class="large-button secondary" type="button" data-i18n="selectImages">选择图片</button>
         </div>
         <div id="feedbackImageList" class="feedback-image-list"></div>
-        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.1.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
+        <div class="feedback-system-info"><span><small data-i18n="softwareVersion">软件版本</small><strong id="feedbackAppVersion">3.2.0</strong></span><span><small data-i18n="systemVersion">系统版本</small><strong id="feedbackSystemVersion">—</strong></span></div>
         <p class="feedback-privacy" data-i18n="feedbackPrivacy">提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。</p>
         <p id="feedbackMessageStatus" class="feedback-status" role="status"></p>
         <div class="feedback-actions"><button id="cancelFeedback" class="large-button secondary" type="button" data-i18n="cancel">取消</button><button id="submitFeedback" class="large-button primary" type="submit" data-i18n="submitFeedback">提交反馈</button></div>
@@ -1042,9 +1093,9 @@
         </div>
       </div>
       <div class="update-versions" aria-label="Version change">
-        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.1.0</strong></span>
+        <span><small data-i18n="currentVersion">当前版本</small><strong id="currentVersion">3.2.0</strong></span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.1.0</strong></span>
+        <span class="latest"><small data-i18n="latestVersion">最新版本</small><strong id="latestVersion">3.2.0</strong></span>
       </div>
       <div class="release-notes-panel">
         <strong data-i18n="releaseNotes">更新说明</strong>

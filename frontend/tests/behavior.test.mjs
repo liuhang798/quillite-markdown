@@ -357,7 +357,7 @@ test('plain text files render without Markdown parsing and edit without Markdown
   assert.match(renderer, /function isPlainTextFile\(path\)/);
   assert.match(renderer, /return \/\\\.txt\$\/i\.test\(path \|\| ''\)/);
   assert.match(renderer, /if \(isPlainTextFile\(doc\.path\)\) \{\s*releaseRenderedResources\(container\);\s*container\.innerHTML = `<div class="plain-text">\$\{escapeHtml\(content\)\}<\/div>`;/);
-  assert.match(renderer, /const language = editorSourceFallback \|\| isPlainTextFile\(state\.currentFile\?\.path\)\s*\? \[\]\s*: \[markdown\(\{ base: markdownLanguage, extensions: \[tableWhitespace\] \}\), syntaxHighlighting\(markdownHighlightStyle\)\]/);
+  assert.match(renderer, /const language = editorSourceFallback \|\| isPlainTextFile\(state\.currentFile\?\.path\)\s*\? \[\]\s*: \[markdown\(\{ base: markdownLanguage, extensions: markdownExtensions \}\), syntaxHighlighting\(markdownHighlightStyle\)\]/);
   assert.match(renderer, /function editorPresentationExtensions\(\) \{\s*if \(editorSourceFallback \|\| isPlainTextFile\(state.currentFile\?\.path\)\) return \[\];\s*if \(state.editorPresentation === 'source'\) return \[sourceImageFolding\];/);
   assert.doesNotMatch(renderer, /editorExtensions = \[\s*basicSetup,\s*markdown\(\)/);
   assert.match(styles, /\.plain-text \{ white-space: pre-wrap; overflow-wrap: break-word; font-family: "Cascadia Code", Consolas, "Microsoft YaHei UI", monospace;/);
@@ -598,7 +598,7 @@ test('code blocks let the user pick a common programming language', () => {
 
 test('LaTeX math, chemistry, and numbered equations are available in preview and editor formats', () => {
   assert.match(renderer, /import 'katex\/dist\/katex\.min\.css'/);
-  assert.match(renderer, /extensions: \[highlightExtension, \.\.\.mathExtensions\]/);
+  assert.match(renderer, /extensions: \[cjkStrongToken, highlightExtension, \.\.\.mathExtensions, \.\.\.localVideoMarkdownExtensions\]/);
   assert.match(html, /data-format-command="formula-builder" data-i18n-title="formulaBuilder"/);
   assert.doesNotMatch(html, /value="(?:inline-math|math-block|chemical-formula|numbered-math|math-guide)"/);
   assert.match(renderer, /command === 'formula-builder'/);

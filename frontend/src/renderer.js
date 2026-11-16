@@ -6,8 +6,11 @@ import { installTextStyleMenu } from './text-style-menu.js';
 import { markdownLinkAttribute } from './markdown-link-attributes.js';
 import { frontmatterRenderSource } from './frontmatter.js';
 import { retainRecentSelection, toggleRecentSelection, rangeRecentSelection, removeRecentSelection } from './recent-selection.js';
-import { tableWhitespace, tableRenderSource } from './markdown-parser.js';
+import { markdownExtensions, tableRenderSource } from './markdown-parser.js';
+import { cjkStrongToken } from './cjk-strong.js';
 import { isFileDrag } from './file-drag.js';
+import { localVideoMarkdownExtensions, localVideoMarkup, networkVideoMarkup, prepareDocumentVideos, findRetainedVideoCard, releaseLocalVideos, flattenDocumentVideos } from './local-video.js';
+import { reconcileVideoPlayback } from './video-playback-persistence.js';
 import { createImageInsertionTarget, imageInsertionTargetCurrent, mapImageInsertionTargets, separateImageFromTable } from './image-insertion-target.js';
 import { fitEditorSplit, normalizeEditorPreviewWidth } from './editor-split-layout.js';
 import { createToastPlacement } from './toast-placement.js';
@@ -28,7 +31,7 @@ import './editor-live-preview.css';
 import { applyBodyTypography, normalizeBodyTypography, readBodyTypography, bodyStyleFor, typographyForStyle } from './body-typography.js';
 import hljs from 'highlight.js/lib/common';
 import { createReaderCache, READER_DEFER_THRESHOLD, cancelReaderWork, revealReaderLayout, finishReaderWork, scheduleReaderWork } from './reader-performance.js';
-import { cancelPreviewImages, loadPreviewImages, waitForPreviewImageReads } from './image-load-session.js';
+import { cancelPreviewImages, loadPreviewImages, snapshotPreviewImageSizes, waitForPreviewImageReads } from './image-load-session.js';
 import { mountDocumentLoading } from './document-loading.js';
 import { cancelMermaidRendering, convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
@@ -41,7 +44,7 @@ import { validateDiagramRendering } from './diagram-validation.js';
 import { projectedDiagramReplacement, diagramDisplayName } from './diagram-editing.js';
 import { aiModelOptions } from './ai-model-options.js';
 import { exceedsAIInputLimit, protectEmbeddedImages, aiInputCharacterCount } from './ai-input.js';
-import { transformMarkdownImages } from './portable-images.js';
+import { documentMediaRanges, transformMarkdownImages } from './portable-images.js';
 import { prepareTextPackExport } from './textpack.js';
 import { imageSourceKind, normalizeImageRows } from './image-layout.js';
 import { deleteAIModelCache, readAIModelCache, writeAIModelCache } from './ai-model-cache.js';
@@ -106,6 +109,7 @@ function highlightReaderSource(source, language) {
 }
 let codeEditor;
 let embeddedImagePreview;
+let editorVideoPreview, videoPreviewContext;
 let sourceImageFolding;
 let editorLivePreview;
 let editorHasComposition = view => !!(view?.compositionStarted || view?.composing);
@@ -121,6 +125,7 @@ let canPasteEditableTableGrid;
 let replaceLiveSelections;
 let liveAIReplacement;
 let editorPresentation;
+let editorSyntaxTree;
 let markdownLanguage;
 let imagePreviewContext;
 let editorFormulaPreview;
@@ -589,7 +594,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 3.1.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 3.2.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -684,7 +689,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 3.1.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 3.2.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -1166,6 +1171,65 @@ Object.assign(translations.en, {
   textBundleStale: 'The current document changed and was not replaced. Imported files remain at: {path}', textBundlePartial: 'Import did not complete. The new partial copy was retained and the original package is unchanged. Retained location and reason: {details}', textBundleLimit: 'Package limits exceeded: 64 MiB of text, 25 MiB per image, 256 MiB total, and 1024 entries.'
 });
 
+Object.assign(translations['zh-CN'], {
+  insertVideo: '插入视频…', videoInsertTitle: '插入视频', videoSource: '视频来源',
+  videoSourceLocal: '本地文件', videoSourceNetwork: '网络链接',
+  videoPickLocal: '选择文件', videoReplaceLocal: '更换文件', videoPickingLocal: '正在读取文件…',
+  videoLocalFormats: '也可拖入 MP4 或 WebM 文件', videoLocalInvalid: '仅支持 MP4 和 WebM，请选择有效的视频文件。',
+  videoDropUnavailable: '无法读取拖入文件的位置，请用「选择文件」。',
+  videoNetworkUrl: '视频直链', videoNetworkHelp: '粘贴 HTTPS 视频文件地址。视频平台的播放页请使用普通链接，点击播放前不会联网。',
+  videoNetworkInvalid: '请输入可公开访问的 HTTPS 视频直链。B 站、YouTube 等网页请插入普通链接。',
+  localVideoChoiceTitle: '如何引用此视频？',
+  localVideoChoiceHint: '视频位于文档目录外。仅引用不会复制文件，重新启动后要再次选择；复制到 assets 后，视频可随文档目录一起移动。',
+  localVideoCopy: '复制到 assets', localVideoReference: '仅引用',
+  localVideoDocumentOnly: '视频仅支持在普通 Markdown 文档中插入',
+  localVideoParagraphOnly: '请将光标移到普通段落或空行，再插入视频',
+  localVideoInsertFailed: '无法读取或插入此视频，请检查文件是否仍可访问。',
+  localVideoLabel: '本地视频', localVideoLoad: '加载并播放', localVideoLoading: '正在加载视频…',
+  localVideoUnavailable: '无法播放视频。文件可能已移动、缺少访问权限，或系统不支持该编码。',
+  localVideoAuthorize: '请重新选择原来的视频文件，授予本次访问权限。',
+  localVideoOpenExternally: '用系统播放器打开', localVideoExternalFailed: '无法打开视频。请检查附件位置或重新选择文件。',
+  localVideoUnsupported: '该视频引用当前无法在文档内播放', localVideoClose: '停止播放',
+  videoEditSource: '编辑视频源码', videoReturnRendered: '返回视频卡片',
+  localVideoExportPlaceholder: '视频（未嵌入导出文件）', videoNotIncluded: '视频未包含在导出文件中，请另行保留视频源文件',
+  portableVideoUnsupported: '便携 Markdown 暂不支持嵌入视频，未生成不完整的副本。',
+  networkVideoLabel: '网络视频', networkVideoLoad: '联网播放', networkVideoLoading: '正在连接视频来源…',
+  networkVideoUnavailable: '无法播放。链接可能已过期、不是视频直链，或当前系统不支持此编码。',
+  networkVideoOpenExternally: '在浏览器打开', networkVideoExternalFailed: '无法在浏览器打开该地址。',
+  networkVideoNotice: '点击播放后才会连接来源网站。',
+  networkVideoSeekLimited: '此来源可能只能在已缓冲范围内拖动进度。',
+  videoPandocUnsupported: '含视频的文档请用内置导出格式（如 HTML、PDF 或 Word），视频会保留为静态说明。',
+});
+Object.assign(translations.en, {
+  insertVideo: 'Insert video…', videoInsertTitle: 'Insert video', videoSource: 'Video source',
+  videoSourceLocal: 'Local file', videoSourceNetwork: 'Online link',
+  videoPickLocal: 'Choose file', videoReplaceLocal: 'Replace file', videoPickingLocal: 'Reading file…',
+  videoLocalFormats: 'Or drop an MP4 or WebM file', videoLocalInvalid: 'Choose a valid MP4 or WebM video file.',
+  videoDropUnavailable: 'The dropped file location could not be read. Use Choose file instead.',
+  videoNetworkUrl: 'Direct video URL', videoNetworkHelp: 'Paste a direct HTTPS video URL. Use ordinary links for video platform pages. No connection is made until you play the video.',
+  videoNetworkInvalid: 'Enter a public HTTPS video URL. Insert Bilibili or YouTube pages as ordinary links.',
+  localVideoChoiceTitle: 'How should this video be referenced?',
+  localVideoChoiceHint: 'This video is outside the document folder. A reference does not copy the file, and you will need to select it again after restarting. Copy to assets to move it with the document folder.',
+  localVideoCopy: 'Copy to assets', localVideoReference: 'Reference only',
+  localVideoDocumentOnly: 'Video can only be inserted in a regular Markdown document',
+  localVideoParagraphOnly: 'Move the caret to a normal paragraph or a blank line before inserting a video',
+  localVideoInsertFailed: 'Could not read or insert this video. Check that the file is still accessible.',
+  localVideoLabel: 'Local video', localVideoLoad: 'Load and play', localVideoLoading: 'Loading video…',
+  localVideoUnavailable: 'Could not play this video. Check the file, permissions, and system codec support.',
+  localVideoAuthorize: 'Choose the original video file again to allow access for this session.',
+  localVideoOpenExternally: 'Open in system player', localVideoExternalFailed: 'Could not open the video. Check its location or choose the file again.',
+  localVideoUnsupported: 'This video reference cannot play inline', localVideoClose: 'Stop playback',
+  videoEditSource: 'Edit video source', videoReturnRendered: 'Return to video card',
+  localVideoExportPlaceholder: 'Video (not embedded in this export)', videoNotIncluded: 'Video is not included in the export; keep its source file separately',
+  portableVideoUnsupported: 'Portable Markdown cannot embed videos. No incomplete copy was created.',
+  networkVideoLabel: 'Online video', networkVideoLoad: 'Play online', networkVideoLoading: 'Connecting to the video source…',
+  networkVideoUnavailable: 'Cannot play this video. The link may have expired, may not be a direct video URL, or may use an unsupported codec.',
+  networkVideoOpenExternally: 'Open in browser', networkVideoExternalFailed: 'Could not open this link in the browser.',
+  networkVideoNotice: 'The source website is contacted only when you play the video.',
+  networkVideoSeekLimited: 'This source may only allow seeking within the buffered range.',
+  videoPandocUnsupported: 'For a document with video, use a built-in export format such as HTML, PDF, or Word. Videos are represented by static labels.',
+});
+
 function t(key, values = {}) {
   let template = translations[state.language]?.[key] ?? translations['zh-CN'][key] ?? key;
   if (document.documentElement.dataset.platform === 'darwin') template = template.replaceAll('Ctrl', '⌘');
@@ -1276,7 +1340,7 @@ marked.use({
   gfm: true,
   breaks: true,
   tokenizer: { lheading: largeHeadingTokenizer },
-  extensions: [highlightExtension, ...mathExtensions],
+  extensions: [cjkStrongToken, highlightExtension, ...mathExtensions, ...localVideoMarkdownExtensions],
   renderer: {
     link({ href, title, tokens }) {
       const text = this.parser.parseInline(tokens);
@@ -1343,8 +1407,9 @@ function loadEditorDependencies() {
     import('./embedded-image-preview.js'),
     import('./editor-formula-preview.js'),
     import('./editor-diagram-preview.js'),
-    import('./editor-live-preview.js')
-  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule, diagramPreviewModule, livePreviewModule]) => {
+    import('./editor-live-preview.js'),
+    import('./editor-video-preview.js')
+  ]).then(([codemirrorModule, stateModule, viewModule, commandsModule, searchModule, languageModule, markdownModule, highlightModule, imagePreviewModule, formulaPreviewModule, diagramPreviewModule, livePreviewModule, videoPreviewModule]) => {
     basicSetup = [...codemirrorModule.basicSetup.filter(extension => extension !== viewModule.highlightActiveLine()), livePreviewModule.stableActiveLine];
     Compartment = stateModule.Compartment;
     StateEffect = stateModule.StateEffect;
@@ -1364,6 +1429,7 @@ function loadEditorDependencies() {
     searchPanelOpen = searchModule.searchPanelOpen;
     HighlightStyle = languageModule.HighlightStyle;
     syntaxHighlighting = languageModule.syntaxHighlighting;
+    editorSyntaxTree = languageModule.syntaxTree;
     markdown = markdownModule.markdown;
     markdownLanguage = markdownModule.markdownLanguage;
     editorPresentation = new Compartment();
@@ -1385,6 +1451,8 @@ function loadEditorDependencies() {
     Object.assign(codeMirrorTranslations['zh-CN'], livePreviewModule.livePreviewPhrases);
     tags = highlightModule.tags;
     embeddedImagePreview = imagePreviewModule.embeddedImagePreview;
+    editorVideoPreview = videoPreviewModule.editorVideoPreview;
+    videoPreviewContext = videoPreviewModule.videoPreviewContext;
     sourceImageFolding = imagePreviewModule.sourceImageFolding;
     Object.assign(codeMirrorTranslations['zh-CN'], imagePreviewModule.sourceImagePhrases);
     imagePreviewContext = imagePreviewModule.imagePreviewContext;
@@ -1437,7 +1505,10 @@ function editorPresentationExtensions() {
           const owner = resolveEditableOwner(view, diagram, true);
           if (owner && codeEditor === owner.view && state.editing && state.documentSession === session && state.currentFile?.path === path) openEditorDiagram({ ...diagram, from: owner.from, to: owner.to, projectionPrefix:owner.projectionPrefix+(diagram.projectionPrefix||''), projectionPrefixes:diagram.projectionPrefixes?.map((prefix,i)=>i?owner.projectionPrefix+prefix:prefix), original:owner.view.state.sliceDoc(owner.from,owner.to) });
         } })];
-  return [...mediaExtensions, editorLivePreview, livePreviewContext.of({
+  const videoExtensions = !state.blockImportedRemoteImages && canPlayLocalVideo()
+    ? [editorVideoPreview, videoPreviewContext.of({ enabled: true, documentPath: path, session, bridge: window.quilliteMarkdown, t })]
+    : [];
+  return [...mediaExtensions, ...videoExtensions, editorLivePreview, livePreviewContext.of({
         nestedExtensions: mediaExtensions,
         nestedEffects: [setFormulaDisplayEffect, setDiagramDisplayEffect, refreshDiagramThemeEffect, updateImagePreviewDirectory],
         renderTocTitle: source => tocTitleHTML(createTocTitle(inertInlineTocLabel(source))),
@@ -1462,7 +1533,7 @@ function editorPresentationExtensions() {
 
 function createEditorState(content = '', moveToStart = true) {
   const language = editorSourceFallback || isPlainTextFile(state.currentFile?.path)
-    ? [] : [markdown({ base: markdownLanguage, extensions: [tableWhitespace] }), syntaxHighlighting(markdownHighlightStyle)];
+    ? [] : [markdown({ base: markdownLanguage, extensions: markdownExtensions }), syntaxHighlighting(markdownHighlightStyle)];
   return EditorState.create({
     doc: content,
     selection: { anchor: moveToStart ? 0 : content.length },
@@ -1631,6 +1702,19 @@ function currentFormulaIndex() {
     indexedFormulas = scanMarkdownFormulas(indexedFormulaDocument.toString());
   }
   return indexedFormulas;
+}
+
+function previewFormulaElements(container, formulas) {
+  if (!formulas.length) return [];
+  // One scan of the rendered preview instead of one full DOM query per
+  // formula. Only parser-issued IDs participate; a duplicated origin
+  // remains ambiguous and must never receive an edit handler.
+  const elements = new Map(formulas.map(({ id }) => [id, undefined]));
+  for (const element of container.querySelectorAll('[data-math-origin]')) {
+    const id = element.dataset.mathOrigin;
+    if (elements.has(id)) elements.set(id, elements.get(id) === undefined ? element : null);
+  }
+  return formulas.map(({ id }) => elements.get(id) ?? null);
 }
 
 function openEditorDiagram(diagram) {
@@ -1997,6 +2081,7 @@ function runFormatCommand(command) {
   if (['quote', 'unordered-list', 'ordered-list', 'task-list'].includes(command)) return formatSelectedLines(command);
   if (command === 'table') { openTableDialog(); return true; }
   if (command === 'image') { insertImage(); return true; }
+  if (command === 'local-video') { openVideoInsertDialog(); return true; }
   return false;
 }
 
@@ -2178,19 +2263,18 @@ function syncFormatDividers() {
   bar.querySelectorAll('[data-divider-before]').forEach(divider => {
     const target = divider.dataset.dividerBefore;
     const hasVisibleTarget = target === 'more'
-      ? directFormats.some(element => !element.hidden)
+      ? !els.moreFormatButton.hidden && directFormats.some(element => !element.hidden)
       : directFormats.some(element => element.dataset.formatGroup === target && !element.hidden);
     divider.hidden = !hasVisibleTarget;
   });
 }
 
-function rebuildOverflowFormatOptions() {
+function rebuildOverflowFormatOptions(collapsed) {
   const group = $('#overflowFormatGroup');
   const options = $('#overflowFormatOptions');
-  const bar = $('#editorFormatBar');
-  if (!group || !options || !bar) return;
+  if (!group || !options) return;
   options.replaceChildren();
-  for (const element of bar.querySelectorAll('[data-format-overflow][hidden]')) {
+  for (const element of collapsed) {
     if (element.dataset.formatOverflow === 'heading') {
       for (const heading of element.querySelector('select').options) {
         const button = document.createElement('button');
@@ -2285,24 +2369,29 @@ function openAIToolbarMenu() {
 function layoutFormatToolbar() {
   const bar = $('#editorFormatBar');
   if (!bar || bar.clientWidth === 0) return;
-  const candidates = [...bar.querySelectorAll('[data-format-overflow]')];
-  els.moreFormatButton.hidden = false;
-  candidates.forEach(element => { element.hidden = false; });
+  const available = [...bar.querySelectorAll('[data-format-overflow]')].filter(element => {
+    element.hidden = element.dataset.formatOverflow === 'local-video' && !canInsertLocalVideo();
+    return !element.hidden;
+  });
+  // Measure the full toolbar before reserving space for its overflow trigger.
+  els.moreFormatButton.hidden = true;
   syncFormatDividers();
 
-  const byOverflowPriority = [...candidates].sort((first, second) =>
-    Number(first.dataset.overflowPriority) - Number(second.dataset.overflowPriority)
-  );
-  for (const candidate of byOverflowPriority) {
-    if (bar.scrollWidth <= bar.clientWidth + 1) break;
-    candidate.hidden = true;
+  if (bar.scrollWidth > bar.clientWidth + 1) {
+    els.moreFormatButton.hidden = false;
     syncFormatDividers();
+    const byOverflowPriority = [...available].sort((first, second) =>
+      Number(first.dataset.overflowPriority) - Number(second.dataset.overflowPriority)
+    );
+    for (const candidate of byOverflowPriority) {
+      if (bar.scrollWidth <= bar.clientWidth + 1) break;
+      candidate.hidden = true;
+      syncFormatDividers();
+    }
   }
-  rebuildOverflowFormatOptions();
-  const hasOverflow = candidates.some(element => element.hidden);
-  els.moreFormatButton.hidden = !hasOverflow;
-  bar.querySelector('[data-divider-before="more"]')?.toggleAttribute('hidden', !hasOverflow);
-  if (!hasOverflow) closeMoreFormatMenu();
+  const collapsed = available.filter(element => element.hidden);
+  rebuildOverflowFormatOptions(collapsed);
+  if (!collapsed.length) closeMoreFormatMenu();
 }
 
 function scheduleFormatToolbarLayout() {
@@ -4986,6 +5075,208 @@ function cancelImageInsertions() {
   els.imageUploadProgress.classList.add('hidden');
 }
 
+function closeLocalVideoChoice() {
+  const dialog = $('#localVideoChoice');
+  if (dialog.open) dialog.close('cancel');
+  closeVideoInsertDialog();
+}
+
+const LOCAL_VIDEO_FILE_PATTERN = /\.(?:mp4|webm)$/i;
+function canPlayLocalVideo(doc = state.currentFile) {
+  return Boolean(doc?.path && /\.(?:md|markdown|mdown|mkd)$/i.test(doc.path)
+    && !doc.bundleKind && !doc.blockRemoteImages && !doc.referenceKind);
+}
+
+function canInsertLocalVideo() {
+  return state.editing && !state.currentFile?.readOnly && canPlayLocalVideo();
+}
+
+function askLocalVideoReference(file) {
+  const dialog = $('#localVideoChoice');
+  if (dialog.open) return Promise.resolve('cancel');
+  $('#localVideoChoiceFile').textContent = describeVideoInsertFile(file);
+  dialog.returnValue = 'cancel';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue), {once: true});
+    dialog.showModal();
+  });
+}
+
+let selectingLocalVideo = false;
+let videoInsertTarget = null;
+let videoInsertSource = 'local';
+let videoInsertFile = null;
+let videoInsertPending = null;
+
+function describeVideoInsertFile(file) {
+  const bytes = Math.max(0, Number(file.size) || 0);
+  const size = bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MiB` : `${Math.ceil(bytes / 1024)} KiB`;
+  return `${file.name} · ${size}`;
+}
+
+function normalVideoInsertionRange(target) {
+  const tree = editorSyntaxTree?.(codeEditor.state);
+  for (const at of [target.from, Math.max(target.from, target.to - 1)]) {
+    for (let node = tree?.resolveInner(at, 1); node; node = node.parent) {
+      if (/^(?:FencedCode|CodeBlock|Table|HTMLBlock|Blockquote|BulletList|OrderedList)$/.test(node.name)) return false;
+    }
+  }
+  return true;
+}
+
+function captureVideoInsertion() {
+  if (!canInsertLocalVideo()) { showToast(t('localVideoDocumentOnly'), 'warning'); return null; }
+  const target = captureImageInsertion();
+  if (target && !normalVideoInsertionRange(target)) {
+    releaseImageInsertion(target);
+    showToast(t('localVideoParagraphOnly'), 'warning');
+    return null;
+  }
+  return target;
+}
+
+function closeVideoInsertDialog(keepTarget = false) {
+  const dialog = $('#videoInsertDialog');
+  if (!keepTarget) releaseImageInsertion(videoInsertTarget);
+  videoInsertTarget = null;
+  videoInsertFile = null;
+  videoInsertPending = null;
+  $('#pickLocalVideo').classList.remove('dragging');
+  $('#networkVideoUrl').value = '';
+  if (dialog.open) dialog.close();
+}
+
+function setVideoLocalError(error = '') {
+  const message = $('#videoLocalError');
+  message.textContent = error;
+  message.hidden = !error;
+}
+
+function setNetworkVideoError(error = '') {
+  const input = $('#networkVideoUrl'), message = $('#networkVideoError');
+  message.textContent = error;
+  message.hidden = !error;
+  if (error) input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
+}
+
+function updateVideoInsertActions() {
+  const pick = $('#pickLocalVideo'), action = $('#videoLocalAction'), selected = $('#videoLocalSelected');
+  pick.disabled = Boolean(videoInsertPending);
+  pick.setAttribute('aria-busy', String(pick.disabled));
+  pick.classList.toggle('has-file', Boolean(videoInsertFile));
+  action.dataset.i18n = pick.disabled ? 'videoPickingLocal' : videoInsertFile ? 'videoReplaceLocal' : 'videoPickLocal';
+  action.textContent = t(action.dataset.i18n);
+  $('#videoLocalFormats').hidden = Boolean(videoInsertFile);
+  selected.hidden = !videoInsertFile;
+  selected.textContent = videoInsertFile ? describeVideoInsertFile(videoInsertFile) : '';
+  $('#confirmVideoInsert').disabled = videoInsertSource === 'local'
+    ? !videoInsertFile || Boolean(videoInsertPending)
+    : !networkVideoMarkup($('#networkVideoUrl').value);
+}
+
+function setVideoInsertSource(source, focusTab = false) {
+  videoInsertSource = source;
+  for (const [name, tabId, panelId] of [['local', 'videoLocalTab', 'videoLocalPanel'], ['network', 'videoNetworkTab', 'videoNetworkPanel']]) {
+    const tab = $('#' + tabId);
+    const active = name === source;
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+    $('#' + panelId).hidden = !active;
+    if (active && focusTab) tab.focus();
+  }
+  updateVideoInsertActions();
+}
+
+async function chooseVideoInsertFile(path = '') {
+  const dialog = $('#videoInsertDialog');
+  const target = videoInsertTarget;
+  if (!dialog.open || !target || videoInsertPending || !imageInsertionCurrent(target)) return;
+  if (path && !LOCAL_VIDEO_FILE_PATTERN.test(path)) {
+    setVideoInsertSource('local');
+    setVideoLocalError(t('videoLocalInvalid'));
+    return;
+  }
+  const request = {};
+  videoInsertPending = request;
+  setVideoLocalError();
+  updateVideoInsertActions();
+  const current = () => videoInsertPending === request && dialog.open && imageInsertionCurrent(target);
+  try {
+    const bridge = window.quilliteMarkdown;
+    const file = await (path ? bridge.describeDroppedLocalVideo(target.path, path) : bridge.selectLocalVideo(target.path));
+    if (file?.reference && current()) {
+      if (!localVideoMarkup(file.reference)) throw new Error('LOCAL_VIDEO_UNSUPPORTED_FORMAT');
+      videoInsertFile = file;
+    }
+  } catch (error) {
+    if (current()) setVideoLocalError(t(String(error?.message || error).includes('LOCAL_VIDEO_UNSUPPORTED_FORMAT')
+      ? 'videoLocalInvalid' : 'localVideoInsertFailed'));
+  } finally {
+    if (videoInsertPending === request) {
+      videoInsertPending = null;
+      updateVideoInsertActions();
+      if (dialog.open && videoInsertSource === 'local' && document.activeElement === document.body) $('#pickLocalVideo').focus();
+    }
+  }
+}
+
+function openVideoInsertDialog() {
+  const dialog = $('#videoInsertDialog');
+  if (selectingLocalVideo || dialog.open || $('#localVideoChoice').open) return;
+  videoInsertTarget = captureVideoInsertion();
+  if (!videoInsertTarget) return;
+  setVideoLocalError();
+  setNetworkVideoError();
+  $('#networkVideoUrl').value = '';
+  setVideoInsertSource('local');
+  dialog.showModal();
+}
+
+function commitVideoMarkup(target, block) {
+  if (!imageInsertionCurrent(target)) return false;
+  if (!normalVideoInsertionRange(target)) { showToast(t('localVideoParagraphOnly'), 'warning'); return false; }
+  const before = codeEditor.state.doc.sliceString(Math.max(0, target.from - 2), target.from);
+  const after = codeEditor.state.doc.sliceString(target.to, Math.min(codeEditor.state.doc.length, target.to + 2));
+  const prefix = target.from === 0 || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const suffix = after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  const insert = prefix + block + suffix;
+  releaseImageInsertion(target);
+  codeEditor.dispatch({changes: {from: target.from, to: target.to, insert},
+    selection: {anchor: target.from + insert.length}, annotations: isolateHistory.of('full'), userEvent: 'input.video', scrollIntoView: true});
+  focusCodeEditor();
+  return true;
+}
+
+async function insertLocalVideo(droppedPath = '', target = null, selectedFile = null) {
+  if (selectingLocalVideo) { releaseImageInsertion(target); return; }
+  target ||= captureVideoInsertion();
+  if (!target || !imageInsertionCurrent(target)) { releaseImageInsertion(target); return; }
+  selectingLocalVideo = true;
+  try {
+    const bridge = window.quilliteMarkdown;
+    const file = selectedFile || await bridge.describeDroppedLocalVideo(target.path, droppedPath);
+    if (!file?.reference || !imageInsertionCurrent(target)) return;
+    let reference = file.reference;
+    if (file.external) {
+      const action = await askLocalVideoReference(file);
+      if (!imageInsertionCurrent(target) || !['copy', 'reference'].includes(action)) return;
+      if (action === 'copy') {
+        reference = await bridge.copyLocalVideoToAssets(target.path, reference);
+        if (!imageInsertionCurrent(target)) return;
+      }
+    }
+    const block = localVideoMarkup(reference);
+    if (!block) throw new Error('LOCAL_VIDEO_TYPE');
+    commitVideoMarkup(target, block);
+  } catch {
+    if (imageInsertionCurrent(target)) showToast(t('localVideoInsertFailed'), 'error');
+  } finally {
+    selectingLocalVideo = false;
+    releaseImageInsertion(target);
+  }
+}
+
 function insertImageReference(imagePath, description, width = preferredImageWidth(), target = null) {
   if (!imageInsertionCurrent(target, true)) return false;
   const markdown = imageMarkdown(imagePath, description, width);
@@ -7069,6 +7360,7 @@ function cancelScheduledEditorPreview() {
 
 // Every DOM replacement/close must retire both pending work and live charts.
 function releaseRenderedResources(container) {
+  releaseLocalVideos(container);
   clearPreviewSourceMap(container);
   cancelReaderWork(container);
   cancelPreviewImages(container);
@@ -7077,6 +7369,8 @@ function releaseRenderedResources(container) {
 }
 
 function suspendEditorPreview() {
+  renderEditorPreview.displayed = null;
+  releaseLocalVideos(els.editorPreview);
   clearPreviewSourceMap(els.editorPreview);
   hidePreviewLocateHint();
   cancelScheduledEditorPreview();
@@ -7098,7 +7392,7 @@ function scheduleEditorPreview(performance) {
     const content = editorContent();
     state.currentFile.content = content;
     state.currentDocumentHasDiagrams = documentHasDiagrams(content);
-    renderEditorPreview(content);
+    renderEditorPreview(content, { reserveImages: true });
   };
   renderEditorPreview.timer = setTimeout(() => {
     if (performance.idlePreview && typeof window.requestIdleCallback === 'function') {
@@ -7446,7 +7740,7 @@ function allowImportedResourcesForRendering() {
   return true;
 }
 
-function renderMarkdownTo(container, doc, content, presentation = null) {
+function renderMarkdownTo(container, doc, content, presentation = null, splitLayout = null) {
   cancelReaderWork(container);
   cancelPreviewImages(container);
   if (isPlainTextFile(doc.path)) {
@@ -7476,8 +7770,30 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
   // otherwise repeated editing of a chart-heavy document gradually retains
   // detached observers and makes typing/scrolling feel sluggish.
   releaseEChartsDiagrams(container);
-  if (state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path)) container.replaceChildren(importedImagePresentation(html));
-  else container.innerHTML = html;
+  const blocked = state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path);
+  const hasMedia = /<(?:video|audio|source|track)\b/i.test(html);
+  if (blocked || hasMedia) {
+    let fragment;
+    if (blocked) fragment = importedImagePresentation(html);
+    else {
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      fragment = template.content;
+    }
+    if (hasMedia) prepareDocumentVideos(fragment, {
+      enabled: !blocked && canPlayLocalVideo(doc),
+      documentPath: doc.path, session: state.documentSession, bridge: window.quilliteMarkdown, t
+    });
+    const pair = hasMedia && !blocked ? findRetainedVideoCard(container, fragment) : null;
+    if (pair) releaseLocalVideos(container, {except: pair.current});
+    if (!pair || !reconcileVideoPlayback(container, fragment, pair)) {
+      releaseLocalVideos(container);
+      container.replaceChildren(fragment);
+    }
+  } else {
+    releaseLocalVideos(container);
+    container.innerHTML = html;
+  }
   normalizeImageRows(container);
   sourceMap?.apply(container);
   const documentHeadings = collectDocumentHeadings(container);
@@ -7504,7 +7820,9 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
     }
     element.style.color = value;
   });
-  loadPreviewImages(container, { directory: doc.directory, readImageData: window.quilliteMarkdown.readImageData });
+  // Apply authored column widths before measuring any image's split-preview slot.
+  applyMarkdownTableLayouts(container, tableLayouts);
+  loadPreviewImages(container, { directory: doc.directory, readImageData: window.quilliteMarkdown.readImageData, splitLayout });
   if (state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path) && (container === els.content || container === els.editorPreview)) {
     const notice = document.createElement('div'); notice.className = 'imported-network-notice';
     const label = document.createElement('span'); label.textContent = t('textBundleRemoteBlocked');
@@ -7513,10 +7831,7 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
   }
   bindDocumentActions(container);
   if (container === els.editorPreview && state.editing && codeEditor?.state.doc.toString() === content) {
-    const elements = renderedMath.formulas.map(item => {
-      const matches = container.querySelectorAll(`[data-math-origin="${item.id}"]`);
-      return matches.length === 1 ? matches[0] : null;
-    });
+    const elements = previewFormulaElements(container, renderedMath.formulas);
     const matches = matchPreviewFormulas(currentFormulaIndex(), renderedMath.formulas, prepared.notes.length === 0);
     elements.forEach((element, i) => {
       if (!element || !matches[i]) return;
@@ -7525,7 +7840,6 @@ function renderMarkdownTo(container, doc, content, presentation = null) {
       element.title = t('formulaPreviewEditHint');
     });
   }
-  applyMarkdownTableLayouts(container, tableLayouts);
   if (deferred) scheduleReaderWork(container, highlightReaderSource);
   return diagramRender;
 }
@@ -7581,13 +7895,27 @@ function renderLightweightTable(container, source, definitions) {
   });
 }
 
-function renderEditorPreview(content = state.currentFile?.content || '') {
+function renderEditorPreview(content = state.currentFile?.content || '', { reserveImages = false, preservePlaying = false } = {}) {
   if (!state.currentFile || state.editorLayout === 'editor-only') return;
+  const session = state.documentSession, doc = state.currentFile;
+  const displayed = renderEditorPreview.displayed;
+  // Saving the same bytes is not a preview change and must not stop playback.
+  if (preservePlaying && displayed?.session === session && displayed.path === doc.path && displayed.content === content
+      && els.editorPreview.querySelector('video.qm-local-video__player')) return;
   hidePreviewLocateHint();
   const generation = (renderEditorPreview.generation || 0) + 1;
   renderEditorPreview.generation = generation;
+  const scope = JSON.stringify([session, doc.path, doc.directory, doc.bundleSessionId, state.blockImportedRemoteImages]);
   try {
-    const mermaidRender = renderMarkdownTo(els.editorPreview, state.currentFile, content);
+    const previous = reserveImages ? snapshotPreviewImageSizes(els.editorPreview, scope) : undefined;
+    const mermaidRender = renderMarkdownTo(els.editorPreview, doc, content, null, {
+      scope, previous,
+      onLayout() {
+        if (generation === renderEditorPreview.generation && session === state.documentSession) scrollPreviewToCursor(true);
+      }
+    });
+    renderEditorPreview.displayed = els.editorPreview.querySelector('.qm-local-video__action')
+      ? { session, path: doc.path, content } : null;
     scrollPreviewToCursor(true);
     // Mermaid first appears as a short placeholder and later expands into its
     // final SVG. Positioning only before that asynchronous layout completes
@@ -7602,6 +7930,7 @@ function renderEditorPreview(content = state.currentFile?.content || '') {
       }));
     });
   } catch (error) {
+    renderEditorPreview.displayed = null;
     reportSilentError(error, 'preview.render-editor');
     releaseRenderedResources(els.editorPreview);
     els.editorPreview.innerHTML = `<p class="preview-error">${t('previewError')}</p>`;
@@ -7694,6 +8023,7 @@ function displayDocument(doc, { addToLibrary = true, presentation = null } = {})
   editorEntryPosition = null;
   closeImageDialog();
   cancelImageInsertions();
+  closeLocalVideoChoice();
   closeFormulaDialog(false);
   indexedFormulaDocument = null;
   indexedFormulas = [];
@@ -7750,6 +8080,7 @@ function closePreview() {
   editorEntryPosition = null;
   closeImageDialog();
   cancelImageInsertions();
+  closeLocalVideoChoice();
   closeFormulaDialog(false);
   indexedFormulaDocument = null;
   indexedFormulas = [];
@@ -8151,6 +8482,7 @@ async function toggleEditor(forceEditing) {
     clearTimeout(outlineRefreshTimer);
     outlineDocument = null; outlineHeadings = [];
     state.editing = nextEditing;
+    scheduleFormatToolbarLayout();
     editorEntryPosition = nextEditing && readingPosition?.line ? readingPosition : null;
     // Retain the document, selection and undo history, but unmount live widgets
     // while reading so hidden nested editors/images do not consume resources.
@@ -8163,7 +8495,7 @@ async function toggleEditor(forceEditing) {
       releaseRenderedResources(els.content);
       els.content.replaceChildren();
     }
-    if (!nextEditing) { closeImageDialog(); cancelImageInsertions(); }
+    if (!nextEditing) { closeImageDialog(); cancelImageInsertions(); closeLocalVideoChoice(); }
     syncEditorLayoutOptions();
     syncEditorDiagramDisplay();
     if (state.editing) {
@@ -8219,6 +8551,7 @@ function authoringError(error) {
   if (message.includes('PORTABLE_REMOTE_IMAGE')) return t('portableRemote');
   if (message.includes('PORTABLE_IMAGE_LIMIT')) return t('portableImageLimit');
   if (message.includes('PORTABLE_UNSUPPORTED_IMAGE')) return t('portableUnsupported');
+  if (message.includes('PORTABLE_VIDEO_UNSUPPORTED')) return t('portableVideoUnsupported');
   if (message.includes('IMAGE_EMBED_TYPE')) return t('imageEmbedType');
   if (message.includes('PORTABLE_IMAGE_MISSING')) return t('portableMissing');
   return t('renameFailed');
@@ -8602,7 +8935,7 @@ async function saveDocument(saveAs = false, options = {}) {
     if (typeof documentHasDiagrams === 'function') state.currentDocumentHasDiagrams = documentHasDiagrams(currentContent);
     syncDocumentAccessControls();
     addRecentDocument(saved);
-    renderEditorPreview(state.currentFile.content);
+    renderEditorPreview(state.currentFile.content, { preservePlaying: !saveAs });
     if (!state.editing) renderCurrentDocument();
     els.editorFileName.textContent = saved.name;
     syncDocumentIdentity();
@@ -8814,6 +9147,12 @@ async function cleanRenderedHTMLForExport(container) {
     errorHint: t('dataChartRenderHint')
   });
   const clone = container.cloneNode(true);
+  flattenDocumentVideos(clone, t);
+  // The split preview may have been rebuilt while the export waited. Never
+  // export a temporary image placeholder as if the local attachment was ready.
+  if (container === els.editorPreview && clone.querySelector('img.local-image-loading.local-image-reserved')) {
+    throw new Error('EXPORT_IMAGE_RESOURCE_FAILED: local image is still loading');
+  }
   clone.querySelectorAll('.imported-network-notice').forEach(element => element.remove());
   clone.querySelectorAll('.diagram-view-button').forEach(button => button.remove());
   await convertMermaidDiagramsToImages(clone, t('mermaidDiagram'));
@@ -9383,7 +9722,7 @@ function textBundleWarnings(...reports) {
 function renderTextBundleReport(container, warnings = []) {
   container.replaceChildren(); container.classList.remove('hidden');
   const count = { remote: 0, missing: 0, other: 0 };
-  const warningKey = warning => /REMOTE_IMAGE/.test(warning.code) ? 'textBundleRemote' : /MISSING_IMAGE/.test(warning.code) ? 'textBundleMissing' : /UNSAFE_REFERENCE/.test(warning.code) ? 'textBundleUnsafe' : 'textBundleUnsupported';
+  const warningKey = warning => warning.code === 'VIDEO_NOT_INCLUDED' ? 'videoNotIncluded' : /REMOTE_IMAGE/.test(warning.code) ? 'textBundleRemote' : /MISSING_IMAGE/.test(warning.code) ? 'textBundleMissing' : /UNSAFE_REFERENCE/.test(warning.code) ? 'textBundleUnsafe' : 'textBundleUnsupported';
   for (const warning of warnings) count[/REMOTE_IMAGE/.test(warning.code) ? 'remote' : /MISSING_IMAGE/.test(warning.code) ? 'missing' : 'other']++;
   container.dataset.warning = String(warnings.length > 0);
   const summary = document.createElement('strong'); summary.textContent = t('textBundleImageSummary', count); container.append(summary);
@@ -9437,6 +9776,18 @@ async function performExportCenter() {
       showToast(t('bundlePandocUnsupported'), 'warning', 9000);
       return;
     }
+    const pandocDoc = state.currentFile, pandocSession = state.documentSession;
+    const pandocContent = PANDOC_EXPORT_FORMATS.has(options.format)
+      ? (state.editing ? editorContent() : pandocDoc?.content || '') : null;
+    if (pandocContent !== null && /<video(?=[\s/>])/i.test(pandocContent)) {
+      let hasVideo = true;
+      try { hasVideo = documentMediaRanges(pandocContent).hasVideo; }
+      catch { /* A resource we cannot inspect must not go to the converter. */ }
+      if (hasVideo) {
+        showToast(t('videoPandocUnsupported'), 'warning', 9000);
+        return;
+      }
+    }
     if (state.blockImportedRemoteImages && !['textpack', 'markdown-portable', 'markdown-assets'].includes(options.format) && !allowImportedResourcesForRendering()) return;
     if (PANDOC_EXPORT_FORMATS.has(options.format) && !state.pandocStatus.available) {
       await refreshPandocStatus();
@@ -9477,18 +9828,22 @@ async function performExportCenter() {
       if (!isCurrent()) return;
       if (!output) return; // Native picker cancelled: keep export options and document intact.
     }
-    else output = await window.quilliteMarkdown.exportWithPandoc({
-      sourcePath: state.currentFile.resourcePath || state.currentFile.path,
-      title: state.currentFile.name,
-      content: state.currentFile.content,
-      format: options.format,
-      pandocPath: state.pandocStatus.path,
-      header: options.header,
-      footer: options.footer,
-      extraArguments: options.extraArguments,
-      customWriter: options.customWriter,
-      customExtension: options.customExtension
-    });
+    else {
+      if (!pandocDoc || pandocContent === null || pandocSession !== state.documentSession ||
+          state.currentFile?.path !== pandocDoc.path) return;
+      output = await window.quilliteMarkdown.exportWithPandoc({
+        sourcePath: pandocDoc.resourcePath || pandocDoc.path,
+        title: pandocDoc.name,
+        content: pandocContent,
+        format: options.format,
+        pandocPath: state.pandocStatus.path,
+        header: options.header,
+        footer: options.footer,
+        extraArguments: options.extraArguments,
+        customWriter: options.customWriter,
+        customExtension: options.customExtension
+      });
+    }
     if (output === false) return;
     if (output?.autoPaginatedLongImage) showToast(t('longImageAutoPaged', { count: output.paths.length }), 'info', 7200);
     else if (output && !['docx', 'html', 'html-plain', 'pdf', 'textpack', 'markdown-assets'].includes(options.format)) showToast(t('exportSucceeded'), 'success');
@@ -10869,7 +11224,7 @@ function startDocumentSummaryProgress() {
 }
 
 function renderDocumentSummary(markdown) {
-  const html = DOMPurify.sanitize(marked.parse(markdown), { ADD_ATTR: ['target', 'rel'] });
+  const html = DOMPurify.sanitize(marked.parse(markdown), { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['video', 'audio', 'source', 'track'] });
   els.documentSummaryContent.innerHTML = html;
   bindDocumentActions(els.documentSummaryContent);
   els.documentSummaryContent.classList.remove('hidden');
@@ -11742,9 +12097,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '3.1.0', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '3.2.0', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.1.0';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.2.0';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -11837,7 +12192,7 @@ function renderUpdateDialogContent(info) {
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   const portableWindows = info.manualInstallReason === 'windows-portable';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
-  $('#currentVersion').textContent = info.currentVersion || '3.1.0';
+  $('#currentVersion').textContent = info.currentVersion || '3.2.0';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -11848,7 +12203,7 @@ function renderUpdateDialogContent(info) {
     ? history.map(entry => `<section class="update-release-entry"><h3>v${escapeHtml(entry.version)}</h3>${entry.summary ? `<p class="update-release-summary">${escapeHtml(entry.summary)}</p>` : ''}${marked.parse(entry.notes || t('noReleaseNotes'))}${entry.notesTruncated ? partialNotesNotice : ''}</section>`).join('')
       + (info.updatesTruncated ? `<p class="update-history-notice">${escapeHtml(t('updateHistoryTruncated', {count: history.length}))}</p>` : '')
     : marked.parse(latestNotes.notes) + (latestNotes.notesTruncated ? partialNotesNotice : '');
-  notesElement.innerHTML = DOMPurify.sanitize(releaseNotes);
+  notesElement.innerHTML = DOMPurify.sanitize(releaseNotes, {FORBID_TAGS: ['video', 'audio', 'source', 'track']});
   notesElement.querySelectorAll('a').forEach(link => link.addEventListener('click', event => {
     const href = link.getAttribute('href') || '';
     if (!/^https?:\/\//i.test(href)) return;
@@ -13273,6 +13628,43 @@ els.moreFormatButton.addEventListener('click', event => {
   event.stopPropagation();
   openMoreFormatMenu();
 });
+$('#pickLocalVideo').addEventListener('click', () => { void chooseVideoInsertFile(); });
+$('#videoLocalTab').addEventListener('click', () => setVideoInsertSource('local', true));
+$('#videoNetworkTab').addEventListener('click', () => setVideoInsertSource('network', true));
+$('#videoSourceTabs').addEventListener('keydown', event => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  setVideoInsertSource(event.key === 'Home' ? 'local' : event.key === 'End' ? 'network'
+    : videoInsertSource === 'local' ? 'network' : 'local', true);
+});
+$('#cancelVideoInsert').addEventListener('click', () => closeVideoInsertDialog());
+$('#videoInsertDialog').addEventListener('close', () => {
+  if (!$('#videoInsertDialog').open && videoInsertTarget) closeVideoInsertDialog();
+});
+$('#networkVideoUrl').addEventListener('input', () => {
+  setNetworkVideoError();
+  updateVideoInsertActions();
+});
+$('#networkVideoUrl').addEventListener('blur', event => {
+  if (event.target.value.trim() && !networkVideoMarkup(event.target.value)) setNetworkVideoError(t('videoNetworkInvalid'));
+});
+$('#videoInsertForm').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!$('#videoInsertDialog').open || !videoInsertTarget) return;
+  const target = videoInsertTarget;
+  if (!imageInsertionCurrent(target)) { closeVideoInsertDialog(); return; }
+  if (videoInsertSource === 'local') {
+    const file = videoInsertFile;
+    if (!file || videoInsertPending) return;
+    closeVideoInsertDialog(true);
+    void insertLocalVideo('', target, file);
+    return;
+  }
+  const input = $('#networkVideoUrl'), block = networkVideoMarkup(input.value);
+  if (!block) { setNetworkVideoError(t('videoNetworkInvalid')); input.focus(); return; }
+  closeVideoInsertDialog(true);
+  if (!commitVideoMarkup(target, block)) releaseImageInsertion(target);
+});
 els.moreFormatMenu.addEventListener('click', event => {
   event.stopPropagation();
   const button = event.target.closest('[data-format-command]');
@@ -13426,7 +13818,7 @@ const documentTools = createDocumentTools({
   focusDocument: () => requestAnimationFrame(() => codeEditor?.focus()),
   conflict: () => openDocumentConflict(),
   notifyFailure: () => showToast(t('previewError'), 'error'),
-  hasBlockingDialog: () => Boolean(document.querySelector('.dialog-backdrop:not(.hidden)')),
+  hasBlockingDialog: () => Boolean(document.querySelector('.dialog-backdrop:not(.hidden), #localVideoChoice[open], #videoInsertDialog[open]')),
   checkAnchors: content => {
     // Use the same sanitised Markdown pipeline and DOM heading order as preview.
     // A detached template does not fetch image URLs or execute document HTML.
@@ -13739,6 +14131,7 @@ els.editorPreview.addEventListener('dblclick', event => {
 
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented) return;
+  if ($('#localVideoChoice').open || $('#videoInsertDialog').open) return;
   if (!els.recoveryDialog.classList.contains('hidden')) {
     if (event.key === 'Escape') { event.preventDefault(); void discardRecoverySnapshot(); }
     else if (event.key === 'Tab') {
@@ -13820,20 +14213,51 @@ document.addEventListener('keydown', event => {
 
 const IMAGE_FILE_PATTERN = /\.(png|jpe?g|gif|webp|svg|bmp)$/i;
 let dragDepth = 0;
-document.addEventListener('dragenter', event => { if (!isFileDrag(event)) return; event.preventDefault(); dragDepth++; els.dropOverlay.classList.remove('hidden'); });
+function resetDocumentFileDrag() {
+  dragDepth = 0;
+  els.dropOverlay.classList.add('hidden');
+  $('#pickLocalVideo').classList.remove('dragging');
+}
+function handleVideoDialogDrop(filePath) {
+  if (!$('#videoInsertDialog').open) return false;
+  setVideoInsertSource('local');
+  if (filePath) void chooseVideoInsertFile(filePath);
+  else setVideoLocalError(t('videoDropUnavailable'));
+  return true;
+}
+document.addEventListener('dragenter', event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  dragDepth++;
+  if ($('#videoInsertDialog').open) $('#pickLocalVideo').classList.add('dragging');
+  else els.dropOverlay.classList.remove('hidden');
+});
 document.addEventListener('dragover', event => { if (isFileDrag(event)) event.preventDefault(); });
-document.addEventListener('dragleave', event => { if (!isFileDrag(event)) return; event.preventDefault(); dragDepth--; if (dragDepth <= 0) { dragDepth = 0; els.dropOverlay.classList.add('hidden'); } });
-document.addEventListener('dragend', () => { dragDepth = 0; els.dropOverlay.classList.add('hidden'); });
+document.addEventListener('dragleave', event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  if (--dragDepth <= 0) resetDocumentFileDrag();
+});
+document.addEventListener('dragend', resetDocumentFileDrag);
 document.addEventListener('drop', async event => {
   if (!isFileDrag(event)) return;
   event.preventDefault();
-  dragDepth = 0;
-  els.dropOverlay.classList.add('hidden');
+  resetDocumentFileDrag();
   const file = event.dataTransfer.files[0];
   if (!file) return;
   const filePath = window.quilliteMarkdown.pathForFile(file);
+  if ($('#videoInsertDialog').open) {
+    // Wails may provide the native path through a separate callback instead of File.path.
+    if (filePath || !window.runtime?.OnFileDrop) handleVideoDialogDrop(filePath);
+    return;
+  }
+  if ($('#localVideoChoice').open) return;
   if (!filePath) return;
-  if (state.editing && IMAGE_FILE_PATTERN.test(filePath)) {
+  if (state.editing && LOCAL_VIDEO_FILE_PATTERN.test(filePath)) {
+    const dropPosition = codeEditor?.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (Number.isInteger(dropPosition)) codeEditor.dispatch({ selection: { anchor: dropPosition } });
+    await insertLocalVideo(filePath);
+  } else if (state.editing && IMAGE_FILE_PATTERN.test(filePath)) {
     const dropPosition = codeEditor?.posAtCoords({ x: event.clientX, y: event.clientY });
     if (Number.isInteger(dropPosition)) codeEditor.dispatch({ selection: { anchor: dropPosition } });
     await importAndInsertImage(filePath, imageDescriptionFromName(file.name));
@@ -13842,17 +14266,17 @@ document.addEventListener('drop', async event => {
 });
 
 window.quilliteMarkdown.onFileDrop(paths => {
-  dragDepth = 0;
-  els.dropOverlay.classList.add('hidden');
+  resetDocumentFileDrag();
   const filePath = paths[0];
+  if (handleVideoDialogDrop(filePath) || $('#localVideoChoice').open) return;
   if (!filePath) return;
-  if (state.editing && IMAGE_FILE_PATTERN.test(filePath)) importAndInsertImage(filePath);
+  if (state.editing && LOCAL_VIDEO_FILE_PATTERN.test(filePath)) void insertLocalVideo(filePath);
+  else if (state.editing && IMAGE_FILE_PATTERN.test(filePath)) importAndInsertImage(filePath);
   else if (/\.(md|markdown|mdown|mkd|txt|textpack|textbundle)$/i.test(filePath)) loadFile(filePath);
   else showToast(t('dropUnsupported'), 'warning');
 }, () => {
-  dragDepth = 0;
-  els.dropOverlay.classList.add('hidden');
-  showToast(t('virtualFileDropUnsupported'), 'warning');
+  resetDocumentFileDrag();
+  if (!handleVideoDialogDrop('')) showToast(t('virtualFileDropUnsupported'), 'warning');
 });
 
 initializeFormatToolbarOverflow();
