@@ -144,9 +144,15 @@ export function alignImageChanges(source, group, index, alignment) {
   return { from: target.from, to: target.to, insert };
 }
 
-export function resizeImageChanges(source, group, index, dimensions) {
+export function resizeImageChanges(source, group, index, dimensions, inCell=false) {
   const target = group.images[index];
   if (!target) throw new Error('Invalid image index');
+  if(inCell){
+    // A GFM cell is already a layout container. Only replace the chosen
+    // token; never serialize its siblings into a nested HTML table.
+    if(target.kind!=='html' && !dimensions.width && !dimensions.height)return null;
+    return {from:target.from,to:target.to,insert:sizedImageSource(source.slice(target.from,target.to),target,dimensions)};
+  }
   if (group.row && target.paragraphFrom !== undefined) {
     // As with alignment, first materialize the complete Markdown-only row so
     // an HTML img cannot swallow the remaining Markdown images.

@@ -7,7 +7,7 @@ const source=readFileSync(new URL('../src/renderer.js',import.meta.url),'utf8');
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
 const deferred=()=>{let resolve,reject;const promise=new Promise((r,j)=>{resolve=r;reject=j;});return{promise,resolve,reject};};
 function harness() {
- const state={root:'Saved',explorerRequest:0,explorerFiles:[{name:'original.md'}],sidebarMode:'explorer',documentOpenRequest:0,documentSession:0};
+ const state={root:'Saved',explorerRequest:0,explorerFiles:[{name:'original.md'}],sidebarMode:'explorer',librarySearch:{query:'keyword',key:'cached'},documentOpenRequest:0,documentSession:0};
  const lists=[],frames=[],notices=[],opens=[];
  const context=vm.createContext({state,console:{warn(){},error(){}},window:{quilliteMarkdown:{listFolder:root=>{const d=deferred();lists.push({root,...d});return d.promise;},openFolder:()=>{const d=deferred();opens.push(d);return d.promise;},readFile:async path=>({path})}},requestAnimationFrame:fn=>frames.push(fn),setSidebarMode:mode=>{state.sidebarMode=mode;},reportSilentError(){},showToast:k=>notices.push(k),t:k=>k,isMissingDocumentError:()=>false,maybeDiscardChanges:()=>true,displayDocument:doc=>{state.currentFile=doc;state.documentSession++;}});
  installDocumentLoadingFixture(context,source);
@@ -20,10 +20,12 @@ for(const failure of [false,true])test(`older refresh ${failure?'failure':'succe
  h.lists[1].resolve({files:[{name:'new.md'}]});await b;
  failure?h.lists[0].reject(Error('old')):h.lists[0].resolve({files:[{name:'stale.md'}]});await a;
  assert.equal(h.state.explorerFiles[0].name,'new.md');assert.deepEqual(h.notices,[]);
+ assert.equal(h.state.librarySearch.key,'','refresh must recheck bodies even if filenames did not change');
 });
 for(const mode of ['recent','favorites'])test(`refresh retains the user's ${mode} tab`,async()=>{
  const h=harness(),a=h.context.refreshExplorer();h.state.sidebarMode=mode;h.lists[0].resolve({files:[{name:'fresh.md'}]});await a;
  assert.equal(h.state.sidebarMode,mode);assert.equal(h.state.explorerFiles[0].name,'fresh.md');
+ assert.equal(h.state.librarySearch.key,'cached','refreshing Explorer must not invalidate another tab');
 });
 test('current refresh failure still reports and preserves existing files',async()=>{
  const h=harness(),a=h.context.refreshExplorer();h.lists[0].reject(Error('current'));await a;

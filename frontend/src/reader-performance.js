@@ -68,7 +68,7 @@ export function finishReaderWork(container, highlight) {
   container.querySelectorAll('code[data-reader-code]').forEach(code => highlightReaderCode(code, highlight));
 }
 
-export function scheduleReaderWork(container, highlight) {
+export function scheduleReaderWork(container, highlight, viewport = container.closest('.reader-pane')) {
   cancelReaderWork(container);
   const session = { observer: null, frame: 0, queue: new Set() };
   sessions.set(container, session);
@@ -100,7 +100,7 @@ export function scheduleReaderWork(container, highlight) {
     for (const entry of entries) if (entry.isIntersecting) {
       session.observer.unobserve(entry.target); enqueue(entry.target);
     }
-  }, { root: container.closest('.reader-pane'), rootMargin: '400px' });
+  }, { root: viewport, rootMargin: '400px' });
   codes.forEach(code => session.observer.observe(code));
   // Keep headings and charts normally laid out. Prose below the viewport can
   // also skip layout; all text stays in the DOM for selection/search/export.

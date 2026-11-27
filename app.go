@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -29,8 +30,8 @@ const (
 	appNameEN       = "Quillite Markdown"
 	legacyAppNameZH = "MD阅读助手"
 	legacyAppNameEN = "MD Reader Assistant"
-	appVersion      = "3.2.0"
-	maxRecent       = 10
+	appVersion      = "3.3.0"
+	maxRecent       = 100
 )
 
 var markdownExtensions = map[string]bool{
@@ -143,6 +144,9 @@ type App struct {
 	startupRecoveryReady     bool
 	startupRecovery          *RecoverySnapshot
 	workspaceMu              sync.Mutex
+	librarySearchVersion     atomic.Uint64
+	librarySearchMu          sync.Mutex
+	libraryTrashMu           sync.Mutex
 	workspacePlan            *workspaceReplacePlan
 	historyMu                sync.Mutex
 	picGoCloudLoginMu        sync.Mutex
@@ -154,12 +158,15 @@ type App struct {
 	securityBookmarksMu      sync.Mutex
 	draftsMu                 sync.Mutex
 	aiRequestMu              sync.Mutex
+	readingTranslationID     string
+	readingTranslationCancel context.CancelFunc
 	draftFiles               map[string]bool
 	draftReplacements        map[string]bool
 	dirty                    bool
 	language                 string
 	initialFile              string
 	frontendReady            bool
+	startupWindow            startupWindowState
 	preferencesOverride      string
 	referenceOverride        string
 	aiCredentials            aiCredentialStore
@@ -211,13 +218,7 @@ func (a *App) onSecondInstanceLaunch(data options.SecondInstanceData) {
 	if filePath != "" {
 		a.openFileFromSystem(filePath)
 	}
-	a.mu.RLock()
-	ctx := a.ctx
-	a.mu.RUnlock()
-	if ctx != nil {
-		wailsruntime.WindowUnminimise(ctx)
-		wailsruntime.WindowShow(ctx)
-	}
+	a.requestWindowActivation()
 }
 
 func (a *App) onFileOpen(filePath string) {
@@ -239,8 +240,7 @@ func (a *App) openFileFromSystem(filePath string) {
 	_ = a.rememberMacSecurityScopedPath(filePath, false)
 	if doc, err := a.OpenRecentFile(filePath); err == nil {
 		wailsruntime.EventsEmit(ctx, "file:open-from-main", doc)
-		wailsruntime.WindowUnminimise(ctx)
-		wailsruntime.WindowShow(ctx)
+		a.requestWindowActivation()
 	}
 }
 
@@ -428,7 +428,7 @@ func samePreferencePath(left, right string) bool {
 	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
 		return false
 	}
-	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+	return sameFilesystemPath(left, right)
 }
 
 func indexPreferencePath(paths []string, target string) int {
@@ -611,7 +611,8 @@ func (a *App) isReferenceDocumentPath(filePath string) bool {
 		return false
 	}
 	candidate, err := filepath.Abs(filepath.Clean(filePath))
-	if err != nil || !samePreferencePath(filepath.Dir(candidate), directory) {
+	// Keep the conservative read-only guard on case-insensitive volumes.
+	if err != nil || !strings.EqualFold(filepath.Dir(candidate), filepath.Clean(directory)) {
 		return false
 	}
 	for _, kind := range []string{"charts", "formulas", "formats"} {
@@ -1139,11 +1140,13 @@ func writeImageAsset(currentFile, preferredName string, data []byte) (string, er
 func (a *App) ReadImageData(imagePath, documentDirectory string) (string, error) {
 	var resolved string
 	var err error
+	bundleScoped := false
 	if scopedPath, scoped, scopeErr := a.bundleWorkspaceImagePath(imagePath, documentDirectory); scoped {
 		if scopeErr != nil {
 			return "", scopeErr
 		}
 		resolved = scopedPath // Already decoded and confined; never decode again.
+		bundleScoped = true
 	} else {
 		resolved, err = resolveLocalImagePath(imagePath, documentDirectory)
 	}
@@ -1169,6 +1172,15 @@ func (a *App) ReadImageData(imagePath, documentDirectory string) (string, error)
 		contentType = http.DetectContentType(data)
 	}
 	contentType = strings.Split(contentType, ";")[0]
+	if bundleScoped && !strings.HasPrefix(contentType, "image/") {
+		// A TextBundle attachment need not have an image suffix. Reuse the
+		// package parser's bounded byte recognition, including SVG's XML root,
+		// instead of rejecting a valid image as text or generic binary data.
+		// Keep established image/* MIME handling (for example AVIF) unchanged.
+		if detected, detectErr := textPackImageType(data); detectErr == nil {
+			contentType = detected
+		}
+	}
 	if !strings.HasPrefix(contentType, "image/") {
 		return "", errors.New("selected file is not a supported image")
 	}
@@ -1610,7 +1622,7 @@ func (a *App) RemoveRecent(filePath string) (Preferences, error) {
 	return a.updatePreferences(func(prefs *Preferences) {
 		filtered := make([]string, 0, len(prefs.RecentFiles))
 		for _, item := range prefs.RecentFiles {
-			if !strings.EqualFold(filepath.Clean(item), cleaned) {
+			if !samePreferencePath(item, cleaned) {
 				filtered = append(filtered, item)
 			}
 		}
@@ -1642,7 +1654,7 @@ func (a *App) AddFavorite(filePath string) (Preferences, error) {
 	}
 	return a.updatePreferences(func(prefs *Preferences) {
 		for _, item := range prefs.FavoriteFiles {
-			if strings.EqualFold(filepath.Clean(item), cleaned) {
+			if samePreferencePath(item, cleaned) {
 				return
 			}
 		}
@@ -1658,7 +1670,7 @@ func (a *App) RemoveFavorite(filePath string) (Preferences, error) {
 	return a.updatePreferences(func(prefs *Preferences) {
 		filtered := make([]string, 0, len(prefs.FavoriteFiles))
 		for _, item := range prefs.FavoriteFiles {
-			if !strings.EqualFold(filepath.Clean(item), cleaned) {
+			if !samePreferencePath(item, cleaned) {
 				filtered = append(filtered, item)
 			}
 		}

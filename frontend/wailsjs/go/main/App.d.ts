@@ -16,6 +16,8 @@ export function CancelAIRewrite():Promise<void>;
 
 export function CancelPicGoCLILogin(arg1:string):Promise<void>;
 
+export function CancelReadingTranslation(arg1:string):Promise<void>;
+
 export function CheckDocumentAssets(arg1:string,arg2:Array<string>):Promise<Array<string>>;
 
 export function CheckForUpdates(arg1:boolean):Promise<main.UpdateInfo>;
@@ -188,7 +190,13 @@ export function SavePastedImage(arg1:string,arg2:string):Promise<string>;
 
 export function SavePicGoCLIDraft(arg1:main.PicGoCLIDraft):Promise<main.PicGoCLIDraft>;
 
+export function SaveReadingTranslation(arg1:string,arg2:string):Promise<string>;
+
 export function SaveRecoverySnapshot(arg1:main.RecoverySnapshotInput):Promise<void>;
+
+export function SearchLibraryFiles(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<main.LibrarySearchResult>;
+
+export function SearchLibraryFilesWithProgress(arg1:string,arg2:string,arg3:string,arg4:Array<string>,arg5:number):Promise<main.LibrarySearchResult>;
 
 export function SearchWorkspace(arg1:main.WorkspaceQuery):Promise<main.WorkspaceSearchResult>;
 
@@ -245,6 +253,10 @@ export function TestPicGoCLIUpload(arg1:string,arg2:string,arg3:boolean,arg4:boo
 export function TestPicGoCLIUploadWithProgress(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:string):Promise<string>;
 
 export function TestPicGoCloud():Promise<main.PicGoCloudStatus>;
+
+export function TranslateReadingParts(arg1:main.ReadingTranslationRequest):Promise<Array<string>>;
+
+export function TrashLibraryFile(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UploadImageToPicGo(arg1:string,arg2:string):Promise<string>;
 

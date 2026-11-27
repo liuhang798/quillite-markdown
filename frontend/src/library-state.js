@@ -1,13 +1,20 @@
 const supportedSidebarModes = new Set(['recent', 'favorites', 'explorer']);
 
-export const DEFAULT_RECENT_LIMIT = 10;
+export const DEFAULT_RECENT_LIMIT = 100;
 
 export function normalizeSidebarMode(mode) {
   return supportedSidebarModes.has(mode) ? mode : 'recent';
 }
 
+export function isWindowsDocumentPath(path) {
+  const platform=globalThis.document?.documentElement?.dataset?.platform;
+  return platform==='windows' || ((!platform || platform==='browser') && /^(?:[a-z]:[\\/]|[\\/]{2})/i.test(path));
+}
+
 export function normalizeDocumentPath(filePath) {
-  return String(filePath || '').trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const path=String(filePath || '');
+  // A backslash and differently cased names are distinct on POSIX.
+  return (isWindowsDocumentPath(path) ? path.replace(/\\/g,'/').toLowerCase() : path).replace(/\/+$/,'');
 }
 
 export function sameDocumentPath(left, right) {
@@ -27,6 +34,17 @@ export function isMissingDocumentError(error) {
 
 function pathFromRecentEntry(entry) {
   return typeof entry === 'string' ? entry : entry?.path;
+}
+
+// Preferences replace the favorites array. Reuse membership until it changes.
+const favoriteMembership = new WeakMap();
+export function isLibraryFavorite(files, path) {
+  let keys = favoriteMembership.get(files);
+  if (!keys) {
+    keys = new Set(files.map(file => normalizeDocumentPath(file.path)));
+    favoriteMembership.set(files, keys);
+  }
+  return keys.has(normalizeDocumentPath(path));
 }
 
 function uniqueRecentFiles(recentFiles = []) {

@@ -128,6 +128,13 @@ window.quilliteMarkdown = {
   readFile: filePath => desktopRuntime ? Backend.ReadFile(filePath) : resolved(null),
   readDocumentConflict: filePath => desktopRuntime ? Backend.ReadDocumentConflict(filePath) : resolved(null),
   searchWorkspace: query => desktopRuntime ? Backend.SearchWorkspace(query) : Promise.reject(new Error('DESKTOP_REQUIRED')),
+  searchLibraryFiles: async (mode, root, query, paths, request, onBatch) => {
+    if (!desktopRuntime) return { paths: [], skipped: paths.length };
+    if (!onBatch) return Backend.SearchLibraryFiles(mode, root, query, paths);
+    const off = EventsOn('library:search:' + request, onBatch);
+    try { return await Backend.SearchLibraryFilesWithProgress(mode, root, query, paths, request); }
+    finally { off(); }
+  },
   previewWorkspaceReplace: query => desktopRuntime ? Backend.PreviewWorkspaceReplace(query) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   applyWorkspaceReplace: (token, paths) => desktopRuntime ? Backend.ApplyWorkspaceReplace(token, paths) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   checkDocumentAssets: (path, refs) => desktopRuntime ? Backend.CheckDocumentAssets(path, refs) : resolved(refs),
@@ -217,6 +224,7 @@ window.quilliteMarkdown = {
     : resolved({ language: localStorage.getItem('language') || 'zh-CN', fontFamily: localStorage.getItem('fontFamily') || 'system', bodyTypography: readBodyTypography(localStorage), recentFiles: [], recentFileStatuses: [], pinnedRecentFiles: [], favoriteFiles: [], favoriteFileStatuses: [], explorerRoot: localStorage.getItem('explorerRoot') || '', suppressUpdateUntil: localStorage.getItem('suppressUpdateUntil') || '', usageAnalytics: true }),
   needsLanguageSelection: () => desktopRuntime ? Backend.NeedsLanguageSelection() : resolved(false),
   removeRecent: filePath => desktopRuntime ? Backend.RemoveRecent(filePath) : resolved(),
+  trashLibraryFile: (mode, root, path) => desktopRuntime ? Backend.TrashLibraryFile(mode, root, path) : Promise.reject(new Error('DESKTOP_REQUIRED')),
   setRecentPinned: (filePath, pinned) => desktopRuntime ? Backend.SetRecentPinned(filePath, pinned) : resolved(),
   reorderPinnedRecent: filePaths => desktopRuntime ? Backend.ReorderPinnedRecent(filePaths) : resolved(),
   addFavorite: filePath => desktopRuntime ? Backend.AddFavorite(filePath) : resolved(),
@@ -234,6 +242,9 @@ window.quilliteMarkdown = {
   setBodyTypography: settings => desktopRuntime ? Backend.SetBodyTypography(settings) : resolved(normalizeBodyTypography(settings)),
   setUsageAnalytics: enabled => desktopRuntime ? Backend.SetUsageAnalytics(enabled) : resolved({ usageAnalytics: enabled }),
   getAISettings: () => desktopRuntime ? Backend.GetAISettings() : resolved(browserAISettings(sessionStorage.getItem('activeAIProvider') || 'deepseek')),
+  translateReadingParts: request => desktopRuntime ? Backend.TranslateReadingParts(request) : Promise.reject(Error('TRANSLATION_DESKTOP_REQUIRED')),
+  cancelReadingTranslation: id => desktopRuntime ? Backend.CancelReadingTranslation(id) : resolved(),
+  saveReadingTranslation: (path, content) => desktopRuntime ? Backend.SaveReadingTranslation(path,content) : Promise.reject(Error('TRANSLATION_DESKTOP_REQUIRED')),
   getAIProviderSettings: provider => desktopRuntime ? Backend.GetAIProviderSettings(provider) : resolved(browserAISettings(provider)),
   setAISettings: input => {
     if (desktopRuntime) return Backend.SetAISettings(input);
@@ -287,12 +298,12 @@ window.quilliteMarkdown = {
   onAIRewriteChunk: callback => desktopRuntime ? EventsOn('ai:rewrite-chunk', callback) : () => {},
   onAIProgress: callback => desktopRuntime ? EventsOn('ai:progress', callback) : () => {},
   reportErrorLog: (source, message, stack) => desktopRuntime ? Backend.ReportErrorLog(source, message, stack) : resolved(),
-  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.2.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
+  getFeedbackSystemInfo: () => desktopRuntime ? Backend.GetFeedbackSystemInfo() : resolved({ appVersion: '3.3.0', os: browserPlatform === 'darwin' ? 'macos' : 'windows', systemVersion: navigator.userAgent }),
   selectFeedbackImages: () => desktopRuntime ? Backend.SelectFeedbackImages() : resolved([]),
   submitFeedback: input => desktopRuntime ? Backend.SubmitFeedback(input) : resolved(),
   getWindowsInstallSafety: () => desktopRuntime
     ? Backend.GetWindowsInstallSafety()
-    : resolved({ applicable: false, safe: true, currentVersion: '3.2.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
+    : resolved({ applicable: false, safe: true, currentVersion: '3.3.0', downloadUrl: 'https://qm.ssssa.cn/#download' }),
   checkForUpdates: force => desktopRuntime
     ? Backend.CheckForUpdates(force)
     : resolved(mockUpdate
@@ -317,7 +328,7 @@ window.quilliteMarkdown = {
           ],
           releaseUrl: 'https://qm.ssssa.cn/#download'
         }
-      : { checked: true, available: false, currentVersion: '3.2.0', latestVersion: '3.2.0' }),
+      : { checked: true, available: false, currentVersion: '3.3.0', latestVersion: '3.3.0' }),
   snoozeUpdates: days => {
     if (desktopRuntime) return Backend.SnoozeUpdates(days);
     localStorage.setItem('suppressUpdateUntil', new Date(Date.now() + Math.max(1, Math.min(365, days)) * 86400000).toISOString());

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { documentListName } from '../src/document-list-name.js';
-import { directoryFromDocumentPath, sameDocumentPath } from '../src/library-state.js';
+import { directoryFromDocumentPath, isLibraryFavorite, sameDocumentPath } from '../src/library-state.js';
 
 for (const [name, title, extension, kind] of [
   ['国际站数据库结构与业务关系手册.md', '国际站数据库结构与业务关系手册', '.md', 'markdown'],
@@ -32,7 +32,7 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&am
 
 function render(file, changes = {}, pinned = false) {
   const state = { currentFile: null, favoriteFiles: [], sidebarMode: 'recent', ...changes };
-  const c = vm.createContext({ documentListName, directoryFromDocumentPath, sameDocumentPath, escapeHtml,
+  const c = vm.createContext({ documentListName, directoryFromDocumentPath, isLibraryFavorite, sameDocumentPath, escapeHtml,
     state, pinMutationInProgress: false, fileIcon: () => '<svg></svg>',
     t: (key, values) => values?.name ? `${key}: ${values.name}` : key,
   });

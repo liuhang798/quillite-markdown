@@ -66,6 +66,13 @@ test('missing document errors are recognized as an expected library state', () =
   assert.equal(isMissingDocumentError('unexpected renderer failure'), false);
 });
 
+test('POSIX case variants remain independently listed, selected and pinned',()=>{
+  const a='/notes/README.md', b='/notes/readme.md';
+  assert.equal(sameDocumentPath(a,b),false);
+  assert.equal(sameDocumentPath('/notes/a\\b.md','/notes/a/b.md'),false);
+  assert.deepEqual(paths(partitionRecentFiles([recentFile(a),recentFile(b)],[b]).files),[b,a]);
+});
+
 test('normalizePinnedRecentPaths keeps an ordered, deduplicated subset using recent path casing', () => {
   const recentFiles = [
     recentFile('C:\\Docs\\Alpha.md'),
@@ -77,7 +84,7 @@ test('normalizePinnedRecentPaths keeps an ordered, deduplicated subset using rec
     normalizePinnedRecentPaths(recentFiles, [
       'c:/docs/beta.md',
       'C:\\DOCS\\BETA.MD',
-      '/users/demo/gamma.md',
+      '/Users/demo/Gamma.md',
       'C:\\Docs\\Unknown.md',
     ]),
     ['C:\\Docs\\Beta.md', '/Users/demo/Gamma.md'],
@@ -85,6 +92,7 @@ test('normalizePinnedRecentPaths keeps an ordered, deduplicated subset using rec
 });
 
 test('partitionRecentFiles places pinned files first and limits only ordinary entries', () => {
+  assert.equal(DEFAULT_RECENT_LIMIT, 100);
   const pinned = [recentFile('C:\\Docs\\Pinned-A.md'), recentFile('C:\\Docs\\Pinned-B.md')];
   const ordinary = Array.from({ length: DEFAULT_RECENT_LIMIT + 1 }, (_, index) => (
     recentFile(`C:\\Docs\\Recent-${index + 1}.md`)
@@ -111,7 +119,7 @@ test('upsertRecentFile inserts new files after pins while existing files keep th
 
   const inserted = upsertRecentFile(
     [pinned, first, second],
-    ['/DOCS/PINNED.MD'],
+    ['/docs/pinned.md'],
     recentFile('/docs/new.md'),
   );
   assert.deepEqual(paths(inserted.files), [
@@ -124,12 +132,12 @@ test('upsertRecentFile inserts new files after pins while existing files keep th
   const updated = upsertRecentFile(
     inserted.files,
     inserted.pinnedPaths,
-    recentFile('/DOCS/FIRST.MD', { exists: true, modifiedAt: 'now' }),
+    recentFile('/docs/first.md', { exists: true, modifiedAt: 'now' }),
   );
   assert.deepEqual(paths(updated.files), [
     '/docs/pinned.md',
     '/docs/new.md',
-    '/DOCS/FIRST.MD',
+    '/docs/first.md',
     '/docs/second.md',
   ]);
   assert.equal(updated.files[2].modifiedAt, 'now');
@@ -141,7 +149,7 @@ test('pinRecentFile moves a normal entry to the front of the pinned group withou
   const originalFiles = [...recentFiles];
   const originalPins = [...pinnedPaths];
 
-  const result = pinRecentFile(recentFiles, pinnedPaths, '/DOCS/TWO.MD');
+  const result = pinRecentFile(recentFiles, pinnedPaths, '/docs/two.md');
 
   assert.deepEqual(paths(result.files), ['/docs/two.md', '/docs/pinned.md', '/docs/one.md']);
   assert.deepEqual(result.pinnedPaths, ['/docs/two.md', '/docs/pinned.md']);
@@ -158,12 +166,12 @@ test('unpinRecentFile moves the entry to the front of ordinary recents and drops
   const result = unpinRecentFile(
     [pinA, pinB, ...ordinary],
     [pinA.path, pinB.path],
-    '/DOCS/PIN-A.MD',
+    '/docs/pin-a.md',
   );
 
   assert.deepEqual(result.pinnedPaths, ['/docs/pin-b.md']);
   assert.deepEqual(paths(result.pinnedFiles), ['/docs/pin-b.md']);
-  assert.deepEqual(paths(result.ordinaryFiles), ['/docs/pin-a.md', ...paths(ordinary.slice(0, 9))]);
+  assert.deepEqual(paths(result.ordinaryFiles), ['/docs/pin-a.md', ...paths(ordinary.slice(0, DEFAULT_RECENT_LIMIT - 1))]);
 });
 
 test('reorderPinnedRecentFiles accepts current pins only and appends omitted pins in their old order', () => {

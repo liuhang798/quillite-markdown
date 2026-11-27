@@ -29,10 +29,10 @@ test('recent selection normalizes paths, toggles and prunes missing records, not
 
 test('bulk clear serializes record-only requests and retains failed items', async () => {
   const calls=[];let pending=false;
-  const result=await removeRecentSelection(['a.md','A.md','b.md','c.md',''],async path=>{
+  const result=await removeRecentSelection(['C:/a.md','c:/A.md','C:/b.md','C:/c.md',''],async path=>{
     assert.equal(pending,false);pending=true;calls.push(path);
-    await Promise.resolve();pending=false;if(path==='b.md')throw Error('preferences unavailable');
+    await Promise.resolve();pending=false;if(path==='C:/b.md')throw Error('preferences unavailable');
   });
-  assert.deepEqual(calls,['a.md','b.md','c.md']);
-  assert.deepEqual(result,{removed:['a.md','c.md'],failed:['b.md']});
+  assert.deepEqual(calls,['C:/a.md','C:/b.md','C:/c.md']);
+  assert.deepEqual(result,{removed:['C:/a.md','C:/c.md'],failed:['C:/b.md']});
 });

@@ -15,7 +15,7 @@ const boxes=StateField.define({
   create: () => Decoration.none,
   update(value, tr) {
     value=value.map(tr.changes);
-    for (const effect of tr.effects) if(effect.is(changeRanges)) value=Decoration.set(effect.value.map(([from,to])=>Decoration.replace({widget:new Box()}).range(from,to)),true);
+    for (const effect of tr.effects) if(effect.is(changeRanges)) value=Decoration.set(effect.value.map(([from,to])=>Decoration.replace({widget:new Box(),inclusive:from===to}).range(from,to)),true);
     return value;
   },
   provide: field=>EditorView.decorations.from(field)

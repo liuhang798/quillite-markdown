@@ -1,4 +1,9 @@
-/* Critical layout, loaded before the body and main application bundle. */
+/* Critical canvas and layout, before the body and main application bundle.
+   These neutral colors match styles.css; no document rendering is required. */
+:root { --bg: #f7f7f6; --text: #171918; color-scheme: light; }
+:root[data-color-mode="dark"] { --bg: #151716; --text: #eceeec; color-scheme: dark; }
+html, body { background: var(--bg); color: var(--text); }
+
 html[data-startup-sidebar="collapsed"] #sidebar {
   width: 0 !important;
   flex-basis: 0 !important;

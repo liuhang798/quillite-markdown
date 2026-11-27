@@ -34,3 +34,6 @@
   .diagram-viewer-controls button { padding: 6px 8px; }
 }
 @media print { .diagram-view-button, .diagram-viewer { display: none !important; } }
+.diagram-viewer-canvas { display:block; width:100%; height:100%; pointer-events:none; }
+.diagram-viewer-stage [hidden] { display:none; }
+:is(#markdownContent,#editorPreview,.markdown-body) img[src]:not(a img, button img,.local-image-loading,.local-image-error) { cursor:zoom-in; }

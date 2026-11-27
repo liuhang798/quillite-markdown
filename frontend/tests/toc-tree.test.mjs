@@ -48,6 +48,15 @@ test('outline search keeps matching headings together with their ancestors', () 
   assert.equal(normalizeTocMode('invalid'), 'tree');
 });
 
+test('POSIX case variants keep separate folds and never inherit ambiguous legacy entries',()=>{
+  const storage=memoryStorage(), upper='/docs/Guide.md', lower='/docs/guide.md';
+  storage.setItem('tocCollapsedByDocument',JSON.stringify({[lower]:['old'], 'c:/docs/windows.md':['win']}));
+  assert.deepEqual([...readCollapsedToc(storage,upper)],[]);assert.deepEqual([...readCollapsedToc(storage,lower)],[]);
+  writeCollapsedToc(storage,upper,new Set(['one']));writeCollapsedToc(storage,lower,new Set(['two']));
+  assert.deepEqual([...readCollapsedToc(storage,upper)],['one']);assert.deepEqual([...readCollapsedToc(storage,lower)],['two']);
+  assert.deepEqual([...readCollapsedToc(storage,'C:\\Docs\\Windows.md')],['win']);
+});
+
 test('[TOC] markers become dynamic placeholders outside fenced code only', () => {
   const source = ['# Guide', '[TOC]', '```md', '[TOC]', '```', '[toc]'].join('\n');
   const converted = replaceDynamicTocMarkers(source);

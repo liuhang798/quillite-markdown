@@ -110,7 +110,7 @@ test('right-clicking any library document opens an action menu', () => {
   assert.match(html, /data-recent-action="favorite"/);
   assert.match(html, /data-recent-action="reveal"/);
   assert.match(html, /data-recent-action="remove"/);
-  assert.match(renderer, /els\.fileList\.querySelectorAll\('\.file-row'\)/);
+  assert.match(renderer, /els\.fileList\.addEventListener\('contextmenu', event => \{\s*const row = event\.target\.closest\('\.file-row'\)/);
   assert.match(renderer, /addEventListener\('contextmenu', event =>/);
   assert.match(renderer, /openRecentContextMenu\(event, decodeURIComponent\(row\.dataset\.path\), row\.classList\.contains\('missing'\)\)/);
   assert.match(renderer, /const favoriteRemoval = button\.dataset\.recentAction === 'favorite' && isFavorite/);
@@ -130,7 +130,7 @@ test('document context menu edits, favorites, reveals, or removes the selected d
 });
 
 test('favorite documents show a persistent theme-colored marker in every library view', () => {
-  assert.match(renderer, /const favorited = state\.favoriteFiles\.some\(favorite => sameDocumentPath\(favorite\.path, file\.path\)\)/);
+  assert.match(renderer, /const favorited = isLibraryFavorite\(state\.favoriteFiles, file\.path\)/);
   assert.match(renderer, /class="file-title-line"/);
   assert.match(renderer, /class="favorite-marker"/);
   assert.match(renderer, /class="file-title-line">\$\{pinMarker\}\$\{favoriteMarker\}<strong>/);
@@ -165,7 +165,7 @@ test('pinned recents support menu toggles, pointer and keyboard reordering, and 
   assert.match(renderer, /window\.removeEventListener\('pointermove', handlePinnedPointerMove\)/);
   assert.match(renderer, /drag\.captureTarget\.hasPointerCapture\?\.\(drag\.pointerId\)/);
   assert.match(renderer, /const container = row\.closest\('\[data-pinned-list\]'\)/);
-  assert.match(renderer, /row\.addEventListener\('pointerdown', beginPinnedPointerReorder\)/);
+  assert.match(renderer, /els\.fileList\.addEventListener\('pointerdown', beginPinnedPointerReorder\)/);
   assert.match(renderer, /suppressPinnedFileClickPath = drag\.filePath/);
   assert.match(renderer, /sameDocumentPath\(suppressPinnedFileClickPath, filePath\)/);
   assert.match(renderer, /drag\.container\.insertBefore\(drag\.row, insertionPoint \|\| null\)/);
@@ -598,7 +598,7 @@ test('code blocks let the user pick a common programming language', () => {
 
 test('LaTeX math, chemistry, and numbered equations are available in preview and editor formats', () => {
   assert.match(renderer, /import 'katex\/dist\/katex\.min\.css'/);
-  assert.match(renderer, /extensions: \[cjkStrongToken, highlightExtension, \.\.\.mathExtensions, \.\.\.localVideoMarkdownExtensions\]/);
+  assert.match(renderer, /extensions:\s*\[[^\]]*\.\.\.mathExtensions\b[^\]]*\]/);
   assert.match(html, /data-format-command="formula-builder" data-i18n-title="formulaBuilder"/);
   assert.doesNotMatch(html, /value="(?:inline-math|math-block|chemical-formula|numbered-math|math-guide)"/);
   assert.match(renderer, /command === 'formula-builder'/);
@@ -810,7 +810,10 @@ test('TOC display metrics are polled while visible so same-DPR monitor moves are
 
 test('back-to-top follows the resized TOC while keeping a safe gap from the document scrollbar', () => {
   assert.match(styles, /\.back-to-top \{[^}]*right: calc\(var\(--toc-width\) \+ 24px\);/);
-  assert.match(styles, /body:has\(\.toc-panel\.hidden\) \.back-to-top \{ right: 24px; \}/);
+  assert.match(styles, /body:has\(\.toc-panel:is\(\.hidden, \.collapsed\)\) \.back-to-top \{ right: 24px; \}/);
+  assert.match(styles, /\.back-to-top \{[^}]*transition: right \.2s ease,/);
+  assert.match(styles, /body\.resizing-panes \.sidebar, body\.resizing-panes \.toc-panel, body\.resizing-panes \.back-to-top \{ transition: none; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[^}]*\.back-to-top \{ transition-duration: \.01ms; \}/);
   assert.doesNotMatch(styles, /body\[data-doc-width="full"\][^{]*\.back-to-top/);
   assert.match(styles, /@media \(max-width: 1120px\)[\s\S]*\.back-to-top \{ right: 24px; \}/);
 });

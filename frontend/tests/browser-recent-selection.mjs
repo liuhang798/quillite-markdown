@@ -22,6 +22,8 @@ try{
  await page.evaluate(()=>{
   window.recentPrefs={recentFiles:['C:/pinned.md','C:/keep.md','C:/missing.md','C:/fail.md'],pinnedRecentFiles:['C:/pinned.md'],favoriteFiles:['C:/pinned.md'],recentFileStatuses:[{path:'C:/missing.md',exists:false}]};
   window.removed=[];window.opened=[];window.failRemoval=true;
+  window.trashCalls=[];window.trashResult='cancelled';
+  window.quilliteMarkdown.trashLibraryFile=async(mode,root,path)=>{window.trashCalls.push({mode,path});return window.trashResult;};
   window.quilliteMarkdown.getPreferences=async()=>window.recentPrefs;
   window.quilliteMarkdown.removeRecent=async path=>{window.removed.push(path);await new Promise(r=>setTimeout(r,60));if(path==='C:/fail.md'&&window.failRemoval)throw Error('Synthetic preference failure');window.recentPrefs.recentFiles=window.recentPrefs.recentFiles.filter(p=>p!==path);window.recentPrefs.pinnedRecentFiles=window.recentPrefs.pinnedRecentFiles.filter(p=>p!==path);return window.recentPrefs;};
   window.quilliteMarkdown.openRecentFile=async path=>{window.opened.push(path);return{path,name:path.split('/').at(-1),directory:'C:/',content:'# Original',revision:'a'.repeat(64)};};
@@ -31,6 +33,17 @@ try{
  // File extensions are shown separately as type badges; identify the record by path.
  const row=name=>page.locator(`.file-item[data-path="${encodeURIComponent(`C:/${name}`)}"]`);
  const selected=()=>page.evaluate(()=>recentAudit.snapshot().selection);
+ const trash=page.locator('[data-recent-action="trash"]');
+ await page.evaluate(()=>{window.recentAudit.seed({recentFiles:['C:/clean.md'],favoriteFiles:['C:/clean.md'],pinnedRecentFiles:[]});window.trashResult='trashed';});
+ await row('clean.md').click();await page.locator('#markdownContent h1').waitFor();
+ await row('clean.md').click({button:'right'});await trash.click();
+ await page.waitForFunction(()=>!window.recentAudit.snapshot().current);
+ assert.equal(await row('clean.md').count(),0);
+ await page.evaluate(()=>{window.trashCalls=[];window.opened=[];window.trashResult='cancelled';window.recentAudit.seed(window.recentPrefs);});
+ await row('keep.md').click({button:'right'});await trash.click();
+ assert.equal(await row('keep.md').count(),1);
+ assert.deepEqual(await page.evaluate(()=>window.trashCalls),[{mode:'recent',path:'C:/keep.md'}]);
+ await row('missing.md').click({button:'right'});assert.equal(await trash.isDisabled(),true);await page.keyboard.press('Escape');
  await row('pinned.md').click({modifiers:[primary]});
  await row('missing.md').click({modifiers:[primary,'Shift']});
  assert.deepEqual(await selected(),['C:/pinned.md','C:/keep.md','C:/missing.md']);
@@ -64,8 +77,11 @@ try{
  await page.locator('#editButton').click();await page.locator('[data-editor-presentation="source"]').click();
  await page.locator('#markdownEditor > .cm-editor > .cm-scroller > .cm-content').fill('# Unsaved original');
  const before=await page.evaluate(()=>window.recentAudit.snapshot());assert.equal(before.dirty,true);
+ await row('pinned.md').click({button:'right'});await trash.click();
+ assert.equal(await page.evaluate(()=>window.trashCalls.length),1,'dirty current document never reaches the trash bridge');
  for(const name of ['pinned.md','missing.md','fail.md'])await row(name).click({modifiers:[primary]});
  assert.equal(await page.locator('.bulk-selected').count(),3);
+ await row('pinned.md').click({button:'right'});assert.equal(await trash.isDisabled(),true);
  await page.locator('#clearSelectedRecent').click();
  await page.locator('#recentClearDialog').waitFor();
  assert.equal(await page.locator('#cancelRecentClear').evaluate(el=>el===document.activeElement),true);
@@ -106,6 +122,11 @@ try{
  await page.locator('.empty-list').waitFor();
  assert.equal((await page.evaluate(()=>window.recentAudit.snapshot())).text,before.text);
  await page.locator('#recentTab').click();assert.equal(await page.locator('.file-item').count(),0);
+ assert.equal(await page.evaluate(()=>window.trashCalls.length),1,'record removal does not reach the trash bridge');
+ await page.evaluate(()=>{window.trashResult='trashed';window.recentAudit.seed({recentFiles:['C:/trash.md'],favoriteFiles:['C:/trash.md'],pinnedRecentFiles:['C:/trash.md']})});
+ await row('trash.md').click({button:'right'});await trash.click();await page.locator('.empty-list').waitFor();
+ const final=await page.evaluate(()=>window.recentAudit.snapshot());
+ assert.deepEqual(final.favorites,[]);assert.deepEqual(final.pins,[]);assert.equal(final.text,before.text);
  assert.deepEqual(errors,[]);
  console.log(`PASS ${engine}: Ctrl/Meta toggle, keyboard, no native confirm, modal cancel/Escape/reentrancy, toolbar/context menu/Delete, partial failure/retry, pinned/missing records, favorites and dirty document preserved, empty-list persistence`);
 }finally{await browser?.close();await server.close();}

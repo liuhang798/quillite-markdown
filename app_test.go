@@ -943,6 +943,32 @@ func testApp(t *testing.T) *App {
 	}
 }
 
+func TestRemovingRecentRecordDoesNotAuthorizeTrash(t *testing.T) {
+	a := testApp(t)
+	path := filepath.Join(t.TempDir(), "keep.md")
+	if err := os.WriteFile(path, []byte("keep this file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := defaultPreferences()
+	p.RecentFiles, p.FavoriteFiles = []string{path}, []string{path}
+	if err := a.writePreferences(p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.RemoveRecent(path); err != nil {
+		t.Fatal(err)
+	}
+	_, err := a.trashLibraryFile("recent", "", path, func(string) (bool, error) {
+		t.Fatal("a stale Recent menu opened a deletion prompt")
+		return false, nil
+	}, func(string) error { t.Fatal("a removed record reached the system Trash"); return nil })
+	if err == nil {
+		t.Fatal("stale Recent scope was accepted")
+	}
+	if body, err := os.ReadFile(path); err != nil || string(body) != "keep this file" {
+		t.Fatal("record removal changed the file")
+	}
+}
+
 func TestSnoozeUpdatesSuppressesAutomaticChecks(t *testing.T) {
 	previousSafetyCheck := windowsUninstallerSafetyCheck
 	windowsUninstallerSafetyCheck = func() bool { return true }
@@ -1458,7 +1484,7 @@ func TestSaveDocumentAsAtomicallyReplacesUnpinnedDraftWithinFullRecentCapacity(t
 	}
 
 	paths := make([]string, 0, maxRecent)
-	for index := 0; index < 5; index++ {
+	for index := 0; index < maxRecent-5; index++ {
 		paths = append(paths, filepath.Join(root, fmt.Sprintf("older-%02d.md", index)))
 	}
 	paths = append(paths, draftPath)
@@ -1823,7 +1849,11 @@ func TestFavoritesPersistAndRemainIndependentFromRecentFiles(t *testing.T) {
 	if !reflect.DeepEqual(prefs.FavoriteFiles, []string{filePath}) {
 		t.Fatalf("favorite was not added: %#v", prefs.FavoriteFiles)
 	}
-	if _, err := app.AddFavorite(strings.ToUpper(filePath)); err != nil {
+	alias := filePath
+	if runtime.GOOS == "windows" {
+		alias = strings.ToUpper(filePath)
+	}
+	if _, err := app.AddFavorite(alias); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1857,6 +1887,36 @@ func TestFavoritesPersistAndRemainIndependentFromRecentFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(filePath); err != nil {
 		t.Fatalf("removing a favorite deleted the original file: %v", err)
+	}
+}
+
+func TestLibraryCaseVariantIdentity(t *testing.T) {
+	app := testApp(t)
+	dir := t.TempDir()
+	upper, lower := filepath.Join(dir, "README.md"), filepath.Join(dir, "readme.md")
+	for _, p := range []string{upper, lower} {
+		if err := app.rememberFile(p); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := app.AddFavorite(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := app.GetPreferences()
+	count := 2
+	if runtime.GOOS == "windows" {
+		count = 1
+	}
+	if err != nil || len(p.RecentFiles) != count || len(p.FavoriteFiles) != count {
+		t.Fatalf("case variants: recent=%v favorites=%v err=%v", p.RecentFiles, p.FavoriteFiles, err)
+	}
+	if _, err = app.RemoveRecent(lower); err != nil {
+		t.Fatal(err)
+	}
+	p, err = app.RemoveFavorite(lower)
+	if err != nil || len(p.RecentFiles) != count-1 || len(p.FavoriteFiles) != count-1 ||
+		(count == 2 && (p.RecentFiles[0] != upper || p.FavoriteFiles[0] != upper)) {
+		t.Fatalf("removed wrong entry: recent=%v favorites=%v err=%v", p.RecentFiles, p.FavoriteFiles, err)
 	}
 }
 

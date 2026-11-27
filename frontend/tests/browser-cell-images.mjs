@@ -5,15 +5,17 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {findMarkdownTables} from '../src/table-designer.js';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error'});
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0,watch:null,hmr:false},logLevel:'error',
+  plugins:[{name:'cell-image-test',enforce:'pre',transform(code,id){if(id.replaceAll('\\','/').endsWith('/src/renderer.js'))return code+'\nwindow.cellTest={displayDocument,toggleEditor,editorContent};';}}]});
 let browser,page;
 try {
   await server.listen();browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE || undefined});
   page=await browser.newPage({viewport:{width:1700,height:1100}});page.setDefaultTimeout(8000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(server.resolvedUrls.local[0]+'tests/fixtures/app-drag-audit.html');
-  const app=page.frameLocator('iframe');await app.getByRole('button',{name:'新建文档',exact:true}).click();
-  const read=()=>app.locator('#markdownEditor > .cm-editor').evaluate(async el=>{const {EditorView}=await import('/node_modules/@codemirror/view/dist/index.js');return EditorView.findFromDOM(el).state.doc.toString();});
+  await page.goto(server.resolvedUrls.local[0]);await page.waitForFunction(()=>window.cellTest && document.querySelector('#fileList').childElementCount);
+  await page.evaluate(async()=>{quilliteMarkdown.canEditFile=async()=>true;await cellTest.displayDocument({name:'test.md',path:'/test/test.md',directory:'/test',revision:'b'.repeat(64),content:'Starting document'});await cellTest.toggleEditor(true);});
+  const app=page,read=()=>page.evaluate(()=>cellTest.editorContent());
+  const returnToTable=()=>app.getByRole('button',{name:'返回渲染',exact:true}).click();
   const shot=async name=>{if(process.env.AUDIT_OUTPUT)await page.screenshot({path:`${process.env.AUDIT_OUTPUT}/${name}.png`});};
   const ref=server.resolvedUrls.local[0]+'tests/fixtures/sample-image.svg';
   for(const [kind,cell] of [
@@ -26,7 +28,9 @@ try {
     const name=kind+'-'+container, isRow=kind.endsWith('row'), count=kind==='linked'?1:2;
     const source='前文\n\n'+intro+['| 内容 | 对照 |','| --- | --- |',`| ${cell} | 保留 |`].map(line=>prefix+line).join('\n')+suffix+`\n\n后文\n\n[shared]: ${ref} "共享标题"`;
     await app.getByRole('button',{name:'源码',exact:true}).click();await app.getByRole('textbox').fill(source);await page.keyboard.press('Control+Home');await app.getByRole('button',{name:'即时渲染',exact:true}).click();
-    const editor=app.locator('#markdownEditor'),reading=app.getByRole('article'),table=editor.locator('.cm-live-table');
+    // Switching to live presentation intentionally starts in editor-only layout.
+    await app.locator('#restoreLivePreviewButton').click();
+    const editor=app.locator('#markdownEditor'),reading=app.locator('#editorPreviewContent'),table=editor.locator('.cm-live-table');
     const images=table.locator('.cm-embedded-image img');
     await images.first().waitFor({state:'visible'});await reading.locator('td img').first().waitFor({state:'visible'});
     await shot(`${name}-01-loaded`);
@@ -42,7 +46,7 @@ try {
     if(kind==='linked') await reading.locator('a[href="https://example.com/target"] > img').waitFor({state:'visible'});
     if(kind==='mixed') {assert.ok(changed.includes('中间 **强调**'));assert.ok(changed.includes('后文'));}
     await table.hover();await table.locator(':scope > .cm-live-block-actions').getByRole('button',{name:'查看源码',exact:true}).click();
-    await app.getByRole('button',{name:'返回渲染',exact:true}).click();
+    await returnToTable();
     await shot(`${name}-03-remounted`);
     await images.first().waitFor({state:'visible'});assert.equal(await read(),changed);
     assert.equal(await table.locator('> .cm-live-block-content > table > tbody > tr > td > .cm-editor').count(),2);
@@ -54,7 +58,7 @@ try {
     await reading.locator('td img[width="80"][height="40"]').waitFor({state:'visible'});
     const resized=await read();assert.equal(findMarkdownTables(resized)[0].model.cells[1][1],'保留');
     await table.hover();await table.locator(':scope > .cm-live-block-actions').getByRole('button',{name:'查看源码',exact:true}).click();
-    await app.getByRole('button',{name:'返回渲染',exact:true}).click();await images.first().waitFor({state:'visible'});
+    await returnToTable();await images.first().waitFor({state:'visible'});
     assert.equal(await read(),resized);await page.keyboard.press('Control+z');assert.equal(await read(),source);
     if(isRow) {
       await first.hover();await first.locator('[data-image-action="split"]').click();

@@ -1416,12 +1416,16 @@ func (a *App) callOpenAICompatibleWithSystem(ctx context.Context, provider, base
 }
 
 func (a *App) callOpenAICompatibleWithSystemKey(ctx context.Context, baseURL, model, key, systemPrompt, prompt string) (string, error) {
+	return a.callChatWithClient(aiHTTPClient, ctx, baseURL, model, key, systemPrompt, prompt)
+}
+
+func (a *App) callChatWithClient(client *http.Client, ctx context.Context, baseURL, model, key, systemPrompt, prompt string) (string, error) {
 	payload := map[string]any{
 		"model":    model,
 		"messages": []map[string]string{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}},
 	}
 	var result aiChatResponse
-	if err := a.postAIJSON(ctx, baseURL+"/chat/completions", key, payload, &result); err != nil {
+	if err := postAIJSONWithClient(client, ctx, baseURL+"/chat/completions", key, payload, &result); err != nil {
 		return "", err
 	}
 	return result.answerText()
@@ -1474,6 +1478,10 @@ func decodeAIMessageContent(raw json.RawMessage) (string, error) {
 }
 
 func (a *App) postAIJSON(ctx context.Context, endpoint, apiKey string, payload any, result any) error {
+	return postAIJSONWithClient(aiHTTPClient, ctx, endpoint, apiKey, payload, result)
+}
+
+func postAIJSONWithClient(client *http.Client, ctx context.Context, endpoint, apiKey string, payload any, result any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -1486,7 +1494,7 @@ func (a *App) postAIJSON(ctx context.Context, endpoint, apiKey string, payload a
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	response, err := aiHTTPClient.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("AI request failed: %w", err)
 	}

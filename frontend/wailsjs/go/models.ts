@@ -651,6 +651,20 @@ export namespace main {
 	        this.clearSecret = source["clearSecret"];
 	    }
 	}
+	export class LibrarySearchResult {
+	    paths: string[];
+	    skipped: number;
+
+	    static createFrom(source: any = {}) {
+	        return new LibrarySearchResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.paths = source["paths"];
+	        this.skipped = source["skipped"];
+	    }
+	}
 	export class LocalVideoFile {
 	    reference: string;
 	    name: string;
@@ -835,6 +849,26 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class ReadingTranslationRequest {
+	    requestId: string;
+	    provider: string;
+	    baseUrl: string;
+	    model: string;
+	    parts: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ReadingTranslationRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.requestId = source["requestId"];
+	        this.provider = source["provider"];
+	        this.baseUrl = source["baseUrl"];
+	        this.model = source["model"];
+	        this.parts = source["parts"];
+	    }
 	}
 
 	export class RecoveryArchive {

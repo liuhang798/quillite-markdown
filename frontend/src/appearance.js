@@ -48,7 +48,8 @@ export function temporaryMacColorModeAfterToggle(currentMode, prefersDark) {
 }
 
 export function readAppearanceStorage(storage) {
-  const legacy = LEGACY_THEMES[storage.getItem('theme')] ?? DEFAULT_APPEARANCE;
+  const savedTheme = storage.getItem('theme');
+  const legacy = Object.hasOwn(LEGACY_THEMES, savedTheme) ? LEGACY_THEMES[savedTheme] : DEFAULT_APPEARANCE;
   const savedAccent = storage.getItem('accentTheme');
   const savedMode = storage.getItem('colorMode');
   const appearance = {

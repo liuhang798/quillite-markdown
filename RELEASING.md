@@ -12,6 +12,8 @@ Keep the version synchronized in:
 
 Update `CHANGELOG.md` and both README files for user-visible changes.
 
+Build cumulative candidates from one worktree containing all intended unreleased changes. Packages built independently from the same base commit do not include one another's fixes. Merge the source changes and tests first, rerun verification in that combined worktree, and build the final installer there; keep unrelated or unfinished changes separate. Record the candidate path and SHA-256 so a per-task test package is not mistaken for the cumulative release candidate.
+
 Every release must have a matching `## [version]` section in `CHANGELOG.md`. The release workflow uses that section for the GitHub source-code release and synchronizes it to the official website, which is the only update and binary-download channel used by the app.
 
 Also add an entry for that exact version to `release-summaries.json`. Supply reviewed `summaryZh` and `summaryEn`: one plain-text line per language, at most 160 characters, naming the main user-facing features or improvements. This is the compact in-app update banner and website release highlight, not a replacement for the full changelog. Do not reuse an unrelated version's summary or generate it silently from the first bug-fix bullet. Validate it with `node scripts/release-summary.mjs <version>`; publishing must fail if either language is missing or invalid. Legacy website records without a summary remain readable through a compatible fallback.
@@ -59,8 +61,8 @@ git push origin main
 创建与 `wails.json` 完全一致的 tag 并推送到 GitHub（`release.yml` 由 push tag 自动触发）：
 
 ```bash
-git tag -a v3.2.0 -m "Quillite Markdown v3.2.0"
-git push origin v3.2.0
+git tag -a v3.3.0 -m "Quillite Markdown v3.3.0"
+git push origin v3.3.0
 ```
 
 The `Build and Release` workflow validates the tag/version match, builds Windows, macOS, and Linux packages, uploads them to GitHub Release, then synchronizes the version and all platform assets to the official website. The Windows installer is published directly as an `.exe`; it is not wrapped in a ZIP. The Windows in-app asset is a standalone `.bin`, while the macOS in-app asset is a ZIP containing the complete verified `轻阅 Markdown.app`. Never publish a raw macOS executable for in-app updates: replacing only `Contents/MacOS/QuilliteMarkdown` breaks the application code seal and macOS terminates the next launch with `CODESIGNING / Invalid Page`.

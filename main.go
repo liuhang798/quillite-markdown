@@ -38,8 +38,8 @@ func main() {
 		AssetServer:       &assetserver.Options{Assets: assets, Middleware: app.localVideoMiddleware},
 		BackgroundColour:  &options.RGBA{R: 246, G: 244, B: 239, A: 255},
 		OnStartup:         app.startup,
-		StartHidden:       goruntime.GOOS == "windows",
-		OnDomReady:        startupWindowReady(),
+		StartHidden:       hideStartupWindowUntilReady(goruntime.GOOS),
+		OnDomReady:        startupWindowReady(app),
 		OnBeforeClose:     app.beforeClose,
 		OnShutdown:        app.shutdownLocalVideo,
 		SingleInstanceLock: &options.SingleInstanceLock{

@@ -1,6 +1,41 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"testing"
+)
+
+func TestHideStartupWindowUntilReady(t *testing.T) {
+	for _, platform := range []string{"windows", "linux", "darwin", "freebsd", ""} {
+		want := platform == "windows" || platform == "linux"
+		if got := hideStartupWindowUntilReady(platform); got != want {
+			t.Errorf("platform %q: got %v, want %v", platform, got, want)
+		}
+	}
+}
+
+func TestShowStartupWindowOnce(t *testing.T) {
+	var calls atomic.Int32
+	ctx := context.WithValue(context.Background(), struct{}{}, "startup-context")
+	show := showStartupWindowOnce(func(got context.Context) {
+		if got != ctx {
+			t.Errorf("show callback did not receive startup context")
+		}
+		calls.Add(1)
+	})
+	var group sync.WaitGroup
+	for range 8 {
+		group.Add(1)
+		go func() { defer group.Done(); show(ctx) }()
+	}
+	group.Wait()
+	show(context.Background()) // A later page reload must not show it again.
+	if calls.Load() != 1 {
+		t.Fatalf("startup window was shown %d times, want once", calls.Load())
+	}
+}
 
 func TestFitStartupWindow(t *testing.T) {
 	for _, tt := range []struct {

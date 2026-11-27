@@ -1,7 +1,7 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package main
 
 import "context"
 
-func startupWindowReady() func(context.Context) { return nil }
+func startupWindowReady(_ *App) func(context.Context) { return nil }

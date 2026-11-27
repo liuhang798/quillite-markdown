@@ -1,5 +1,6 @@
 import { sidebarStartsCollapsed, alignedPreviewScroll } from './reading-layout.js';
 import { createDiagramViewer } from './diagram-viewer.js';
+import { decorateTableImage } from './static-table-image.js';
 import { marked } from 'marked';
 import { picGoPrepareProgressModel, picGoPrepareBytes } from './picgo-prepare-progress.js';
 import { installTextStyleMenu } from './text-style-menu.js';
@@ -32,7 +33,7 @@ import { applyBodyTypography, normalizeBodyTypography, readBodyTypography, bodyS
 import hljs from 'highlight.js/lib/common';
 import { createReaderCache, READER_DEFER_THRESHOLD, cancelReaderWork, revealReaderLayout, finishReaderWork, scheduleReaderWork } from './reader-performance.js';
 import { cancelPreviewImages, loadPreviewImages, snapshotPreviewImageSizes, waitForPreviewImageReads } from './image-load-session.js';
-import { mountDocumentLoading } from './document-loading.js';
+import { documentLoadingFrame, mountDocumentLoading } from './document-loading.js';
 import { cancelMermaidRendering, convertMermaidDiagramsToImages, refreshMermaidDiagrams, renderMermaidDiagrams } from './mermaid-diagrams.js';
 import { convertEChartsDiagramsToImages, refreshEChartsDiagrams, releaseEChartsDiagrams, renderEChartsDiagrams, validateEChartsSource } from './echarts-diagrams.js';
 import { DIAGRAM_CATEGORIES, diagramTemplateById, diagramTemplateSource, diagramTemplatesForCategory, searchDiagramTemplates } from './diagram-templates.js';
@@ -60,11 +61,17 @@ import { formulaFallbackSource } from './formula-export.js';
 import { FORMULA_STRUCTURES, hasFormulaPlaceholders } from './formula-visual-policy.js';
 import { createPreviewSourceMap, clearPreviewSourceMap, previewLineTarget, previewPointerTarget, previewCursorRect } from './preview-source-map.js';
 import { captureReadingPosition, restoreReadingPosition } from './reading-position.js';
+import { comparisonReader } from './comparison-reader.js';
+import { installReadingTranslation, rtText } from './reading-translation.js';
 import { editorOutline, captureEditorPosition, restoreEditorPosition } from './editor-navigation.js';
 import { largeHeadingTokenizer } from './marked-large-heading.js';
+import { documentSvgBlock, liveSvgImage } from './document-svg.js';
 import { openExternalSafely } from './external-links.js';
 import { resolveDocumentLink } from './document-links.js';
-import { directoryFromDocumentPath, filesFromPreferencePaths, isMissingDocumentError, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
+import { directoryFromDocumentPath, filesFromPreferencePaths, isLibraryFavorite, isMissingDocumentError, normalizeDocumentPath, normalizeSidebarMode, partitionRecentFiles, pinRecentFile, reorderPinnedRecentFiles, sameDocumentPath, unpinRecentFile, upsertRecentFile } from './library-state.js';
+import { createLibraryViewport } from './library-viewport.js';
+import { planLibrarySearch } from './library-search.js';
+import { installReadingAnnotations } from './reading-annotations.js';
 import { documentListName } from './document-list-name.js';
 import { TEXT_COLOR_PALETTE, TEXT_COLOR_VALUES, textColorValue } from './text-colors.js';
 import { createTableModel, findMarkdownTables, removeTableColumn, removeTableRow, reorderTableColumn, reorderTableRow, resizeTableModel, serializeMarkdownTable, serializeTableReplacement, stripTableWidthMetadata, TABLE_LIMITS, usesLightweightTable } from './table-designer.js';
@@ -326,7 +333,9 @@ const state = {
   sidebarMode: normalizeSidebarMode(localStorage.getItem('sidebarMode')),
   recentSelection: [],
   recentSelectionAnchor: '',
+  librarySearch: { query: '', key: '', request: 0, timer: 0, pending: false, running: false, matches: new Set(), skipped: 0, failed: false, visible: [] },
   removingRecentSelection: false,
+  trashPendingPath: '',
   accentTheme: initialAppearance.accentTheme,
   colorMode: initialAppearance.colorMode,
   fontScale: initialFontScale.scale,
@@ -442,6 +451,9 @@ function diagnosticErrorMessage(error) {
 
 function isExpectedOperationalError(error, source) {
   const message = diagnosticErrorMessage(error).toLowerCase();
+  // The provider's explicit quota rejection remains a visible failed request,
+  // but it is an account condition, not an application exception to upload.
+  if (source.startsWith('ai.') && /^ai_quota_exceeded(?:\s*:|$)/.test(message)) return true;
   if (source === 'document.save' && (
     message.includes('permission denied') || message.includes('access is denied')
     || message.includes('document_safe_save_access') || message.includes('document_metadata_requires_copy')
@@ -559,6 +571,7 @@ const translations = {
     bodyStyle: '正文风格', bodyStyleDefault: '默认（跟随软件）', bodyStyleModern: '现代简洁', bodyStyleClear: '清晰易读', bodyStyleBook: '书籍阅读', bodyStyleClassic: '经典文档', bodyStyleLiterary: '文艺随笔', bodyStyleHandwritten: '手写气息', bodyStyleGentle: '柔和圆润', bodyStyleMagazine: '杂志风格', bodyStyleTechnical: '技术文档', bodyStyleMono: '等宽正文', bodyStyleLegacy: '原有自定义搭配',
 bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', bodyEnglishFont: '英文正文字体', fontFollowApp: '跟随软件字体', bodyFontSans: '无衬线（微软雅黑 / 苹方）', bodyFontArial: 'Arial（无衬线）', bodyFontGeorgia: 'Georgia（衬线）', bodyFontTimes: 'Times New Roman（衬线）', bodyFontVerdana: 'Verdana（无衬线）', formulaTextSize: '公式字号', formulaSizeSmall: '小', formulaSizeStandard: '标准', formulaSizeLarge: '大', typographyHint: '切换后直接预览当前文档；保存后记忆，取消恢复原设置。左右正文同步，界面与代码不变。', typographyFallbackHint: '使用本机字体，未安装时自动回退；公式保留 KaTeX 数学字体，仅调整大小。', typographySample: '混合文字与公式预览', typographyReset: '恢复默认', typographySaved: '正文与公式设置已保存', typographySaveFailed: '设置保存失败，已恢复原有显示，请重试。',
     documentTools: '文档工具',
+    librarySearchHint: '搜索文件名或正文', librarySearchClear: '清除文件搜索', librarySearching: '正在搜索正文…', librarySearchingFound: '已找到 {count} 个文件，继续搜索…', librarySearchCount: '找到 {count} 个文件', librarySearchPartial: '{count} 个结果 · {skipped} 个文件未能检索正文', librarySearchFailed: '正文搜索未完成，当前结果可能不完整',
     conflictDraftStale: '当前编辑或磁盘版本已变化，之前的合并草稿已过期。是否丢弃旧草稿，基于当前编辑重新合并？取消会保留旧草稿，但不会应用。',
     conflictTitle: '文档发生冲突', conflictHint: '磁盘文件已变化，自动保存已暂停。对比后选择保留、另存或手动合并；不会自动覆盖。',
     conflictDisk: '磁盘版本（只读）', conflictCurrent: '当前编辑（只读）', conflictKeep: '保留当前编辑', conflictUseDisk: '使用磁盘版本', conflictCopy: '另存副本', conflictMerge: '手动合并', conflictApply: '应用合并，不保存', conflictSave: '确认保存合并', conflictMergeContent: '手动合并内容（先应用到编辑器，不写入磁盘）',
@@ -594,7 +607,7 @@ bodyTypography: '正文与公式设置', bodyChineseFont: '中文正文字体', 
     exportCenter: '导出中心', exportFormatsCount: '12 种导出格式', exportEyebrow: '导出', exportCenterHint: '选择用途和格式，轻阅会自动采用合适的导出设置。', exportCategoryDocument: '文档', exportCategoryWeb: '网页', exportCategoryImage: '图片', exportAdvancedFormats: '更多专业格式', exportAdvancedHint: '需要 Pandoc', exportPreset: '导出预设', currentExportSettings: '当前设置', presetName: '预设名称', presetNamePlaceholder: '例如：公众号长图', savePreset: '保存预设', deletePreset: '删除', exportFormat: '导出格式', exportFormatWord: 'Word 文档', exportFormatStyledHTML: '带样式网页', exportFormatPlainHTML: '无样式网页', exportFormatPDF: '系统打印', exportFormatPNG: '高清图片', exportFormatJPEG: '压缩图片', exportFormatEPUB: '电子书', exportFormatRTF: '富文本', exportFormatODT: '开放文档', exportFormatLatex: '排版源码', exportFormatCustom: '自定义格式', exportHeaderFooter: '页眉与页脚', exportVariablesHint: '支持 {title}、{date}、{page}', exportHeader: '页眉', exportFooter: '页脚', exportHeaderPlaceholder: '例如：{title}', exportFooterPlaceholder: '例如：第 {page} 页', exportHeaderFooterHint: 'PDF 会重复显示在每页；其他格式显示在文档开头和结尾。', imageExportOptions: '图片选项', imageResolution: '清晰度', pandocNotDetected: '尚未检测到 Pandoc', pandocDetected: '已检测到 {version}', pandocPathPlaceholder: '自动检测或选择 pandoc', pandocSetupHint: '此格式需要 Pandoc。轻阅会先自动检测；没有安装时再选择安装或指定文件。', detectPandoc: '重新检测', selectPandoc: '选择文件', installPandoc: '安装 Pandoc ↗', pandocWriter: '输出 writer', fileExtension: '文件扩展名', pandocArguments: '自定义 Pandoc 命令参数', pandocSecurityHint: '参数直接传给 Pandoc，不经过系统 shell；输出路径始终由保存窗口决定。', exportNow: '立即导出', exporting: '正在生成，请稍候…', exportingImageSlices: '正在生成图片：{current}/{total}', exportSucceeded: '文档已导出', exportFailed: '导出失败', pandocRequired: '此格式需要先安装或选择 Pandoc', presetSaved: '导出预设已保存', presetDeleted: '导出预设已删除', presetNameRequired: '请输入预设名称', imageExportTooTall: '文档过长，无法生成图片，请缩短文档后重试', imageExportBlank: '图片渲染异常，未保存空白图片；请重试', exportDescriptionDocx: '保留标题、表格、代码、公式与图片，可继续编辑。', exportDescriptionHtml: '独立网页，保留当前主题、代码高亮与文档样式。', exportDescriptionHtmlPlain: '仅输出语义化 HTML，不附带主题或排版 CSS。', exportDescriptionPdf: '通过系统打印生成 PDF。', exportDescriptionPng: '自动以 2× 清晰度生成便于阅读的连续 PNG 图片。', exportDescriptionJpeg: '自动以 2× 清晰度生成体积更小的连续 JPEG 图片。', exportDescriptionEpub: '通过 Pandoc 生成适合电子阅读器的 EPUB 电子书。', exportDescriptionRtf: '通过 Pandoc 生成可由多数文字处理软件打开的 RTF。', exportDescriptionOdt: '通过 Pandoc 生成 LibreOffice 等支持的开放文档。', exportDescriptionLatex: '通过 Pandoc 生成可继续排版的 LaTeX 源文件。', exportDescriptionMediawiki: '通过 Pandoc 转换为 MediaWiki 标记文本。', exportDescriptionCustom: '指定 Pandoc writer 和扩展名，导出自定义格式。',
     imageOutputMode: '输出方式', imageOutputPages: 'A4 高清分页（推荐）', imageOutputLong: '单张长图（仅适合短文档）', imageOutputHint: '按 A4 高度逐页独立渲染，文字不会被整张缩小；选择单张长图时，超过 3 页的长文档也会自动改为 A4 高清分页。', exportingImagePages: '正在生成 A4 高清图片：{current}/{total}', longImageAutoPaged: '文档过长，已自动改为 {count} 张 A4 高清图片，避免整张缩小后模糊',
     languageChanged: '界面语言已切换为简体中文', about: '关于', aboutProductLabel: 'MARKDOWN 阅读与编辑器',
-    aboutVersion: '版本 3.2.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
+    aboutVersion: '版本 3.3.0', aboutDescription: '一款专注、美观、跨平台的 Markdown 阅读与编辑工具，支持实时预览、语法高亮、目录导航、最近阅读和文档收藏。',
     authorEmail: '作者邮箱', officialWebsite: '官方网站', openSourceAddress: '开源地址', aboutLicense: '基于 MIT 许可证开源', done: '完成',
     usageAnalytics: '参与产品改进计划', usageAnalyticsDescription: '此开关仅控制异常回传。勾选后，软件发生异常时会静默提交已清理的错误日志。无论是否勾选，每天最多提交一次匿名活跃记录；不会上传文档内容、文件名、文件路径或联系方式。', usageAnalyticsEnabled: '已参与产品改进计划', usageAnalyticsDisabled: '已关闭异常自动回传', usageAnalyticsSaveFailed: '无法保存产品改进计划设置',
     feedback: '意见反馈', feedbackShortHint: '建议与异常', feedbackLabel: '帮助我们改进', feedbackTitle: '意见反馈', feedbackIntro: '告诉我们你的建议或遇到的问题。邮箱和手机均为选填，仅用于需要进一步确认时联系你。', feedbackType: '反馈类型', feedbackFeature: '功能建议', feedbackFeatureHint: '希望新增或优化的功能', feedbackBug: '功能异常', feedbackBugHint: '功能无法使用或结果不正确', feedbackDescription: '反馈说明', feedbackDescriptionPlaceholder: '请描述期望效果、操作步骤或异常现象', feedbackEmail: '联系邮箱（选填）', feedbackPhone: '手机号码（选填）', feedbackPhonePlaceholder: '用于必要时联系', feedbackImages: '上传图片（选填）', feedbackImagesHint: '最多 5 张，支持 PNG、JPG、WebP；每张不超过 5 MB', selectImages: '选择图片', removeImage: '移除图片', softwareVersion: '软件版本', systemVersion: '系统版本', feedbackPrivacy: '提交后，以上反馈内容、联系方式、所选图片及版本信息将发送到轻阅官网服务器；服务器会记录请求 IP 并解析所在城市，不会上传当前文档。', submitFeedback: '提交反馈', feedbackSubmitting: '正在提交反馈…', feedbackSubmitted: '感谢反馈，我们会认真查看', feedbackSubmitFailed: '反馈提交失败', feedbackImageSelectFailed: '无法选择反馈图片', feedbackNeedDescription: '请至少填写 5 个字的反馈说明',
@@ -654,6 +667,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     bodyStyle: 'Body style', bodyStyleDefault: 'Default (follow app)', bodyStyleModern: 'Modern', bodyStyleClear: 'Clear & readable', bodyStyleBook: 'Book reading', bodyStyleClassic: 'Classic document', bodyStyleLiterary: 'Literary', bodyStyleHandwritten: 'Handwritten feel', bodyStyleGentle: 'Soft & rounded', bodyStyleMagazine: 'Magazine', bodyStyleTechnical: 'Technical', bodyStyleMono: 'Monospaced prose', bodyStyleLegacy: 'Previous custom pairing',
     bodyTypography: 'Body & math typography', bodyChineseFont: 'Chinese body font', bodyEnglishFont: 'English body font', fontFollowApp: 'Follow app font', bodyFontSans: 'Sans serif (YaHei / PingFang)', bodyFontArial: 'Arial (sans serif)', bodyFontGeorgia: 'Georgia (serif)', bodyFontTimes: 'Times New Roman (serif)', bodyFontVerdana: 'Verdana (sans serif)', formulaTextSize: 'Math size', formulaSizeSmall: 'Small', formulaSizeStandard: 'Standard', formulaSizeLarge: 'Large', typographyHint: 'Preview directly in your document. Save to remember; cancel to restore. Editor and preview stay in sync; UI and code are unchanged.', typographyFallbackHint: 'Uses local fonts with automatic fallback when unavailable. Formulas retain KaTeX math fonts; only their size changes.', typographySample: 'Mixed text and math preview', typographyReset: 'Reset defaults', typographySaved: 'Body and math settings saved', typographySaveFailed: 'Could not save settings. The previous display is unchanged; please retry.',
     documentTools: 'Document tools',
+    librarySearchHint: 'Search names or contents', librarySearchClear: 'Clear file search', librarySearching: 'Searching contents…', librarySearchingFound: '{count} found · still searching…', librarySearchCount: '{count} files found', librarySearchPartial: '{count} results · {skipped} files could not be searched', librarySearchFailed: 'Content search incomplete; some matches may be missing',
     conflictDraftStale: 'The editor or disk version changed. Discard the outdated merge draft and start from current edits? Cancel keeps the draft without applying it.',
     conflictTitle: 'Document conflict', conflictHint: 'The file changed on disk. Autosave is paused. Compare and keep, save a copy, or merge manually. Nothing is overwritten automatically.',
     conflictDisk: 'Disk version (read-only)', conflictCurrent: 'Current edits (read-only)', conflictKeep: 'Keep current edits', conflictUseDisk: 'Use disk version', conflictCopy: 'Save a copy', conflictMerge: 'Merge manually', conflictApply: 'Apply merge without saving', conflictSave: 'Confirm and save merge', conflictMergeContent: 'Manual merge (apply to editor first, without writing to disk)',
@@ -689,7 +703,7 @@ formulaWizardLabel: '学科公式', formulaWizardTitle: '选择并生成公式',
     exportCenter: 'Export center', exportFormatsCount: '12 export formats', exportEyebrow: 'EXPORT', exportCenterHint: 'Choose a purpose and format. Quillite applies suitable export settings automatically.', exportCategoryDocument: 'Documents', exportCategoryWeb: 'Web', exportCategoryImage: 'Images', exportAdvancedFormats: 'More professional formats', exportAdvancedHint: 'Requires Pandoc', exportPreset: 'Export preset', currentExportSettings: 'Current settings', presetName: 'Preset name', presetNamePlaceholder: 'For example: Social image', savePreset: 'Save preset', deletePreset: 'Delete', exportFormat: 'Export format', exportFormatWord: 'Word document', exportFormatStyledHTML: 'Styled webpage', exportFormatPlainHTML: 'Unstyled webpage', exportFormatPDF: 'System print', exportFormatPNG: 'High-resolution images', exportFormatJPEG: 'Compressed images', exportFormatEPUB: 'E-book', exportFormatRTF: 'Rich text', exportFormatODT: 'Open document', exportFormatLatex: 'Typesetting source', exportFormatCustom: 'Custom format', exportHeaderFooter: 'Header and footer', exportVariablesHint: 'Supports {title}, {date}, and {page}', exportHeader: 'Header', exportFooter: 'Footer', exportHeaderPlaceholder: 'For example: {title}', exportFooterPlaceholder: 'For example: Page {page}', exportHeaderFooterHint: 'PDF repeats these on every page; other formats place them at the beginning and end.', imageExportOptions: 'Image options', imageResolution: 'Resolution', pandocNotDetected: 'Pandoc has not been detected', pandocDetected: 'Detected {version}', pandocPathPlaceholder: 'Detect or select pandoc', pandocSetupHint: 'This format requires Pandoc. Quillite detects it automatically; install it or choose the executable only when needed.', detectPandoc: 'Detect again', selectPandoc: 'Choose file', installPandoc: 'Install Pandoc ↗', pandocWriter: 'Output writer', fileExtension: 'File extension', pandocArguments: 'Custom Pandoc arguments', pandocSecurityHint: 'Arguments are passed directly to Pandoc without a system shell; the save dialog always controls the output path.', exportNow: 'Export now', exporting: 'Generating, please wait…', exportingImageSlices: 'Rendering images: {current}/{total}', exportSucceeded: 'Document exported', exportFailed: 'Export failed', pandocRequired: 'Install or select Pandoc before exporting this format', presetSaved: 'Export preset saved', presetDeleted: 'Export preset deleted', presetNameRequired: 'Enter a preset name', imageExportTooTall: 'This document is too long to export as images. Shorten it and try again.', imageExportBlank: 'Image rendering failed, so the blank file was not saved. Please try again.', exportDescriptionDocx: 'Preserves headings, tables, code, formulas, and images in an editable document.', exportDescriptionHtml: 'A standalone webpage that preserves the current theme, code highlighting, and document styling.', exportDescriptionHtmlPlain: 'Semantic HTML only, without theme or typography CSS.', exportDescriptionPdf: 'Uses system printing to create a PDF.', exportDescriptionPng: 'Automatically creates readable PNG pages at 2× resolution.', exportDescriptionJpeg: 'Automatically creates smaller JPEG pages at 2× resolution.', exportDescriptionEpub: 'Uses Pandoc to create an EPUB for e-book readers.', exportDescriptionRtf: 'Uses Pandoc to create an RTF supported by most word processors.', exportDescriptionOdt: 'Uses Pandoc to create an open document for LibreOffice and similar apps.', exportDescriptionLatex: 'Uses Pandoc to create editable LaTeX typesetting source.', exportDescriptionMediawiki: 'Uses Pandoc to convert the document to MediaWiki markup.', exportDescriptionCustom: 'Choose a Pandoc writer and extension for a custom format.',
     imageOutputMode: 'Output mode', imageOutputPages: 'A4 HD pages (recommended)', imageOutputLong: 'Single long image (short documents only)', imageOutputHint: 'Each A4-height page is rendered independently so text is never shrunk with the entire document. Long images over three pages automatically switch to A4 HD pages.', exportingImagePages: 'Rendering A4 HD image: {current}/{total}', longImageAutoPaged: 'This document is long, so it was exported as {count} A4 HD images to prevent fit-to-screen blur',
     languageChanged: 'Interface language changed to English', about: 'About', aboutProductLabel: 'MARKDOWN READER & EDITOR',
-    aboutVersion: 'Version 3.2.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
+    aboutVersion: 'Version 3.3.0', aboutDescription: 'A focused, beautiful, cross-platform Markdown reader and editor with live preview, syntax highlighting, navigation, recent reading, and document favorites.',
     authorEmail: 'Author email', officialWebsite: 'Official website', openSourceAddress: 'Open-source repository', aboutLicense: 'Open source under the MIT License', done: 'Done',
     usageAnalytics: 'Join the product improvement program', usageAnalyticsDescription: 'This switch controls error reporting only. When enabled, sanitized error logs are submitted silently after failures. One anonymous daily-active event is submitted at most once per day regardless of this setting; document content, file names, paths, and contact details are never uploaded.', usageAnalyticsEnabled: 'Product improvement program enabled', usageAnalyticsDisabled: 'Automatic error reporting disabled', usageAnalyticsSaveFailed: 'Unable to save the product improvement setting',
     feedback: 'Feedback', feedbackShortHint: 'Ideas & issues', feedbackLabel: 'HELP US IMPROVE', feedbackTitle: 'Send Feedback', feedbackIntro: 'Tell us what you would like improved or what went wrong. Email and phone are optional and used only if we need to follow up.', feedbackType: 'Feedback type', feedbackFeature: 'Feature suggestion', feedbackFeatureHint: 'A new feature or an improvement', feedbackBug: 'Functional issue', feedbackBugHint: 'Something does not work as expected', feedbackDescription: 'Description', feedbackDescriptionPlaceholder: 'Describe the expected result, steps, or issue', feedbackEmail: 'Email (optional)', feedbackPhone: 'Phone (optional)', feedbackPhonePlaceholder: 'Only for necessary follow-up', feedbackImages: 'Images (optional)', feedbackImagesHint: 'Up to 5 PNG, JPG, or WebP images; 5 MB each', selectImages: 'Choose images', removeImage: 'Remove image', softwareVersion: 'App version', systemVersion: 'System version', feedbackPrivacy: 'Submitting sends this feedback, optional contact details, selected images, and version information to the Quillite website server. The server records the request IP and resolves its city. Your current document is never uploaded.', submitFeedback: 'Submit feedback', feedbackSubmitting: 'Submitting feedback…', feedbackSubmitted: 'Thank you. We will review your feedback.', feedbackSubmitFailed: 'Unable to submit feedback', feedbackImageSelectFailed: 'Unable to choose feedback images', feedbackNeedDescription: 'Enter at least 5 characters',
@@ -765,6 +779,8 @@ Object.assign(translations['zh-CN'], {
   picGoCLIReady: '1 · 已检测到 PicGo CLI {version}。尚未验证图床，请继续配置并测试上传。',
   picGoCLIFailed: '未能运行 PicGo CLI。请确认 Node.js 和 PicGo CLI 已安装，或填写 picgo / picgo.cmd 的完整路径（不要添加命令参数）。',
   recentSelectHint: 'Ctrl / ⌘ 多选 · Shift 连选 · 组合可追加范围', recentBatchActions: '最近阅读批量操作', recentSelectedCount: '已选 {count} 项', recentClearSelected: '清除所选',
+  annoTitle:'阅读标注', annoPrivate:'仅自己可见 · 不修改原文', anno_yellow:'黄色', anno_mint:'薄荷绿', anno_purple:'淡紫色', annoRemove:'移除标注', annoRelocate:'重新定位', annoPlace:'将标注移到此处', annoCancel:'取消定位', annoChoose:'请选择新的文字，然后右键选择「将标注移到此处」。', annoUnplaced:'{count} 条阅读标注需要重新定位', annoStoreError:'本机标注未能保存，或已在其他窗口变更。请检查后重试。', annoUnsupported:'当前系统浏览器组件暂不支持阅读高亮。', annoOverlap:'选区与已有标注重叠，请点原标注修改或重新选择。', annoLimit:'每篇文档最多保留 {count} 条阅读标注。',
+  removeFromRecent: '从最近阅读移除', trashLocalFile: '删除本地文件…', trashLocalDone: '已将文件移到系统回收站', trashLocalDirty: '当前文档有未保存的修改或保存冲突，请先处理后再删除。', trashLocalFailed: '未能确认文件已移到回收站。请在所在文件夹核对；不会改为永久删除。', trashListStale: '文件已移到回收站，但列表未能同步。',
   recentBatchConfirm: '从最近阅读中清除所选的 {count} 条记录？\n仅移除记录及其置顶状态，不删除文件，不影响收藏或当前文档。',
   recentBatchRemoved: '已清除 {count} 条最近记录，原文件未删除', recentBatchFailed: '已清除 {count} 条，{failed} 条未成功；失败项已保留，可重试',
   aiToolbarTitle: '打开 AI 工具', aiToolbarMenuLabel: 'AI 工具', aiToolbarGenerate: 'AI生成', aiToolbarGenerateHint: '提示词写文档', aiToolbarEdit: 'AI编辑', aiToolbarProofread: 'AI校对', aiToolbarContinue: 'AI续写', aiToolbarTranslate: 'AI翻译', aiToolbarConcise: 'AI精简', aiToolbarExpand: 'AI扩写', aiToolbarCustom: 'AI自定义', aiContinueInstruction: '根据光标前的上下文自然续写。只返回需要插入的新 Markdown 内容，不要重复已有上下文。', aiContinueNeedContext: '请先在光标前输入一些内容，再使用 AI 续写', aiContinueDialogTitle: 'AI续写', aiTranslateDialogTitle: 'AI翻译', aiConciseDialogTitle: 'AI精简', aiExpandDialogTitle: 'AI扩写', aiCustomDialogTitle: 'AI自定义',
@@ -878,6 +894,8 @@ Object.assign(translations.en, {
   picGoCLIReady: '1 · PicGo CLI {version} detected. Hosting has not been verified; configure it and test uploading next.',
   picGoCLIFailed: 'Unable to run PicGo CLI. Install Node.js and PicGo CLI, or enter the full picgo / picgo.cmd path without command arguments.',
   recentSelectHint: 'Ctrl / ⌘: toggle · Shift: range · combine to add', recentBatchActions: 'Recent document bulk actions', recentSelectedCount: '{count} selected', recentClearSelected: 'Clear selected',
+  annoTitle:'Reading highlight', annoPrivate:'Only on this device · original unchanged', anno_yellow:'Yellow', anno_mint:'Mint', anno_purple:'Lilac', annoRemove:'Remove highlight', annoRelocate:'Re-anchor', annoPlace:'Move highlight here', annoCancel:'Cancel', annoChoose:'Select the new text, then right-click and choose “Move highlight here”.', annoUnplaced:'{count} reading highlights need re-anchoring', annoStoreError:'Could not save local highlights, or they changed in another window. Check and try again.', annoUnsupported:'This system webview does not support reading highlights.', annoOverlap:'Selection overlaps a highlight. Click the existing highlight or select other text.', annoLimit:'A document can hold up to {count} reading highlights.',
+  removeFromRecent: 'Remove from Recent', trashLocalFile: 'Delete local file…', trashLocalDone: 'File moved to the system Trash', trashLocalDirty: 'Resolve unsaved changes or a save conflict before deleting this document.', trashLocalFailed: 'Could not confirm the move to Trash. Check the original folder; Quillite will not permanently delete the file.', trashListStale: 'File moved to Trash, but the list could not be synced.',
   recentBatchConfirm: 'Clear {count} selected records from Recent?\nOnly recent records and their pins are removed. Files, Favorites and the current document are unchanged.',
   recentBatchRemoved: 'Cleared {count} recent records. Original files were not deleted.', recentBatchFailed: 'Cleared {count}; {failed} failed. Failed records are retained for retry.',
   aiToolbarTitle: 'Open AI tools', aiToolbarMenuLabel: 'AI TOOLS', aiToolbarGenerate: 'AI Generate', aiToolbarGenerateHint: 'Write from a prompt', aiToolbarEdit: 'AI Edit', aiToolbarProofread: 'AI Proofread', aiToolbarContinue: 'AI Continue', aiToolbarTranslate: 'AI Translate', aiToolbarConcise: 'AI Condense', aiToolbarExpand: 'AI Expand', aiToolbarCustom: 'AI Custom', aiContinueInstruction: 'Continue naturally from the context before the cursor. Return only the new Markdown to insert and do not repeat the existing context.', aiContinueNeedContext: 'Enter some content before the cursor before using AI Continue', aiContinueDialogTitle: 'AI Continue', aiTranslateDialogTitle: 'AI Translate', aiConciseDialogTitle: 'AI Condense', aiExpandDialogTitle: 'AI Expand', aiCustomDialogTitle: 'AI Custom',
@@ -1230,6 +1248,20 @@ Object.assign(translations.en, {
   videoPandocUnsupported: 'For a document with video, use a built-in export format such as HTML, PDF, or Word. Videos are represented by static labels.',
 });
 
+Object.assign(translations['zh-CN'], {
+  compareOpen:'在右侧对照阅读', compareCurrent:'当前文档', compareReadOnly:'只读对照', compareClose:'关闭对照',
+  compareResize:'调整对照栏宽度', compareLoading:'正在打开对照文档…', compareOpenFailed:'未能打开对照文档，请检查文件是否存在以及读取权限。',
+  compareAnchorMissing:'对照文档中未找到这个章节。', compareLocalLink:'请在文件列表中选择要对照的另一份文档。',
+  compareOffline:'只读对照不会加载这个包的网络资源。需要联网时，请在主栏打开文档并确认。'
+});
+Object.assign(translations.en, {
+  compareOpen:'Read alongside on the right', compareCurrent:'Current document', compareReadOnly:'Read-only reference', compareClose:'Close comparison',
+  compareResize:'Adjust reference pane width', compareLoading:'Opening reference…', compareOpenFailed:'Could not open the reference. Check the file and its read permissions.',
+  compareAnchorMissing:'Section not found in the reference.', compareLocalLink:'Choose another reference from the file list.',
+  compareOffline:'Online resources are disabled for this reference package. Open it in the main pane to allow them.'
+});
+Object.assign(translations['zh-CN'],rtText['zh-CN'],{rtTranslateHere:'翻译当前章节'});
+Object.assign(translations.en,rtText.en,{rtTranslateHere:'Translate this section'});
 function t(key, values = {}) {
   let template = translations[state.language]?.[key] ?? translations['zh-CN'][key] ?? key;
   if (document.documentElement.dataset.platform === 'darwin') template = template.replaceAll('Ctrl', '⌘');
@@ -1340,7 +1372,7 @@ marked.use({
   gfm: true,
   breaks: true,
   tokenizer: { lheading: largeHeadingTokenizer },
-  extensions: [cjkStrongToken, highlightExtension, ...mathExtensions, ...localVideoMarkdownExtensions],
+  extensions: [cjkStrongToken, highlightExtension, ...mathExtensions, ...localVideoMarkdownExtensions, documentSvgBlock],
   renderer: {
     link({ href, title, tokens }) {
       const text = this.parser.parseInline(tokens);
@@ -1487,12 +1519,18 @@ function isPlainTextFile(path) {
   return /\.txt$/i.test(path || '');
 }
 
+function viewEditorImage(image, trigger) {
+  if (diagramViewer.openImage(image, trigger)) return true;
+  showToast(state.language === 'en' ? 'Only loaded images can be enlarged.' : '图片尚未加载，暂时无法查看大图。', 'info');
+  return false;
+}
+
 function editorPresentationExtensions() {
   if (editorSourceFallback || isPlainTextFile(state.currentFile?.path)) return [];
   if (state.editorPresentation === 'source') return [sourceImageFolding];
   if (!state.editing) return [sourceImageFolding];
   const session = state.documentSession, path = state.currentFile?.path;
-  const mediaExtensions = [embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', blockRemoteImages: state.blockImportedRemoteImages, readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
+  const mediaExtensions = [embeddedImagePreview, imagePreviewContext.of({ directory: state.currentFile?.directory || '', blockRemoteImages: state.blockImportedRemoteImages, openImage:viewEditorImage, readImageData: (ref, directory) => window.quilliteMarkdown.readImageData(ref, directory) }),
       editorFormulaPreview, formulaPreviewContext.of({ enabled: state.formulaDisplay !== 'source', sanitize: html => DOMPurify.sanitize(html),
         edit: (formula, view) => {
           const owner = resolveEditableOwner(view, formula, true);
@@ -1513,8 +1551,10 @@ function editorPresentationExtensions() {
         nestedEffects: [setFormulaDisplayEffect, setDiagramDisplayEffect, refreshDiagramThemeEffect, updateImagePreviewDirectory],
         renderTocTitle: source => tocTitleHTML(createTocTitle(inertInlineTocLabel(source))),
         renderTable: (target, source, definitions) => renderLightweightTable(target, source, definitions),
+        openImage:viewEditorImage,
+        invalidImageTarget:()=>showToast(state.language==='en'?'Cannot identify this image in the cell. Edit its source instead.':'无法准确定位这张图片，请在单元格中编辑其源码。','warning'),
         releaseTable: root => { const target = root.querySelector('.cm-live-block-content'); if (target) cancelPreviewImages(target); },
-        render: (source, item) => item.kind === 'code' ? DOMPurify.sanitize(`<pre><code>${hljs.getLanguage(item.language) ? hljs.highlight(item.text, { language: item.language }).value : escapeHtml(item.text)}</code></pre>`, { ALLOWED_TAGS: ['pre', 'code', 'span'], ALLOWED_ATTR: ['class'] }) : DOMPurify.sanitize(marked.parse(source, { gfm: true, breaks: true }), {
+        render: (source, item) => item.documentSvg ? liveSvgImage(source, DOMPurify) : item.kind === 'code' ? DOMPurify.sanitize(`<pre><code>${hljs.getLanguage(item.language) ? hljs.highlight(item.text, { language: item.language }).value : escapeHtml(item.text)}</code></pre>`, { ALLOWED_TAGS: ['pre', 'code', 'span'], ALLOWED_ATTR: ['class'] }) : DOMPurify.sanitize(marked.parse(source, { gfm: true, breaks: true }), {
           ALLOWED_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'p', 'br', 'hr', 'div', 'span', 'strong', 'em', 'del', 's', 'u', 'sub', 'sup', 'mark', 'kbd', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
           ALLOWED_ATTR: ['align', 'colspan', 'rowspan', 'title'],
         }),
@@ -5682,7 +5722,7 @@ function refreshDiagramAppearance() {
   cancelAnimationFrame(diagramAppearanceRefreshFrame);
   diagramAppearanceRefreshFrame = requestAnimationFrame(async () => {
     if (state.editing && codeEditor?.state.field(editorDiagramField, false)) codeEditor.dispatch({ effects: refreshDiagramThemeEffect.of(null) });
-    const containers = [els.content, els.editorPreview, els.diagramPreview].filter(container => container?.isConnected);
+    const containers = [els.content, els.editorPreview, els.diagramPreview, comparison.content()].filter(container => container?.isConnected);
     const themeKey = mermaidPreviewThemeKey();
     await Promise.all(containers.flatMap(container => [
       refreshMermaidDiagrams(container, {
@@ -5962,7 +6002,7 @@ function clearPersonalDictionary() {
 function openRecentContextMenu(event, filePath, missing) {
   event.preventDefault();
   event.stopPropagation();
-  if (state.removingRecentSelection) return;
+  if (state.removingRecentSelection || state.trashPendingPath) return;
   if (!state.recentSelection.some(path => sameDocumentPath(path, filePath))) {
     state.recentSelection = [];
     state.recentSelectionAnchor = '';
@@ -5983,13 +6023,14 @@ function openRecentContextMenu(event, filePath, missing) {
   const favoriteButton = $('#favoriteContextAction');
   favoriteButton.dataset.favoriteState = isFavorite ? 'remove' : 'add';
   $('#favoriteContextLabel').textContent = t(isFavorite ? 'unfavoriteDocument' : 'favoriteDocument');
-  $('#recentRemoveDivider').classList.toggle('hidden', state.sidebarMode !== 'recent');
   $('#recentRemoveAction').classList.toggle('hidden', state.sidebarMode !== 'recent');
-  $('#recentRemoveAction .menu-label').textContent = t(state.sidebarMode === 'recent' && state.recentSelection.length ? 'recentClearSelected' : 'recentRemove');
+  $('#recentRemoveAction .menu-label').textContent = t(state.sidebarMode === 'recent' && state.recentSelection.length ? 'recentClearSelected' : 'removeFromRecent');
   els.recentContextMenu.querySelectorAll('[data-recent-action]').forEach(button => {
     const pinRemoval = button.dataset.recentAction === 'pin' && isPinned;
     const favoriteRemoval = button.dataset.recentAction === 'favorite' && isFavorite;
     const disabled = pinMutationInProgress
+      || (button.dataset.recentAction === 'compare' && (!state.currentFile || sameDocumentPath(state.currentFile.path, filePath)))
+      || (button.dataset.recentAction === 'trash' && ((state.sidebarMode === 'recent' && state.recentSelection.length > 1) || !/\.(?:md|markdown|mdown|mkd|txt|textpack)$/i.test(filePath) || (state.currentFile?.readOnly && sameDocumentPath(state.currentFile.path, filePath))))
       || (missing && button.dataset.recentAction !== 'remove' && !pinRemoval && !favoriteRemoval);
     button.disabled = disabled;
     button.setAttribute('aria-disabled', String(disabled));
@@ -6208,6 +6249,7 @@ function setFontScale(scale, silent = false, mode = 'manual') {
   state.fontScale = clampFontScale(scale);
   state.fontScaleMode = mode === 'auto' ? 'auto' : 'manual';
   document.documentElement.style.setProperty('--font-scale', state.fontScale);
+  if (libraryViewport.active) renderFileList();
   localStorage.setItem('fontScale', state.fontScale);
   localStorage.setItem('fontScaleMode', state.fontScaleMode);
   applyTocDisplayStyles();
@@ -6432,6 +6474,7 @@ function applyLibraryPreferences(prefs) {
 async function refreshLibraryFileStatuses() {
   try {
     applyLibraryPreferences(await window.quilliteMarkdown.getPreferences());
+    if (state.sidebarMode !== 'explorer' && state.librarySearch.query.trim()) state.librarySearch.key = '';
     renderFileList();
     return true;
   } catch (error) {
@@ -6471,6 +6514,7 @@ function samePathOrder(left, right) {
 
 function focusPinnedHandle(filePath) {
   requestAnimationFrame(() => {
+    libraryViewport.reveal(filePath);
     const handle = [...els.fileList.querySelectorAll('.pin-drag-handle')]
       .find(candidate => sameDocumentPath(decodeURIComponent(candidate.dataset.path), filePath));
     handle?.focus();
@@ -6541,6 +6585,41 @@ async function removeRecentRecord(filePath) {
   showToast(t('recentRemoved'), 'success');
 }
 
+async function trashLocalFile(path) {
+  if (state.trashPendingPath || state.removingRecentSelection || pinMutationInProgress ||
+      (state.sidebarMode === 'recent' && state.recentSelection.length > 1)) return;
+  const unsafeToClose = () => state.dirty || state.saving || state.documentConflict;
+  if (sameDocumentPath(path, state.currentFile?.path) && unsafeToClose()) {
+    showToast(t('trashLocalDirty'), 'warning');
+    return;
+  }
+  state.trashPendingPath = path;
+  try {
+    const result = await window.quilliteMarkdown.trashLibraryFile(state.sidebarMode, state.root || '', path);
+    if (result === 'cancelled') return;
+    if (result !== 'trashed' && result !== 'trashed-list-stale') throw new Error('UNCONFIRMED');
+    const matches = p => document.documentElement.dataset.platform === 'windows' ? sameDocumentPath(path, p) : path === p;
+    if (matches(state.currentFile?.path)) {
+      if (!unsafeToClose()) closePreview();
+      else state.saveAsRequired = true; // Preserve any edits made while the native dialog was open.
+    }
+    state.explorerFiles = state.explorerFiles.filter(f => !matches(f.path));
+    if (state.sidebarMode === 'explorer') state.files = [...state.explorerFiles];
+    applyRecentPartition(partitionRecentFiles(state.recentFiles.filter(f => !matches(f.path)), state.pinnedRecentFiles.filter(p => !matches(p))));
+    state.favoriteFiles = state.favoriteFiles.filter(f => !matches(f.path));
+    if (state.sidebarMode === 'favorites') state.files = [...state.favoriteFiles];
+    state.recentSelection = state.recentSelection.filter(p => !matches(p));
+    if (matches(state.recentSelectionAnchor)) state.recentSelectionAnchor = '';
+    state.librarySearch.key = '';
+    renderFileList();
+    showToast(t(result === 'trashed' ? 'trashLocalDone' : 'trashListStale'), result === 'trashed' ? 'success' : 'warning');
+  } catch {
+    showToast(t('trashLocalFailed'), 'warning');
+  } finally {
+    state.trashPendingPath = '';
+  }
+}
+
 async function setFavoriteRecord(filePath, shouldFavorite) {
   if (shouldFavorite) await window.quilliteMarkdown.addFavorite(filePath);
   else await window.quilliteMarkdown.removeFavorite(filePath);
@@ -6580,8 +6659,8 @@ function setSidebarMode(mode) {
 
 function pathIsInsideRoot(filePath) {
   if (!state.root || !filePath) return false;
-  const root = state.root.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-  const target = filePath.replace(/\\/g, '/').toLowerCase();
+  const root = normalizeDocumentPath(state.root);
+  const target = normalizeDocumentPath(filePath);
   return target === root || target.startsWith(`${root}/`);
 }
 
@@ -6596,6 +6675,7 @@ async function refreshExplorer() {
     const folder = await window.quilliteMarkdown.listFolder(root);
     if (request !== state.explorerRequest || state.root !== root) return;
     state.explorerFiles = folder?.files || [];
+    if (state.sidebarMode === 'explorer' && state.librarySearch.query.trim()) state.librarySearch.key = '';
     if (state.sidebarMode === 'explorer') setSidebarMode('explorer');
   } catch (error) {
     if (request !== state.explorerRequest || state.root !== root) return;
@@ -6627,7 +6707,7 @@ function restoreExplorerAfterFirstPaint(savedRoot) {
   }));
 }
 
-function renderFileRow(file, pinned = false) {
+function renderFileRow(file, pinned = false, reorderable = true) {
   const encodedPath = encodeURIComponent(file.path);
   const nameParts = documentListName(file.name);
   const typeLabel = nameParts.extension.length > 16 ? t('documentTypeFile') : (nameParts.extension || t('documentTypeNoExtension'));
@@ -6639,7 +6719,7 @@ function renderFileRow(file, pinned = false) {
   const directory = file.directory && file.directory !== '.' ? file.directory : absoluteDirectory;
   const active = sameDocumentPath(state.currentFile?.path, file.path) ? ' active' : '';
   const missing = state.sidebarMode !== 'explorer' && file.exists === false;
-  const favorited = state.favoriteFiles.some(favorite => sameDocumentPath(favorite.path, file.path));
+  const favorited = isLibraryFavorite(state.favoriteFiles, file.path);
   const sub = state.sidebarMode === 'explorer'
     ? directory
     : missing
@@ -6655,20 +6735,25 @@ function renderFileRow(file, pinned = false) {
   const itemAttributes = missing
     ? ` aria-disabled="true" data-missing="true" title="${escapeHtml(fullTitle)}" aria-label="${escapeHtml(t('recentMissingAria', { name: file.name }))}"`
     : ` title="${escapeHtml(fullTitle)}" aria-label="${escapeHtml(file.name + ', ' + absoluteDirectory)}"`;
-  const pinHandle = pinned
+  const pinHandle = pinned && reorderable
     ? `<button class="pin-drag-handle" type="button" data-path="${encodedPath}" aria-label="${escapeHtml(t('reorderPinnedRecent', { name: file.name }))}" title="${escapeHtml(t('reorderPinnedRecent', { name: file.name }))}" aria-keyshortcuts="ArrowUp ArrowDown Escape"${pinMutationInProgress ? ' disabled aria-disabled="true"' : ''}><svg viewBox="0 0 18 24" aria-hidden="true"><circle cx="6" cy="7" r="1.35"/><circle cx="12" cy="7" r="1.35"/><circle cx="6" cy="12" r="1.35"/><circle cx="12" cy="12" r="1.35"/><circle cx="6" cy="17" r="1.35"/><circle cx="12" cy="17" r="1.35"/></svg></button>`
     : '';
   return `<div class="file-row${pinned ? ' pinned' : ''}${missing ? ' missing' : ''}" data-path="${encodedPath}">${pinHandle}<button class="file-item${active}" data-path="${encodedPath}"${itemAttributes}><span class="file-icon">${fileIcon()}</span><span class="file-copy"><span class="file-title-line">${pinMarker}${favoriteMarker}<strong>${escapeHtml(nameParts.title)}</strong></span><small class="file-meta-line" title="${escapeHtml(absoluteDirectory)}"><span class="file-type-badge" data-file-kind="${nameParts.kind}" title="${escapeHtml(typeDescription + (nameParts.extension ? ' · ' + nameParts.extension : ''))}">${escapeHtml(typeLabel)}</span><span class="file-location">${escapeHtml(sub)}</span></small></span></button></div>`;
 }
 
-function renderRecentFileGroups() {
-  const partition = partitionRecentFiles(state.recentFiles, state.pinnedRecentFiles);
-  if (!partition.pinnedFiles.length) return partition.ordinaryFiles.map(file => renderFileRow(file)).join('');
+function renderRecentFileGroups(files, searching) {
+  if (searching) {
+    // Preserve relevance order even when a body-only result is pinned.
+    const pins = new Set(state.pinnedRecentFiles);
+    return libraryViewport.rows(files, file => pins.has(file.path), false);
+  }
+  const partition = partitionRecentFiles(files, state.pinnedRecentFiles);
+  if (!partition.pinnedFiles.length) return libraryViewport.rows(partition.ordinaryFiles);
   const pinnedLabel = escapeHtml(t('pinnedRecentGroup'));
   const ordinaryLabel = escapeHtml(t('ordinaryRecentGroup'));
-  const pinnedGroup = `<div class="recent-file-group pinned-file-group" role="group" aria-label="${pinnedLabel}"><div class="recent-group-label">${pinnedLabel}</div><div class="pinned-file-list" data-pinned-list>${partition.pinnedFiles.map(file => renderFileRow(file, true)).join('')}</div></div>`;
-  const ordinaryGroup = `<div class="recent-file-group ordinary-file-group" role="group" aria-label="${ordinaryLabel}"><div class="recent-group-label">${ordinaryLabel}</div>${partition.ordinaryFiles.map(file => renderFileRow(file)).join('')}</div>`;
-  return pinnedGroup + ordinaryGroup;
+  const pinnedGroup = `<div class="recent-file-group pinned-file-group" role="group" aria-label="${pinnedLabel}"><div class="recent-group-label">${pinnedLabel}</div><div class="pinned-file-list" data-pinned-list>${libraryViewport.rows(partition.pinnedFiles, true)}</div></div>`;
+  const ordinaryGroup = `<div class="recent-file-group ordinary-file-group" role="group" aria-label="${ordinaryLabel}"><div class="recent-group-label">${ordinaryLabel}</div>${libraryViewport.rows(partition.ordinaryFiles)}</div>`;
+  return pinnedGroup + (partition.ordinaryFiles.length ? ordinaryGroup : '');
 }
 
 function pinnedPathsFromDOM(container) {
@@ -6744,6 +6829,7 @@ function handlePinnedPointerMove(event) {
   if (!drag.active) {
     const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
     if (distance < PIN_DRAG_THRESHOLD) return;
+    drag.expanded = libraryViewport.expandForDrag(drag.container);
     drag.active = true;
     drag.captureTarget.setPointerCapture?.(event.pointerId);
     drag.row.classList.add('dragging', 'pin-insertion-position');
@@ -6773,7 +6859,10 @@ function finishPinnedPointerReorder() {
       }
     }, 400);
   }
-  if (!drag.active || samePathOrder(requestedPaths, drag.snapshot.pinnedRecentFiles)) return;
+  if (!drag.active || samePathOrder(requestedPaths, drag.snapshot.pinnedRecentFiles)) {
+    if (drag.expanded) renderFileList();
+    return;
+  }
   const optimistic = reorderPinnedRecentFiles(state.recentFiles, state.pinnedRecentFiles, requestedPaths);
   void persistPinnedMutation({
     snapshot: drag.snapshot,
@@ -6798,7 +6887,8 @@ function handlePinnedLostPointerCapture(event) {
 
 function beginPinnedPointerReorder(event) {
   if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || state.recentSelection.length || state.removingRecentSelection || pinMutationInProgress || pinnedPointerDrag) return;
-  const row = event.currentTarget;
+  const row = event.target.closest('.file-row.pinned');
+  if (!row) return;
   const handle = row.querySelector('.pin-drag-handle');
   const container = row.closest('[data-pinned-list]');
   if (!handle || !container) return;
@@ -6832,7 +6922,7 @@ function handlePinnedKeyboardReorder(event) {
   if ((event.key !== 'ArrowUp' && event.key !== 'ArrowDown') || pinMutationInProgress || state.removingRecentSelection || state.recentSelection.length) return;
   event.preventDefault();
   event.stopPropagation();
-  const filePath = decodeURIComponent(event.currentTarget.dataset.path);
+  const filePath = decodeURIComponent(event.target.closest('.pin-drag-handle').dataset.path);
   const fileName = state.recentFiles.find(file => sameDocumentPath(file.path, filePath))?.name || filePath.split(/[\\/]/).pop();
   const currentIndex = state.pinnedRecentFiles.findIndex(path => sameDocumentPath(path, filePath));
   const nextIndex = currentIndex + (event.key === 'ArrowUp' ? -1 : 1);
@@ -6858,63 +6948,129 @@ function handlePinnedKeyboardReorder(event) {
   });
 }
 
-function initializePinnedFileInteractions() {
-  els.fileList.querySelectorAll('.file-row.pinned').forEach(row => {
-    row.addEventListener('pointerdown', beginPinnedPointerReorder);
-  });
-  els.fileList.querySelectorAll('.pin-drag-handle').forEach(handle => {
-    handle.addEventListener('keydown', handlePinnedKeyboardReorder);
+const libraryViewport = createLibraryViewport(els.fileList, renderFileRow, updateRecentSelectionUI);
+
+function librarySearchView() {
+  const search = state.librarySearch;
+  const query = search.query.trim().toLowerCase();
+  const mode = state.sidebarMode;
+  const root = mode === 'explorer' ? state.root || '' : '';
+  if (!query) search.plan = null;
+  else if (!search.plan || search.plan.files !== state.files || search.plan.query !== query) {
+    search.plan = planLibrarySearch(state.files, query);
+  }
+  const paths = search.plan?.paths || [];
+  const key = query ? JSON.stringify([mode, root, query, paths, state.currentFile?.revision]) : '';
+  if (key !== search.key) {
+    const request = ++search.request;
+    clearTimeout(search.timer);
+    if (search.running) void window.quilliteMarkdown.searchLibraryFiles(mode, root, '', []).catch(() => {});
+    Object.assign(search, { key, pending: !!paths.length, running: false, matches: new Set(), skipped: 0, failed: false });
+    if (paths.length) search.timer = setTimeout(async () => {
+      search.running = true;
+      try {
+        const result = await window.quilliteMarkdown.searchLibraryFiles(mode, root, query, paths, request, batch => {
+          if (request !== search.request || !search.running || !Array.isArray(batch)) return;
+          for (const path of batch) search.matches.add(path);
+          renderSearchProgress();
+        });
+        if (request !== search.request) return;
+        search.matches = new Set(result.paths);
+        search.skipped = result.skipped;
+      } catch {
+        if (request !== search.request) return;
+        search.failed = true;
+      }
+      search.pending = search.running = false;
+      renderSearchProgress();
+    }, 200);
+  }
+  search.visible = search.plan ? search.plan.visible(search.matches) : state.files;
+  const status = $('#librarySearchStatus');
+  status.classList.toggle('hidden', !query);
+  const statusKey = search.pending ? (search.visible.length ? 'librarySearchingFound' : 'librarySearching') : search.failed ? 'librarySearchFailed' : search.skipped ? 'librarySearchPartial' : 'librarySearchCount';
+  status.textContent = query ? t(statusKey, { count: search.visible.length, skipped: search.skipped }) : '';
+  $('#clearLibrarySearch').classList.toggle('hidden', !search.query);
+  return search.visible;
+}
+
+// A batch arriving between pointerdown and click must not replace the
+// pressed button and swallow the user's first click on an early result.
+let searchRowPointer = null, deferredSearchPaint = 0;
+function releaseSearchRow(event) {
+  if (searchRowPointer === null || (event.pointerId !== undefined && event.pointerId !== searchRowPointer)) return;
+  searchRowPointer = null;
+  const request = deferredSearchPaint;
+  deferredSearchPaint = 0;
+  if (request) requestAnimationFrame(() => {
+    if (request === state.librarySearch.request) renderSearchProgress();
   });
 }
 
-function renderFileList() {
-  closeRecentContextMenu();
-  updateRecentSelectionUI();
-  if (!state.files.length) {
+function renderSearchProgress() {
+  if (searchRowPointer !== null) {
+    deferredSearchPaint = state.librarySearch.request;
+    return;
+  }
+  const list = els.fileList;
+  const top = list.getBoundingClientRect().top;
+  const anchor = list.scrollTop > 0 && [...list.querySelectorAll('.file-row')].find(row => row.getBoundingClientRect().bottom > top);
+  const offset = anchor && anchor.getBoundingClientRect().top - top;
+  const focused = list.contains(document.activeElement) ? document.activeElement : null;
+  renderFileList(true);
+  if (anchor) libraryViewport.restore(decodeURIComponent(anchor.dataset.path), offset);
+  if (focused?.dataset.path) {
+    const selector = focused.matches('.pin-drag-handle') ? '.pin-drag-handle' : '.file-item';
+    [...list.querySelectorAll(selector)].find(el => el.dataset.path === focused.dataset.path)?.focus({ preventScroll: true });
+  }
+}
+
+function renderFileList(progress = false) {
+  if (!progress) closeRecentContextMenu();
+  const files = librarySearchView();
+  const searching = !!state.librarySearch.query.trim();
+  libraryViewport.reset(state.fontScale);
+  if (!files.length) {
     const emptyKey = state.sidebarMode === 'explorer' ? 'emptyExplorer' : state.sidebarMode === 'favorites' ? 'emptyFavorites' : 'emptyRecent';
-    els.fileList.innerHTML = `<div class="empty-list">${t(emptyKey)}</div>`;
+    els.fileList.innerHTML = searching ? '' : `<div class="empty-list">${t(emptyKey)}</div>`;
+    updateRecentSelectionUI();
     return;
   }
   els.fileList.innerHTML = state.sidebarMode === 'recent'
-    ? renderRecentFileGroups()
-    : state.files.map(file => renderFileRow(file)).join('');
-  els.fileList.querySelectorAll('.file-item').forEach(button => {
-    button.addEventListener('click', event => {
-      const filePath = decodeURIComponent(button.dataset.path);
-      if (state.sidebarMode === 'recent' && state.removingRecentSelection) return;
-      if (state.sidebarMode === 'recent' && (event.ctrlKey || event.metaKey || event.shiftKey)) {
-        event.preventDefault();
-        if (pinMutationInProgress) return;
-        selectRecentFile(filePath, event);
-        updateRecentSelectionUI();
-        return;
-      }
-      state.recentSelection = [];
-      state.recentSelectionAnchor = state.sidebarMode === 'recent' ? filePath : '';
-      updateRecentSelectionUI();
-      if (button.dataset.missing === 'true') return;
-      if (suppressPinnedFileClickPath && performance.now() < suppressPinnedFileClickUntil && sameDocumentPath(suppressPinnedFileClickPath, filePath)) {
-        suppressPinnedFileClickPath = '';
-        suppressPinnedFileClickUntil = 0;
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      loadFile(filePath);
-    });
-  });
-  els.fileList.querySelectorAll('.file-row').forEach(row => {
-    row.addEventListener('contextmenu', event => {
-      openRecentContextMenu(event, decodeURIComponent(row.dataset.path), row.classList.contains('missing'));
-    });
-  });
-  initializePinnedFileInteractions();
+    ? renderRecentFileGroups(files, searching)
+    : libraryViewport.rows(files);
+  libraryViewport.attach();
   updateRecentSelectionUI();
 }
 
+function handleFileListClick(event) {
+  const button = event.target.closest('.file-item');
+  if (!button) return;
+  const filePath = decodeURIComponent(button.dataset.path);
+  if (state.sidebarMode === 'recent' && state.removingRecentSelection) return;
+  if (state.sidebarMode === 'recent' && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+    event.preventDefault();
+    if (pinMutationInProgress) return;
+    selectRecentFile(filePath, event);
+    updateRecentSelectionUI();
+    return;
+  }
+  state.recentSelection = [];
+  state.recentSelectionAnchor = state.sidebarMode === 'recent' ? filePath : '';
+  updateRecentSelectionUI();
+  if (button.dataset.missing === 'true') return;
+  if (suppressPinnedFileClickPath && performance.now() < suppressPinnedFileClickUntil && sameDocumentPath(suppressPinnedFileClickPath, filePath)) {
+    suppressPinnedFileClickPath = '';
+    suppressPinnedFileClickUntil = 0;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  loadFile(filePath);
+}
+
 function selectRecentFile(path, event) {
-  const { pinnedFiles, ordinaryFiles } = partitionRecentFiles(state.recentFiles, state.pinnedRecentFiles);
-  const files = [...pinnedFiles, ...ordinaryFiles];
+  const files = state.librarySearch.visible;
   if (event.shiftKey) {
     state.recentSelection = rangeRecentSelection(state.recentSelection, state.recentSelectionAnchor, path, files, event.ctrlKey || event.metaKey);
     if (!files.some(file => sameDocumentPath(file.path, state.recentSelectionAnchor))) state.recentSelectionAnchor = path;
@@ -6925,7 +7081,7 @@ function selectRecentFile(path, event) {
 }
 
 function updateRecentSelectionUI() {
-  state.recentSelection = retainRecentSelection(state.recentSelection, state.recentFiles);
+  state.recentSelection = retainRecentSelection(state.recentSelection, state.librarySearch.query.trim() ? state.librarySearch.visible : state.recentFiles);
   if (!state.recentFiles.some(file => sameDocumentPath(file.path, state.recentSelectionAnchor))) state.recentSelectionAnchor = '';
   const recent = state.sidebarMode === 'recent';
   const count = state.recentSelection.length;
@@ -7123,6 +7279,7 @@ function syncCompactTocControls(tocAvailable = state.tocAvailable) {
 }
 
 function setCompactTocOpen(open, restoreFocus = false) {
+  if (comparison.active()) return;
   if (open && state.editing) renderToc();
   state.compactTocOpen = Boolean(open && isCompactTocLayout() && state.tocAvailable);
   syncCompactTocControls();
@@ -7133,6 +7290,7 @@ function setCompactTocOpen(open, restoreFocus = false) {
 }
 
 function setWideTocCollapsed(collapsed) {
+  if (comparison.active()) return;
   if (isCompactTocLayout() || !state.tocAvailable) return;
   state.tocPanelCollapsed = Boolean(collapsed);
   localStorage.setItem('tocPanelCollapsed', String(state.tocPanelCollapsed));
@@ -7383,6 +7541,7 @@ function suspendEditorPreview() {
 
 function scheduleEditorPreview(performance) {
   cancelScheduledEditorPreview();
+  if (comparison.active()) return;
   if (state.editorLayout === 'editor-only') return;
   const requestedSession = state.documentSession;
   const requestedPath = state.currentFile?.path;
@@ -7644,11 +7803,11 @@ function applyMarkdownTableLayouts(container, layouts) {
   });
 }
 
-function* prepareMarkdownPresentation(container, doc, content) {
+function* prepareMarkdownPresentation(container, doc, content, reference = false) {
   if (isPlainTextFile(doc.path)) return null;
   const tableLayouts = findMarkdownTables(content);
   yield;
-  const deferred = container === els.content && content.length >= READER_DEFER_THRESHOLD;
+  const deferred = (container === els.content || reference) && content.length >= READER_DEFER_THRESHOLD;
   const cacheKey = JSON.stringify([doc.path, state.language, mermaidPreviewThemeKey(), deferred]);
   const cachedHTML = container === els.content ? readerHTMLCache.get(cacheKey, content) : null;
   const prepared = cachedHTML === null ? prepareFootnotes(replaceDynamicTocMarkers(stripTableWidthMetadata(tableRenderSource(frontmatterRenderSource(content))))) : null;
@@ -7696,7 +7855,9 @@ function importedImagePresentation(html, { cleanStyles = true } = {}) {
       const value = element.getAttribute(name);
       if (value && (name === 'srcset' || remote(value))) {
         element.removeAttribute(name);
-        if (element.tagName === 'IMG') {
+        // srcset may carry remote alternatives while src is a safe local
+        // fallback. Remove the alternatives without suppressing that fallback.
+        if (element.tagName === 'IMG' && name === 'src') {
           element.dataset.remoteImageBlocked = 'true';
           element.classList.add('remote-image-blocked');
           element.title = t('textBundleRemoteBlocked');
@@ -7740,7 +7901,7 @@ function allowImportedResourcesForRendering() {
   return true;
 }
 
-function renderMarkdownTo(container, doc, content, presentation = null, splitLayout = null) {
+function renderMarkdownTo(container, doc, content, presentation = null, splitLayout = null, reference = null) {
   cancelReaderWork(container);
   cancelPreviewImages(container);
   if (isPlainTextFile(doc.path)) {
@@ -7758,9 +7919,9 @@ function renderMarkdownTo(container, doc, content, presentation = null, splitLay
   const reusableECharts = reusableEChartsDiagrams(container, mermaidThemeKey);
   // Settings can change while opening yields to the UI. Never commit HTML
   // prepared for an older language/theme, or cache it under the newer settings.
-  if (presentation && presentation.cacheKey !== JSON.stringify([doc.path, state.language, mermaidThemeKey, container === els.content && content.length >= READER_DEFER_THRESHOLD])) presentation = null;
+  if (presentation && presentation.cacheKey !== JSON.stringify([doc.path, state.language, mermaidThemeKey, (container === els.content || !!reference) && content.length >= READER_DEFER_THRESHOLD])) presentation = null;
   if (!presentation) {
-    const steps = prepareMarkdownPresentation(container, doc, content);
+    const steps = prepareMarkdownPresentation(container, doc, content, !!reference);
     let step; do { step = steps.next(); } while (!step.done);
     presentation = step.value;
   }
@@ -7770,9 +7931,10 @@ function renderMarkdownTo(container, doc, content, presentation = null, splitLay
   // otherwise repeated editing of a chart-heavy document gradually retains
   // detached observers and makes typing/scrolling feel sluggish.
   releaseEChartsDiagrams(container);
-  const blocked = state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path);
+  const blocked = reference ? Boolean(doc.bundleKind || doc.blockRemoteImages)
+    : state.blockImportedRemoteImages && sameDocumentPath(doc.path, state.currentFile?.path);
   const hasMedia = /<(?:video|audio|source|track)\b/i.test(html);
-  if (blocked || hasMedia) {
+  if (blocked || hasMedia || reference) {
     let fragment;
     if (blocked) fragment = importedImagePresentation(html);
     else {
@@ -7780,8 +7942,13 @@ function renderMarkdownTo(container, doc, content, presentation = null, splitLay
       template.innerHTML = html;
       fragment = template.content;
     }
+    if (reference) {
+      fragment.querySelectorAll('style, link, form, button:not(.copy-code), iframe, object, embed').forEach(el=>el.remove());
+      fragment.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
+      fragment.querySelectorAll('input, textarea, select').forEach(el=>{el.disabled=true;});
+    }
     if (hasMedia) prepareDocumentVideos(fragment, {
-      enabled: !blocked && canPlayLocalVideo(doc),
+      enabled: !blocked && !reference && canPlayLocalVideo(doc),
       documentPath: doc.path, session: state.documentSession, bridge: window.quilliteMarkdown, t
     });
     const pair = hasMedia && !blocked ? findRetainedVideoCard(container, fragment) : null;
@@ -7829,7 +7996,12 @@ function renderMarkdownTo(container, doc, content, presentation = null, splitLay
     const button = document.createElement('button'); button.type = 'button'; button.textContent = t('textBundleLoadRemote'); button.addEventListener('click', loadImportedNetworkImages);
     notice.append(label, button); container.prepend(notice);
   }
-  bindDocumentActions(container);
+  if (reference && blocked) {
+    const notice = document.createElement('p');
+    notice.className = 'imported-network-notice'; notice.textContent = t('compareOffline'); container.prepend(notice);
+  }
+  bindDocumentActions(container, reference ? { ...reference, doc } : null);
+  if(container===els.content || container===els.editorPreview || reference)diagramViewer.bindImages(container);
   if (container === els.editorPreview && state.editing && codeEditor?.state.doc.toString() === content) {
     const elements = previewFormulaElements(container, renderedMath.formulas);
     const matches = matchPreviewFormulas(currentFormulaIndex(), renderedMath.formulas, prepared.notes.length === 0);
@@ -7840,7 +8012,7 @@ function renderMarkdownTo(container, doc, content, presentation = null, splitLay
       element.title = t('formulaPreviewEditHint');
     });
   }
-  if (deferred) scheduleReaderWork(container, highlightReaderSource);
+  if (deferred) scheduleReaderWork(container, highlightReaderSource, reference?.viewport);
   return diagramRender;
 }
 
@@ -7883,6 +8055,7 @@ function renderLightweightTable(container, source, definitions) {
     } else if (kind === 'remote' && ref.startsWith('//')) image.setAttribute('src', 'https:' + ref);
     image.loading = 'lazy';
     image.decoding = 'async';
+    if(kind)decorateTableImage(image,ref,state.language==='en'?{view:'View image',size:'Adjust size'}:{view:'查看大图',size:'调整尺寸'});
   }
   for (const element of content.querySelectorAll('[data-md-color]')) {
     const color = textColorValue(element.dataset.mdColor);
@@ -7896,6 +8069,7 @@ function renderLightweightTable(container, source, definitions) {
 }
 
 function renderEditorPreview(content = state.currentFile?.content || '', { reserveImages = false, preservePlaying = false } = {}) {
+  if (comparison.active()) return;
   if (!state.currentFile || state.editorLayout === 'editor-only') return;
   const session = state.documentSession, doc = state.currentFile;
   const displayed = renderEditorPreview.displayed;
@@ -8017,6 +8191,7 @@ async function readDocumentForOpen(request, read, options = {}) {
 
 function displayDocument(doc, { addToLibrary = true, presentation = null } = {}) {
   if (!doc?.path) return;
+  comparison.close(false);
   cancelEditorPresentationChange();
   cancelReadingPositionRestore();
   readingPosition = null;
@@ -8073,6 +8248,7 @@ function displayDocument(doc, { addToLibrary = true, presentation = null } = {})
 
 function closePreview() {
   if (!maybeDiscardChanges()) return;
+  comparison.close(false);
   cancelEditorPresentationChange();
   documentLoading?.cancel();
   cancelReadingPositionRestore();
@@ -8482,6 +8658,7 @@ async function toggleEditor(forceEditing) {
     clearTimeout(outlineRefreshTimer);
     outlineDocument = null; outlineHeadings = [];
     state.editing = nextEditing;
+    if(nextEditing && comparison.translationActive()) comparison.close(false);
     scheduleFormatToolbarLayout();
     editorEntryPosition = nextEditing && readingPosition?.line ? readingPosition : null;
     // Retain the document, selection and undo history, but unmount live widgets
@@ -8858,6 +9035,7 @@ function closeDocumentSaveFormat(format = null) {
 
 async function saveDocument(saveAs = false, options = {}) {
   if (!state.currentFile || state.saving) return;
+  if (state.trashPendingPath && sameDocumentPath(state.currentFile.path, state.trashPendingPath)) return;
   if (!saveAs && state.currentFile.bundleKind && String(state.currentFile.warning || '').includes('BUNDLE_SESSION_PERSIST_WARNING')) {
     if (!options.auto) showToast(t('bundleSessionPersistWarning'), 'warning', 10000);
     return;
@@ -9227,7 +9405,7 @@ async function renderedHTMLForExport(header = '', footer = '') {
   const container = exportPreviewContainer();
   // Export is an explicit request, not live rendering. Never export a stale or
   // emptied split preview while editor-only mode is active.
-  if (state.editing && state.editorLayout === 'editor-only') {
+  if (state.editing && (state.editorLayout === 'editor-only' || comparison.active())) {
     await renderMarkdownTo(container, state.currentFile, editorContent());
   }
   // A bounded queue may still contain images without src. Finish those reads
@@ -9945,6 +10123,7 @@ function closeDocumentActionsMenu() {
 
 function runDocumentHeaderAction(action) {
   closeDocumentActionsMenu();
+  if (action === 'translate') void readingTranslation.open();
   if (action === 'save-as' && state.currentFile?.path) saveLibraryDocumentAs(state.currentFile.path);
   if (action === 'export-center') openExportCenter();
   if (action === 'print') {
@@ -9958,7 +10137,7 @@ function openExternal(url) {
   });
 }
 
-function bindDocumentActions(container = els.content) {
+function bindDocumentActions(container = els.content, reference = null) {
   container.querySelectorAll('.copy-code').forEach(button => button.addEventListener('click', async () => {
     const code = button.closest('.code-block').querySelector('code').textContent;
     try {
@@ -9974,8 +10153,14 @@ function bindDocumentActions(container = els.content) {
     const activate = event => {
       if (event.type === 'auxclick' && event.button !== 1) return;
       event.preventDefault();
-      const target = resolveDocumentLink(link.getAttribute('href') || '', state.currentFile?.path);
+      const target = resolveDocumentLink(link.getAttribute('href') || '', reference?.doc.path || state.currentFile?.path);
       if (target.kind === 'external') { openExternal(target.url); return; }
+      if (reference) {
+        if (target.kind === 'anchor' || (target.kind === 'document' && sameDocumentPath(target.path,reference.doc.path))) reference.jump(target.fragment);
+        else if (target.kind === 'document' && !reference.doc.bundleKind && !sameDocumentPath(target.path,state.currentFile?.path)) void reference.open(target.path,target.fragment);
+        else showToast(t('compareLocalLink'),'info');
+        return;
+      }
       if (target.kind === 'anchor' || (target.kind === 'document' && sameDocumentPath(target.path, state.currentFile?.path))) {
         scrollDocumentLinkTarget(container, target.fragment);
       } else if (target.kind === 'document') {
@@ -9989,11 +10174,15 @@ function bindDocumentActions(container = els.content) {
   });
 }
 
+function findDocumentLinkTarget(container, fragment) {
+  return fragment ? [...container.querySelectorAll('[id]')].find(node => node.id === fragment)
+    || [...container.querySelectorAll('h1, h2, h3, h4, h5, h6')].find(node => slugify(node.textContent, 0).replace(/-0$/, '') === fragment) : container;
+}
+
 function scrollDocumentLinkTarget(container, fragment) {
   cancelReadingPositionRestore();
   if (container === els.content) revealReaderLayout(container);
-  const target = fragment ? [...container.querySelectorAll('[id]')].find(node => node.id === fragment)
-    || [...container.querySelectorAll('h1, h2, h3, h4, h5, h6')].find(node => slugify(node.textContent, 0).replace(/-0$/, '') === fragment) : container;
+  const target = findDocumentLinkTarget(container, fragment);
   if (target && /^H[1-6]$/.test(target.tagName) && scrollPreviewContainerToHeading(container, target.id, 'auto')) return;
   const scroller = container === els.content ? $('.reader-pane') : container.closest('.editor-preview-scroll');
   if (target && scroller) {
@@ -12097,9 +12286,9 @@ async function openFeedback() {
   try {
     state.feedbackSystemInfo = await window.quilliteMarkdown.getFeedbackSystemInfo();
   } catch {
-    state.feedbackSystemInfo = { appVersion: '3.2.0', os: 'windows', systemVersion: '—' };
+    state.feedbackSystemInfo = { appVersion: '3.3.0', os: 'windows', systemVersion: '—' };
   }
-  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.2.0';
+  $('#feedbackAppVersion').textContent = state.feedbackSystemInfo?.appVersion || '3.3.0';
   $('#feedbackSystemVersion').textContent = state.feedbackSystemInfo?.systemVersion || '—';
   requestAnimationFrame(() => $('#feedbackMessage').focus());
 }
@@ -12192,7 +12381,7 @@ function renderUpdateDialogContent(info) {
   const unsafeWindowsUninstaller = info.manualInstallReason === 'windows-unsafe-uninstaller';
   const portableWindows = info.manualInstallReason === 'windows-portable';
   $('#updateTitle').textContent = unsafeWindowsUninstaller && !info.available ? t('installerRepairRequired') : t('updateAvailable');
-  $('#currentVersion').textContent = info.currentVersion || '3.2.0';
+  $('#currentVersion').textContent = info.currentVersion || '3.3.0';
   $('#latestVersion').textContent = info.latestVersion || '';
   $('#updateReleaseName').textContent = info.releaseName || `v${info.latestVersion || ''}`;
   const notesElement = $('#releaseNotes');
@@ -12862,6 +13051,45 @@ function handleRecentSelectionKey(event) {
   }
 }
 els.fileList.addEventListener('keydown', handleRecentSelectionKey);
+els.fileList.addEventListener('click', handleFileListClick);
+els.fileList.addEventListener('contextmenu', event => {
+  const row = event.target.closest('.file-row');
+  if (row) openRecentContextMenu(event, decodeURIComponent(row.dataset.path), row.classList.contains('missing'));
+});
+els.fileList.addEventListener('pointerdown', beginPinnedPointerReorder);
+els.fileList.addEventListener('pointerdown', event => {
+  if (event.button === 0 && state.librarySearch.running && event.target.closest('.file-item')) searchRowPointer = event.pointerId;
+});
+window.addEventListener('pointerup', releaseSearchRow, true);
+window.addEventListener('pointercancel', releaseSearchRow, true);
+window.addEventListener('blur', releaseSearchRow);
+els.fileList.addEventListener('keydown', event => {
+  libraryViewport.advanceTab(event, state.librarySearch.visible);
+  if (event.target.closest('.pin-drag-handle')) handlePinnedKeyboardReorder(event);
+});
+const librarySearchInput = $('#librarySearchInput');
+function updateLibraryQuery() {
+  if (state.librarySearch.query === librarySearchInput.value) return;
+  cancelPinnedPointerReorder();
+  state.librarySearch.query = librarySearchInput.value;
+  state.recentSelection = [];
+  state.recentSelectionAnchor = '';
+  els.fileList.scrollTop = 0;
+  renderFileList();
+}
+function clearLibraryQuery() {
+  librarySearchInput.value = '';
+  updateLibraryQuery();
+  librarySearchInput.focus();
+}
+librarySearchInput.addEventListener('input', event => { if (!event.isComposing) updateLibraryQuery(); });
+librarySearchInput.addEventListener('compositionend', updateLibraryQuery);
+librarySearchInput.addEventListener('keydown', event => {
+  if (!event.isComposing && event.key === 'Escape' && librarySearchInput.value) {
+    event.preventDefault(); event.stopPropagation(); clearLibraryQuery();
+  }
+});
+$('#clearLibrarySearch').addEventListener('click', clearLibraryQuery);
 $('#recentSelectionActions').addEventListener('keydown', handleRecentSelectionKey);
 els.recentTab.addEventListener('click', () => {
   setSidebarMode('recent');
@@ -13940,6 +14168,40 @@ els.moreMenu.querySelectorAll('.settings-submenu-group').forEach(group => {
 });
 els.fontScaleSlider.addEventListener('input', event => setFontScale(Number(event.target.value) / 100, true));
 els.fontScaleSlider.addEventListener('change', event => setFontScale(Number(event.target.value) / 100));
+const comparison = comparisonReader({
+  findDocumentLinkTarget,
+  read: path => window.quilliteMarkdown.readDocumentConflict(path),
+  primary: () => state.currentFile, samePath: sameDocumentPath, t, warn: message=>showToast(message,'warning'),
+  async prepare(doc,current) {
+    if(doc.content.length<READER_DEFER_THRESHOLD || isPlainTextFile(doc.path))return null;
+    // Keep the old reference visible until the new one is ready to commit.
+    // A superseded request never creates DOM, starts image reads or queues highlighting.
+    const steps=prepareMarkdownPresentation(null,doc,doc.content,true);
+    while(current()) {
+      await documentLoadingFrame();
+      if(!current())return null;
+      const step=steps.next();
+      if(step.done)return step.value;
+    }
+    return null;
+  },
+  render: (article,doc,reference,presentation) => renderMarkdownTo(article,doc,doc.content,presentation,null,reference),
+  release: releaseRenderedResources,
+  layout(change, restore = true) {
+    const reader = $('.reader-pane'), session = state.documentSession;
+    cancelReadingPositionRestore();
+    const point = restore && state.currentFile && !state.editing && reader.scrollTop > 0 ? captureReadingPosition(reader,els.content) : null;
+    change();
+    if (point) cancelReadingPositionRestore = restoreReadingPosition(reader,els.content,point,()=>session===state.documentSession && !state.editing);
+    if (state.editing && restore) {
+      if (comparison.active()) suspendEditorPreview();
+      else renderEditorPreview(editorContent());
+      codeEditor?.requestMeasure();
+      scheduleFormatToolbarLayout();
+    }
+    schedulePaneWidthRefresh();
+  }
+});
 els.recentContextMenu.addEventListener('click', async event => {
   event.stopPropagation();
   const button = event.target.closest('[data-recent-action]');
@@ -13949,10 +14211,12 @@ els.recentContextMenu.addEventListener('click', async event => {
   const filePath = decodeURIComponent(encodedPath);
   closeRecentContextMenu();
   if (action === 'edit') await editRecentDocument(filePath);
+  else if (action === 'compare') await comparison.open(filePath);
   else if (action === 'save-as') await saveLibraryDocumentAs(filePath);
   else if (action === 'pin') await setRecentPinnedRecord(filePath, button.dataset.pinState === 'add');
   else if (action === 'favorite') await setFavoriteRecord(filePath, button.dataset.favoriteState === 'add');
   else if (action === 'reveal') await revealFileInFolder(filePath);
+  else if (action === 'trash') await trashLocalFile(filePath);
   else if (action === 'remove') {
     if (state.sidebarMode === 'recent' && state.recentSelection.some(path => sameDocumentPath(path, filePath))) await clearSelectedRecentRecords();
     else await removeRecentRecord(filePath);
@@ -14279,7 +14543,28 @@ window.quilliteMarkdown.onFileDrop(paths => {
   if (!handleVideoDialogDrop('')) showToast(t('virtualFileDropUnsupported'), 'warning');
 });
 
+const readingTranslation=installReadingTranslation({
+  comparison, bridge:window.quilliteMarkdown, t, notify:showToast, configure:()=>openAISettings({required:true}),
+  current:()=>!state.editing && state.currentFile ? {...state.currentFile,session:state.documentSession} : null,
+  sectionLine:()=>captureReadingPosition($('.reader-pane'),els.content).line || 1,
+  selectionSource(range){
+    if(!els.content.contains(range.startContainer) || !els.content.contains(range.endContainer))return '';
+    const node=range.commonAncestorContainer;
+    const parent=node.nodeType===1?node:node.parentElement;
+    if(parent.closest('code,pre,svg,math,.math-inline,.math-block,.katex,button,video,audio'))return '';
+    const box=document.createElement('div');box.append(range.cloneContents());
+    box.querySelectorAll('button,input,textarea,[hidden],svg,video,audio').forEach(el=>el.remove());
+    return htmlToMarkdown(box.innerHTML);
+  }
+});
 initializeFormatToolbarOverflow();
+installReadingAnnotations({
+  translate:(range,line)=>readingTranslation.open(range,line),
+  root:els.content, toc:els.toc, view:els.documentView, panel:$('#readingMarkIssues'), menu:$('#readingMarkMenu'), t, notify:showToast,
+  current:()=>!state.editing && state.currentFile ? {
+    path:state.currentFile.path, content:state.currentFile.content, revision:state.currentFile.content===state.savedContent && !state.dirty ? state.currentFile.revision : '', session:state.documentSession,
+  } : null,
+});
 initializePaneResizers();
 window.addEventListener('resize', scheduleMacWindowModeSync);
 window.addEventListener('focus', () => {

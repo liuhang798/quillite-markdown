@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"sync"
 	"syscall"
 	"unsafe"
 
@@ -24,13 +23,11 @@ var (
 	startupThreadDPIContext = user32DLL.NewProc("SetThreadDpiAwarenessContext")
 )
 
-func startupWindowReady() func(context.Context) {
-	var once sync.Once
+func startupWindowReady(app *App) func(context.Context) {
 	return func(ctx context.Context) {
-		once.Do(func() {
+		app.startupWindow.ready(ctx, func(ctx context.Context) {
 			// StartHidden prevents a visible oversized-window -> fitted-window jump.
 			// Always show even if native discovery fails; never strand a hidden app.
-			defer wailsruntime.WindowShow(ctx)
 			if err := fitNativeStartupWindow(ctx); err != nil {
 				wailsruntime.LogWarningf(ctx, "startup window placement: %v", err)
 			}

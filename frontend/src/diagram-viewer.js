@@ -27,7 +27,8 @@ export function diagramSnapshot(svg) {
 
 export function createDiagramViewer({roots, language = () => 'zh-CN', canOpen = () => true}) {
   const text = () => messages[language()] || messages['zh-CN'];
-  let dialog, stage, image, output, hint, buttons, active = null, drag = null, resizeObserver, sourceObserver;
+  let dialog, stage, image, canvas, output, hint, buttons, active = null, drag = null, resizeObserver, sourceObserver;
+  const readingRoots=new WeakSet();
   const inRoots = element => roots.some(root => root.contains(element));
   const viewport = () => ({width:stage.clientWidth, height:stage.clientHeight});
   const apply = () => {
@@ -35,6 +36,14 @@ export function createDiagramViewer({roots, language = () => 'zh-CN', canOpen = 
     active.transform = constrainDiagram(active.transform, active.size, viewport());
     const {x,y,scale} = active.transform;
     image.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    if(active.paint){
+      // Use the already-decoded remote image; zoom never issues a second
+      // network request, even for no-store responses. No pixel readback.
+      const w=stage.clientWidth,h=stage.clientHeight,d=Math.min(devicePixelRatio||1,2,4096/Math.max(1,w,h));
+      if(canvas.width!==Math.round(w*d) || canvas.height!==Math.round(h*d)){canvas.width=Math.round(w*d);canvas.height=Math.round(h*d);}
+      const ctx=canvas.getContext('2d');
+      if(ctx){ctx.setTransform(d,0,0,d,0,0);ctx.clearRect(0,0,w,h);if(active.element.complete && active.element.naturalWidth)ctx.drawImage(active.element,x,y,active.size.width*scale,active.size.height*scale);}
+    }
     output.value = `${Math.round(scale * 1000) / 10}%`;
     buttons.minus.disabled = scale <= Math.min(.1, fitDiagram(active.size, viewport())) + .000001;
     buttons.plus.disabled = scale >= 8;
@@ -56,6 +65,7 @@ export function createDiagramViewer({roots, language = () => 'zh-CN', canOpen = 
     if (drag && stage.hasPointerCapture(drag.id)) stage.releasePointerCapture(drag.id);
     active = null; drag = null; resizeObserver?.disconnect(); sourceObserver?.disconnect();
     if (image) {image.onload = image.onerror = null; image.removeAttribute('src');}
+    if(canvas){canvas.hidden=true;canvas.width=canvas.height=1;}
     stage?.classList.remove('is-dragging');
     if (trigger?.isConnected) trigger.focus({preventScroll:true});
   };
@@ -72,6 +82,7 @@ export function createDiagramViewer({roots, language = () => 'zh-CN', canOpen = 
     }
     header.append(controls); stage = document.createElement('div');stage.className = 'diagram-viewer-stage';
     image = document.createElement('img');image.className = 'diagram-viewer-image';image.draggable = false;stage.append(image);
+    canvas=document.createElement('canvas');canvas.className='diagram-viewer-canvas';canvas.hidden=true;stage.append(canvas);
     hint = document.createElement('p');hint.id='diagramViewerHint';hint.className = 'diagram-viewer-hint';hint.setAttribute('role','status');
     dialog.append(header,stage,hint);document.body.append(dialog);
     buttons.minus.onclick=()=>zoom(1/1.25);buttons.plus.onclick=()=>zoom(1.25);buttons.fit.onclick=fit;buttons.actual.onclick=actual;buttons.close.onclick=close;
@@ -106,22 +117,47 @@ export function createDiagramViewer({roots, language = () => 'zh-CN', canOpen = 
     const end=()=>{drag=null;stage.classList.remove('is-dragging');};
     for(const type of ['pointerup','pointercancel','lostpointercapture'])stage.addEventListener(type,end);
   };
-  const open = (element, trigger) => {
-    if (!canOpen() || !inRoots(element) || !element.isConnected) return;
-    const svg = element.querySelector('svg'); if (!svg) return;
-    const snapshot = diagramSnapshot(svg); if (!snapshot) return;
+  const present = (element, trigger, snapshot, photo=false) => {
     if (!dialog) build(); if (dialog.open) close();
-    const labels = text();dialog.querySelector('h2').textContent=labels.title;hint.textContent=labels.hint;image.alt=labels.title;
+    const labels = text(),title=photo?(language()==='en'?'Image viewer':'图片查看'):labels.title;
+    dialog.querySelector('h2').textContent=title;hint.textContent=labels.hint;image.alt=photo?(element.alt||title):title;
     for(const key of Object.keys(buttons)){
       buttons[key].textContent=key==='minus'?'−':key==='plus'?'+':labels[key];buttons[key].setAttribute('aria-label',labels[key]);buttons[key].title=labels[key];
     }
-    const record={element,trigger,size:{width:snapshot.width,height:snapshot.height},transform:{x:0,y:0,scale:1},fitted:true};active=record;
+    const paint=photo && !/^(?:data:image\/|blob:)/i.test(snapshot.url);
+    const record={element,trigger,paint,size:{width:snapshot.width,height:snapshot.height},transform:{x:0,y:0,scale:1},fitted:true};active=record;
+    canvas.hidden=!paint;image.hidden=paint;canvas.setAttribute('aria-label',image.alt);canvas.setAttribute('role','img');
     image.style.width=`${snapshot.width}px`;image.style.height=`${snapshot.height}px`;
     image.onerror=()=>{if(active===record)hint.textContent=labels.error;};
-    image.src=snapshot.url;dialog.showModal();fit();buttons.close.focus({preventScroll:true});
+    if(!paint)image.src=snapshot.url;dialog.showModal();fit();buttons.close.focus({preventScroll:true});
     resizeObserver=new ResizeObserver(()=>{if(active===record){if(active.fitted)fit();else apply();}});resizeObserver.observe(stage);
-    sourceObserver=new MutationObserver(()=>{if(active===record&&!element.isConnected)close();});sourceObserver.observe(document.body,{childList:true,subtree:true});
+    sourceObserver=new MutationObserver(()=>{
+      if(active===record && (!element.isConnected || photo && (element.hidden || !element.hasAttribute('src') && !element.hasAttribute('srcset') || element.currentSrc!==snapshot.url)))close();
+    });
+    const observeRemoval={childList:true,subtree:true};
+    sourceObserver.observe(document.body,observeRemoval);
+    const root=element.getRootNode();if(root instanceof ShadowRoot)sourceObserver.observe(root,observeRemoval);
+    if(photo)sourceObserver.observe(element,{attributes:true,attributeFilter:['src','srcset','hidden']});
   };
+  const open=(element,trigger)=>{
+    if(!canOpen()||!inRoots(element)||!element.isConnected)return;
+    const svg=element.querySelector('svg'),snapshot=svg&&diagramSnapshot(svg);
+    if(snapshot)present(element,trigger,snapshot);
+  };
+  function openImage(img,trigger=img) {
+    if(!canOpen() || !img?.isConnected || !img.matches('img') || !img.complete || !img.naturalWidth || !img.naturalHeight || !img.currentSrc ||
+       img.closest('[hidden],.local-image-error,[data-remote-image-blocked="true"]') || img.matches('.is-pending,.local-image-loading'))return false;
+    present(img,trigger,{width:img.naturalWidth,height:img.naturalHeight,url:img.currentSrc},true);return true;
+  }
+  function bindImages(root){
+    if(readingRoots.has(root))return;readingRoots.add(root);
+    root.addEventListener('click',event=>{
+      const img=event.target;
+      if(event.defaultPrevented || event.button!==0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || !img.matches?.('img') ||
+         img.closest('a,button,figure.mermaid-diagram,.echarts-diagram,[contenteditable=true]') || !window.getSelection()?.isCollapsed)return;
+      if(openImage(img)){event.preventDefault();event.stopPropagation();}
+    });
+  }
   const enhance = element => {
     if(!inRoots(element)||!element.matches(selector)||!element.querySelector('svg'))return;
     let button=element.querySelector(':scope > .diagram-view-button');
@@ -148,5 +184,5 @@ export function createDiagramViewer({roots, language = () => 'zh-CN', canOpen = 
     event.preventDefault();event.stopPropagation();open(element,button||element.querySelector('.diagram-view-button'));
   };
   document.addEventListener('pointerdown',pointer,true);document.addEventListener('click',click,true);
-  return {open,close,destroy(){close();observer.disconnect();dialog?.remove();document.removeEventListener('pointerdown',pointer,true);document.removeEventListener('click',click,true);}};
+  return {open,openImage,bindImages,close,destroy(){close();observer.disconnect();dialog?.remove();document.removeEventListener('pointerdown',pointer,true);document.removeEventListener('click',click,true);}};
 }

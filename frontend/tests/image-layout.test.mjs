@@ -10,6 +10,21 @@ import { history, undo, isolateHistory } from '@codemirror/commands';
 
 const apply = (source, change) => source.slice(0, change.from) + change.insert + source.slice(change.to);
 
+test('resizing one image in a GFM cell preserves the other image token and its rendered order', () => {
+  const tokens=['![first](same.png "first title")','![second](same.png "second title")'];
+  const cell=tokens.join(' '),group=editorImageGroups(cell)[0];
+  for(const index of [0,1]){
+    const change=resizeImageChanges(cell,group,index,{width:'50%',height:''},true);
+    assert.equal(cell.slice(change.from,change.to),tokens[index]);
+    const changed=apply(cell,change);assert.ok(changed.includes(tokens[1-index]));
+    const html=marked('| Photos | Note |\n| --- | --- |\n| '+changed+' | **keep** |');
+    assert.equal((html.match(/<img /g)||[]).length,2);
+    assert.ok(html.indexOf('alt="first"') < html.indexOf('alt="second"'));
+    assert.match(html,/<strong>keep<\/strong>/);
+    assert.equal((html.match(/width="50%"/g)||[]).length,1);
+  }
+});
+
 test('single-line image split/join preserves table cells and refuses prose or arbitrary tags', () => {
   for (const source of ['![a](a.png) ![b](b.png)', imageRowSource('![a](a.png) ![b](b.png)',editorImageItems('![a](a.png) ![b](b.png)')).replaceAll('\n','')]) {
     const separated=apply(source,separateImageChanges(source,editorImageGroups(source)[0],true));

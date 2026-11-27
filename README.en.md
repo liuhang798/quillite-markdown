@@ -7,7 +7,7 @@
   <p><a href="README.md">简体中文</a> · <strong>English</strong></p>
   <p>
     <a href="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml"><img src="https://github.com/liuhang798/quillite-markdown/actions/workflows/release.yml/badge.svg" alt="Build status"></a>
-    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.2.0-159A63" alt="Download V3.2.0"></a>
+    <a href="https://qm.ssssa.cn/#download"><img src="https://img.shields.io/badge/download-V3.3.0-159A63" alt="Download V3.3.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/liuhang798/quillite-markdown" alt="MIT License"></a>
   </p>
   <p><a href="https://qm.ssssa.cn/">Official website</a> · <a href="https://qm.ssssa.cn/#download">Download</a> · <a href="#quick-start">Quick start</a> · <a href="#development">Build from source</a></p>
@@ -15,13 +15,21 @@
 
 The sidebar automatically remembers its last expanded or collapsed state and restores it before first paint, without extra settings or a collapse animation. Split preview follows the caret at a similar relative height; manual preview scrolling pauses following until the next editor interaction.
 
+Back to top moves to the right edge when the outline is collapsed and makes room for it again when expanded.
+
+**Read alongside:** open a document, then right-click a different file in Recent, Favorites or Explorer and choose **Read alongside on the right**. Scroll independently and drag the divider (or focus it and use the arrow keys). The reference is read-only and excluded from saves, prints and exports. Close it with × to restore the previous outline and layout.
+
 Charts support an enlarged viewer in reading mode, split preview and the live editor. Click **Enlarge chart**, scroll or use +/− to zoom, and drag to pan; **Fit to window** and **Actual size** reset the view. Mermaid diagrams in reading mode also open on click; data charts retain their legend interactions. Press Esc to close. Viewing does not change document content, chart configuration or export dimensions.
 
 Gantt charts retain their schedule viewport: out-of-range today markers do not stretch the canvas or hide chart content in fitted and actual-size views.
 
+Place a standalone raw `<svg>…</svg>` in Markdown to show artwork in reading, split preview and live editing. Use `width` and `viewBox` for its intended width and aspect ratio. Use a fenced code block to show the source instead.
+
 Quillite Markdown is built with Go + Wails, without Electron. The Windows installer is about 13 MB. Read long documents, write READMEs, maintain technical notes and browse local Markdown folders; plain-text `.txt` files are supported too. Documents stay in local files, and no Quillite account is required.
 
-V3.2.0 adds local MP4/WebM and direct HTTPS video playback in live editing, split preview, and reading. It also improves large-table editing, image loading, and formula navigation, and fixes Chinese bold rendering. See the [changelog](CHANGELOG.md) for details.
+V3.3.0: Read documents side by side, translate with AI, add private highlights, search file contents in the sidebar, and zoom in on table images. See the [changelog](CHANGELOG.md) for details.
+
+Dark mode is restored before first paint. Linux waits for page readiness before showing the window; Linux/Windows startup activation requests wait for the initial show to finish. macOS retains native window behavior and follows system appearance at launch.
 
 ## Download
 
@@ -34,7 +42,7 @@ V3.2.0 adds local MP4/WebM and direct HTTPS video playback in live editing, spli
 - **[qm.ssssa.cn](https://qm.ssssa.cn/)** is the official website and the app's only update/download channel. GitHub retains source code, release records and build assets.
 - Windows installation shows the final destination before confirmation. A custom ordinary folder is treated as a parent for a dedicated product directory. Upgrades reuse only a validated installation directory; uninstalling preserves user documents.
 - Formal Windows Authenticode / Apple Developer ID certificates are not configured. SmartScreen or Gatekeeper may display warnings. Updates or file access may require authorization depending on the operating system; a prompt-free experience is not guaranteed.
-- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.2.0; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
+- Windows and macOS support in-app downloading, verification and updates. V3.0.0 users can check for updates to V3.3.0; use the full official installer when an update cannot be applied safely. **Replacing a release under the same version does not trigger a newer-version notification**.
 - New releases appear in a banner without opening a dialog automatically. Dismiss the banner to pause automatic reminders for seven days; manual checks are still available. Open it to see missed-version notes and use **Update now** when supported, or open the official download link.
 
 ## Quick start
@@ -88,6 +96,12 @@ Switching modes preserves content, selection and undo history. The app remembers
 
 ## Features
 
+**Table images:** click a non-linked image in reading mode to zoom, use **Actual size** to inspect details and press Esc to return. In live editing, use the image controls to view or resize just that image. Keep its aspect ratio or undo a size change; viewing never modifies the file.
+
+**Reading translation:** right-click **Translate selection** to send just the selection to your configured AI service and read the Simplified Chinese translation alongside the original. For sections or the whole document, use **Translate side by side** and confirm before sending. Stop, resume or retry failed sections only. Copy the result or save a new `name.zh-CN.md` beside the original to keep relative attachments working; the source is never overwritten. A standalone chapter keeps the reference links, images and footnotes it uses. Formulas and footnote definitions remain in their original form and are not sent to the AI service.
+
+Select text within a paragraph and right-click to add a private reading highlight. Click a highlight to recolor or remove it; highlighted headings have a dot in the sidebar outline. Highlights are stored locally by document path, never in the Markdown file, document package, printout or export. Uncertain matches after edits are offered for manual re-anchoring. Moving or renaming a file does not migrate its highlights.
+
 Rendered exports such as Word, PDF and styled HTML stop if a local image cannot be read. Check the path, location and read permissions, then export again without reopening the document. “Package document with images” still explicitly reports missing resources without promising complete offline use.
 
 ### Live-rendered and source editing
@@ -111,6 +125,7 @@ The 2026-10-29 rebuild of v3.0.2 fixes editor tile traversal when rendered widge
 ### Tables, images and attachments
 
 - The visual table designer supports row/column changes and ordering, column alignment and widths. In-place cells can be emptied and edited again.
+- Live editing preserves original layout traversal ranges when reusing replacement blocks whose lengths change, without rewriting text or undo history or automatically switching to source mode.
 - Paste regular TSV or HTML text tables with empty cells, alignment and undo preserved. Unsupported merged cells or complex media tables are rejected with feedback instead of overwriting content.
 - Use local attachments, online URLs, reference images or embedded Base64 images. Adjust size, alignment and image rows, including images inside tables.
 - Long Base64 image payloads appear as format/size labels even in source mode. **Only their display is condensed; copying and saving preserve the complete image data.**
@@ -142,6 +157,11 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 - Windows Show in Folder selects the full file path without guessing the target from same-named window titles.
 - Document lists show the name without its extension on the first line and a type badge plus location on the second, distinguishing TextPack, TextBundle and ordinary Markdown. Long paths truncate without hiding the badge; hover to see complete names and paths. Actual files are never renamed.
 - Recent, Favorites and a folder explorer. Recent supports pinning, ordering and `Ctrl / ⌘` multi-selection removal. `Shift + click` selects an inclusive range; `Ctrl / ⌘ + Shift + click` adds a range to the selection. Removing records does not delete files.
+- Recent keeps 100 unpinned files, plus your pins. The field below the tabs searches filenames and saved text in the active list; switching tabs applies the same query to the new list. Searches stay local and do not open documents or load package attachments.
+- The library and document outline share a slim scrollbar that fades when the pointer leaves and brightens on hover or keyboard navigation, without shifting list text.
+- Search is case-insensitive: exact filename (extension optional), filename prefix, other filename matches, then content-only matches. Ties keep their list order. Clearing the query restores the original list and pin groups.
+- **Remove from Recent** only clears a record. To move one local document to the system Trash, right-click it, choose **Delete local file…**, and confirm its full path. Separate attachments are not touched. Bulk deletion and TextBundle folders are not supported.
+- Long lists render only rows near the viewport. Content matches appear in batches and can be opened before the scan finishes.
 - Bulk removal uses a macOS-compatible in-app confirmation dialog from the toolbar, context menu or Delete key. Cancel preserves the selection; failures remain retryable without affecting Favorites or the unsaved document.
 - Rename, Save As, history versions and crash recovery. Restored content first enters the editor and is written to disk only after saving.
 - Compare disk changes with current edits, save a separate copy or merge manually instead of silently overwriting another application's changes.
@@ -152,6 +172,7 @@ Live equations no longer disappear at 300,000 document characters or stop after 
 ### Export and optional assistance
 
 - TextPack/TextBundle use the ordinary opening, editing and saving workflow, without separate import/direct-edit modes. Open `.textpack` through **Open**; drag in a TextBundle, select its `.textbundle` directory through **Open folder**, or enter the package in the file picker and select its text document. Ctrl/Command+S and 10-second autosave update the current original package.
+- Package previews strip responsive `srcset` candidates before network permission, while retaining a valid package-local `src` fallback. Recognizable package images are not rejected solely for nonstandard filename extensions. Previously viewed online images are still not downloaded into exported packages; reopening requires explicit permission to load online resources.
 - The Windows installer registers the TextPack icon, double-click command and Open With candidate; replacing the editor executable alone does not update these system registrations, so run the new installer. Portable users can explicitly choose **More → Set as default MD app** to register candidates and open Windows Settings. Registration never runs automatically at startup or forcibly replaces a chosen default application.
 - **Save As** offers Markdown, TextBundle and TextPack, plus **Plain text** for a current TXT document. It defaults to the current format and extension before opening the system location dialog. Ordinary same-format Markdown backups do not force image collection; TXT copies preserve the exact text without parsing image syntax. Cross-folder Markdown copies still rebase supported image references. Editing continues in the new copy only after success; canceling leaves the current document unchanged. Package-to-package copies retain all resources and third-party metadata without overwriting an existing target. **Markdown (with images)** in the export panel creates an ordinary `.md + assets` copy without switching the current document; **Pack document (with images)** still creates a new `.textpack`. Neither export changes the source.
 - Package revisions cover text, images and metadata. External changes pause autosave and require comparison, an explicit merge or a complete copy. Unchanged ZIP entries and original `info.json` bytes are retained; directory saves safely replace only the text and create new images without deleting existing resources.

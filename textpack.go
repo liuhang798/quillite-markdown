@@ -250,6 +250,10 @@ func textPackFileLimit(name string) int64 {
 }
 
 func readTextPackArchive(source string) (map[string][]byte, error) {
+	return readTextPackEntries(source, nil)
+}
+
+func readTextPackEntries(source string, include func(string) bool) (map[string][]byte, error) {
 	root, err := textPackOpenRoot(filepath.Dir(source))
 	if err != nil {
 		return nil, err
@@ -303,6 +307,9 @@ func readTextPackArchive(source string) (map[string][]byte, error) {
 			return nil, textPackError("TEXTPACK_LIMIT")
 		}
 		total += entry.UncompressedSize64
+		if include != nil && !include(entry.Name) {
+			continue
+		}
 		r, err := entry.Open()
 		if err != nil {
 			return nil, textPackError("TEXTPACK_INVALID")
@@ -322,6 +329,10 @@ func readTextPackArchive(source string) (map[string][]byte, error) {
 }
 
 func readTextBundleDirectory(source string) (map[string][]byte, error) {
+	return readTextBundleEntries(source, nil)
+}
+
+func readTextBundleEntries(source string, include func(string) bool) (map[string][]byte, error) {
 	root, err := textPackOpenRoot(source)
 	if err != nil {
 		return nil, err
@@ -351,6 +362,9 @@ func readTextBundleDirectory(source string) (map[string][]byte, error) {
 				name := entry.Name()
 				if directory != "." {
 					name = directory + "/" + name
+				}
+				if include != nil && !include(name) {
+					continue
 				}
 				info, err := root.Lstat(name)
 				if err != nil {

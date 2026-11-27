@@ -44,6 +44,7 @@ function rememberImageFrame(frame, view, record) {
 }
 export const imagePreviewPhrases = {
   'Embedded image': '内嵌图片', 'Local image': '本地图片', 'Online image': '在线图片', 'Image group': '图片组',
+  'View image': '查看大图', 'Adjust size':'调整尺寸', '% of cell width':'%（单元格宽度）',
   '$ images': '$ 张图片', 'Show source': '查看源码', 'Hide source': '收起源码',
   'Align left': '左对齐', 'Align center': '居中', 'Align right': '右对齐',
   'L': '左', 'C': '中', 'R': '右',
@@ -126,6 +127,23 @@ function selectImageControls(root, index) {
     cards[i].classList.toggle('is-active-image', i === index);
   });
   positionImageControls(root);
+}
+
+// Switch from the static table projection to the existing cell inspector.
+// Verify the whole ordered image list so duplicate URLs and stale/missing
+// widgets cannot accidentally resize an adjacent image.
+export function revealCellImageSize(view,index,refs){
+  const images=[...view.dom.querySelectorAll('.cm-image-frame > img')];
+  if(images.length!==refs.length || images.some((img,i)=>displayedSources.get(img)?.ref!==refs[i]))return false;
+  const card=images[index]?.closest('.cm-image-card'), root=card?.closest('.cm-embedded-image');
+  if(!root)return false;
+  const n=[...root.querySelectorAll('.cm-image-card')].indexOf(card);
+  selectImageControls(root,n);card.focus({preventScroll:true});
+  const panel=root.querySelectorAll('.cm-image-item-tools')[n] || root.querySelector('.cm-image-tools');
+  const button=panel?.querySelector('button[data-image-action="size"]');
+  if(!button)return false;
+  if(!card.classList.contains('is-size-open'))button.click();
+  return true;
 }
 
 function positionImageControls(root) {
@@ -229,12 +247,8 @@ class ImageWidget extends WidgetType {
       card.addEventListener('pointerdown', event => {
         if (!event.target.closest('button, input, select, a')) card.focus({ preventScroll: true });
       });
-      card.addEventListener('mouseleave', () => { if (!this.item.row && !card.matches(':focus-within')) card.classList.remove('is-size-open'); });
-      card.addEventListener('focusout', () => queueMicrotask(() => {
-        if (!this.item.row && !card.matches(':focus-within') && !card.matches(':hover')) card.classList.remove('is-size-open');
-      }));
       const tools = document.createElement('div'); tools.className = 'cm-image-tools cm-image-align-tools'; card.append(tools);
-      for (const action of ['left', 'center', 'right', 'size']) { const button = document.createElement('button'); button.type = 'button'; button.dataset.imageAction = action; tools.append(button); }
+      for (const action of ['view','left', 'center', 'right', 'size']) { const button = document.createElement('button'); button.type = 'button'; button.dataset.imageAction = action; tools.append(button); }
       const sizeTools = document.createElement('div'); sizeTools.className = 'cm-image-size-tools'; card.append(sizeTools);
       const widthLabel = document.createElement('label'); widthLabel.className = 'cm-image-size-field'; sizeTools.append(widthLabel);
       const widthText = document.createElement('span'); widthText.dataset.imageSizeLabel = 'width'; widthLabel.append(widthText);
@@ -270,8 +284,8 @@ class ImageWidget extends WidgetType {
         settleImage(img, status, root, view, false);
       });
     }
-    if (this.item.row) {
-      const closeSizes = () => { if (!root.matches(':hover') && !root.matches(':focus-within')) { root.querySelectorAll('.cm-image-card').forEach(card => card.classList.remove('is-size-open')); selectImageControls(root, Number(root.dataset.activeImage || 0)); } };
+    {
+      const closeSizes = () => { if (!root.matches(':hover, :focus-within')) { root.querySelectorAll('.cm-image-card').forEach(card => card.classList.remove('is-size-open')); if(this.item.row)selectImageControls(root, Number(root.dataset.activeImage || 0)); } };
       root.addEventListener('mouseleave', closeSizes);
       root.addEventListener('focusout', () => queueMicrotask(closeSizes));
       root.addEventListener('pointerenter', () => positionImageControls(root));
@@ -376,6 +390,13 @@ class ImageWidget extends WidgetType {
       }
       controlRoot.querySelectorAll('.cm-image-align-tools button').forEach(button => {
         const action = button.dataset.imageAction, sizeAction = action === 'size';
+        if(action==='view'){
+          button.textContent=this.labels['View image'];button.title=button.textContent;
+          button.hidden=!this.session.context.openImage;
+          button.onmousedown=event=>event.preventDefault();
+          button.onclick=()=>{if(this.current(view))this.session.context.openImage?.(img,button);};
+          return;
+        }
         const shortAlignment = { left: 'L', center: 'C', right: 'R' }[action];
         button.textContent = sizeAction ? this.labels['Image size'] : group.row ? this.labels[shortAlignment] : this.labels[`Align ${action}`];
         button.title = `${image.alt || label} · ${button.textContent}`;
@@ -406,6 +427,7 @@ class ImageWidget extends WidgetType {
       widthInput.max = widthPercent ? '100' : '4096'; widthInput.placeholder = this.labels.Auto;
       heightInput.value = dimensions.height; heightInput.placeholder = this.labels.Auto;
       widthInput.setAttribute('aria-label', this.labels.Width); widthUnit.setAttribute('aria-label', `${this.labels.Width} % / px`);
+      if(view.state.facet(singleLineMedia))widthUnit.querySelector('option[value="%"]').textContent=this.labels['% of cell width'];
       heightInput.setAttribute('aria-label', this.labels.Height); ratioInput.setAttribute('aria-label', this.labels['Keep ratio']);
       ratioInput.checked = !dimensions.height; heightInput.disabled = ratioInput.checked;
       widthUnit.onchange = () => { widthInput.max = widthUnit.value === '%' ? '100' : '4096'; if (Number(widthInput.value) > Number(widthInput.max)) widthInput.value = widthInput.max; };
@@ -428,7 +450,7 @@ class ImageWidget extends WidgetType {
             height: ratioInput.checked ? '' : bounded(heightInput, 4096)
           };
           let changes;
-          try { changes = resizeImageChanges(source, current, index, size); } catch { return; }
+          try { changes = resizeImageChanges(source, current, index, size,view.state.facet(singleLineMedia)); } catch { return; }
           if (changes && source.slice(changes.from, changes.to) !== changes.insert) applyImageChanges(view, changes);
         };
       });

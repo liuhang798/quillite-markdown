@@ -52,8 +52,8 @@ for(const completed of [false,true])test(`startup does not supersede a ${complet
 test('startup retains local recent entries, pinning, metadata and ordinary limit',async()=>{
  const h=harness(),init=h.context.initialize();await flush();h.context.beginDocumentOpen();
  const fresh={path:'user.md',name:'fresh'};h.state.recentFiles=[fresh];h.state.pinnedRecentFiles=['user.md'];
- h.prefs.resolve({recentFiles:[{path:'USER.md',name:'stale'},...Array.from({length:14},(_,i)=>({path:`old${i}.md`}))],pinnedRecentFiles:['old0.md']});await init;
- assert.equal(h.state.recentFiles[0],fresh);assert.deepEqual(h.state.pinnedRecentFiles,['user.md','old0.md']);assert.equal(h.state.recentFiles.length,12);
+ h.prefs.resolve({recentFiles:[{path:'USER.md',name:'stale'},...Array.from({length:104},(_,i)=>({path:`old${i}.md`}))],pinnedRecentFiles:['old0.md']});await init;
+ assert.equal(h.state.recentFiles[0],fresh);assert.deepEqual(h.state.pinnedRecentFiles,['user.md','old0.md']);assert.equal(h.state.recentFiles.length,102);
 });
 test('late initial response cannot replace an already edited document',async()=>{
  const h=harness(),init=h.context.initialize();h.prefs.resolve({});await flush();

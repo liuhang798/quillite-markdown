@@ -1,11 +1,15 @@
 import { markdownParser } from './markdown-parser.js';
 import { frontmatterRange, maskFrontmatter } from './frontmatter.js';
+import { isWindowsDocumentPath, normalizeDocumentPath } from './library-state.js';
 
 const STORAGE_KEY = 'tocCollapsedByDocument';
 const MAX_STORED_DOCUMENTS = 40;
 
 function documentKey(filePath) {
-  return String(filePath || '').trim().replace(/\\/g, '/').toLowerCase();
+  const key = normalizeDocumentPath(filePath);
+  // An old folded POSIX key cannot identify which file it belonged to.
+  // Leave it untouched. Windows keeps its original storage keys.
+  return !key || isWindowsDocumentPath(filePath) ? key : 'posix:' + key;
 }
 
 export function buildTocTree(items = []) {

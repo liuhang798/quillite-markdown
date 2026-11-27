@@ -2,7 +2,71 @@
 
 All notable changes to Quillite Markdown are documented here.
 
-## [Unreleased]
+## [3.3.0] - 2026-11-27
+
+### 简体中文
+
+- 对照翻译保护紧邻的行内公式及含网址的公式；单章复制、另存保留所用的跨章链接、图片和多行脚注，不把外章定义发给 AI。
+- 对照阅读支持 Linux 下仅大小写不同的文件；长文档右栏分阶段准备，按可见范围高亮代码，切换或关闭可取消旧任务。
+- 对照右栏可跟随普通章节链接，跳转不移动左栏；Linux 上仅大小写不同的文件各自记住目录折叠状态。
+- 左侧文档库和右侧「本页目录」统一使用细滚动条，移出面板时淡化，移入或用键盘浏览时变清晰；阅读和编辑目录均适用。
+
+- 阅读页和分栏预览可点击已加载的图片（包括表格截图）查看原图，支持缩放、拖动和 Esc 返回。即时渲染提供「查看大图」及单图尺寸操作；大表格无需先切到源码。
+- 调整「对照翻译」确认框：章节与全文并列选择，分开展示发送字数、服务商、模型和费用提醒；选区翻译仍一键执行。
+
+- 阅读页新增简体中文对照翻译：右键选区即可直接翻译，不再弹框；翻译当前章节或全文仍需确认 AI 服务。可停止、续译、仅重试失败章节；译文可复制或另存为新的 Markdown。
+
+- 新增「对照阅读」：从最近阅读、收藏或资源浏览器右键打开只读参考文档。两栏独立滚动、可拖动调宽；对照期间临时隐藏目录，关闭后恢复原布局。
+- 修复正文内嵌 SVG 被缩成界面图标的问题。阅读、分栏和即时渲染可按原图宽度显示独立 SVG；图内空行不再拆散图形和说明。
+
+- 调淡 AI 写作提示词和目标篇幅输入框中的示例文字，不影响实际输入。
+
+- 新增本机阅读标注：选区右键高亮、点击换色或移除，标题标注同步显示目录色点；不写入文档或导出，定位不明确时可手动重选（#24）。
+
+- 侧栏搜索优先显示文件名完全匹配、开头匹配和其他文件名匹配，再显示仅正文命中的文件；同档保持原列表顺序。
+
+- 文件列表右键新增「删除本地文件…」：确认后将单个文档移到系统回收站，和仅移除最近记录区分开。
+
+- 最近阅读增至 100 个普通文件（置顶另计）；最近阅读、收藏和资源浏览器都可在当前列表内按文件名或正文搜索。
+- 优化长文件列表滚动和搜索：只渲染视口附近的文件，正文命中分批出现，无需等待全部文件扫描完。
+- 收起右侧目录时，“返回顶部”按钮同步移到窗口右侧；展开目录后恢复避让位置，并遵循系统减少动态效果设置。
+- 在首屏绘制前恢复主题；Linux 等页面就绪再显示窗口。Linux／Windows 启动期间再次打开文档或激活应用会排队，不能提前显示尚未就绪的窗口；重复就绪通知不打扰已最小化的窗口。
+- 修复 TextPack／TextBundle 中 HTML 图片带 `srcset` 时，安全清理误阻止包内主图的问题；仍不自动加载响应式候选或网络资源（#23）。
+- 修复包内 PNG、JPEG 等图片使用非图片后缀，以及 SVG 无后缀时被误判为非图片的问题，保留附件路径与原包内容。
+- 补全即时渲染中完整替换块复用时的长度一致性保护，避免该路径下旧布局游标越界；不改写正文或撤回历史，也不强制切回源码模式。
+- AI 服务明确返回额度耗尽时，仍显示请求失败和额度提示，但不再作为软件异常上传；未知服务异常继续保留诊断。
+
+### English
+
+- Reading translation keeps adjacent and URL-bearing formulas local. Copying or saving a chapter retains its cross-chapter links, images and multiline footnotes without sending external definitions to the AI service.
+- Compare files that differ only in case on Linux. Long references prepare in stages and highlight code near the viewport; switching or closing cancels stale work.
+- Ordinary heading links now scroll only their own comparison pane; Linux files differing only in case keep independent outline folds.
+- The library and the document outline share a slim scrollbar that fades when the pointer leaves and brightens on hover or keyboard navigation, in both reading and editing views.
+
+- Click loaded images, including table screenshots, to zoom and pan in reading or split preview. Live editing offers explicit image viewing and per-image sizing without switching to source, including in large tables.
+- The translation dialog shows section/document scope choices, text volume, service details and a cost notice at a glance. Selection translation still runs in one click.
+
+- Read Simplified Chinese alongside the original: translate a selection in one click, or confirm the AI destination for a section or the whole document. Stop, resume, retry failed sections and save a separate Markdown file.
+
+- Read two documents side by side: open a read-only reference from Recent, Favorites or Explorer. Scroll each pane independently, drag the divider, and close to restore the original outline and layout.
+- Preserve authored inline SVG dimensions in reading, split preview and live editing. Blank lines inside standalone diagrams no longer separate shapes and captions.
+
+- Use lighter placeholder text in the AI prompt and target length fields without changing typed text.
+
+- Add private reading highlights with heading dots, recoloring, removal and manual re-anchoring; highlights stay out of document files and exports (#24).
+
+- Rank library search results by exact filename, prefix, substring, then content-only matches. Ties retain their original list order.
+
+- Added **Delete local file…** to library context menus. Confirm the single document to move it to Trash; removing a recent record still leaves the file on disk.
+
+- Keep 100 unpinned recent files and search filenames or saved contents within Recent, Favorites or Explorer.
+- Render only nearby rows in long library lists and show content matches progressively during the scan.
+- Move Back to top to the right edge when the outline is collapsed, restore its offset when expanded, and respect reduced-motion preferences.
+- Restore appearance before first paint and wait for page readiness before showing the Linux window. Queue document-open and activation requests during Linux/Windows startup; repeated ready notifications do not unhide a minimized window.
+- Keep package-local HTML image sources visible when stripping `srcset` from TextPack/TextBundle previews. Responsive candidates and online resources still never load automatically (#23).
+- Recognize package PNG/JPEG and other supported image bytes despite non-image filename extensions, including extensionless SVG, without rewriting attachments or source packages.
+- Preserve the original traversal extent when reusing a complete replacement block in live editing, preventing that path from advancing past the old layout tree. Document text, undo history and editing mode remain unchanged.
+- Keep explicit AI quota rejections visible as failed requests with quota guidance, without uploading them as application exceptions. Unknown service failures still retain diagnostics.
 
 ## [3.2.0] - 2026-11-16
 

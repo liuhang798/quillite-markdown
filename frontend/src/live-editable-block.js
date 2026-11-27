@@ -7,6 +7,8 @@ import { crossSelection, crossSelectionField } from './editable-cross-selection.
 import { fieldPosition, fieldOffset, fieldInsertion, changedFieldPosition } from './projected-code.js';
 import { imageDefinitionsFor, imageDefinitionsField, inheritedImageDefinitions, updateImageDefinitions, footnotesFor, footnotesField, inheritedFootnotes, updateFootnotes, footnoteBodyContext } from './editor-reference-context.js';
 import { singleLineMedia } from './media-ownership.js';
+import { tableImageAction,tableImageRef } from './static-table-image.js';
+import { revealCellImageSize } from './embedded-image-preview.js';
 import { nestedSourcePanel, revealSourceReturnCaret, preserveSourceBlockPosition } from './source-return-panel.js';
 import {getSearchQuery, searchPanelOpen} from '@codemirror/search';
 import {projectedSearchMatches, updateProjectedSearch, projectSearchMatches, sameSearchMatches} from './projected-search.js';
@@ -881,6 +883,7 @@ export class EditableBlockWidget extends WidgetType {
         return Math.min(source.length, prefix.toString().length);
       };
       root.addEventListener('mousedown', event => {
+        if(tableImageAction(event.target)){event.preventDefault();return;}
         if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('.cm-editor') !== view.dom) return;
         const cell = event.target.closest('td, th'), index = indexOf.get(cell);
         if (index === undefined || mounts[index] !== cell) return;
@@ -916,7 +919,20 @@ export class EditableBlockWidget extends WidgetType {
         doc.addEventListener('mouseup', end, true);
         doc.defaultView.addEventListener('blur', end);
       });
-      root.addEventListener('click', event => { if (event.target.closest('a')) event.preventDefault(); });
+      root.addEventListener('click', event => {
+        if (event.target.closest('a')) event.preventDefault();
+        const action=tableImageAction(event.target);
+        if(!action || !controller.valid() || editorHasComposition(view))return;
+        event.preventDefault();event.stopPropagation();
+        const {img,name}=action, cell=img.closest('td,th'),index=indexOf.get(cell);
+        if(index===undefined || mounts[index]!==cell)return;
+        if(name==='view'){this.options.context.openImage?.(img,event.target);return;}
+        if(view.state.readOnly)return;
+        const images=[...cell.querySelectorAll('img')],ordinal=images.indexOf(img),refs=images.map(tableImageRef);
+        if(ordinal<0 || refs.some(r=>!r)){this.options.context.invalidImageTarget?.();return;}
+        const inner=controller.activate(index);
+        if(inner && !revealCellImageSize(inner,ordinal,refs))this.options.context.invalidImageTarget?.();
+      });
     }
     const actions = document.createElement('div'); actions.className = 'cm-live-block-actions';
     const action = (label, callback) => { const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.onmousedown = event => event.preventDefault(); button.onclick = event => { event.stopPropagation(); if (controller.valid()) callback(event); }; actions.append(button); };

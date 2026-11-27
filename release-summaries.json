@@ -10,5 +10,9 @@
   "3.2.0": {
     "summaryZh": "新增本地 MP4／WebM 和 HTTPS 视频点播，优化即时渲染中的大表格、图片预览和公式定位。",
     "summaryEn": "Play local MP4/WebM and HTTPS video in live editing, and enjoy smoother large tables, image previews, and formula navigation."
+  },
+  "3.3.0": {
+    "summaryZh": "新增双文档对照阅读、AI 对照翻译和本地阅读标注，支持侧栏全文搜索与表格图片放大。",
+    "summaryEn": "Read documents side by side, translate with AI, add private highlights, search file contents in the sidebar, and zoom in on table images."
   }
 }

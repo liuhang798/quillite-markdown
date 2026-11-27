@@ -30,6 +30,10 @@ export function CancelPicGoCLILogin(arg1) {
   return window['go']['main']['App']['CancelPicGoCLILogin'](arg1);
 }
 
+export function CancelReadingTranslation(arg1) {
+  return window['go']['main']['App']['CancelReadingTranslation'](arg1);
+}
+
 export function CheckDocumentAssets(arg1, arg2) {
   return window['go']['main']['App']['CheckDocumentAssets'](arg1, arg2);
 }
@@ -374,8 +378,20 @@ export function SavePicGoCLIDraft(arg1) {
   return window['go']['main']['App']['SavePicGoCLIDraft'](arg1);
 }
 
+export function SaveReadingTranslation(arg1, arg2) {
+  return window['go']['main']['App']['SaveReadingTranslation'](arg1, arg2);
+}
+
 export function SaveRecoverySnapshot(arg1) {
   return window['go']['main']['App']['SaveRecoverySnapshot'](arg1);
+}
+
+export function SearchLibraryFiles(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SearchLibraryFiles'](arg1, arg2, arg3, arg4);
+}
+
+export function SearchLibraryFilesWithProgress(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SearchLibraryFilesWithProgress'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SearchWorkspace(arg1) {
@@ -488,6 +504,14 @@ export function TestPicGoCLIUploadWithProgress(arg1, arg2, arg3, arg4, arg5) {
 
 export function TestPicGoCloud() {
   return window['go']['main']['App']['TestPicGoCloud']();
+}
+
+export function TranslateReadingParts(arg1) {
+  return window['go']['main']['App']['TranslateReadingParts'](arg1);
+}
+
+export function TrashLibraryFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['TrashLibraryFile'](arg1, arg2, arg3);
 }
 
 export function UploadImageToPicGo(arg1, arg2) {

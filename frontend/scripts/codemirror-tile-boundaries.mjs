@@ -2,7 +2,7 @@
 // can temporarily lack a DOM tile around block replacements. IME context can
 // likewise outlive its node. Never invent document text or reuse detached DOM.
 export function patchCodeMirrorTileBoundaries(code) {
-  const marker = '// quillite-tile-boundaries-v2';
+  const marker = '// quillite-tile-boundaries-v3';
   if (code.includes(marker)) return code;
   const replace = (before, after) => {
     if (code.split(before).length !== 2) throw new Error('CodeMirror tile boundaries changed; review the compatibility patch');
@@ -59,5 +59,19 @@ export function patchCodeMirrorTileBoundaries(code) {
                     break;
                 }
             }`);
+  // A full-child skip invokes the same mutating walker as the leaf path.
+  // Keep its old extent too: a reused widget can be resized during skip(),
+  // and consuming its new length would move the old-tree cursor past its root.
+  replace(`                let next = tile.children[index], brk = next.breakAfter;
+                if ((side > 0 ? next.length <= dist : next.length < dist) &&
+                    (!walker || walker.skip(next, 0, next.length) !== false || !next.isComposite)) {
+                    beforeBreak = !!brk;
+                    index++;
+                    dist -= next.length;`, `                let next = tile.children[index], brk = next.breakAfter, len = next.length;
+                if ((side > 0 ? len <= dist : len < dist) &&
+                    (!walker || walker.skip(next, 0, len) !== false || !next.isComposite)) {
+                    beforeBreak = !!brk;
+                    index++;
+                    dist -= len;`);
   return code;
 }

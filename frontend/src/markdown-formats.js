@@ -13,13 +13,13 @@ function replaceReferencesOutsideInlineCode(line, replaceReference) {
   });
 }
 
-export function prepareFootnotes(source, inherited = null) {
+export function prepareFootnotes(source, inherited = null, { formulaRanges, onDefinition, referenceText } = {}) {
   source = String(source);
   if(!source.includes('[^'))return {source,markdown:source,notes:[],lineMap:null,references:[],definitions:new Map()};
   const lines = source.split('\n'), offsets = [];
   let offset = 0;
   for (const line of lines) { offsets.push(offset); offset += line.length + 1; }
-  const protectedRanges = scanMarkdownFormulas(source);
+  const protectedRanges = formulaRanges ? [...formulaRanges] : scanMarkdownFormulas(source);
   const metadata = frontmatterRange(source);
   if (metadata) protectedRanges.push(metadata);
   // Footnote syntax is not a CommonMark reference link. Mask just that token
@@ -30,7 +30,16 @@ export function prepareFootnotes(source, inherited = null) {
       protectedRanges.push({from:node.from,to:node.to}); return false;
     }
   }});
-  const protectedAt = (from,to) => protectedRanges.some(range => from < range.to && to > range.from);
+  const ordered=[];
+  for(const {from,to} of protectedRanges.sort((a,b)=>a.from-b.from)){
+    const last=ordered.at(-1);
+    if(last && last.to>=from) last.to=Math.max(last.to,to); else ordered.push({from,to});
+  }
+  const protectedAt = (from,to) => {
+    let lo=0,hi=ordered.length;
+    while(lo<hi){const mid=(lo+hi)>>>1;if(ordered[mid].to<=from)lo=mid+1;else hi=mid;}
+    return lo<ordered.length && ordered[lo].from<to;
+  };
   const definitions = new Map();
   const definitionRanges = new Map(), references = [];
   const contentLines = [];
@@ -51,7 +60,9 @@ export function prepareFootnotes(source, inherited = null) {
         else break;
       }
       definitions.set(definition[1], noteLines.join('\n').trim());
-      definitionRanges.set(definition[1], {label:definition[1],from,to:offsets[sourceIndex]+lines[sourceIndex].length,bodyFrom,text:noteLines.join('\n').trim()});
+      const range={label:definition[1],from,to:offsets[sourceIndex]+lines[sourceIndex].length,bodyFrom,text:noteLines.join('\n').trim()};
+      definitionRanges.set(definition[1], range);
+      onDefinition?.(range);
       continue;
     }
     contentLines.push(line);
@@ -75,13 +86,13 @@ export function prepareFootnotes(source, inherited = null) {
       const count = (referenceCounts.get(label) || 0) + 1;
       referenceCounts.set(label, count);
       references.push({from,to,label,number,text:definitions.get(label) ?? inherited?.get(label)?.text,raw});
-      return `<sup class="footnote-ref"><a id="fnref-${number}-${count}" href="#fn-${number}">${number}</a></sup>`;
+      return referenceText ? referenceText(number) : `<sup class="footnote-ref"><a id="fnref-${number}-${count}" href="#fn-${number}">${number}</a></sup>`;
     });
   }).join('\n');
 
   const unreferencedLabels = [...definitions.keys()].filter(label => !numbers.has(label));
   for (const label of unreferencedLabels) {
-    numbers.set(label, numbers.size + 1);
+    numbers.set(label, inherited?.get(label)?.number ?? numbers.size + 1);
     referencedLabels.push(label);
   }
 
@@ -99,11 +110,12 @@ export function prepareFootnotes(source, inherited = null) {
 
 export function renderFootnoteSection(notes, parseContent, label) {
   if (!notes.length) return '';
-  const items = notes.map(note => {
+  const items = notes.map((note,index) => {
     const backlinks = Array.from({ length: note.referenceCount }, (_, index) =>
       `<a class="footnote-backref" href="#fnref-${note.number}-${index + 1}" aria-label="${label} ${note.number}">↩</a>`
     ).join(' ');
-    return `<li id="fn-${note.number}">${parseContent(note.text)}${backlinks ? ` ${backlinks}` : ''}</li>`;
+    const ordinal=note.number===index+1?'':` value="${note.number}"`;
+    return `<li id="fn-${note.number}"${ordinal}>${parseContent(note.text)}${backlinks ? ` ${backlinks}` : ''}</li>`;
   }).join('');
   return `<section class="footnotes" aria-label="${label}"><hr><ol>${items}</ol></section>`;
 }

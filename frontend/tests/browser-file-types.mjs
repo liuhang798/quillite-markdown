@@ -119,6 +119,50 @@ try {
     if (output) await page.locator('#sidebar').screenshot({path: join(output, `file-types-${scenario.name}-${engine}.png`), animations: 'disabled'});
     console.log(`PASS ${engine}: ${scenario.name}`);
   }
+  // Use the actual input and tab events. Delay the first Recent response until
+  // Favorites has finished, so stale-result handling is exercised deterministically.
+  await page.evaluate(() => {
+    const files = window.listFixture, s = fileTypeListUI.state;
+    Object.assign(window.quilliteMarkdown, {
+      getPreferences: async () => ({recentFiles: files.map(f => f.path), pinnedRecentFiles: [files[0].path],
+        favoriteFiles: files.slice(0, 3).map(f => f.path)}),
+      searchLibraryFiles: async (scope, root, q, paths) => {
+        if (q === '正文' && scope === 'recent' && !window.releaseSidebarSearch) {
+          await new Promise(resolve => { window.releaseSidebarSearch = resolve; });
+        }
+        return { paths: paths.filter(p => (scope === 'recent' ? [files[0].path, files[4].path] :
+          scope === 'favorites' ? [files[2].path] : [s.explorerFiles[1].path]).includes(p) && q === '正文'), skipped: 0 };
+      },
+    });
+    fileTypeListUI.setSidebarMode('recent');
+  });
+  const input = page.locator('#librarySearchInput');
+  const shown = () => page.locator('#fileList .file-item').evaluateAll(buttons => buttons.map(b => decodeURIComponent(b.dataset.path)));
+  const done = () => page.waitForFunction(() => !fileTypeListUI.state.librarySearch.pending);
+  await input.fill('正文');
+  await page.waitForFunction(() => !!window.releaseSidebarSearch);
+  await page.locator('#favoritesTab').click(); await done();
+  const favoriteHit = await page.evaluate(() => listFixture[2].path);
+  assert.deepEqual(await shown(), [favoriteHit]);
+  await page.evaluate(async () => { releaseSidebarSearch(); await new Promise(r => setTimeout(r, 0)); });
+  assert.deepEqual(await shown(), [favoriteHit], 'late Recent results cannot replace Favorites');
+  await page.locator('#explorerTab').click(); await done();
+  assert.deepEqual(await shown(), [await page.evaluate(() => fileTypeListUI.state.explorerFiles[1].path)]);
+  await page.locator('#recentTab').click(); await done();
+  assert.equal((await shown()).length, 2);
+  assert.equal(await page.locator('#fileList .pin-drag-handle').count(), 0);
+  await page.locator('#fileList .file-item').first().click({modifiers:['Control']});
+  await page.locator('#fileList .file-item').last().click({modifiers:['Shift']});
+  assert.equal(await page.evaluate(() => fileTypeListUI.state.recentSelection.length), 2);
+  await input.fill('changelog'); await done();
+  assert.deepEqual(await shown(), [await page.evaluate(() => listFixture[3].path)]);
+  await input.fill('no-such-document'); await done();
+  assert.equal((await shown()).length, 0);
+  assert.match(await page.locator('#librarySearchStatus').textContent(), /0/);
+  await input.press('Escape');
+  assert.equal((await shown()).length, 10);
+  assert.deepEqual(await page.evaluate(() => listReads), []);
+  console.log(`PASS ${engine}: scoped filename/body search, stale response, visible-only selection and clear`);
   await page.evaluate(() => {
     window.defaultAppTest = {attempts: 0, fail: true};
     window.quilliteMarkdown.openDefaultApps = async () => {

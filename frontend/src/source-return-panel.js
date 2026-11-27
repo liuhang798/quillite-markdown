@@ -112,7 +112,9 @@ export function sourceReturnPanel(readSource, returnSource) {
           // occupies layout space or floats outside this block's viewport.
           const y=Math.max(port.top+3,top-27);
           if(y+24>Math.min(port.bottom,bottom))return null;
-          return {left,right,top:y,bottom:Math.min(port.bottom,bottom),x:right-rect.left-4,y:y-rect.top, persistent: !!item.lightweight};
+          // A table may change height when its images finish laying out. Keep
+          // its explicit exit reachable even if this moves it off the pointer.
+          return {left,right,top:y,bottom:Math.min(port.bottom,bottom),x:right-rect.left-4,y:y-rect.top, persistent: !!item.lightweight || item.kind==='table'};
         },
         write(position){
           if(!alive||owner!==target||owner.destroyed||owner.state!==expected)return;

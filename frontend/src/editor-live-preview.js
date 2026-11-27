@@ -14,6 +14,7 @@ import { EditableBlockWidget, lightweightTableCell, tableCellRanges, safeCellIns
 import { editableForwardedChange, editableProjectionSync, resolveEditableOwner } from './editable-owner.js';
 import { protectedBlockReplacement, crossSelection, crossSelectionField } from './editable-cross-selection.js';
 import { structuredHtmlBlocks } from './html-block-editing.js';
+import { svgBlockEnd } from './document-svg.js';
 import { standaloneLiveVideoSource } from './editor-video-preview.js';
 import { sourceReturnPanel, preserveSourceBlockPosition, revealSourceReturnCaret } from './source-return-panel.js';
 import { activeDiagramSourceItem, returnDiagramSourceToRendered, editorDiagramField, isRenderedDiagramSelection } from './editor-diagram-preview.js';
@@ -199,6 +200,18 @@ export function buildLivePlan(source, footnotes = null, inFootnote = false, defi
   collect(tree.topNode);
   const inlineImages = new Set([...imageRanges, ...images].map(image => `${image.from}:${image.to}`));
   const htmlBlocks = structuredHtmlBlocks(source, htmlProtected);
+  if (/<svg[\s/>]/i.test(source)) {
+    let consumed = -1;
+    const owned = liveRangeIndex(htmlBlocks);
+    for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
+      if (node.from < consumed || !['HTMLBlock', 'Paragraph'].includes(node.name)) continue;
+      const end = svgBlockEnd(source, node.from);
+      if (end < 0 || owned(node.from, end)) continue;
+      htmlBlocks.push({from: node.from, to: end, raw: source.slice(node.from, end), kind: 'html', documentSvg: true, block: true});
+      consumed = end;
+    }
+    htmlBlocks.sort((a,b) => a.from - b.from);
+  }
   plan.widgets.push(...htmlBlocks,...noteBlocks);
   blocked.push(...htmlBlocks);
   const overlapsBlocked = liveRangeIndex(blocked), overlapsHtml = liveRangeIndex(htmlBlocks), overlapsImage = liveRangeIndex(imageRanges);

@@ -1,11 +1,11 @@
 import { Marked } from 'marked';
-import { mathExtensions } from './math-rendering.js';
+import { mathBlockSyntax, mathInlineSyntax } from './math-syntax.js';
 import { sourceLines } from './source-lines.js';
 import { maskFrontmatter } from './frontmatter.js';
 import { findMarkdownTableAt } from './table-designer.js';
 
 // Share preview's lexer. Unmappable/transformed runs are never editable.
-const lexer = new Marked({ gfm: true, breaks: false, extensions: mathExtensions });
+const lexer = new Marked({ gfm: true, breaks: false, extensions: [mathBlockSyntax, mathInlineSyntax] });
 
 // Manual formula lookup also supports source-only documents beyond the widget
 // limit; retain the existing long-line behavior while bounding lexer allocation.
@@ -193,26 +193,36 @@ function details(source, from, to, expression, displayMode, tableCell) {
   };
 }
 
-export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_SCAN_DOCUMENT_LIMIT, maxTokens = SCAN_TOKEN_LIMIT, tableCell = false } = {}) {
+export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_SCAN_DOCUMENT_LIMIT, maxTokens = SCAN_TOKEN_LIMIT, tableCell = false, strict = false } = {}) {
   const source = String(markdown);
-  if (source.length >= maxSourceLength || exceedsContainerBudget(source)) return [];
   if (!source.includes('$') && !source.includes('\\(') && !source.includes('\\[')) return [];
+  if (source.length >= maxSourceLength || exceedsContainerBudget(source)) {
+    if (strict) throw Error('FORMULA_SCAN_BUDGET');
+    return [];
+  }
   const formulas = [], root = originalView(tableCell ? source : maskFrontmatter(source));
+  const unmapped = tokens => {
+    if(strict) lexer.walkTokens(tokens || [],token=>{
+      if(token.type==='mathBlock' || token.type==='mathInline') throw Error('FORMULA_SCAN_UNMAPPED');
+    });
+  };
   let tokenCount = 0;
   const visit = (tokens, view, depth = 0, inTable = false) => {
-    if (!view) return;
+    if (!view) { unmapped(tokens); return; }
     if (depth > SCAN_DEPTH_LIMIT) throw new Error('FORMULA_SCAN_DEPTH');
     let cursor = 0;
-    for (const token of tokens || []) {
+    for (let index=0; index<(tokens?.length || 0); index++) {
+      const token=tokens[index];
       if (++tokenCount > maxTokens) throw new Error('FORMULA_SCAN_BUDGET');
       if (!token.raw) continue;
       const start = view.text.indexOf(token.raw, cursor);
-      if (start < 0) return;
+      if (start < 0) { if(strict)unmapped(tokens.slice(index)); return; }
       cursor = start + token.raw.length;
       const own = sliceView(view, start, cursor);
       if (token.type === 'mathInline' || token.type === 'mathBlock') {
         const from = offset(own, 0), to = offset(own, token.raw.trimEnd().length, true);
         if (from !== null && to !== null) formulas.push(details(source, from, to, token.text, token.type === 'mathBlock', inTable));
+        else if(strict)throw Error('FORMULA_SCAN_UNMAPPED');
       } else if (token.type === 'list') visit(token.items, own, depth + 1);
       else if (token.type === 'table') {
         let line = 0, lineStart = 0;
@@ -223,6 +233,7 @@ export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_
             row.forEach((cell, column) => {
               const projected = cells[column];
               if (projected?.text === cell.text) visit(cell.tokens, projected, depth + 1, true);
+              else unmapped(cell.tokens);
             });
           }
           line++;
@@ -239,7 +250,7 @@ export function scanMarkdownFormulas(markdown = '', { maxSourceLength = FORMULA_
       if (projected) visit(lexer.Lexer.lexInline(projected.text, lexer.defaults), projected, 0, true);
     } else visit(lexer.lexer(root.text), root);
   }
-  catch { return []; } // Never return partial/unreliable edit ranges or block source editing.
+  catch (error) { if (strict) throw error; return []; } // A translation must not treat a failed scan as plain prose.
   return formulas.sort((a, b) => a.from - b.from);
 }
 
